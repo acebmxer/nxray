@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **More NXray accounts, with roles.** Admins add sign-in accounts on a new
+  Users page and give each a role: admin (everything, including the Switch
+  page and the Users page), operator (turn ports on or off, edit
+  descriptions, change VLANs, Save config) or viewer (look only). Pages
+  hide the buttons a role can't use, and NXray refuses those forms if they
+  are sent anyway. Admins can change roles, disable an account (it is signed
+  out at once) and set a new password (it is signed out everywhere);
+  NXray always keeps at least one active admin. Everyone changes their own
+  password on the new Account page (click your name at the top). The
+  account in `nxray.env` becomes the first admin at the first start after
+  upgrading, so you keep signing in as before; after that, changing
+  `NXRAY_ADMIN_USER` or `NXRAY_ADMIN_PASSWORD_HASH` no longer changes who
+  can sign in. A forgotten password can be reset from the Docker host with
+  `docker compose exec nxray python -m app.resetpw <username>`.
 - **Switch settings on the Switch page.** Change the switch address lets
   NXray follow a switch whose management address or NX-API port changed: it
   signs in at the new address with its own account first and keeps the old

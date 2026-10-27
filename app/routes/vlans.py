@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
-from app.dependencies import login_required, require_csrf, stored_switch, templates
+from app.dependencies import (
+    login_required,
+    operator_required,
+    require_csrf,
+    stored_switch,
+    templates,
+)
 from app.nxapi import (
     VLAN_NAME_MAX,
     NxapiClient,
@@ -103,7 +109,7 @@ def _changed(request: Request, connection, username: str, what: str) -> None:
 @router.post("/vlans/create", response_class=HTMLResponse)
 def vlan_create(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     vlan_id: str = Form(""),
     name: str = Form(""),
@@ -138,7 +144,7 @@ def vlan_create(
 @router.post("/vlans/rename", response_class=HTMLResponse)
 def vlan_rename(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     vlan_id: str = Form(""),
     name: str = Form(""),
@@ -180,7 +186,7 @@ def vlan_rename(
 @router.post("/vlans/delete", response_class=HTMLResponse)
 def vlan_delete(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     vlan_id: str = Form(""),
     confirm: str = Form(""),

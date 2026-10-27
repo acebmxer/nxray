@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Users — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Users</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+<p class="lead">
+  Who can sign in to NXray, and what each may do. These are NXray accounts
+  only; they have nothing to do with the accounts on the switch.
+</p>
+
+<section class="card card-flush">
+  <table class="table table-users">
+    <thead>
+      <tr><th>Username</th><th>Role</th><th>Status</th><th>New password</th></tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      {% set own = user.username|lower == username|lower %}
+      <tr>
+        <td>{{ user.username }}{% if own %} <span class="dim">(you)</span>{% endif %}</td>
+        <td>
+          {% if own %}
+          {{ user.role }}
+          {% else %}
+          <form method="post" action="/users/role" class="row-form">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <select name="role" aria-label="Role for {{ user.username }}">
+              {% for role in roles %}
+              <option value="{{ role }}" {% if role == user.role %}selected{% endif %}>{{ role }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-quiet">Change</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>
+          {% if user.disabled %}<span class="badge badge-warn">disabled</span>{% else %}<span class="badge badge-ok">active</span>{% endif %}
+          {% if not own %}
+          <form method="post" action="/users/disable" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <input type="hidden" name="disabled" value="{{ 'no' if user.disabled else 'yes' }}">
+            <button type="submit" class="btn btn-quiet">{{ "Enable" if user.disabled else "Disable" }}</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/users/password" class="row-form">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <input type="password" name="new_password" autocomplete="new-password" required
+                   minlength="{{ min_password }}" placeholder="New password"
+                   aria-label="New password for {{ user.username }}">
+            <input type="password" name="confirm_password" autocomplete="new-password" required
+                   minlength="{{ min_password }}" placeholder="Again"
+                   aria-label="New password for {{ user.username }} again">
+            <button type="submit" class="btn btn-quiet">Set</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<p class="note">
+  {% for role in roles %}<strong>{{ role }}</strong>: {{ role_help[role] }}{% if not loop.last %}. {% endif %}{% endfor %}.
+  A new role or a disabled account applies on that account's next click; a new
+  password signs it out everywhere. Your own role and status are changed by
+  another admin; NXray always keeps at least one active admin.
+</p>
+
+<section class="card">
+  <h2 class="card-title">Add an account</h2>
+  <form method="post" action="/users/create" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="new_username">Username</label>
+    <input id="new_username" name="new_username" type="text" value="{{ form.new_username }}"
+           autocomplete="off" spellcheck="false" required maxlength="64">
+    <p class="hint">Letters, digits, dots, dashes, underscores or @. Upper and lower case count as the same name.</p>
+    <label for="new_password">Password</label>
+    <input id="new_password" name="password" type="password" autocomplete="new-password"
+           required minlength="{{ min_password }}">
+    <label for="confirm_password">Password again</label>
+    <input id="confirm_password" name="confirm_password" type="password"
+           autocomplete="new-password" required minlength="{{ min_password }}">
+    <p class="hint">At least {{ min_password }} characters.</p>
+    <label for="role">Role</label>
+    <select id="role" name="role">
+      {% for role in roles %}
+      <option value="{{ role }}" {% if role == form.role %}selected{% endif %}>{{ role }}: {{ role_help[role] }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">Add account</button>
+  </form>
+</section>
+{% endblock %}

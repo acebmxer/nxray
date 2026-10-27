@@ -27,13 +27,14 @@ SESSION_COOKIE = "nxray_session"
 # cost paid once per interactive login.
 _hasher = PasswordHasher()
 
-# Checked against when the username is wrong, so a wrong username and a wrong
-# password cost the same time and cannot be told apart from outside.
-_DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
+# Checked against when there is no such account (app/users.py authenticate),
+# so a wrong username and a wrong password cost the same time and cannot be
+# told apart from outside.
+DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
 
 
 def hash_password(plain: str) -> str:
-    """Return an Argon2id hash for storage in the environment."""
+    """Return an Argon2id hash for storage."""
     return _hasher.hash(plain)
 
 
@@ -43,17 +44,6 @@ def verify_password(plain: str, stored_hash: str) -> bool:
         return _hasher.verify(stored_hash, plain)
     except (VerifyMismatchError, VerificationError, InvalidHashError, ValueError):
         return False
-
-
-def check_credentials(username: str, password: str, admin_user: str, admin_hash: str) -> bool:
-    """True only for the configured admin's username and password.
-
-    The password is always verified, against a dummy hash when the username
-    is wrong, so the answer takes the same time either way.
-    """
-    user_ok = hmac.compare_digest(username.encode(), admin_user.encode())
-    password_ok = verify_password(password, admin_hash if user_ok else _DUMMY_HASH)
-    return user_ok and password_ok
 
 
 def _serializer(secret_key: str) -> URLSafeSerializer:
@@ -87,7 +77,12 @@ def create_session(conn: sqlite3.Connection, username: str, session_hours: int) 
 
 
 def get_session_user(conn: sqlite3.Connection, session_id: str) -> str | None:
-    """Return the username of a live session; None if missing or expired."""
+    """Return the username of a live session.
+
+    None, and the session ended, when it expired or its account no longer
+    exists or is disabled: disabling an account signs it out on its next
+    click, not when its session runs out hours later.
+    """
     row = conn.execute(
         "SELECT username, expires_at FROM sessions WHERE id = ?", (session_id,)
     ).fetchone()
@@ -96,7 +91,13 @@ def get_session_user(conn: sqlite3.Connection, session_id: str) -> str | None:
     if row["expires_at"] < time.time():
         destroy_session(conn, session_id)
         return None
-    return row["username"]
+    account = conn.execute(
+        "SELECT username, disabled FROM users WHERE username = ?", (row["username"],)
+    ).fetchone()
+    if account is None or account["disabled"]:
+        destroy_session(conn, session_id)
+        return None
+    return account["username"]
 
 
 def touch_session(conn: sqlite3.Connection, session_id: str, session_hours: int) -> None:
@@ -112,6 +113,22 @@ def destroy_session(conn: sqlite3.Connection, session_id: str) -> None:
     """Delete a session so its cookie stops working immediately."""
     conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
     conn.commit()
+
+
+def destroy_user_sessions(
+    conn: sqlite3.Connection, username: str, *, keep: str | None = None
+) -> int:
+    """Sign an account out everywhere, except the session ``keep``.
+
+    Used when its password changes or it is disabled. Returns how many
+    sessions ended.
+    """
+    cursor = conn.execute(
+        "DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id != ?",
+        (username, keep or ""),
+    )
+    conn.commit()
+    return cursor.rowcount
 
 
 def purge_expired_sessions(conn: sqlite3.Connection) -> int:
@@ -193,9 +210,9 @@ def csrf_valid(request: Request, token: str) -> bool:
 def current_user(request: Request) -> str | None:
     """Return the logged-in username for a request, or None.
 
-    Reads the signed cookie, resolves it against the sessions table, and
-    slides the expiry forward. A session for a username that is no longer the
-    configured admin (NXRAY_ADMIN_USER changed) is ended.
+    Reads the signed cookie, resolves it against the sessions table (which
+    also checks the account still exists and is not disabled), and slides the
+    expiry forward.
     """
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
@@ -209,9 +226,6 @@ def current_user(request: Request) -> str | None:
     with open_db(settings.db_path) as conn:
         username = get_session_user(conn, session_id)
         if username is None:
-            return None
-        if username != settings.admin_user:
-            destroy_session(conn, session_id)
             return None
         touch_session(conn, session_id, settings.session_hours)
     return username

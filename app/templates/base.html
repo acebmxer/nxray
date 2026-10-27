@@ -9,6 +9,7 @@
 </head>
 <body>
   {% if username %}
+  {% set nav_role = current_role(request) %}
   <header class="topbar">
     <a class="brand" href="/">
       <span class="brand-mark">◈</span> NXray
@@ -17,8 +18,11 @@
       <a class="navlink" href="/">Dashboard</a>
       <a class="navlink" href="/ports">Ports</a>
       <a class="navlink" href="/vlans">VLANs</a>
+      {% if nav_role == "admin" %}
       <a class="navlink" href="/switch">Switch</a>
-      <span class="who">{{ username }}</span>
+      <a class="navlink" href="/users">Users</a>
+      {% endif %}
+      <a class="navlink who" href="/account" title="Your account">{{ username }}{% if nav_role %} ({{ nav_role }}){% endif %}</a>
       <form method="post" action="/logout" class="inline">
         <button type="submit" class="btn btn-quiet">Log out</button>
       </form>

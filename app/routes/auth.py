@@ -9,7 +9,6 @@ from app.db import open_db
 from app.dependencies import redirect, safe_next, templates
 from app.security import (
     SESSION_COOKIE,
-    check_credentials,
     clear_login_failures,
     client_ip,
     create_session,
@@ -20,6 +19,7 @@ from app.security import (
     sign_session_id,
     unsign_session_id,
 )
+from app.users import AccountDisabled, authenticate
 
 router = APIRouter()
 
@@ -71,9 +71,20 @@ def login_submit(
                 status_code=429,
             )
 
-        if not check_credentials(
-            username, password, settings.admin_user, settings.admin_password_hash
-        ):
+        try:
+            user = authenticate(conn, username, password)
+        except AccountDisabled:
+            record_login_failure(conn, ip)
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "error": "This account is disabled. Ask an NXray admin to enable it.",
+                    "next_url": next_url,
+                },
+                status_code=401,
+            )
+        if user is None:
             record_login_failure(conn, ip)
             return templates.TemplateResponse(
                 request,
@@ -83,7 +94,7 @@ def login_submit(
             )
 
         clear_login_failures(conn, ip)
-        session_id = create_session(conn, settings.admin_user, settings.session_hours)
+        session_id = create_session(conn, user.username, settings.session_hours)
 
     response = redirect(next_url)
     _set_session_cookie(response, request, session_id)

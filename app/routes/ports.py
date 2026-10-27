@@ -9,7 +9,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
-from app.dependencies import login_required, require_csrf, stored_switch, templates
+from app.dependencies import (
+    login_required,
+    operator_required,
+    require_csrf,
+    stored_switch,
+    templates,
+)
 from app.nxapi import (
     NxapiClient,
     NxapiCommandError,
@@ -201,7 +207,7 @@ def change_refused(exc: NxapiError, target: SwitchTarget) -> str:
 @router.post("/ports/change", response_class=HTMLResponse)
 def port_change(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     name: str = Form(""),
     action: str = Form(""),
@@ -289,7 +295,7 @@ def port_change(
 @router.post("/ports/vlans", response_class=HTMLResponse)
 def port_vlans_change(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     name: str = Form(""),
     mode: str = Form(""),

@@ -70,6 +70,22 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN role_version INTEGER NOT NULL DEFAULT 0;
     UPDATE switch_connection SET role_version = 1 WHERE changes_enabled_at IS NOT NULL;
     """,
+    # 4 -> 5: NXray's own sign-in accounts (app/users.py). Before this, the
+    # only account was the one in nxray.env; it becomes the first admin row
+    # at the next start (users.bootstrap_admin). Names are unique whatever
+    # their case. sessions.username stays a bare name: a session of a
+    # removed or disabled account is refused when it is looked up
+    # (security.get_session_user).
+    """
+    CREATE TABLE users (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        username       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash  TEXT NOT NULL,
+        role           TEXT NOT NULL CHECK (role IN ('admin', 'operator', 'viewer')),
+        disabled       INTEGER NOT NULL DEFAULT 0,
+        created_at     REAL NOT NULL
+    );
+    """,
 ]
 
 

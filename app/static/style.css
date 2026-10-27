@@ -376,4 +376,13 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .choice legend { font-size: 0.85rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.3rem; }
 .choice label.check { display: flex; gap: 0.5rem; align-items: center; margin-top: 0; font-size: 0.92rem; color: var(--text); }
 
+/* ---- users ---- */
+
+.navlink.who { color: var(--text-dim); }
+.navlink.who:hover { color: var(--accent); }
+.table-users td { vertical-align: middle; }
+.table-users .row-form input[type="password"] { padding: 0.3rem 0.5rem; width: 9rem; }
+.table-users select { padding: 0.3rem 0.4rem; }
+.table-users .badge + .inline { margin-left: 0.5rem; }
+
 a { color: var(--accent); }

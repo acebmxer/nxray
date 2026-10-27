@@ -9,12 +9,16 @@
   <span class="empty-mark">◇</span>
   <h2>No switch connected yet</h2>
   <p>Set up the switch first.</p>
+  {% if current_role(request) == "admin" %}
   <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
 </div>
 {% elif ports is none %}
 <div class="card">
   <p class="alert alert-error" role="alert">{{ status.message }}</p>
-  <p class="note"><a href="/switch">Go to the Switch page</a>.</p>
+  {% if current_role(request) == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
 </div>
 {% else %}
 <nav class="filters" aria-label="Show ports">

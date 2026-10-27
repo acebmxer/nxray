@@ -24,6 +24,8 @@ prose columns; those are a reviewer's job.
 | Read a setting | `app/config.py`, the only module that reads `os.environ` |
 | Talk to the database | `app/db.py`, `open_db` |
 | Hash or check a password | `app/security.py` |
+| Add, change or check an NXray account | `app/users.py` |
+| Limit a route to a role | `app/dependencies.py`, `operator_required` / `admin_required` |
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
 | Require a login on a route | `app/dependencies.py`, `login_required` |
@@ -70,16 +72,16 @@ behind.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_credentials` | `(username, password, admin_user, admin_hash) -> bool` | Checks a login in constant time whether the username or the password is wrong | `routes/auth.login_submit` | v0.1.0 |
 | `clear_login_failures` | `(conn, ip: str) -> None` | Forgets an address's failures after success | `routes/auth.login_submit` | v0.1.0 |
 | `client_ip` | `(request) -> str` | The peer address login throttling counts against | `routes/auth.login_submit` | v0.1.0 |
 | `create_session` | `(conn, username: str, session_hours: int) -> str` | Records a session, returns its id | `routes/auth.login_submit` | v0.1.0 |
 | `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id | routes rendering forms | v0.1.0 |
 | `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token | `dependencies.require_csrf` | v0.1.0 |
 | `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
-| `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user`, `security.current_user` | v0.1.0 |
-| `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends an expired one | `security.current_user` | v0.1.0 |
-| `hash_password` | `(plain: str) -> str` | Argon2id hash for storage | `hashpw.main`, tests | v0.1.0 |
+| `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user` | v0.1.0 |
+| `destroy_user_sessions` | `(conn, username, *, keep=None) -> int` | Signs an account out everywhere except one session | `users.set_password`, `users.set_disabled` | v0.1.0 |
+| `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends one that expired or whose account is gone or disabled | `security.current_user` | v0.1.0 |
+| `hash_password` | `(plain: str) -> str` | Argon2id hash for storage | `hashpw.main`, `users.create_user`, `users.set_password` | v0.1.0 |
 | `is_rate_limited` | `(conn, ip, max_attempts, window_minutes) -> bool` | True when an address has failed too often | `routes/auth.login_submit` | v0.1.0 |
 | `purge_expired_sessions` | `(conn) -> int` | Deletes expired sessions | `main.lifespan` | v0.1.0 |
 | `purge_old_login_attempts` | `(conn, window_minutes: int) -> int` | Drops attempts older than the window | `main.lifespan` | v0.1.0 |
@@ -88,9 +90,10 @@ behind.
 | `sign_session_id` | `(session_id: str, secret_key: str) -> str` | Wraps a session id in a signed cookie value | `routes/auth` | v0.1.0 |
 | `touch_session` | `(conn, session_id: str, session_hours: int) -> None` | Slides the expiry forward on use | `security.current_user` | v0.1.0 |
 | `unsign_session_id` | `(cookie_value: str, secret_key: str) -> str \| None` | Recovers an id, None if forged | `security.current_user`, `routes/auth.logout` | v0.1.0 |
-| `verify_password` | `(plain: str, stored_hash: str) -> bool` | Checks a password against its hash | `security.check_credentials`, tests | v0.1.0 |
+| `verify_password` | `(plain: str, stored_hash: str) -> bool` | Checks a password against its hash | `users.authenticate`, `routes/users.account_password` | v0.1.0 |
 
-`SESSION_COOKIE` is the cookie name. Sessions are stored server-side so logout
+`SESSION_COOKIE` is the cookie name; `DUMMY_HASH` is what `users.authenticate`
+checks a password against when there is no such account. Sessions are stored server-side so logout
 really invalidates rather than merely asking the browser to forget.
 
 ## `app/dependencies.py` — shared route plumbing
@@ -98,7 +101,11 @@ really invalidates rather than merely asking the browser to forget.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `add_security_headers` | `(request, call_next) -> Response` | HTTP middleware adding `SECURITY_HEADERS` to every response | `main.create_app` | v0.1.0 |
+| `admin_required` | `(request) -> str` | FastAPI dependency for the Switch and Users pages; raises `Forbidden` for other roles | `routes/switch_page`, `routes/users` | v0.1.0 |
+| `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
+| `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
+| `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
 | `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The stored switch, its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
@@ -106,8 +113,9 @@ really invalidates rather than merely asking the browser to forget.
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
 `templates` is the shared Jinja environment; `RedirectToLogin` is the
-exception `login_required` raises and `CsrfFailed` the one `require_csrf`
-raises, both handled in `main.create_app`.
+exception `login_required` raises, `Forbidden` the one the role guards raise
+(a 403 page naming the role needed) and `CsrfFailed` the one `require_csrf`
+raises, all handled in `main.create_app`.
 
 ## `app/nxapi.py` — the NX-API client
 
@@ -285,12 +293,14 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `create_app` | `(settings: Settings \| None = None) -> FastAPI` | Builds and wires the app | module `__getattr__`, tests | v0.1.0 |
-| `lifespan` | `(app: FastAPI)` | Migrates the database and purges stale rows on start | `main.create_app` | v0.1.0 |
+| `lifespan` | `(app: FastAPI)` | Migrates the database, creates the first account from nxray.env once, purges stale rows on start | `main.create_app` | v0.1.0 |
 
 ## `app/routes/` — HTTP endpoints
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `account_page` | `(request, username) -> Response` | `GET /account`, your name, role and password form | router | v0.1.0 |
+| `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
 | `change_refused` | `(exc, target) -> str` | The message for a port or VLAN change the switch did not make | `port_change`, `port_vlans_change`, `routes/vlans` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
@@ -312,10 +322,39 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
+| `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
+| `users_disable` | `(request, username, csrf, user_id, disabled) -> Response` | `POST /users/disable`: disables (signs out) or enables an account; not your own | router | v0.1.0 |
+| `users_page` | `(request, username) -> Response` | `GET /users`, every account, admin only | router | v0.1.0 |
+| `users_password` | `(request, username, csrf, user_id, new_password, confirm_password) -> Response` | `POST /users/password`: an admin sets an account's password and signs it out | router | v0.1.0 |
+| `users_role` | `(request, username, csrf, user_id, role) -> Response` | `POST /users/role`; not your own, never the last active admin | router | v0.1.0 |
 | `vlan_create` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/create`; refuses a VLAN that exists | router | v0.1.0 |
 | `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1 and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
 | `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
 | `vlans_page` | `(request, username) -> Response` | `GET /vlans`, every VLAN and the ports using it | router | v0.1.0 |
+
+## `app/users.py` — NXray's own accounts
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `authenticate` | `(conn, username, password) -> User \| None` | Checks a sign-in in constant time; raises `AccountDisabled` for the right password on a disabled account | `routes/auth.login_submit` | v0.1.0 |
+| `bootstrap_admin` | `(conn, admin_user, admin_password_hash) -> bool` | Makes the nxray.env account the first admin, only while there are no accounts | `main.lifespan` | v0.1.0 |
+| `check_new_password` | `(password, confirm) -> None` | Raises `UserError` unless a new password is long enough and typed twice the same | `create_user`, `routes/users`, `resetpw.main` | v0.1.0 |
+| `create_user` | `(conn, username, password, confirm, role) -> User` | Adds an account after checking name, role and password | `routes/users.users_create` | v0.1.0 |
+| `get_user` | `(conn, username) -> User \| None` | An account by name, case ignored | `dependencies.current_account`, `routes/users`, `resetpw.main` | v0.1.0 |
+| `get_user_by_id` | `(conn, user_id) -> User \| None` | An account by id | `routes/users`, the setters below | v0.1.0 |
+| `list_users` | `(conn) -> list[User]` | Every account, oldest first | `routes/users.users_page` | v0.1.0 |
+| `set_disabled` | `(conn, user_id, disabled) -> User` | Disables (and signs out) or enables an account; keeps the last active admin | `routes/users.users_disable`, `resetpw.main` | v0.1.0 |
+| `set_password` | `(conn, user_id, password, *, keep_session=None) -> None` | Stores a new password and signs the account out everywhere but `keep_session` | `routes/users`, `resetpw.main` | v0.1.0 |
+| `set_role` | `(conn, user_id, role) -> User` | Changes an account's role; keeps the last active admin | `routes/users.users_role` | v0.1.0 |
+
+`ROLES` is the three roles, `ROLE_HELP` says what each may do in words, and
+`User.can_change` / `User.is_admin` are what the route guards test.
+
+## `app/resetpw.py` — password reset from the command line
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `main` | `(argv=None) -> int` | Prompts for a new password for a named account, stores it, enables the account | `python -m app.resetpw <username>` | v0.1.0 |
 
 ## `app/hashpw.py` — password hash helper
 

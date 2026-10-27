@@ -20,6 +20,7 @@ from app.ports import human_bytes, human_rate
 from app.security import csrf_valid, current_user
 from app.switch_connection import DecryptionError, SwitchConnection, get_connection, load_target
 from app.switch_setup import KEY_CHANGED_MESSAGE
+from app.users import User, get_user
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -91,6 +92,64 @@ def login_required(request: Request) -> str:
     if username is None:
         raise RedirectToLogin(request.url.path)
     return username
+
+
+class Forbidden(Exception):
+    """A signed-in account's role may not do this; main.py renders a 403 page.
+
+    Not a redirect to /login like RedirectToLogin: the caller is signed in,
+    just not allowed.
+    """
+
+    def __init__(self, required_role: str) -> None:
+        self.required_role = required_role
+        super().__init__(f"requires the {required_role} role")
+
+
+def current_account(request: Request) -> User | None:
+    """The signed-in account, or None. Looked up once per request."""
+    if getattr(request.state, "account_looked_up", False):
+        return request.state.account
+    account = None
+    username = current_user(request)
+    if username is not None:
+        with open_db(request.app.state.settings.db_path) as conn:
+            account = get_user(conn, username)
+    request.state.account = account
+    request.state.account_looked_up = True
+    return account
+
+
+def operator_required(request: Request) -> str:
+    """The username, for routes that change the switch: operator or admin."""
+    username = login_required(request)
+    account = current_account(request)
+    if account is None or not account.can_change:
+        raise Forbidden("operator")
+    return username
+
+
+def admin_required(request: Request) -> str:
+    """The username, for the Switch page and user management: admin only."""
+    username = login_required(request)
+    account = current_account(request)
+    if account is None or not account.is_admin:
+        raise Forbidden("admin")
+    return username
+
+
+def current_role(request: Request) -> str | None:
+    """The signed-in account's role, for templates deciding which buttons to show.
+
+    A button that answers "not permitted" when pressed is worse than no
+    button, so pages hide what the role can't do. The route guards above
+    still refuse it if someone sends the form anyway.
+    """
+    account = current_account(request)
+    return account.role if account is not None else None
+
+
+templates.env.globals["current_role"] = current_role
 
 
 def paused_message(seconds: int) -> str:

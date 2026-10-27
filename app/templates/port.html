@@ -2,6 +2,8 @@
 {% block title %}{{ name }} — NXray{% endblock %}
 
 {% block content %}
+{% set role = current_role(request) %}
+{% set can_change = role in ("admin", "operator") %}
 <p class="breadcrumb"><a href="/ports">← All ports</a></p>
 <h1 class="page-title">{{ name }}</h1>
 
@@ -9,7 +11,11 @@
 <div class="card empty-state">
   <span class="empty-mark">◇</span>
   <h2>No switch connected yet</h2>
+  {% if role == "admin" %}
   <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
 </div>
 {% elif ports is none %}
 <div class="card">
@@ -26,7 +32,7 @@
 {% if notice %}
 <p class="alert alert-ok" role="status">{{ notice }}</p>
 {% endif %}
-{% if connection.unsaved_changes %}
+{% if connection.unsaved_changes and can_change %}
 <div class="warning warning-row">
   <span>NXray changed the switch since its configuration was last saved.</span>
   <form method="post" action="/switch/save" class="inline">
@@ -92,7 +98,9 @@
 
 <section class="card">
   <h2 class="card-title">Change this port</h2>
-  {% if connection.changes_enabled %}
+  {% if not can_change %}
+  <p class="lead">Your role ({{ role }}) can look at ports but not change them.</p>
+  {% elif connection.changes_enabled %}
   <form method="post" action="/ports/change" class="stack form-narrow">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="name" value="{{ port.name }}">
@@ -116,7 +124,7 @@
   </form>
   <p class="note">Each change asks you to confirm first.</p>
   {% else %}
-  <p class="lead">Port changes are off. <a href="/switch">Turn them on on the Switch page</a> to turn this port on or off and edit its description.</p>
+  <p class="lead">Port changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn this port on or off and edit its description.</p>
   {% endif %}
 </section>
 
@@ -135,7 +143,7 @@
     <dt>Access VLAN</dt><dd>{{ vlans.access_vlan }}{% if view.get(vlans.access_vlan) %} ({{ view.get(vlans.access_vlan).name }}){% else %} <span class="reason">not created on the switch</span>{% endif %}</dd>
     {% endif %}
   </dl>
-  {% if connection.vlan_changes_enabled %}
+  {% if connection.vlan_changes_enabled and can_change %}
   <form method="post" action="/ports/vlans" class="stack form-narrow form-after">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="name" value="{{ port.name }}">
@@ -162,8 +170,8 @@
     <button type="submit" class="btn btn-primary">Change VLANs</button>
   </form>
   <p class="note">The change asks you to confirm first. VLANs are created on the <a href="/vlans">VLANs page</a>.</p>
-  {% elif connection.changes_enabled %}
-  <p class="lead">VLAN changes are off. <a href="/switch">Turn them on on the Switch page</a> to set this port's VLANs.</p>
+  {% elif connection.changes_enabled and can_change %}
+  <p class="lead">VLAN changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to set this port's VLANs.</p>
   {% endif %}
   {% endif %}
 </section>

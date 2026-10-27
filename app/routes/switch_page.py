@@ -11,7 +11,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import (
-    login_required,
+    admin_required,
+    operator_required,
     paused_message,
     redirect,
     require_csrf,
@@ -95,7 +96,7 @@ def _render(
 
 
 @router.get("/switch", response_class=HTMLResponse)
-def switch_page(request: Request, username: str = Depends(login_required)) -> Response:
+def switch_page(request: Request, username: str = Depends(admin_required)) -> Response:
     return _render(request, username)
 
 
@@ -115,7 +116,7 @@ def _check_address(host: str, port: str) -> tuple[int, str | None]:
 @router.post("/switch/setup", response_class=HTMLResponse)
 def switch_setup(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(admin_required),
     csrf: str = Form(""),
     host: str = Form(""),
     port: str = Form("443"),
@@ -200,7 +201,7 @@ def switch_setup(
 
 @router.post("/switch/test", response_class=HTMLResponse)
 def switch_test(
-    request: Request, username: str = Depends(login_required), csrf: str = Form("")
+    request: Request, username: str = Depends(admin_required), csrf: str = Form("")
 ) -> Response:
     require_csrf(request, csrf)
     settings = request.app.state.settings
@@ -229,7 +230,7 @@ def switch_test(
 @router.post("/switch/address", response_class=HTMLResponse)
 def switch_address(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(admin_required),
     csrf: str = Form(""),
     host: str = Form(""),
     port: str = Form("443"),
@@ -296,7 +297,7 @@ def switch_address(
 @router.post("/switch/repair", response_class=HTMLResponse)
 def switch_repair(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(admin_required),
     csrf: str = Form(""),
     host: str = Form(""),
     port: str = Form("443"),
@@ -414,7 +415,7 @@ def switch_repair(
 @router.post("/switch/enable-changes", response_class=HTMLResponse)
 def switch_enable_changes(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(admin_required),
     csrf: str = Form(""),
     admin_user: str = Form(""),
     admin_password: str = Form(""),
@@ -495,7 +496,7 @@ def switch_enable_changes(
 @router.post("/switch/save", response_class=HTMLResponse)
 def switch_save(
     request: Request,
-    username: str = Depends(login_required),
+    username: str = Depends(operator_required),
     csrf: str = Form(""),
     back: str = Form(""),
     port: str = Form(""),
@@ -537,7 +538,7 @@ def switch_save(
 
 @router.post("/switch/forget", response_class=HTMLResponse)
 def switch_forget(
-    request: Request, username: str = Depends(login_required), csrf: str = Form("")
+    request: Request, username: str = Depends(admin_required), csrf: str = Form("")
 ) -> Response:
     require_csrf(request, csrf)
     settings = request.app.state.settings

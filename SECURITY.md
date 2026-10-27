@@ -50,9 +50,12 @@ HTTP on port 8080; put it behind an HTTPS reverse proxy (and set
 `NXRAY_HTTPS=true`) if it is reachable from anywhere you do not trust. It is
 not built to be exposed to the internet.
 
-**What protects it.** A single admin account whose Argon2id password hash is
-supplied by configuration; the app refuses to start without one and has no
-default password. Sessions are stored server-side so logout invalidates them
+**What protects it.** Sign-in accounts with Argon2id password hashes. The
+first one, an admin, comes from a hash in configuration; the app refuses to
+start without one and has no default password. Further accounts get one of
+three roles (admin, operator, viewer), checked on every request that changes
+something, and a disabled account or a new password signs that account out
+at once. Sessions are stored server-side so logout invalidates them
 immediately. Failed logins are throttled per address. Pages are sent with a
 strict Content-Security-Policy and may not be framed by other sites. Every
 form that changes something carries a per-session anti-forgery token.
@@ -81,10 +84,10 @@ for a fix before disclosing publicly.
 In scope: authentication and session handling; storage of the switch login;
 anything that lets a request run a switch command it should not; cross-site
 request forgery or framing; anything letting an unauthenticated caller reach
-a protected page.
+a protected page, or an account do what its role does not allow.
 
 Out of scope: vulnerabilities in NX-OS or NX-API themselves (report those to
 [Cisco PSIRT](https://sec.cloudapps.cisco.com/security/center/resources/security_vulnerability_policy.html));
-anything requiring an attacker to already have the NXray admin password or
+anything requiring an attacker to already have an NXray admin password or
 the switch's admin login; running NXray exposed to the internet against this
 document's advice.

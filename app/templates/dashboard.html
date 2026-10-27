@@ -13,7 +13,11 @@
     Switch page: NXray signs in with the switch's admin login once and creates
     its own read-only account there.
   </p>
+  {% if current_role(request) == "admin" %}
   <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
 </div>
 {% elif data %}
 {% set env = data.environment %}
@@ -140,7 +144,7 @@
 <div class="card">
   <p class="alert alert-error" role="alert">{{ status.message }}</p>
   <p class="note">Switch {{ connection.host }}, account {{ connection.username }}.
-    <a href="/switch">Go to the Switch page</a>.</p>
+    {% if current_role(request) == "admin" %}<a href="/switch">Go to the Switch page</a>.{% else %}An NXray admin can fix this on the Switch page.{% endif %}</p>
 </div>
 {% endif %}
 {% endblock %}
