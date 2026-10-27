@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,6 +33,11 @@ from app.switch_ssh import SshAuthError, SshUnreachable
 from tests.conftest import load_fixture
 
 ADMIN_PASSWORD = "Adm1n-switch-pw"
+
+# cisco-25gb's answer to a copy sent while another one runs.
+SAVE_BUSY = (
+    "Configuration update aborted: another request for config change is already in progress\n"
+)
 
 _RECORDED = {
     "show version": "show_version",
@@ -95,6 +101,10 @@ class FakeSwitch:
     # and "no username" is refused while it lives. Off by default.
     sessions_block_delete: bool = False
     signed_in: set[str] = field(default_factory=set)
+    # As on cisco-25gb: a copy takes a while (2-3 s there), and a second copy
+    # sent meanwhile is refused. 0 means instant.
+    save_seconds: float = 0.0
+    _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -227,6 +237,13 @@ class FakeSwitch:
                 return denied, context
             if self.save_text is not None:
                 return _ok(ident, self.save_text), context
+            if self._copying:
+                return _error(ident, SAVE_BUSY), context
+            self._copying = True
+            try:
+                time.sleep(self.save_seconds)
+            finally:
+                self._copying = False
             self.saved = True
             return _ok(ident, None), context
         if not is_admin:

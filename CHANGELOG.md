@@ -43,6 +43,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   Save config pressed on a port's page (or on the VLANs page) used to jump
   to the Switch page after saving; it now stays on that page and shows
   that the configuration was saved, or why saving failed.
+
+  Pressing Save config twice in quick succession used to show "another
+  request for config change is already in progress" although the switch
+  had saved; NXray now runs one save at a time, so both presses save.
 - **Ports page.** A new Ports page lists every front-panel port with its
   description, state (with the switch's reason when it is down), speed,
   VLAN, transceiver, traffic in and out over the last 30 seconds, and its

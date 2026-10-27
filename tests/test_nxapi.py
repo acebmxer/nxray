@@ -344,6 +344,62 @@ def test_save_config_gets_a_longer_timeout() -> None:
     assert seen["timeout"]["read"] == 120.0
 
 
+def test_two_saves_at_once_both_succeed() -> None:
+    # A double-clicked Save config: the second press lands while the first
+    # copy runs, which cisco-25gb refuses. NXray must wait, not pass it on.
+    import threading
+    import time
+
+    from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
+
+    switch = FakeSwitch(save_seconds=0.5)
+    target = SwitchTarget("192.0.2.10", 443, "admin", ADMIN_PASSWORD, 5.0)
+    results: list[str] = []
+
+    def press() -> None:
+        try:
+            with NxapiClient(target, transport=switch.transport()) as client:
+                client.save_config()
+            results.append("saved")
+        except NxapiCommandError as exc:
+            results.append(f"error: {exc}")
+
+    threads = [threading.Thread(target=press) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+        time.sleep(0.2)
+    for thread in threads:
+        thread.join()
+    assert results == ["saved", "saved"]
+    assert [r for r in switch.requests if r == ["copy running-config startup-config"]] == [
+        ["copy running-config startup-config"]
+    ] * 2
+
+
+def test_a_save_stuck_behind_another_gives_up_with_a_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.nxapi as nxapi
+
+    monkeypatch.setattr(nxapi, "SAVE_CONFIG_TIMEOUT", 0.1)
+    target = SwitchTarget("192.0.2.10", 443, "nxray", "s3cret-pw", 0.1)
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.content.decode())
+        return httpx.Response(200, json={"jsonrpc": "2.0", "result": None, "id": 1})
+
+    assert nxapi._save_lock.acquire(timeout=1)
+    try:
+        with NxapiClient(target, transport=httpx.MockTransport(handler)) as client:
+            with pytest.raises(NxapiCommandError) as excinfo:
+                client.save_config()
+    finally:
+        nxapi._save_lock.release()
+    assert "another save from NXray is still running" in str(excinfo.value)
+    assert seen == []  # nothing reached the switch
+
+
 def test_show_still_refuses_text_bodies() -> None:
     reply = {"jsonrpc": "2.0", "result": {"body": "text"}, "id": 1}
     with _client(lambda request: httpx.Response(200, json=reply)) as client:

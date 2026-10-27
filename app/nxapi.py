@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -93,6 +94,12 @@ RESERVED_ACCOUNT_NAMES = frozenset(
 
 # Saving the configuration can take a while on a busy switch.
 SAVE_CONFIG_TIMEOUT = 120.0
+
+# One save at a time from this process. NX-OS refuses a second copy while
+# one runs ("another request for config change is already in progress"),
+# so a double-clicked Save config would turn a save that worked into an
+# error on the page. A second save waits here for the first, then runs.
+_save_lock = threading.Lock()
 
 
 class NxapiError(Exception):
@@ -464,10 +471,20 @@ class NxapiClient:
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:
-        """``copy running-config startup-config``: keep changes over a reboot."""
+        """``copy running-config startup-config``: keep changes over a reboot.
+
+        Saves from this process run one after another (``_save_lock``).
+        """
         command = "copy running-config startup-config"
         timeout = max(self._target.timeout, SAVE_CONFIG_TIMEOUT)
-        (body,) = self._send([command], [command], timeout, allow_text=True)
+        if not _save_lock.acquire(timeout=timeout):
+            raise NxapiCommandError(
+                f"{command!r}: another save from NXray is still running; try again shortly"
+            )
+        try:
+            (body,) = self._send([command], [command], timeout, allow_text=True)
+        finally:
+            _save_lock.release()
         # The switch reports a failed copy as text, not as an error.
         text = str(body.get("text", ""))
         if "fail" in text.lower() or "error" in text.lower():
