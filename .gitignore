@@ -1,0 +1,30 @@
+# Working notes and agent config: not part of the project.
+CLAUDE.md
+.claude/
+
+# Runtime configuration. nxray.env holds the admin password hash. It must
+# never be committed; nxray.env.example is the committed template. It is not
+# called .env because Compose auto-loads a file of that name to interpolate
+# the compose file, which mangles the $ characters in an Argon2 hash.
+nxray.env
+.env
+
+# Your own copy of the compose file; docker-compose.yml.example is the template.
+docker-compose.yml
+
+# The data volume, if bind-mounted here: database, sessions, secret key.
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+.pytest_cache/
+.ruff_cache/

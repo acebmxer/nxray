@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: The switch or NX-OS itself
+    url: https://www.cisco.com/c/en/us/support/index.html
+    about: NXray only talks to the switch through NX-API. Problems with NX-OS or the hardware belong with Cisco.
+  - name: Security vulnerability
+    url: https://github.com/acebmxer/nxray/security
+    about: Report privately through the Security tab, not as a public issue.

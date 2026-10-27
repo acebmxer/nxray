@@ -1,0 +1,4 @@
+# Trivy vulnerability exceptions for NXray.
+#
+# One CVE ID per line, with a comment explaining why it is accepted rather
+# than fixed. Anything listed here is a deliberate call, not an oversight.

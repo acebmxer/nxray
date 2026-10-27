@@ -1,0 +1,256 @@
+"""The NX-API client, against a mock transport (no switch, no network)."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import httpx
+import pytest
+
+from app.nxapi import (
+    NxapiAuthError,
+    NxapiClient,
+    NxapiCommandError,
+    NxapiProtocolError,
+    NxapiUnreachable,
+    SwitchTarget,
+    build_payload,
+    error_message,
+    is_valid_host,
+    parse_response,
+    validate_show_command,
+)
+
+TARGET = SwitchTarget(
+    host="192.0.2.10", port=443, username="nxray", password="s3cret-pw", timeout=5.0
+)
+
+
+def _ok(index: int, body: dict[str, Any] | None) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "result": {"body": body} if body is not None else None, "id": index}
+
+
+def _client(handler) -> NxapiClient:
+    return NxapiClient(TARGET, transport=httpx.MockTransport(handler))
+
+
+# ---- input checks -------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["192.0.2.10", "2001:db8::1", "switch", "nexus-lab.example.net"])
+def test_valid_hosts(value: str) -> None:
+    assert is_valid_host(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "https://192.0.2.10",
+        "192.0.2.10:8443",
+        "192.0.2.10/ins",
+        "user@192.0.2.10",
+        "-bad.example",
+        "a" * 254,
+        "host name",
+    ],
+)
+def test_invalid_hosts(value: str) -> None:
+    assert not is_valid_host(value)
+
+
+def test_show_command_is_stripped() -> None:
+    assert validate_show_command("  show version ") == "show version"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "configure terminal",
+        "copy running-config startup-config",
+        "showversion",
+        "show version ; configure terminal",
+        "show version\nreload",
+        "show version\rreload",
+    ],
+)
+def test_anything_but_a_lone_show_is_refused(command: str) -> None:
+    with pytest.raises(ValueError):
+        validate_show_command(command)
+
+
+def test_url_brackets_ipv6() -> None:
+    target = SwitchTarget(host="2001:db8::1", port=443, username="u", password="p", timeout=1)
+    assert target.url == "https://[2001:db8::1]:443/ins"
+    assert TARGET.url == "https://192.0.2.10:443/ins"
+
+
+def test_password_never_appears_in_repr() -> None:
+    assert "s3cret-pw" not in repr(TARGET)
+    assert "s3cret-pw" not in str(TARGET)
+    assert "nxray" in repr(TARGET)
+
+
+# ---- request and reply shapes -------------------------------------------
+
+
+def test_payload_is_one_json_rpc_entry_per_command() -> None:
+    assert build_payload(["show version", "show clock"]) == [
+        {
+            "jsonrpc": "2.0",
+            "method": "cli",
+            "params": {"cmd": "show version", "version": 1},
+            "id": 1,
+        },
+        {"jsonrpc": "2.0", "method": "cli", "params": {"cmd": "show clock", "version": 1}, "id": 2},
+    ]
+
+
+def test_single_command_reply_as_an_object_is_accepted() -> None:
+    # NX-API answers a one-command request with an object, not a list.
+    assert parse_response(_ok(1, {"a": 1}), ["show x"]) == [{"a": 1}]
+
+
+def test_replies_are_matched_by_id_not_position() -> None:
+    reply = [_ok(2, {"second": True}), _ok(1, {"first": True})]
+    assert parse_response(reply, ["show a", "show b"]) == [{"first": True}, {"second": True}]
+
+
+def test_command_with_no_output_gives_an_empty_body() -> None:
+    assert parse_response([_ok(1, None)], ["show x"]) == [{}]
+
+
+def test_wrong_number_of_replies_is_a_protocol_error() -> None:
+    with pytest.raises(NxapiProtocolError):
+        parse_response([_ok(1, {})], ["show a", "show b"])
+
+
+def test_reply_without_id_is_a_protocol_error() -> None:
+    with pytest.raises(NxapiProtocolError):
+        parse_response([{"jsonrpc": "2.0", "result": {"body": {}}}], ["show a"])
+
+
+def test_text_body_is_a_protocol_error() -> None:
+    reply = {"jsonrpc": "2.0", "result": {"body": "plain text"}, "id": 1}
+    with pytest.raises(NxapiProtocolError):
+        parse_response(reply, ["show a"])
+
+
+def test_rejected_command_reports_the_switch_message() -> None:
+    reply = {
+        "jsonrpc": "2.0",
+        "error": {
+            "code": -32602,
+            "message": "Invalid params",
+            "data": {"msg": "% Invalid command at '^' marker.\n"},
+        },
+        "id": 1,
+    }
+    with pytest.raises(NxapiCommandError) as excinfo:
+        parse_response(reply, ["show nonsense"])
+    assert "Invalid command" in str(excinfo.value)
+    assert "show nonsense" in str(excinfo.value)
+
+
+def test_error_message_falls_back() -> None:
+    assert error_message({"message": "Invalid params"}) == "Invalid params"
+    assert error_message({"data": {"msg": "  "}, "message": "fallback"}) == "fallback"
+    assert error_message("garbage") == "unknown error"
+
+
+# ---- the client over HTTP -----------------------------------------------
+
+
+def test_show_posts_json_rpc_with_basic_auth() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("authorization")
+        seen["type"] = request.headers.get("content-type")
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=[_ok(1, {"host_name": "nexus-lab"}), _ok(2, {})])
+
+    with _client(handler) as client:
+        bodies = client.show("show version", "show clock")
+
+    assert bodies == [{"host_name": "nexus-lab"}, {}]
+    assert seen["url"] == "https://192.0.2.10/ins"  # httpx drops the default port
+    assert seen["auth"].startswith("Basic ")
+    assert seen["type"] == "application/json-rpc"
+    assert [entry["params"]["cmd"] for entry in seen["body"]] == ["show version", "show clock"]
+
+
+def test_a_bad_command_is_refused_before_anything_is_sent() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("nothing may reach the switch")
+
+    with _client(handler) as client, pytest.raises(ValueError):
+        client.show("show version", "configure terminal")
+
+
+def test_no_commands_is_refused() -> None:
+    with _client(lambda request: httpx.Response(200)) as client, pytest.raises(ValueError):
+        client.show()
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_refused_login_is_an_auth_error(status: int) -> None:
+    with _client(lambda request: httpx.Response(status)) as client:
+        with pytest.raises(NxapiAuthError):
+            client.show("show version")
+
+
+def test_http_500_with_a_json_rpc_error_is_a_command_error() -> None:
+    reply = {"jsonrpc": "2.0", "error": {"message": "Input CLI command error"}, "id": 1}
+    with _client(lambda request: httpx.Response(500, json=reply)) as client:
+        with pytest.raises(NxapiCommandError):
+            client.show("show nonsense")
+
+
+def test_non_json_answer_is_a_protocol_error() -> None:
+    with _client(lambda request: httpx.Response(200, text="<html>hi</html>")) as client:
+        with pytest.raises(NxapiProtocolError) as excinfo:
+            client.show("show version")
+    assert "HTTP 200" in str(excinfo.value)
+
+
+def test_timeout_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timed out", request=request)
+
+    with _client(handler) as client, pytest.raises(NxapiUnreachable) as excinfo:
+        client.show("show version")
+    assert "within 5 seconds" in str(excinfo.value)
+
+
+def test_connection_refused_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with _client(handler) as client, pytest.raises(NxapiUnreachable):
+        client.show("show version")
+
+
+def test_errors_never_carry_the_password() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with _client(handler) as client, pytest.raises(NxapiUnreachable) as excinfo:
+        client.show("show version")
+    assert "s3cret-pw" not in str(excinfo.value)
+
+
+def test_certificate_is_not_verified(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Project decision: the switch's self-signed certificate is accepted.
+    captured: dict[str, Any] = {}
+    real_client = httpx.Client
+
+    def spy(*args: Any, **kwargs: Any) -> httpx.Client:
+        captured.update(kwargs)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr("app.nxapi.httpx.Client", spy)
+    NxapiClient(TARGET).close()
+    assert captured["verify"] is False

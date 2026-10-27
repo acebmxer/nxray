@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>
+    NXray is running, but it is not connected to a switch. Connecting one
+    comes in a later stage, with a setup page that creates NXray's own
+    account on the switch.
+  </p>
+</div>
+{% endblock %}

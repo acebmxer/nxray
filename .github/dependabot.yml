@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # The GitHub Actions used in CI.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+
+  # Python dependencies declared in pyproject.toml.
+  - package-ecosystem: "pip"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+
+  # The base image in the Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - "dependencies"

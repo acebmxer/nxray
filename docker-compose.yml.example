@@ -1,0 +1,47 @@
+services:
+  nxray:
+    # Built from this folder. There is no published image yet; one on GHCR
+    # comes with the release workflow in a later stage. Until then, run
+    # this from a clone of the repository:
+    #
+    #   cp docker-compose.yml.example docker-compose.yml
+    #   docker compose up -d --build
+    #
+    build: .
+    image: nxray:local
+    container_name: nxray
+    restart: unless-stopped
+    env_file:
+      # Deliberately NOT named .env, and deliberately long-form.
+      #
+      # An Argon2 hash is full of $ ($argon2id$v=19$m=65536,...). Compose treats
+      # $ as variable interpolation in two separate places, and both have to be
+      # dealt with or the container receives a mangled hash and refuses to start:
+      #
+      #   1. Values loaded from env_file      -> fixed by "format: raw"
+      #   2. Compose auto-loads ./.env as its OWN variable source for
+      #      interpolating this file, whatever env_file says -> fixed by not
+      #      calling the file .env
+      - path: nxray.env
+        required: true
+        format: raw
+    ports:
+      # Reachable from other machines on your network on port 8080. Change
+      # the left number to move it; the right one is the port inside the
+      # container and never changes.
+      #
+      # This is plain HTTP: your NXray password and session travel
+      # unencrypted. Put NXray behind an HTTPS reverse proxy (and set
+      # NXRAY_HTTPS=true) for anything beyond a trusted management network.
+      # To allow only the Docker host itself (a reverse proxy on the same
+      # machine), put the loopback address in front:
+      #
+      #   - "127.0.0.1:8080:8080"
+      #
+      - "8080:8080"
+    volumes:
+      # Holds the SQLite database and the session signing key.
+      - nxray-data:/data
+
+volumes:
+  nxray-data:

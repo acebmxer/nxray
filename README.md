@@ -1,0 +1,92 @@
+# NXray
+
+[![CI](https://github.com/acebmxer/nxray/actions/workflows/ci.yml/badge.svg)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
+[![Tests](https://img.shields.io/badge/tests-106%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+
+A web interface for monitoring and managing Cisco Nexus switches through
+NX-API, so everyday checks and changes don't need an SSH session.
+
+Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
+
+**Status:** early. Stage 1 of the roadmap, the groundwork, is built: you can install NXray, sign
+in, and see an empty dashboard. Connecting a switch comes next; see the
+[roadmap](#roadmap).
+
+## Read next
+
+| Page | What it covers |
+| --- | --- |
+| [Installation](docs/installation.md) | Getting the container running |
+| [Configuration](docs/configuration.md) | Every setting, its default and what it does |
+| [Function index](docs/functions.md) | Every function in the codebase, in one place |
+| [Contributing](CONTRIBUTING.md) | Development setup and conventions |
+| [Security](SECURITY.md) | Threat model and reporting a vulnerability |
+| [Changelog](CHANGELOG.md) | What changed in each version |
+
+## Quick start
+
+On a Linux machine with Docker and Compose 2.30 or newer:
+
+```bash
+git clone https://github.com/acebmxer/nxray.git && cd nxray
+cp docker-compose.yml.example docker-compose.yml
+cp nxray.env.example nxray.env
+docker compose run --rm nxray python -m app.hashpw   # paste the printed line into nxray.env
+docker compose up -d
+```
+
+Then open `http://<that machine>:8080` and sign in. The full steps are in
+[Installation](docs/installation.md).
+
+## Requirements
+
+- Linux with Docker Engine and the Compose plugin, 2.30 or newer.
+- A Cisco Nexus switch with NX-API turned on (`feature nxapi`), reachable from
+  the Docker host on port 443.
+
+## How it talks to the switch
+
+Only through NX-API, the switch's own HTTPS interface: the same commands you
+type over SSH, answered as structured data. NXray will use its own account on
+the switch, never `admin`: the setup page signs in with the admin login once,
+creates that account with a long random password, and keeps only that
+account's login. The admin password is never stored.
+
+The switch's self-signed HTTPS certificate is accepted without checking; see
+[SECURITY.md](SECURITY.md) for what that means.
+
+## Roadmap
+
+1. **Groundwork**: install, sign in, empty dashboard. *(built)*
+2. **Switch setup**: a setup page that connects to the switch and creates
+   NXray's own read-only account on it; clear messages when the switch can't
+   be reached or refuses the login; a "Test connection" button.
+3. **Dashboard**: hostname, model, NX-OS version, uptime, temperatures against
+   their limits, fans, power supplies and power draw, CPU and memory, port
+   counts.
+4. **Ports page**: every port's state, speed, VLAN, description, transceiver,
+   traffic and error counters. Read-only.
+5. **Port changes**: turn a port on or off and edit its description, with a
+   confirm step, plus "Save config".
+6. **VLANs**: create, delete and rename VLANs; set the VLANs on ports.
+7. **Switch settings in the web interface**: change the switch address or run
+   setup again.
+8. **HTTPS, more users, two-factor sign-in, self-update, published images.**
+9. **History**: temperatures, power and traffic over time, as graphs.
+
+## Contributing
+
+Pull requests go to the `dev` branch. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+for the setup and conventions, use the issue templates for
+[bug reports and feature requests](https://github.com/acebmxer/nxray/issues/new/choose),
+report vulnerabilities privately as described in [SECURITY.md](SECURITY.md),
+and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE)

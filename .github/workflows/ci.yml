@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to a commit SHA: a tag can be moved, a SHA cannot.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -ra
+
+  docker:
+    name: Docker build and smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the image
+        run: docker build -t nxray:ci .
+
+      - name: Refuse to start without a password hash
+        run: |
+          if docker run --rm nxray:ci python -c "from app.config import load_settings; load_settings()" 2>/dev/null; then
+            echo "::error::the app started with no NXRAY_ADMIN_PASSWORD_HASH set"
+            exit 1
+          fi
+          echo "correctly refused to start"
+
+      - name: Start the container
+        run: |
+          HASH=$(printf 'ci-test-password' | docker run --rm -i nxray:ci python -m app.hashpw | grep -oP '(?<=HASH=).*')
+          test -n "$HASH" || { echo "::error::app.hashpw printed no hash"; exit 1; }
+          docker run -d --name nxray -p 8080:8080 \
+            -e NXRAY_ADMIN_PASSWORD_HASH="$HASH" \
+            nxray:ci
+
+      - name: Wait for it to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::container never became healthy"
+          exit 1
+
+      - name: The dashboard requires a login
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)
+          test "$code" = "303" || { echo "::error::expected 303, got $code"; exit 1; }
+          location=$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost:8080/)
+          case "$location" in
+            */login*) echo "anonymous callers are sent to $location" ;;
+            *) echo "::error::expected a redirect to /login, got $location"; exit 1 ;;
+          esac
+
+      - name: Signing in works
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -c jar \
+            --data-urlencode username=admin --data-urlencode password=ci-test-password \
+            --data-urlencode next=/ http://localhost:8080/login)
+          test "$code" = "303" || { echo "::error::login answered $code"; exit 1; }
+          curl -sf -b jar http://localhost:8080/ | grep -q "No switch connected yet" \
+            || { echo "::error::dashboard did not render after login"; exit 1; }
+          echo "signed in and saw the dashboard"
+
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker exec nxray id -u)
+          test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
+          echo "runs as uid $uid"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs nxray
+
+  trivy:
+    name: Trivy vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the image
+        run: docker build -t nxray:ci .
+
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nxray:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore

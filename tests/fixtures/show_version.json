@@ -1,0 +1,36 @@
+{
+  "header_str": "Cisco Nexus Operating System (NX-OS) Software\nTAC support: http://www.cisco.com/tac\nCopyright (C) 2002-2025, Cisco and/or its affiliates.\nAll rights reserved.\nThe copyrights to certain works contained in this software are\nowned by other third parties and used and distributed under their own\nlicenses, such as open source.  This software is provided \"as is,\" and unless\notherwise stated, there is no warranty, express or implied, including but not\nlimited to warranties of merchantability and fitness for a particular purpose.\nCertain components of this software are licensed under\nthe GNU General Public License (GPL) version 2.0 or \nGNU General Public License (GPL) version 3.0  or the GNU\nLesser General Public License (LGPL) Version 2.1 or \nLesser General Public License (LGPL) Version 2.0. \nA copy of each such license is available at\nhttp://www.opensource.org/licenses/gpl-2.0.php and\nhttp://opensource.org/licenses/gpl-3.0.html and\nhttp://www.opensource.org/licenses/lgpl-2.1.php and\nhttp://www.gnu.org/licenses/old-licenses/library.txt.",
+  "bios_ver_str": "07.71",
+  "kickstart_ver_str": "9.3(16)",
+  "nxos_ver_str": "9.3(16)",
+  "bios_cmpl_time": "11/10/2024",
+  "kick_file_name": "bootflash:///nxos.9.3.16.bin",
+  "nxos_file_name": "bootflash:///nxos.9.3.16.bin",
+  "kick_cmpl_time": "8/15/2025 30:00:00",
+  "nxos_cmpl_time": "8/15/2025 30:00:00",
+  "kick_tmstmp": "08/28/2025 07:26:22",
+  "nxos_tmstmp": "08/28/2025 07:26:22",
+  "chassis_id": "Nexus9000 C92160YC-X chassis",
+  "cpu_name": "Intel(R) Core(TM) i3- CPU @ 2.50GHz",
+  "memory": "16399572",
+  "mem_type": "kB",
+  "proc_board_id": "SAL0000000A",
+  "host_name": "nexus-lab",
+  "bootflash_size": "53298520",
+  "kern_uptm_days": "0",
+  "kern_uptm_hrs": "0",
+  "kern_uptm_mins": "23",
+  "kern_uptm_secs": "2",
+  "rr_usecs": "543458",
+  "rr_ctime": "Mon Oct 26 23:16:53 2026",
+  "rr_reason": "Module PowerCycled",
+  "rr_sys_ver": null,
+  "rr_service": "HW check by card-client",
+  "plugins": "Core Plugin, Ethernet Plugin",
+  "manufacturer": "Cisco Systems, Inc.",
+  "TABLE_package_list": {
+    "ROW_package_list": {
+      "package_id": null
+    }
+  }
+}
