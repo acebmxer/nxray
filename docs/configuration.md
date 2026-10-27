@@ -22,4 +22,5 @@ message naming the setting; see `docker compose logs nxray`.
 | `NXRAY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`. |
 
 The switch address and NXray's switch account are not set here. They are
-entered on the Switch page; see [Switch setup](switch-setup.md).
+entered on the Switch page, which can also change the address later; see
+[Switch setup](switch-setup.md).

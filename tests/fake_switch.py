@@ -65,6 +65,9 @@ _SWITCHPORT = (
 # VLANs NX-OS keeps for itself (show system vlan reserved).
 RESERVED_VLANS = range(3968, 4096)
 
+# Two of the roles every NX-OS switch has (cisco-25gb lists 27).
+BUILTIN_ROLES = ("network-admin", "network-operator")
+
 
 @dataclass
 class Role:
@@ -250,7 +253,23 @@ class FakeSwitch:
             return denied, context
         if match := re.fullmatch(r"username (\S+) password (\S+) role (\S+)", cmd):
             name, password, role = match.groups()
-            self.users[name] = (password, role)
+            if name in self.users:
+                # As on cisco-25gb: an existing account gets the new password at
+                # once and keeps every role it had; the named role is added.
+                primary = self.users[name][1]
+                self.users[name] = (password, primary)
+                if role != primary:
+                    self.extra_roles.setdefault(name, set()).add(role)
+            else:
+                self.users[name] = (password, role)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"username (\S+) role (\S+)", cmd):
+            name, role = match.groups()
+            if name not in self.users:
+                return _error(ident, f"% User {name} does not exist\n"), context
+            if role not in self.roles and role not in BUILTIN_ROLES:
+                return _error(ident, "% Role does not exist\n"), context
+            self.extra_roles.setdefault(name, set()).add(role)
             return _ok(ident, None), context
         if match := re.fullmatch(r"no username (\S+)", cmd):
             if self.sessions_block_delete and match.group(1) in self.signed_in:
@@ -327,6 +346,10 @@ class FakeSwitch:
             return _ok(ident, {"hostname": "nexus-lab"})
         if cmd == "show nxapi":
             return _ok(ident, {"nxapi_status": "nxapi enabled", "timeout": "10"})
+        if cmd == "show role":
+            names = [*BUILTIN_ROLES, *sorted(self.roles)]
+            table = [{"role_name": name, "role_description": ""} for name in names]
+            return _ok(ident, {"TABLE_role": {"ROW_role": table}})
         if cmd == "show user-account":
             rows = []
             for name in self.users:

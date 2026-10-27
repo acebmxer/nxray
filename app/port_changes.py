@@ -37,6 +37,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.nxapi import (
+    PORT_CHANGES_ROLE,
     NxapiClient,
     NxapiError,
     SwitchTarget,
@@ -56,7 +57,7 @@ from app.switch_ssh import (
 
 log = logging.getLogger("nxray.port_changes")
 
-ROLE_NAME = "nxray-ports"
+ROLE_NAME = PORT_CHANGES_ROLE
 
 # How long one SSH step may stay silent before it counts as stuck.
 SSH_TIMEOUT = 30.0
@@ -194,8 +195,8 @@ def enable_port_changes(
             ) from exc
         if account_name.lower() not in account_names(users):
             raise SetupError(
-                f"NXray's account {account_name} is no longer on the switch. Forget this "
-                "switch and set it up again."
+                f"NXray's account {account_name} is no longer on the switch. Press Run "
+                "setup again on the Switch page: it makes the account again."
             )
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)

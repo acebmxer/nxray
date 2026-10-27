@@ -63,6 +63,48 @@ NXray's database.
 
   (with your account name in place of `nxray`).
 
+## Changing the address, and Run setup again
+
+Both are on the **Switch** page once a switch is set up.
+
+**Change the switch address** is for when the switch's management address or
+NX-API port changed. Type the new address and port and press **Change
+address**. NXray signs in there with its own account (`show version`) and
+stores the new address only if that works; otherwise it keeps the old one
+and says why. If the switch at the new address has another hostname, the
+page says so. No admin login is needed.
+
+**Run setup again** is for when NXray's login stopped working: someone
+changed the account's password or removed the account on the switch, or
+NXray can no longer read its stored copy because `NXRAY_SECRET_KEY` (or the
+data volume's `secret_key` file) changed. Type the admin username and
+password, tick the box and press **Run setup again**. NXray then:
+
+1. Signs in with the admin login and reads `show version`, `show
+   user-account`, `show role` and `show nxapi`.
+2. Runs `username <name> password <random> role network-operator` for
+   NXray's own account name. If the account is still there, this only gives
+   it a new password: it keeps every role it had, and the switch accepts the
+   new password at once. If the account is gone, this makes it again under
+   the same name.
+3. If port changes were on: when the account no longer has the
+   `nxray-ports` role but the switch still has the role, runs `username
+   <name> role nxray-ports`. An account that was made again gets it before
+   it first signs in, so there is no wait; an account that was still there
+   may hold its old permissions in its NX-API session, so NXray waits about
+   11 minutes, as after turning port changes on. When the role itself is no
+   longer on the switch, port changes are turned off in NXray; turn them on
+   again on the same page.
+4. Signs in with the new password to check it, stores it encrypted, and
+   runs `copy running-config startup-config` (which also saves any other
+   unsaved changes on the switch).
+
+The address and NX-API port fields of Run setup again start with the stored
+address; change them too if the switch moved. The account keeps its name:
+to use another name, press **Forget this switch** and set it up again.
+Neither button can be used while NXray is waiting for the switch to apply a
+new role, because signing in would make the wait start over.
+
 ## Port changes
 
 Port changes are off after setup: NXray's account can only read. To turn
@@ -162,13 +204,15 @@ them. Deleting asks you to confirm.
 
 | The page says | What it means |
 | --- | --- |
-| could not reach the switch | Wrong address or port, a firewall, or NX-API is off |
+| could not reach the switch | Wrong address or port, a firewall, or NX-API is off. If the switch moved, use **Change the switch address** |
 | the switch refused the admin username or password | The admin login typed during setup is wrong |
-| the switch refused the NXray account | NXray's account was removed or changed on the switch. Forget the switch and set it up again with a new name |
-| NXray cannot read the stored switch login | `NXRAY_SECRET_KEY` (or the data volume's `secret_key` file) changed. Forget the switch and set it up again with a new name |
+| the switch refused the NXray account | NXray's account was removed, or its password changed, on the switch. Press **Run setup again** on the Switch page |
+| NXray cannot read the stored switch login | `NXRAY_SECRET_KEY` (or the data volume's `secret_key` file) changed. Press **Run setup again** on the Switch page |
 | NXray is leaving the switch alone for about N more minutes | Port changes were just turned on; the switch is applying the new role. Wait, then reload |
 | could not reach the switch over SSH | Turning on port changes needs SSH from the NXray machine to the switch; check SSH is on and the port |
 | may not make this change yet | The switch has not applied the port-changes role, or it was removed. Leave NXray's pages closed for 10 minutes and try again, or turn port changes on again |
+| NXray kept the address | Change the switch address could not sign in at the new address with NXray's account; the message after it says why |
+| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port changes** to make it again |
 | VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN changes** on the Switch page |
 
 ## The certificate and the SSH host key

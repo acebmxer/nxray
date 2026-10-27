@@ -37,7 +37,13 @@ startup-config`. Turning on port changes reads `show interface brief`,
 role and `username <name> role nxray-ports` into an SSH session (NX-API
 refuses the `;` the role's rules need), and saves the configuration. The SSH
 sign-in uses that password only, never keys or an SSH agent on the NXray
-machine.
+machine. Run setup again reads `show version`, `show user-account`, `show
+role` and `show nxapi`, runs `username <name> password <random> role
+network-operator` for NXray's existing account name only (a new password,
+or the account made again), `username <name> role nxray-ports` when port
+changes were on and the account lost the role, and saves the
+configuration. Changing the switch address needs no admin login: NXray
+signs in at the new address with its own account before storing it.
 
 **Where it belongs.** On a trusted management network. NXray serves plain
 HTTP on port 8080; put it behind an HTTPS reverse proxy (and set

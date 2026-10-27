@@ -33,6 +33,7 @@ prose columns; those are a reviewer's job.
 | Run a command on the switch | `app/nxapi.py`, `NxapiClient.show` (and the guarded config methods) |
 | Get NXray's stored switch login | `app/switch_connection.py`, `load_target` |
 | Check NXray can reach the switch | `app/switch_setup.py`, `check_connection` |
+| Give NXray's account a new password, or make it again | `app/switch_repair.py`, `run_repair` |
 | Encrypt a secret for the database | `app/crypto.py` |
 | Protect a form against forgery | `app/dependencies.py`, `require_csrf`; token from `security.csrf_token` |
 | Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports) |
@@ -114,11 +115,11 @@ raises, both handled in `main.create_app`.
 | --- | --- | --- | --- | --- |
 | `build_payload` | `(commands: list[str]) -> list[dict]` | The JSON-RPC request body for running commands in order | `NxapiClient.show` | v0.1.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
-| `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page.switch_setup` | v0.1.0 |
+| `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page` (setup, address, repair) | v0.1.0 |
 | `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
 | `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
 | `parse_vlan_list` | `(text: str) -> list[int]` | A typed VLAN list (`10,20-30`, `all`, `none`) as numbers; refuses anything else | `vlans` | v0.1.0 |
-| `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `delete_user`, `switch_setup.run_setup`, `port_changes.role_lines` | v0.1.0 |
+| `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `give_role`, `delete_user`, `switch_setup.run_setup`, `switch_repair.run_repair`, `port_changes.role_lines` | v0.1.0 |
 | `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
@@ -128,7 +129,8 @@ raises, both handled in `main.create_app`.
 `NxapiClient(target).show(*commands)` runs show commands in one request.
 The only configuration methods are `create_user(name, password, role)`
 (letters-and-digits password, role `network-operator` only),
-`delete_user(name)`, `configure_port(name, description=, enabled=)` (one
+`give_role(name, role)` (role `nxray-ports` only), `delete_user(name)`,
+`configure_port(name, description=, enabled=)` (one
 port's description and on/off, nothing else), `configure_vlan(vlan_id,
 name=None)` (create or rename), `delete_vlan(vlan_id)` (never VLAN 1),
 `configure_port_vlans(name, mode=, access_vlan=, native_vlan=,
@@ -176,7 +178,7 @@ port's own page shows.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `decrypt` | `(stored: str, secret_key: str) -> str` | Recovers a secret; raises `DecryptionError` for a changed key or tampering | `switch_connection.load_target` | v0.1.0 |
-| `encrypt` | `(plaintext: str, secret_key: str) -> str` | AES-GCM with a key derived from the secret key | `switch_connection.save_connection` | v0.1.0 |
+| `encrypt` | `(plaintext: str, secret_key: str) -> str` | AES-GCM with a key derived from the secret key | `switch_connection.save_connection`, `replace_login` | v0.1.0 |
 
 ## `app/switch_connection.py` — the stored switch
 
@@ -186,9 +188,12 @@ port's own page shows.
 | `get_connection` | `(conn) -> SwitchConnection \| None` | The stored connection without its password | Switch page, dashboard | v0.1.0 |
 | `load_target` | `(conn, secret_key) -> SwitchTarget` | The stored login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
 | `record_test_result` | `(conn, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
+| `replace_login` | `(conn, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_address` | `(conn, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
 | `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
-| `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
+| `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
 | `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
@@ -200,17 +205,30 @@ changes are on and how long NXray still waits before calling the switch;
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup` | v0.1.0 |
+| `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page Test connection | v0.1.0 |
 | `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `read_switch` | v0.1.0 |
 | `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `connection_error` | v0.1.0 |
 | `load_dashboard_status` | `(target, transport=None) -> tuple[ConnectionStatus, Dashboard \| None]` | The whole dashboard from one request, or why it failed | `routes/dashboard.dashboard` | v0.1.0 |
 | `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
-| `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup` | v0.1.0 |
+| `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
+| `verify_account` | `(host, port, name, password, transport) -> None` | Signs in with a login NXray just set, retrying briefly; raises the `NxapiError` if it never works | `run_setup`, `switch_repair.run_repair` | v0.1.0 |
 
 `SetupError` carries the message the page shows. The admin login lives only
 inside `run_setup`.
+
+## `app/switch_repair.py` — Run setup again
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `role_names` | `(role_body) -> set[str]` | Every role name in `show role` | `run_repair` | v0.1.0 |
+| `run_repair` | `(*, host, port, admin_user, admin_password, account_name, port_changes, store, transport=None) -> RepairResult` | Gives NXray's account a new password (or makes it again under the same name), gives back the port-changes role if the switch still has it, checks the login, stores it, saves the config | `routes/switch_page.switch_repair` | v0.1.0 |
+
+`RepairResult.port_role` is `ROLE_KEPT`, `ROLE_GIVEN`, `ROLE_MISSING` or
+None (port changes were off); `pause_seconds` is non-zero only when an
+existing account had to be given the role again. The admin login lives
+only inside `run_repair`.
 
 ## `app/switch_ssh.py` — SSH, for lines NX-API refuses
 
@@ -229,10 +247,10 @@ NX-API certificate is. Tests pass a pretend opener through
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes` | v0.1.0 |
+| `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
-| `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes` | v0.1.0 |
+| `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
 `ROLE_RULES` (ports) and `VLAN_RULES` are the role's only rules; `ROLE_NAME`
@@ -286,9 +304,11 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `ports_page` | `(request, username, show) -> Response` | `GET /ports?show=all\|up\|down\|errors` | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
+| `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
 | `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port changes and Turn on VLAN changes buttons | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
+| `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
 | `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |

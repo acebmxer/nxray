@@ -153,6 +153,74 @@
   {{ admin_form("Turn on port changes", true) }}
 </section>
 {% endif %}
+
+<section class="card">
+  <h2 class="card-title">Change the switch address</h2>
+  <p class="lead">
+    For when the switch's management address or NX-API port changed. NXray
+    signs in at the new address with its own account first, and keeps the old
+    address if that does not work. No admin login is needed.
+  </p>
+  <form method="post" action="/switch/address" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="addr_host">Switch address</label>
+    <input id="addr_host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="addr_port">NX-API port</label>
+    <input id="addr_port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <button type="submit" class="btn btn-primary">Change address</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Run setup again</h2>
+  <p class="lead">
+    For when NXray's login stopped working: the account's password was changed
+    or the account was removed on the switch, or NXray can no longer read its
+    stored copy. NXray signs in to the switch's NX-API once with the admin login
+    below and gives its account {{ connection.username }} a new random password,
+    or makes it again under the same name if it is gone. The account keeps its
+    permissions: port changes stay on if the switch still has the
+    {{ role_name }} role. The admin password is used for this only and never
+    stored.
+  </p>
+  <p class="hint">
+    To use another account name instead, press Forget this switch and set it up
+    again with the new name.
+  </p>
+  <form method="post" action="/switch/repair" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="rp_host">Switch address</label>
+    <input id="rp_host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="rp_port">NX-API port</label>
+    <input id="rp_port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <label for="rp_admin_user">Switch admin username</label>
+    <input id="rp_admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="rp_admin_password">Switch admin password</label>
+    <input id="rp_admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Run setup again</button>
+  </form>
+</section>
 {% else %}
 <section class="card">
   <h2 class="card-title">Set up the switch</h2>

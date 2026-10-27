@@ -15,10 +15,11 @@ verified. This is a project decision, not an oversight.
 
 Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
-``delete_user``, ``configure_port``, ``configure_vlan``, ``delete_vlan``,
-``configure_port_vlans``, ``save_config``), each building its commands from
-checked values, so nothing that renders a page can change the switch by
-accident and no caller can pass free text to the switch's configuration.
+``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
+``delete_vlan``, ``configure_port_vlans``, ``save_config``), each building
+its commands from checked values, so nothing that renders a page can change
+the switch by accident and no caller can pass free text to the switch's
+configuration.
 """
 
 from __future__ import annotations
@@ -53,8 +54,12 @@ _ACCOUNT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,27}$")
 # a separator, a quote or a request for help ("?").
 _SAFE_PASSWORD = re.compile(r"^[A-Za-z0-9]{8,64}$")
 
-# The only roles NXray ever gives its own account.
+# The only role NXray creates its own account with.
 ALLOWED_ROLES = frozenset({"network-operator"})
+
+# The role that allows port and VLAN changes (app/port_changes.py builds it).
+# The only role NXray ever adds to its account afterwards.
+PORT_CHANGES_ROLE = "nxray-ports"
 
 # A front-panel port: Ethernet1/3, or a breakout port such as Ethernet1/49/2.
 _PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
@@ -389,6 +394,20 @@ class NxapiClient:
         command = f"username {name} password {password} role {role}"
         label = f"username {name} password ... role {role}"
         self._send([command], [label], self._target.timeout, allow_text=True)
+
+    def give_role(self, name: str, role: str) -> None:
+        """Add NXray's port-changes role to an account. Needs an admin login.
+
+        Used by Run setup again when it makes NXray's account again: the
+        role must be on the account before its first sign-in, because the
+        switch keeps a signed-in account's roles until its NX-API session
+        ends.
+        """
+        validate_account_name(name)
+        if role != PORT_CHANGES_ROLE:
+            raise ValueError(f"role {role!r} is not one NXray gives its account")
+        command = f"username {name} role {role}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
 
     def delete_user(self, name: str) -> None:
         """Remove a local switch account. Needs an admin login.

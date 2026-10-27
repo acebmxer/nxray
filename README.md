@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-409%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-455%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,10 +13,12 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 6 of the [roadmap](#roadmap) are built: you
+**Status:** early. Stages 1 to 7 of the [roadmap](#roadmap) are built: you
 can install NXray, sign in, connect it to a switch, see the switch's health
 on the dashboard, look at every port, turn ports on or off, edit their
-descriptions, create, rename and delete VLANs, and set the VLANs on ports.
+descriptions, create, rename and delete VLANs, set the VLANs on ports, and
+change the switch's address or repair NXray's switch login from the web
+interface.
 
 ## Read next
 
@@ -84,7 +86,7 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 6. **VLANs**: create, delete and rename VLANs; set the VLANs on ports.
    *(built)*
 7. **Switch settings in the web interface**: change the switch address or run
-   setup again.
+   setup again. *(built)*
 8. **HTTPS, more users, two-factor sign-in, self-update, published images.**
 9. **History**: temperatures, power and traffic over time, as graphs.
 

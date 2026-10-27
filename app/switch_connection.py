@@ -134,6 +134,47 @@ def set_changes_enabled(
     conn.commit()
 
 
+def set_changes_off(conn: sqlite3.Connection) -> None:
+    """Record that port changes are off (the role is gone from the switch)."""
+    conn.execute(
+        "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0 WHERE id = 1"
+    )
+    conn.commit()
+
+
+def replace_login(
+    conn: sqlite3.Connection,
+    *,
+    host: str,
+    port: int,
+    password: str,
+    switch_hostname: str,
+    secret_key: str,
+) -> None:
+    """Store the new password Run setup again gave the account, and where it worked.
+
+    The account name, port-change state and pause are left as they are.
+    """
+    conn.execute(
+        """
+        UPDATE switch_connection
+           SET host = ?, port = ?, password_encrypted = ?, switch_hostname = ?
+         WHERE id = 1
+        """,
+        (host, port, encrypt(password, secret_key), switch_hostname),
+    )
+    conn.commit()
+
+
+def set_address(conn: sqlite3.Connection, *, host: str, port: int, switch_hostname: str) -> None:
+    """Store a new switch address that NXray's account has already signed in at."""
+    conn.execute(
+        "UPDATE switch_connection SET host = ?, port = ?, switch_hostname = ? WHERE id = 1",
+        (host, port, switch_hostname),
+    )
+    conn.commit()
+
+
 def set_unsaved_changes(conn: sqlite3.Connection, unsaved: bool) -> None:
     """Remember whether NXray changed the switch since the config was last saved."""
     conn.execute("UPDATE switch_connection SET unsaved_changes = ? WHERE id = 1", (int(unsaved),))
@@ -197,8 +238,11 @@ __all__ = [
     "get_connection",
     "load_target",
     "record_test_result",
+    "replace_login",
     "save_connection",
+    "set_address",
     "set_changes_enabled",
+    "set_changes_off",
     "set_config_saved",
     "set_unsaved_changes",
 ]

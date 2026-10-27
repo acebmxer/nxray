@@ -47,8 +47,8 @@ _VERIFY_PAUSE_SECONDS = 1.0
 # Shown when the stored password cannot be decrypted.
 KEY_CHANGED_MESSAGE = (
     "NXray cannot read the stored switch login. This happens when NXRAY_SECRET_KEY "
-    "(or the data volume's secret_key file) changed. Forget this switch on the Switch "
-    "page and set it up again with a new account name."
+    "(or the data volume's secret_key file) changed. Press Run setup again on the Switch "
+    "page: it gives NXray's account a new password and stores that."
 )
 
 
@@ -186,7 +186,7 @@ def run_setup(
         log.info("created switch account %s on %s (%s)", account_name, host, hostname)
 
         try:
-            _verify_new_account(host, port, account_name, password, transport)
+            verify_account(host, port, account_name, password, transport)
             store(password, hostname)
         except Exception as exc:
             removed = _undo(client, account_name, host)
@@ -211,13 +211,18 @@ def run_setup(
     return SetupResult(hostname, True, None)
 
 
-def _verify_new_account(
+def verify_account(
     host: str,
     port: int,
     name: str,
     password: str,
     transport: httpx.BaseTransport | None,
 ) -> None:
+    """Sign in with a login NXray just set; raises the NxapiError if it never works.
+
+    Retried a few times, in case the switch takes a moment to accept a
+    freshly created account or a new password.
+    """
     target = SwitchTarget(host=host, port=port, username=name, password=password, timeout=10)
     for attempt in range(1, _VERIFY_ATTEMPTS + 1):
         try:
@@ -262,8 +267,9 @@ def connection_error(exc: NxapiError, target: SwitchTarget) -> str:
     message = describe_error(exc, target.host, target.port, f"NXray account ({target.username})")
     if isinstance(exc, NxapiAuthError):
         message += (
-            " The account may have been removed or changed on the switch. Forget this "
-            "switch on the Switch page and set it up again."
+            " The account may have been removed or its password changed on the switch. "
+            "Press Run setup again on the Switch page to set it up again: it gives the "
+            "account a new password, or makes it again if it was removed."
         )
     return _scrub(message, target.password)
 

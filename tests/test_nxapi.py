@@ -320,6 +320,29 @@ def test_delete_user_refuses_a_bad_name() -> None:
     assert seen == []
 
 
+def test_give_role_sends_one_username_role_command() -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client:
+        client.give_role("nxray-dev", "nxray-ports")
+    assert seen == ["username nxray-dev role nxray-ports"]
+
+
+@pytest.mark.parametrize(
+    ("name", "role"),
+    [
+        ("nxray-dev", "network-admin"),
+        ("nxray-dev", "nxray-ports ; reload"),
+        ("nxray dev", "nxray-ports"),
+        ("admin", "nxray-ports"),
+    ],
+)
+def test_give_role_refuses_any_other_role_or_a_bad_name(name: str, role: str) -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client, pytest.raises(ValueError):
+        client.give_role(name, role)
+    assert seen == []
+
+
 def test_save_config_text_answers() -> None:
     def reply(text: str) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "result": {"body": text}, "id": 1}

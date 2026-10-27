@@ -11,6 +11,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Switch settings on the Switch page.** Change the switch address lets
+  NXray follow a switch whose management address or NX-API port changed: it
+  signs in at the new address with its own account first and keeps the old
+  address if that fails, with no admin login needed. Run setup again repairs
+  NXray's switch login with the admin login when it stopped working (the
+  account's password was changed or the account was removed on the switch,
+  or NXray can no longer read its stored copy after a secret key change): it
+  gives the same account a new password, or makes it again under the same
+  name, and keeps its port and VLAN permissions; the address can be changed
+  in the same step. Before, the only way out was to forget the switch and
+  set it up again under a new account name. If the account had lost the
+  nxray-ports role, it gets it back (an account that was still there means
+  the usual 11-minute wait, once); if the role is gone from the switch,
+  port changes are turned off with a note to turn them on again. The
+  messages for a refused NXray login and a changed secret key now point to
+  Run setup again.
 - **VLANs.** A new VLANs page lists every VLAN with the ports that use it,
   and creates, renames and deletes VLANs; deleting asks to confirm, and a
   VLAN a port still uses is not deleted (the page names the ports to move
