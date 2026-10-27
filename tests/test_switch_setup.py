@@ -13,6 +13,7 @@ from app.switch_setup import (
     account_names,
     check_connection,
     generate_password,
+    load_dashboard_status,
     run_setup,
 )
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
@@ -218,3 +219,22 @@ def test_check_connection_reports_an_unreachable_switch() -> None:
     status = check_connection(_target("x"), transport=FakeSwitch(reachable=False).transport())
     assert not status.ok
     assert "could not reach the switch" in status.message
+
+
+def test_load_dashboard_status_reads_everything() -> None:
+    switch = FakeSwitch()
+    switch.users["nxray"] = ("Good1Password", "network-operator")
+    status, data = load_dashboard_status(_target("Good1Password"), transport=switch.transport())
+    assert status.ok and status.message == "Connected to nexus-lab as nxray."
+    assert data is not None
+    assert data.environment.total_draw_w == 126
+    assert data.ports.total == 54
+
+
+def test_load_dashboard_status_reports_a_failure_without_data() -> None:
+    status, data = load_dashboard_status(
+        _target("Gone1Password"), transport=FakeSwitch().transport()
+    )
+    assert not status.ok and data is None
+    assert "refused the NXray account (nxray)" in status.message
+    assert "Gone1Password" not in status.message

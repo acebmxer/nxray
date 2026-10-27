@@ -127,7 +127,8 @@ self-signed certificate is accepted on purpose.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `fan_speed_percent` | `(zone_speed) -> int \| None` | Fan zone speed (`"0x80"`) as a percentage | `switch.parse_environment` | v0.1.0 |
-| `load_dashboard` | `(client: NxapiClient) -> Dashboard` | Everything the dashboard shows, from one request | (dashboard, a later stage) | v0.1.0 |
+| `health_problems` | `(dashboard: Dashboard) -> list[str]` | Plain-words list of hot sensors and failed fans or power supplies | `routes/dashboard.dashboard` | v0.1.0 |
+| `load_dashboard` | `(client: NxapiClient) -> Dashboard` | Everything the dashboard shows, from one request | `switch_setup.load_dashboard_status` | v0.1.0 |
 | `parse_environment` | `(body) -> Environment` | Temperatures, fans, power supplies from `show environment` | `switch.load_dashboard` | v0.1.0 |
 | `parse_port_summary` | `(body) -> PortSummary` | Ethernet port counts from `show interface brief` | `switch.load_dashboard` | v0.1.0 |
 | `parse_resources` | `(body) -> Resources` | CPU and memory use from `show system resources` | `switch.load_dashboard` | v0.1.0 |
@@ -162,8 +163,10 @@ a list; `rows` hides that.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup` | v0.1.0 |
-| `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page test, dashboard | v0.1.0 |
-| `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `check_connection` | v0.1.0 |
+| `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page Test connection | v0.1.0 |
+| `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `load_dashboard_status` | v0.1.0 |
+| `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `connection_error` | v0.1.0 |
+| `load_dashboard_status` | `(target, transport=None) -> tuple[ConnectionStatus, Dashboard \| None]` | The whole dashboard from one request, or why it failed | `routes/dashboard.dashboard` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
 
@@ -187,7 +190,7 @@ inside `run_setup`.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `dashboard` | `(request, username) -> Response` | `GET /`, the landing page; checks the switch live | router | v0.1.0 |
+| `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |

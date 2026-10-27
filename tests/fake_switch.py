@@ -31,6 +31,8 @@ class FakeSwitch:
     reject: set[str] = field(default_factory=set)
     save_text: str | None = None
     requests: list[list[str]] = field(default_factory=list)
+    # Show commands answered from these bodies instead of the recorded ones.
+    bodies: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -76,8 +78,16 @@ class FakeSwitch:
             return error(f"% Rejected by the fake switch: {cmd}\n")
         is_admin = self.users[user][1] == "network-admin"
 
-        if cmd == "show version":
-            return ok(load_fixture("show_version"))
+        if cmd in self.bodies:
+            return ok(self.bodies[cmd])
+        recorded = {
+            "show version": "show_version",
+            "show environment": "show_environment",
+            "show system resources": "show_system_resources",
+            "show interface brief": "show_interface_brief",
+        }
+        if cmd in recorded:
+            return ok(load_fixture(recorded[cmd]))
         if cmd == "show hostname":
             return ok({"hostname": "nexus-lab"})
         if cmd == "show user-account":

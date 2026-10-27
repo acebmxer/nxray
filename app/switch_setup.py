@@ -27,7 +27,7 @@ from app.nxapi import (
     SwitchTarget,
     validate_account_name,
 )
-from app.switch import SystemInfo, parse_version, rows
+from app.switch import Dashboard, SystemInfo, load_dashboard, parse_version, rows
 from app.switch_connection import SWITCH_TIMEOUT
 
 log = logging.getLogger("nxray.setup")
@@ -235,6 +235,17 @@ def _undo(client: NxapiClient, name: str, host: str) -> None:
         log.error("could not remove switch account %s on %s: %s", name, host, exc)
 
 
+def connection_error(exc: NxapiError, target: SwitchTarget) -> str:
+    """The message for a failed call made with NXray's own account."""
+    message = describe_error(exc, target.host, target.port, f"NXray account ({target.username})")
+    if isinstance(exc, NxapiAuthError):
+        message += (
+            " The account may have been removed or changed on the switch. Forget this "
+            "switch on the Switch page and set it up again."
+        )
+    return _scrub(message, target.password)
+
+
 def check_connection(
     target: SwitchTarget, transport: httpx.BaseTransport | None = None
 ) -> ConnectionStatus:
@@ -243,14 +254,19 @@ def check_connection(
         with NxapiClient(target, transport=transport) as client:
             (version,) = client.show("show version")
     except NxapiError as exc:
-        message = describe_error(
-            exc, target.host, target.port, f"NXray account ({target.username})"
-        )
-        if isinstance(exc, NxapiAuthError):
-            message += (
-                " The account may have been removed or changed on the switch. Forget this "
-                "switch on the Switch page and set it up again."
-            )
-        return ConnectionStatus(False, _scrub(message, target.password))
+        return ConnectionStatus(False, connection_error(exc, target))
     system = parse_version(version)
     return ConnectionStatus(True, f"Connected to {system.hostname} as {target.username}.", system)
+
+
+def load_dashboard_status(
+    target: SwitchTarget, transport: httpx.BaseTransport | None = None
+) -> tuple[ConnectionStatus, Dashboard | None]:
+    """Everything the dashboard shows, or why it could not be read."""
+    try:
+        with NxapiClient(target, transport=transport) as client:
+            dashboard = load_dashboard(client)
+    except NxapiError as exc:
+        return ConnectionStatus(False, connection_error(exc, target)), None
+    message = f"Connected to {dashboard.system.hostname} as {target.username}."
+    return ConnectionStatus(True, message, dashboard.system), dashboard

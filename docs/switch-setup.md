@@ -47,8 +47,8 @@ NXray's database.
 ## Test connection and Forget this switch
 
 - **Test connection** signs in with NXray's account and reads the switch's
-  hostname and version. The dashboard does the same check every time it
-  opens.
+  hostname and version. The dashboard also signs in with that account every
+  time it opens, and reads the switch's health.
 - **Forget this switch** deletes NXray's stored login only. The account stays
   on the switch. To remove it, in an SSH session on the switch as admin:
 

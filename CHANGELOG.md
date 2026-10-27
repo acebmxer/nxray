@@ -30,9 +30,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   kept on the server, so logging out ends them at once, and repeated wrong
   passwords from one address are blocked for a while.
 - **Dashboard.** After signing in you see the dashboard. With no switch set
-  up it points to the Switch page; once one is, it shows the switch's
-  hostname, model, NX-OS version and uptime, or why NXray can't reach it.
-  Temperatures, fans, power and ports come in a later stage.
+  up it points to the Switch page; once one is, it reads the switch live
+  and shows its hostname, model, NX-OS version, uptime and last restart
+  reason; every temperature sensor against the switch's own minor and
+  major limits; each fan and the fan speed; each power supply with its
+  input, output and capacity, the total draw and the power mode; CPU and
+  memory use; and how many Ethernet ports are up, down or empty. Anything
+  the switch reports as too hot or failed is listed at the top under
+  "Needs attention". If the switch can't be reached or refuses NXray's
+  login, the page says so instead.
 - **Protection for the pages.** Every page except sign-in and the health check
   needs a session, other sites cannot frame NXray, and the pages run no
   inline scripts.

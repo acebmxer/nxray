@@ -15,17 +15,127 @@
   </p>
   <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
 </div>
-{% elif status and status.ok %}
-<div class="card">
-  <p class="alert alert-ok">{{ status.message }}</p>
-  <dl class="facts">
-    <dt>Hostname</dt><dd>{{ status.system.hostname }}</dd>
-    <dt>Model</dt><dd>{{ status.system.model }}</dd>
-    <dt>NX-OS</dt><dd>{{ status.system.nxos_version }}</dd>
-    <dt>Up for</dt><dd>{{ status.system.uptime }}</dd>
-  </dl>
-  <p class="note">Temperatures, fans, power and ports arrive on this page in a later stage.</p>
+{% elif data %}
+{% set env = data.environment %}
+{% if problems %}
+<div class="alert alert-error" role="alert">
+  <strong>Needs attention</strong>
+  <ul class="problems">
+    {% for problem in problems %}<li>{{ problem }}</li>{% endfor %}
+  </ul>
 </div>
+{% else %}
+<p class="alert alert-ok">{{ status.message }} Temperatures, fans and power supplies are all OK.</p>
+{% endif %}
+
+<div class="grid">
+  <section class="card">
+    <h2 class="card-title">Switch</h2>
+    <dl class="facts">
+      <dt>Hostname</dt><dd>{{ data.system.hostname }}</dd>
+      <dt>Model</dt><dd>{{ data.system.model }}</dd>
+      <dt>NX-OS</dt><dd>{{ data.system.nxos_version }}</dd>
+      <dt>Up for</dt><dd>{{ data.system.uptime }}</dd>
+      {% if data.system.last_reset_reason %}
+      <dt>Last restart</dt><dd>{{ data.system.last_reset_reason }}</dd>
+      {% endif %}
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">CPU and memory</h2>
+    <dl class="facts">
+      <dt>CPU now</dt>
+      <dd>{% if data.resources.cpu_used_percent is not none %}
+        <meter min="0" max="100" low="70" high="90" optimum="0"
+               value="{{ data.resources.cpu_used_percent }}"></meter>
+        {{ data.resources.cpu_used_percent }}%{% else %}unknown{% endif %}</dd>
+      <dt>Memory</dt>
+      <dd>{% if data.resources.memory_used_percent is not none %}
+        <meter min="0" max="100" low="70" high="90" optimum="0"
+               value="{{ data.resources.memory_used_percent }}"></meter>
+        {{ data.resources.memory_used_percent }}%{% else %}unknown{% endif %}</dd>
+      <dt>Load (1 min)</dt><dd>{{ data.resources.load_1min or "unknown" }}</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Ports</h2>
+    <dl class="facts">
+      <dt>Ethernet ports</dt><dd>{{ data.ports.total }}</dd>
+      <dt>Up</dt><dd>{{ data.ports.up }}</dd>
+      <dt>Down</dt><dd>{{ data.ports.down }}</dd>
+      <dt>No transceiver</dt><dd>{{ data.ports.no_transceiver }}</dd>
+    </dl>
+    <p class="note">Each port in detail arrives on its own page in a later stage.</p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Power</h2>
+    <table class="table">
+      <thead><tr><th>Supply</th><th>Model</th><th>Input</th><th>Output</th><th>Capacity</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for psu in env.power_supplies %}
+        <tr>
+          <td>{{ psu.number }}</td>
+          <td>{{ psu.model }}</td>
+          <td>{% if psu.input_w is not none %}{{ psu.input_w }} W{% endif %}</td>
+          <td>{% if psu.output_w is not none %}{{ psu.output_w }} W{% endif %}</td>
+          <td>{% if psu.capacity_w is not none %}{{ psu.capacity_w }} W{% endif %}</td>
+          <td><span class="badge {{ 'badge-ok' if psu.ok else 'badge-crit' }}">{{ "OK" if psu.ok else (psu.status or "Unknown") }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">The switch reported no power supplies.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <dl class="facts facts-after">
+      <dt>Total draw</dt><dd>{% if env.total_draw_w is not none %}{{ env.total_draw_w }} W{% else %}unknown{% endif %}</dd>
+      <dt>Mode</dt><dd>{{ env.redundancy_mode or "unknown" }}</dd>
+    </dl>
+  </section>
+</div>
+
+<section class="card">
+  <h2 class="card-title">Temperatures</h2>
+  <table class="table">
+    <thead><tr><th>Sensor</th><th>Now</th><th>Minor limit</th><th>Major limit</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for sensor in env.temperatures %}
+      <tr>
+        <td>{{ sensor.name }}</td>
+        <td>{% if sensor.current_c is not none %}{{ sensor.current_c }}°C{% else %}unknown{% endif %}</td>
+        <td>{% if sensor.minor_c is not none %}{{ sensor.minor_c }}°C{% endif %}</td>
+        <td>{% if sensor.major_c is not none %}{{ sensor.major_c }}°C{% endif %}</td>
+        <td><span class="badge badge-{{ sensor.level }}">{{ {"ok": "OK", "warn": "Above minor", "crit": "Above major"}.get(sensor.level, "Unknown") }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5">The switch reported no temperature sensors.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Fans</h2>
+  <p class="lead">Fan speed: {% if env.fan_speed_percent is not none %}{{ env.fan_speed_percent }}%{% else %}unknown{% endif %}</p>
+  <table class="table">
+    <thead><tr><th>Fan</th><th>Model</th><th>Airflow</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for fan in env.fans %}
+      <tr>
+        <td>{{ fan.name }}</td>
+        <td>{{ fan.model if fan.model != "--" else "" }}</td>
+        <td>{{ fan.direction }}</td>
+        <td><span class="badge {{ 'badge-ok' if fan.ok else 'badge-crit' }}">{{ "OK" if fan.ok else (fan.status or "Unknown") }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">The switch reported no fans.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<p class="note">Read from the switch when this page opened. Reload the page for fresh values.</p>
 {% else %}
 <div class="card">
   <p class="alert alert-error" role="alert">{{ status.message }}</p>

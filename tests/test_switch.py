@@ -14,8 +14,10 @@ import httpx
 from app.nxapi import NxapiClient, SwitchTarget
 from app.switch import (
     DASHBOARD_COMMANDS,
+    Dashboard,
     TempSensor,
     fan_speed_percent,
+    health_problems,
     load_dashboard,
     parse_environment,
     parse_port_summary,
@@ -175,3 +177,30 @@ def test_load_dashboard_uses_one_request() -> None:
     assert dash.system.hostname == "nexus-lab"
     assert dash.environment.total_draw_w == 126
     assert dash.ports.total == 54
+
+
+def _dashboard_with(environment: dict[str, Any]):
+    return Dashboard(
+        system=parse_version(load_fixture("show_version")),
+        environment=parse_environment(environment),
+        resources=parse_resources(load_fixture("show_system_resources")),
+        ports=parse_port_summary(load_fixture("show_interface_brief")),
+    )
+
+
+def test_health_problems_is_empty_for_the_recorded_switch() -> None:
+    assert health_problems(_dashboard_with(load_fixture("show_environment"))) == []
+
+
+def test_health_problems_names_each_problem() -> None:
+    body = load_fixture("show_environment")
+    body["TABLE_tempinfo"]["ROW_tempinfo"][0]["curtemp"] = "85"  # Intake, minor 80
+    body["TABLE_tempinfo"]["ROW_tempinfo"][1]["curtemp"] = "70"  # Exhaust, major 70
+    body["fandetails"]["TABLE_faninfo"]["ROW_faninfo"][0]["fanstatus"] = "Absent"
+    body["powersup"]["TABLE_psinfo"]["ROW_psinfo"][0]["ps_status"] = ""
+    assert health_problems(_dashboard_with(body)) == [
+        "Temperature Intake is 85°C, at or above its minor limit of 80°C.",
+        "Temperature Exhaust is 70°C, at or above its major limit of 70°C.",
+        "Fan Fan1(sys_fan1) reports Absent.",
+        "Power supply 1 reports no status.",
+    ]
