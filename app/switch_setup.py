@@ -189,14 +189,17 @@ def run_setup(
             _verify_new_account(host, port, account_name, password, transport)
             store(password, hostname)
         except Exception as exc:
-            _undo(client, account_name, host)
+            removed = _undo(client, account_name, host)
             if isinstance(exc, NxapiError):
                 detail = describe_error(exc, host, port, f"new {account_name}")
             else:
                 detail = f"NXray could not store the login: {exc}"
-            raise SetupError(
-                _scrub(f"{detail} The account was removed from the switch again.", password)
-            ) from exc
+            outcome = (
+                " The account was removed from the switch again."
+                if removed
+                else _still_there_message(account_name)
+            )
+            raise SetupError(_scrub(detail + outcome, password, admin_password)) from exc
 
         try:
             client.save_config()
@@ -227,12 +230,31 @@ def _verify_new_account(
             time.sleep(_VERIFY_PAUSE_SECONDS)
 
 
-def _undo(client: NxapiClient, name: str, host: str) -> None:
+def _undo(client: NxapiClient, name: str, host: str) -> bool:
+    """Remove the account setup just created. True only if the switch removed it.
+
+    The switch refuses (``<name> account cannot be deactivated``) while the
+    account still has an NX-API session, which it does once it has signed
+    in, so the caller must not assume this worked.
+    """
     try:
         client.delete_user(name)
-        log.info("removed switch account %s on %s after a failed setup", name, host)
     except NxapiError as exc:
         log.error("could not remove switch account %s on %s: %s", name, host, exc)
+        return False
+    log.info("removed switch account %s on %s after a failed setup", name, host)
+    return True
+
+
+def _still_there_message(name: str) -> str:
+    return (
+        f" NXray tried to remove the account {name} from the switch again, but the switch "
+        "refused: it keeps an account that signed in during the last 10 minutes. The "
+        "account is still on the switch, not saved, and NXray does not use it. To remove "
+        "it, wait 10 minutes, then sign in to the switch over SSH as admin and run "
+        f"configure terminal, no username {name}, end. Until then, setting up again needs "
+        "a different account name."
+    )
 
 
 def connection_error(exc: NxapiError, target: SwitchTarget) -> str:

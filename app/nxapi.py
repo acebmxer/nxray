@@ -387,7 +387,8 @@ class NxapiClient:
         """Remove a local switch account. Needs an admin login.
 
         Only used to undo an account NXray created moments earlier when the
-        rest of setup failed, so a retry is not blocked by a leftover.
+        rest of setup failed, so a retry is not blocked by a leftover. The
+        switch refuses it while the account has an NX-API session.
         """
         validate_account_name(name)
         command = f"no username {name}"

@@ -58,6 +58,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   reached or refuses the login, and Forget this switch removes the stored
   login. Forms that change anything are protected against cross-site
   forgery.
+
+  When setup fails after the new account has signed in (for example,
+  storing its login fails), the switch refuses to remove the account again
+  for about 10 minutes. The page used to say it was removed anyway; it now
+  says the account is still on the switch, and how to remove it or set up
+  again with another name.
 - **Sign in.** NXray runs as a Docker container and asks for a username and
   password before showing anything. The password is stored only as an
   Argon2id hash in `nxray.env`, made with `python -m app.hashpw`; NXray

@@ -34,6 +34,10 @@ When you press **Create the account and connect**, NXray:
    `network-operator` is NX-OS's built-in read-only role.
 4. Signs in with the new account to check it works. If that, or storing the
    login, fails, it runs `no username <name>` so a retry is not blocked.
+   The switch refuses that for an account that signed in during the last
+   10 minutes; the page then says the account is still there, and that you
+   can remove it with `no username <name>` after 10 minutes or set up again
+   with another name.
 5. Runs `copy running-config startup-config`, so the account survives a
    restart of the switch. **This also saves any other changes on the switch
    that were not saved yet**, which is why the page asks you to tick a box

@@ -152,6 +152,34 @@ def test_new_account_that_cannot_sign_in_is_removed_again(
     assert store.calls == []
 
 
+def test_undo_refused_by_a_live_session_says_the_account_is_still_there() -> None:
+    # cisco-25gb refuses "no username" for an account that signed in in the
+    # last 10 minutes, which the new account just did.
+    switch = FakeSwitch(sessions_block_delete=True)
+    with pytest.raises(SetupError) as excinfo:
+        _setup(switch, Store(fail=True))
+    message = str(excinfo.value)
+    assert "nxray" in switch.users  # the switch kept it
+    assert "removed from the switch again" not in message
+    assert "still on the switch" in message
+    assert "wait 10 minutes" in message
+    assert "no username nxray" in message
+    assert "different account name" in message
+    assert switch.requests[-1] == ["no username nxray"]  # NXray did try
+    assert not switch.saved
+
+
+def test_undo_refused_keeps_both_passwords_out_of_the_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.switch_setup.generate_password", lambda: "Known1PasswordXy")
+    switch = FakeSwitch(sessions_block_delete=True)
+    with pytest.raises(SetupError) as excinfo:
+        _setup(switch, Store(fail=True))
+    assert "Known1PasswordXy" not in str(excinfo.value)
+    assert ADMIN_PASSWORD not in str(excinfo.value)
+
+
 def test_failed_save_still_connects_and_says_so() -> None:
     switch = FakeSwitch(save_text="Copy failed: not enough space\n")
     store = Store()

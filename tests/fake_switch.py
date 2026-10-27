@@ -91,6 +91,10 @@ class FakeSwitch:
     # "mode": str, "access": str, "native": str, "allowed": str}.
     port_state: dict[str, dict[str, Any]] = field(default_factory=dict)
     vlans: dict[int, str] = field(default_factory=lambda: {1: "default"})
+    # As on cisco-25gb: an account that made an NX-API call keeps a session,
+    # and "no username" is refused while it lives. Off by default.
+    sessions_block_delete: bool = False
+    signed_in: set[str] = field(default_factory=set)
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -104,6 +108,7 @@ class FakeSwitch:
         user = self._authenticate(request)
         if user is None:
             return httpx.Response(401, text="Unauthorized")
+        self.signed_in.add(user)
         entries = json.loads(request.content)
         self.requests.append([entry["params"]["cmd"] for entry in entries])
         replies: list[dict[str, Any]] = []
@@ -231,6 +236,8 @@ class FakeSwitch:
             self.users[name] = (password, role)
             return _ok(ident, None), context
         if match := re.fullmatch(r"no username (\S+)", cmd):
+            if self.sessions_block_delete and match.group(1) in self.signed_in:
+                return _error(ident, f"{match.group(1)} account cannot be deactivated\n"), context
             self.users.pop(match.group(1), None)
             self.extra_roles.pop(match.group(1), None)
             return _ok(ident, None), context
