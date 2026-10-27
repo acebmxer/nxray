@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.security import current_user
+from app.security import csrf_valid, current_user
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -59,6 +59,23 @@ class RedirectToLogin(Exception):
     def __init__(self, next_url: str) -> None:
         self.next_url = next_url
         super().__init__(f"login required for {next_url}")
+
+
+class CsrfFailed(Exception):
+    """A form arrived without this session's anti-forgery token.
+
+    main.py turns it into a 403 page. Raised by require_csrf.
+    """
+
+
+def require_csrf(request: Request, token: str) -> None:
+    """Refuse a state-changing form that did not come from NXray's own page.
+
+    Every POST that changes something (the switch, the stored connection)
+    calls this first, before reading anything else from the form.
+    """
+    if not csrf_valid(request, token):
+        raise CsrfFailed()
 
 
 def login_required(request: Request) -> str:

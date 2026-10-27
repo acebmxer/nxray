@@ -68,8 +68,10 @@ and `docs/configuration.md`.
 `app/db.py`. Editing an applied migration leaves existing databases behind.
 
 **Nothing changes the switch by accident.** Only `show` commands go through
-`NxapiClient.show()`. Configuration changes get their own, separately guarded
-method when the first feature needs one.
+`NxapiClient.show()`. Each configuration change has its own method
+(`create_user`, `delete_user`, `save_config`) that builds its one command
+from checked values; add a new method like them rather than a way to send
+free text. Every form that changes something calls `require_csrf` first.
 
 **Never commit real switch output unscrubbed.** Replace serial numbers,
 hostnames, addresses, usernames and port descriptions before adding a fixture.

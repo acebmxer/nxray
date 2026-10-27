@@ -30,7 +30,11 @@ prose columns; those are a reviewer's job.
 | Redirect after a POST, or to a `?next=` | `app/dependencies.py`, `redirect` and `safe_next` |
 | Render a page | `app/dependencies.py`, `templates` |
 | Add a route | `app/routes/`, one module per area |
-| Run a command on the switch | `app/nxapi.py`, `NxapiClient.show` |
+| Run a command on the switch | `app/nxapi.py`, `NxapiClient.show` (and the guarded config methods) |
+| Get NXray's stored switch login | `app/switch_connection.py`, `load_target` |
+| Check NXray can reach the switch | `app/switch_setup.py`, `check_connection` |
+| Encrypt a secret for the database | `app/crypto.py` |
+| Protect a form against forgery | `app/dependencies.py`, `require_csrf`; token from `security.csrf_token` |
 | Turn switch output into page data | `app/switch.py` |
 
 ---
@@ -64,6 +68,8 @@ behind.
 | `clear_login_failures` | `(conn, ip: str) -> None` | Forgets an address's failures after success | `routes/auth.login_submit` | v0.1.0 |
 | `client_ip` | `(request) -> str` | The peer address login throttling counts against | `routes/auth.login_submit` | v0.1.0 |
 | `create_session` | `(conn, username: str, session_hours: int) -> str` | Records a session, returns its id | `routes/auth.login_submit` | v0.1.0 |
+| `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id | routes rendering forms | v0.1.0 |
+| `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token | `dependencies.require_csrf` | v0.1.0 |
 | `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
 | `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user`, `security.current_user` | v0.1.0 |
 | `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends an expired one | `security.current_user` | v0.1.0 |
@@ -72,6 +78,7 @@ behind.
 | `purge_expired_sessions` | `(conn) -> int` | Deletes expired sessions | `main.lifespan` | v0.1.0 |
 | `purge_old_login_attempts` | `(conn, window_minutes: int) -> int` | Drops attempts older than the window | `main.lifespan` | v0.1.0 |
 | `record_login_failure` | `(conn, ip: str) -> None` | Records a failed login | `routes/auth.login_submit` | v0.1.0 |
+| `session_id_from_request` | `(request) -> str \| None` | The session id in the signed cookie | `security.csrf_token`, `security.csrf_valid` | v0.1.0 |
 | `sign_session_id` | `(session_id: str, secret_key: str) -> str` | Wraps a session id in a signed cookie value | `routes/auth` | v0.1.0 |
 | `touch_session` | `(conn, session_id: str, session_hours: int) -> None` | Slides the expiry forward on use | `security.current_user` | v0.1.0 |
 | `unsign_session_id` | `(cookie_value: str, secret_key: str) -> str \| None` | Recovers an id, None if forged | `security.current_user`, `routes/auth.logout` | v0.1.0 |
@@ -87,10 +94,12 @@ really invalidates rather than merely asking the browser to forget.
 | `add_security_headers` | `(request, call_next) -> Response` | HTTP middleware adding `SECURITY_HEADERS` to every response | `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
+| `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
 `templates` is the shared Jinja environment; `RedirectToLogin` is the
-exception `login_required` raises, handled in `main.create_app`.
+exception `login_required` raises and `CsrfFailed` the one `require_csrf`
+raises, both handled in `main.create_app`.
 
 ## `app/nxapi.py` — the NX-API client
 
@@ -98,11 +107,16 @@ exception `login_required` raises, handled in `main.create_app`.
 | --- | --- | --- | --- | --- |
 | `build_payload` | `(commands: list[str]) -> list[dict]` | The JSON-RPC request body for running commands in order | `NxapiClient.show` | v0.1.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
-| `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | (switch setup, a later stage) | v0.1.0 |
-| `parse_response` | `(payload, commands: list[str]) -> list[dict]` | One body per command, in request order; raises on errors | `NxapiClient.show` | v0.1.0 |
+| `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page.switch_setup` | v0.1.0 |
+| `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
+| `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `delete_user`, `switch_setup.run_setup` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 
 `NxapiClient(target).show(*commands)` runs show commands in one request.
+The only configuration methods are `create_user(name, password, role)`
+(letters-and-digits password, role `network-operator` only),
+`delete_user(name)` and `save_config()`; each builds its single command from
+checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -125,6 +139,37 @@ self-signed certificate is accepted on purpose.
 NX-OS JSON holds a one-row table as an object and only a several-row table as
 a list; `rows` hides that.
 
+## `app/crypto.py` — secrets in the database
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `decrypt` | `(stored: str, secret_key: str) -> str` | Recovers a secret; raises `DecryptionError` for a changed key or tampering | `switch_connection.load_target` | v0.1.0 |
+| `encrypt` | `(plaintext: str, secret_key: str) -> str` | AES-GCM with a key derived from the secret key | `switch_connection.save_connection` | v0.1.0 |
+
+## `app/switch_connection.py` — the stored switch
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `delete_connection` | `(conn) -> bool` | Forgets the stored login; the switch account stays | `routes/switch_page.switch_forget` | v0.1.0 |
+| `get_connection` | `(conn) -> SwitchConnection \| None` | The stored connection without its password | Switch page, dashboard | v0.1.0 |
+| `load_target` | `(conn, secret_key) -> SwitchTarget` | The stored login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
+| `record_test_result` | `(conn, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
+| `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup | `routes/switch_page.switch_setup` | v0.1.0 |
+
+## `app/switch_setup.py` — creating NXray's account
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup` | v0.1.0 |
+| `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page test, dashboard | v0.1.0 |
+| `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `check_connection` | v0.1.0 |
+| `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup` | v0.1.0 |
+| `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
+
+`SetupError` carries the message the page shows. The admin login lives only
+inside `run_setup`.
+
 ## `app/logging_conf.py` — application logging
 
 | Function | Signature | Does | Used by | Since |
@@ -142,11 +187,15 @@ a list; `rows` hides that.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `dashboard` | `(request, username) -> Response` | `GET /`, the landing page | router | v0.1.0 |
+| `dashboard` | `(request, username) -> Response` | `GET /`, the landing page; checks the switch live | router | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
+| `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
+| `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
+| `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
+| `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 
 ## `app/hashpw.py` — password hash helper
 

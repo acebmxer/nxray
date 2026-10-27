@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Switch — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Switch</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+{% if connection %}
+<section class="card">
+  <h2 class="card-title">Connected switch</h2>
+  <dl class="facts">
+    <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
+    <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} (read-only)</dd>
+    <dt>Config saved</dt>
+    <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
+    <dt>Last test</dt>
+    <dd>{% if connection.last_tested_at is none %}never{% elif connection.last_test_ok %}worked{% else %}failed: {{ connection.last_test_message }}{% endif %}</dd>
+  </dl>
+
+  <div class="button-row">
+    <form method="post" action="/switch/test" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Test connection</button>
+    </form>
+    <form method="post" action="/switch/forget" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Forget this switch</button>
+    </form>
+  </div>
+
+  <p class="note">
+    Forget this switch removes NXray's copy of the login only. The account
+    {{ connection.username }} stays on the switch. To remove it, sign in to the
+    switch over SSH as admin and run <code>configure terminal</code>,
+    <code>no username {{ connection.username }}</code>, <code>end</code>,
+    <code>copy running-config startup-config</code>.
+  </p>
+</section>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Set up the switch</h2>
+  <p class="lead">
+    NXray signs in to the switch's NX-API once with an admin login, creates its
+    own read-only account (role network-operator) with a long random password,
+    and from then on uses only that account. The admin password is used for
+    this setup only and is never stored.
+  </p>
+
+  <form method="post" action="/switch/setup" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="host">Switch address</label>
+    <input id="host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="port">NX-API port</label>
+    <input id="port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <label for="admin_user">Switch admin username</label>
+    <input id="admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="admin_password">Switch admin password</label>
+    <input id="admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="account_name">Name for NXray's account on the switch</label>
+    <input id="account_name" name="account_name" type="text" value="{{ form.account_name }}"
+           required spellcheck="false" maxlength="28">
+    <p class="hint">
+      Each NXray install needs its own name, for example nxray on the production
+      machine and nxray-dev on a test machine. Setup stops if the name already
+      exists on the switch.
+    </p>
+
+    <p class="warning">
+      When the account is made, NXray runs <code>copy running-config startup-config</code>
+      so the account survives a restart of the switch. That also saves any other
+      changes on the switch that have not been saved yet.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration after creating the account.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Create the account and connect</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

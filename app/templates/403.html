@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Form expired — NXray{% endblock %}
+
+{% block content %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>That form could not be accepted</h2>
+  <p>
+    It did not come from this NXray session, or your session has ended. Go back,
+    reload the page and try again.
+  </p>
+  <p class="actions"><a class="btn btn-quiet" href="/">Back to the dashboard</a></p>
+</div>
+{% endblock %}

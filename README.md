@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-106%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-182%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,9 +13,9 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stage 1 of the roadmap, the groundwork, is built: you can install NXray, sign
-in, and see an empty dashboard. Connecting a switch comes next; see the
-[roadmap](#roadmap).
+**Status:** early. Stages 1 and 2 of the [roadmap](#roadmap) are built: you
+can install NXray, sign in, and connect it to a switch, and the dashboard
+shows whether NXray can reach it.
 
 ## Read next
 
@@ -23,6 +23,7 @@ in, and see an empty dashboard. Connecting a switch comes next; see the
 | --- | --- |
 | [Installation](docs/installation.md) | Getting the container running |
 | [Configuration](docs/configuration.md) | Every setting, its default and what it does |
+| [Switch setup](docs/switch-setup.md) | What setup does on the switch, and how to undo it |
 | [Function index](docs/functions.md) | Every function in the codebase, in one place |
 | [Contributing](CONTRIBUTING.md) | Development setup and conventions |
 | [Security](SECURITY.md) | Threat model and reporting a vulnerability |
@@ -52,10 +53,11 @@ Then open `http://<that machine>:8080` and sign in. The full steps are in
 ## How it talks to the switch
 
 Only through NX-API, the switch's own HTTPS interface: the same commands you
-type over SSH, answered as structured data. NXray will use its own account on
-the switch, never `admin`: the setup page signs in with the admin login once,
-creates that account with a long random password, and keeps only that
-account's login. The admin password is never stored.
+type over SSH, answered as structured data. NXray uses its own read-only
+account on the switch, never `admin`: the Switch page signs in with the admin
+login once, creates that account with a long random password, saves the
+switch configuration, and keeps only that account's login. The admin
+password is never stored. See [Switch setup](docs/switch-setup.md).
 
 The switch's self-signed HTTPS certificate is accepted without checking; see
 [SECURITY.md](SECURITY.md) for what that means.
@@ -65,7 +67,7 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 1. **Groundwork**: install, sign in, empty dashboard. *(built)*
 2. **Switch setup**: a setup page that connects to the switch and creates
    NXray's own read-only account on it; clear messages when the switch can't
-   be reached or refuses the login; a "Test connection" button.
+   be reached or refuses the login; a "Test connection" button. *(built)*
 3. **Dashboard**: hostname, model, NX-OS version, uptime, temperatures against
    their limits, fans, power supplies and power draw, CPU and memory, port
    counts.

@@ -13,9 +13,11 @@ self-signed certificate it generates itself, and NXray deliberately accepts
 it: the traffic is still encrypted, but the switch's identity is not
 verified. This is a project decision, not an oversight.
 
-Only read-only ``show`` commands are exposed so far. Configuration changes
-will get their own, separately guarded method when the first feature needs
-one, so nothing that renders a page can change the switch by accident.
+Read-only ``show`` commands go through ``show()``. The few configuration
+commands NXray needs have their own methods (``create_user``,
+``delete_user``, ``save_config``), each building its one command from
+checked values, so nothing that renders a page can change the switch by
+accident and no caller can pass free text to the switch's configuration.
 """
 
 from __future__ import annotations
@@ -39,6 +41,29 @@ _HOSTNAME = re.compile(
 # " ;". Refusing ";" and line breaks keeps one request entry equal to exactly
 # one command, so a value that reaches show() cannot smuggle a second one in.
 _FORBIDDEN_IN_COMMAND = re.compile(r"[;\r\n]")
+
+# NX-OS user names: up to 28 characters. Stricter than NX-OS itself (which
+# also allows + and =) so a name is always safe inside a command line.
+_ACCOUNT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,27}$")
+
+# Only letters and digits: no character the NX-OS command line could read as
+# a separator, a quote or a request for help ("?").
+_SAFE_PASSWORD = re.compile(r"^[A-Za-z0-9]{8,64}$")
+
+# The only roles NXray ever gives its own account.
+ALLOWED_ROLES = frozenset({"network-operator"})
+
+# Names NX-OS keeps for itself, plus the switch's own admin account.
+RESERVED_ACCOUNT_NAMES = frozenset(
+    {
+        "admin", "adm", "bin", "daemon", "ftp", "ftpuser", "games", "gdm", "gopher",
+        "halt", "lp", "mail", "mailnull", "man", "mtsuser", "news", "nobody", "nscd",
+        "operator", "root", "rpc", "rpcuser", "shutdown", "sync", "sys", "uucp", "xfs",
+    }
+)  # fmt: skip
+
+# Saving the configuration can take a while on a busy switch.
+SAVE_CONFIG_TIMEOUT = 120.0
 
 
 class NxapiError(Exception):
@@ -90,6 +115,18 @@ def is_valid_host(value: str) -> bool:
         return bool(_HOSTNAME.match(value))
 
 
+def validate_account_name(name: str) -> str:
+    """Return the name, or raise ValueError if NXray would not use it on a switch."""
+    if not _ACCOUNT_NAME.match(name):
+        raise ValueError(
+            "an account name is 1-28 characters: a letter first, then letters, "
+            "digits, dots, dashes or underscores"
+        )
+    if name.lower() in RESERVED_ACCOUNT_NAMES:
+        raise ValueError(f"{name!r} is reserved on the switch; pick another name")
+    return name
+
+
 def validate_show_command(command: str) -> str:
     """Return the command stripped, or raise ValueError if it is not a lone show."""
     cleaned = command.strip()
@@ -113,13 +150,24 @@ def build_payload(commands: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
+def parse_response(
+    payload: Any,
+    commands: list[str],
+    labels: list[str] | None = None,
+    allow_text: bool = False,
+) -> list[dict[str, Any]]:
     """Turn a JSON-RPC reply into one body per command, in request order.
 
     NX-API answers a one-command request with a single object rather than a
     one-element list, so both shapes are accepted. A command that prints
     nothing comes back with a null body, returned here as an empty dict.
+
+    ``labels`` replace the commands in error messages, for commands that
+    carry a secret (a password) that must never reach a log or a page.
+    ``allow_text`` accepts a plain-text answer (configuration commands have
+    no structured output) and returns it as ``{"text": ...}``.
     """
+    names = labels if labels is not None else commands
     entries = payload if isinstance(payload, list) else [payload]
     if len(entries) != len(commands):
         raise NxapiProtocolError(
@@ -133,7 +181,7 @@ def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
         by_id[entry["id"]] = entry
 
     bodies: list[dict[str, Any]] = []
-    for index, command in enumerate(commands, start=1):
+    for index, command in enumerate(names, start=1):
         entry = by_id.get(index)
         if entry is None:
             raise NxapiProtocolError(f"no answer for {command!r}")
@@ -148,6 +196,8 @@ def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
             bodies.append({})
         elif isinstance(body, dict):
             bodies.append(body)
+        elif allow_text and isinstance(body, str):
+            bodies.append({"text": body})
         else:
             raise NxapiProtocolError(f"{command!r} returned text, not structured data")
     return bodies
@@ -197,13 +247,59 @@ class NxapiClient:
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
+        return self._send(cleaned, cleaned, self._target.timeout)
 
+    def create_user(self, name: str, password: str, role: str) -> None:
+        """Create a local switch account. Needs an admin login.
+
+        Every value is checked before anything is sent, so the one command
+        built here can only ever be ``username <name> password <pw> role <r>``.
+        The password never appears in an error message.
+        """
+        validate_account_name(name)
+        if not _SAFE_PASSWORD.match(password):
+            raise ValueError("the password must be 8-64 letters and digits")
+        if role not in ALLOWED_ROLES:
+            raise ValueError(f"role {role!r} is not one NXray gives its account")
+        command = f"username {name} password {password} role {role}"
+        label = f"username {name} password ... role {role}"
+        self._send([command], [label], self._target.timeout, allow_text=True)
+
+    def delete_user(self, name: str) -> None:
+        """Remove a local switch account. Needs an admin login.
+
+        Only used to undo an account NXray created moments earlier when the
+        rest of setup failed, so a retry is not blocked by a leftover.
+        """
+        validate_account_name(name)
+        command = f"no username {name}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def save_config(self) -> None:
+        """``copy running-config startup-config``: keep changes over a reboot."""
+        command = "copy running-config startup-config"
+        timeout = max(self._target.timeout, SAVE_CONFIG_TIMEOUT)
+        (body,) = self._send([command], [command], timeout, allow_text=True)
+        # The switch reports a failed copy as text, not as an error.
+        text = str(body.get("text", ""))
+        if "fail" in text.lower() or "error" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
+
+    def _send(
+        self,
+        commands: list[str],
+        labels: list[str],
+        timeout: float,
+        allow_text: bool = False,
+    ) -> list[dict[str, Any]]:
+        """POST commands as one JSON-RPC request and parse the answer."""
         try:
-            response = self._http.post(self._target.url, json=build_payload(cleaned))
+            response = self._http.post(
+                self._target.url, json=build_payload(commands), timeout=timeout
+            )
         except httpx.TimeoutException as exc:
             raise NxapiUnreachable(
-                f"no answer from {self._target.host}:{self._target.port} "
-                f"within {self._target.timeout:g} seconds"
+                f"no answer from {self._target.host}:{self._target.port} within {timeout:g} seconds"
             ) from exc
         except httpx.HTTPError as exc:
             raise NxapiUnreachable(
@@ -223,4 +319,4 @@ class NxapiClient:
                 "(is this address really NX-API?)"
             ) from exc
 
-        return parse_response(payload, cleaned)
+        return parse_response(payload, commands, labels, allow_text)

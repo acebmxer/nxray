@@ -254,3 +254,98 @@ def test_certificate_is_not_verified(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.nxapi.httpx.Client", spy)
     NxapiClient(TARGET).close()
     assert captured["verify"] is False
+
+
+# ---- the guarded configuration commands ---------------------------------
+
+
+def _recording_client(seen: list[str], reply: dict[str, Any] | None = None) -> NxapiClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        (entry,) = json.loads(request.content)
+        seen.append(entry["params"]["cmd"])
+        return httpx.Response(200, json=reply or {"jsonrpc": "2.0", "result": None, "id": 1})
+
+    return _client(handler)
+
+
+def test_create_user_sends_exactly_one_username_command() -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client:
+        client.create_user("nxray-dev", "Abc1Def2Ghi3", "network-operator")
+    assert seen == ["username nxray-dev password Abc1Def2Ghi3 role network-operator"]
+
+
+@pytest.mark.parametrize(
+    ("name", "password", "role"),
+    [
+        ("nxray ; reload", "Abc1Def2Ghi3", "network-operator"),
+        ("admin", "Abc1Def2Ghi3", "network-operator"),
+        ("nxray", "has space 123A", "network-operator"),
+        ("nxray", "semi;colon1A", "network-operator"),
+        ("nxray", "Short1", "network-operator"),
+        ("nxray", "Abc1Def2Ghi3", "network-admin"),
+    ],
+)
+def test_create_user_refuses_unsafe_values_before_sending(
+    name: str, password: str, role: str
+) -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client, pytest.raises(ValueError):
+        client.create_user(name, password, role)
+    assert seen == []
+
+
+def test_create_user_error_names_the_command_without_the_password() -> None:
+    reply = {"jsonrpc": "2.0", "error": {"message": "Password is weak"}, "id": 1}
+    with _client(lambda request: httpx.Response(500, json=reply)) as client:
+        with pytest.raises(NxapiCommandError) as excinfo:
+            client.create_user("nxray", "Abc1Def2Ghi3", "network-operator")
+    assert "Abc1Def2Ghi3" not in str(excinfo.value)
+    assert "username nxray password ... role network-operator" in str(excinfo.value)
+    assert "Password is weak" in str(excinfo.value)
+
+
+def test_delete_user_and_save_config_send_their_one_command() -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client:
+        client.delete_user("nxray-dev")
+        client.save_config()
+    assert seen == ["no username nxray-dev", "copy running-config startup-config"]
+
+
+def test_delete_user_refuses_a_bad_name() -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client, pytest.raises(ValueError):
+        client.delete_user("nxray\nreload")
+    assert seen == []
+
+
+def test_save_config_text_answers() -> None:
+    def reply(text: str) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "result": {"body": text}, "id": 1}
+
+    with _recording_client([], reply("[########] 100%\nCopy complete.\n")) as client:
+        client.save_config()  # success text is fine
+    with _recording_client([], reply("Copy failed: no space\n")) as client:
+        with pytest.raises(NxapiCommandError) as excinfo:
+            client.save_config()
+    assert "Copy failed" in str(excinfo.value)
+
+
+def test_save_config_gets_a_longer_timeout() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["timeout"] = request.extensions["timeout"]
+        return httpx.Response(200, json={"jsonrpc": "2.0", "result": None, "id": 1})
+
+    with _client(handler) as client:
+        client.save_config()
+    assert seen["timeout"]["read"] == 120.0
+
+
+def test_show_still_refuses_text_bodies() -> None:
+    reply = {"jsonrpc": "2.0", "result": {"body": "text"}, "id": 1}
+    with _client(lambda request: httpx.Response(200, json=reply)) as client:
+        with pytest.raises(NxapiProtocolError):
+            client.show("show version")

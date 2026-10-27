@@ -8,6 +8,7 @@ browser to forget it.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 import sqlite3
@@ -161,6 +162,32 @@ def purge_old_login_attempts(conn: sqlite3.Connection, window_minutes: int) -> i
     cursor = conn.execute("DELETE FROM login_attempts WHERE attempted_at < ?", (cutoff,))
     conn.commit()
     return cursor.rowcount
+
+
+def session_id_from_request(request: Request) -> str | None:
+    """The session id in the request's signed cookie, or None."""
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if not cookie:
+        return None
+    return unsign_session_id(cookie, request.app.state.settings.secret_key)
+
+
+def csrf_token(request: Request) -> str:
+    """The anti-forgery token forms on this session must send back.
+
+    Derived from the session id with the secret key, so it needs no storage,
+    changes with every login, and cannot be computed by another site.
+    """
+    session_id = session_id_from_request(request) or ""
+    key = request.app.state.settings.secret_key.encode()
+    return hmac.new(key, f"csrf:{session_id}".encode(), hashlib.sha256).hexdigest()
+
+
+def csrf_valid(request: Request, token: str) -> bool:
+    """True when a submitted form carries this session's token."""
+    if session_id_from_request(request) is None or not token:
+        return False
+    return hmac.compare_digest(token, csrf_token(request))
 
 
 def current_user(request: Request) -> str | None:

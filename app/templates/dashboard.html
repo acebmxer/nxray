@@ -4,13 +4,33 @@
 {% block content %}
 <h1 class="page-title">Dashboard</h1>
 
+{% if not connection %}
 <div class="card empty-state">
   <span class="empty-mark">◇</span>
   <h2>No switch connected yet</h2>
   <p>
-    NXray is running, but it is not connected to a switch. Connecting one
-    comes in a later stage, with a setup page that creates NXray's own
-    account on the switch.
+    NXray is running, but it is not connected to a switch. Set one up on the
+    Switch page: NXray signs in with the switch's admin login once and creates
+    its own read-only account there.
   </p>
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
 </div>
+{% elif status and status.ok %}
+<div class="card">
+  <p class="alert alert-ok">{{ status.message }}</p>
+  <dl class="facts">
+    <dt>Hostname</dt><dd>{{ status.system.hostname }}</dd>
+    <dt>Model</dt><dd>{{ status.system.model }}</dd>
+    <dt>NX-OS</dt><dd>{{ status.system.nxos_version }}</dd>
+    <dt>Up for</dt><dd>{{ status.system.uptime }}</dd>
+  </dl>
+  <p class="note">Temperatures, fans, power and ports arrive on this page in a later stage.</p>
+</div>
+{% else %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message }}</p>
+  <p class="note">Switch {{ connection.host }}, account {{ connection.username }}.
+    <a href="/switch">Go to the Switch page</a>.</p>
+</div>
+{% endif %}
 {% endblock %}

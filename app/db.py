@@ -34,6 +34,24 @@ _MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_login_attempts_ip_time ON login_attempts (ip, attempted_at);
     """,
+    # 1 -> 2: the switch NXray talks to, and its own account on it. One row
+    # (id = 1). The password is AES-GCM encrypted (app/crypto.py); the admin
+    # login used during setup is never stored.
+    """
+    CREATE TABLE switch_connection (
+        id                 INTEGER PRIMARY KEY CHECK (id = 1),
+        host               TEXT NOT NULL,
+        port               INTEGER NOT NULL,
+        username           TEXT NOT NULL,
+        password_encrypted TEXT NOT NULL,
+        switch_hostname    TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        config_saved       INTEGER NOT NULL,
+        last_tested_at     REAL,
+        last_test_ok       INTEGER,
+        last_test_message  TEXT
+    );
+    """,
 ]
 
 

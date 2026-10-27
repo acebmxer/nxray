@@ -11,7 +11,7 @@ now it is built from a clone of this repository on the machine that runs it.
   (`docker compose version`). Older Compose cannot read the `format: raw`
   setting the compose file relies on.
 - Network access from that machine to the switch's management address on
-  port 443, for the switch setup that arrives in a later stage.
+  port 443, with NX-API turned on (`feature nxapi`).
 
 ## Steps
 
@@ -43,6 +43,9 @@ In a terminal on the machine that will run NXray:
 
 6. Open `http://<that machine's address>:8080` in a browser and sign in as
    `admin` (or the `NXRAY_ADMIN_USER` you set) with the password from step 3.
+
+7. Click **Switch** at the top and set up the switch. What that does on the
+   switch is described in [Switch setup](switch-setup.md).
 
 ## Updating
 

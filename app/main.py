@@ -5,15 +5,21 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
 from app.config import Settings, load_settings
 from app.db import init_db, open_db
-from app.dependencies import STATIC_DIR, RedirectToLogin, add_security_headers
+from app.dependencies import (
+    STATIC_DIR,
+    CsrfFailed,
+    RedirectToLogin,
+    add_security_headers,
+    templates,
+)
 from app.logging_conf import configure_logging
-from app.routes import auth, dashboard, health
+from app.routes import auth, dashboard, health, switch_page
 from app.security import purge_expired_sessions, purge_old_login_attempts
 
 
@@ -57,16 +63,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
     )
     app.state.settings = settings or load_settings()
+    # Tests put an httpx.MockTransport here so no request reaches a real switch.
+    app.state.nxapi_transport = None
 
     @app.exception_handler(RedirectToLogin)
     async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
         return RedirectResponse(url=f"/login?next={exc.next_url}", status_code=303)
+
+    @app.exception_handler(CsrfFailed)
+    async def _csrf_failed(request: Request, exc: CsrfFailed) -> Response:
+        return templates.TemplateResponse(request, "403.html", {}, status_code=403)
 
     app.middleware("http")(add_security_headers)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(dashboard.router)
+    app.include_router(switch_page.router)
     return app
 
 
