@@ -23,6 +23,12 @@ from app.db import open_db
 
 SESSION_COOKIE = "nxray_session"
 
+# Carries an account from the password step of a two-factor sign-in to the
+# code step (/login/2fa). Not a session: it proves only that the password was
+# right a moment ago, opens no other page, and runs out after a few minutes.
+PENDING_2FA_COOKIE = "nxray_pending_2fa"
+PENDING_2FA_MINUTES = 5
+
 # argon2-cffi's defaults are the RFC 9106 low-memory profile, which suits a
 # cost paid once per interactive login.
 _hasher = PasswordHasher()
@@ -62,6 +68,49 @@ def unsign_session_id(cookie_value: str, secret_key: str) -> str | None:
     except BadSignature:
         return None
     return value if isinstance(value, str) else None
+
+
+def _pending_serializer(secret_key: str) -> URLSafeSerializer:
+    # Its own salt, so a pending cookie can never pass as a session cookie
+    # or the other way round.
+    return URLSafeSerializer(secret_key, salt="nxray-pending-2fa")
+
+
+def _password_mark(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def sign_pending_2fa(username: str, password_hash: str, secret_key: str) -> str:
+    """The pending-2FA cookie value for an account whose password was just right.
+
+    It holds the name, the time, and a mark of the password hash, so a
+    password changed in the meantime makes it worthless.
+    """
+    payload = {"u": username, "t": time.time(), "p": _password_mark(password_hash)}
+    return _pending_serializer(secret_key).dumps(payload)
+
+
+def read_pending_2fa(cookie_value: str, secret_key: str) -> tuple[str, str] | None:
+    """(username, password mark) from a pending-2FA cookie; None if forged or too old."""
+    try:
+        payload = _pending_serializer(secret_key).loads(cookie_value)
+    except BadSignature:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    username, issued, mark = payload.get("u"), payload.get("t"), payload.get("p")
+    if not isinstance(username, str) or not isinstance(mark, str):
+        return None
+    if not isinstance(issued, int | float) or isinstance(issued, bool):
+        return None
+    if not 0 <= time.time() - issued <= PENDING_2FA_MINUTES * 60:
+        return None
+    return username, mark
+
+
+def pending_matches(mark: str, password_hash: str) -> bool:
+    """True when a pending cookie's mark belongs to this password hash."""
+    return hmac.compare_digest(mark, _password_mark(password_hash))
 
 
 def create_session(conn: sqlite3.Connection, username: str, session_hours: int) -> str:

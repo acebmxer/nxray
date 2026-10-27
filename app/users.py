@@ -21,18 +21,26 @@ guards in app/dependencies.py:
 Every account can change its own password on the Account page; only an admin
 can reset someone else's.
 
+Each account can also turn on two-factor sign-in for itself on the Account
+page: after the password, sign-in asks for a six-digit code from an
+authenticator app, or one of ten one-time backup codes. An admin can turn it
+off for someone who lost their phone and their backup codes.
+
 These are NXray sign-ins only. They are unrelated to the account NXray uses
 on the switch (app/switch_setup.py).
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import time
 from dataclasses import dataclass
 
+from app.crypto import DecryptionError, decrypt, encrypt
 from app.security import DUMMY_HASH, destroy_user_sessions, hash_password, verify_password
+from app.totp import generate_backup_codes, generate_secret, hash_backup_code, matching_step
 
 ROLES = ("admin", "operator", "viewer")
 
@@ -74,6 +82,15 @@ class User:
     role: str
     disabled: bool
     created_at: float
+    # Two-factor sign-in; see the 5 -> 6 migration in app/db.py.
+    totp_secret_encrypted: str | None = None
+    totp_enabled: bool = False
+    totp_last_step: int = 0
+    totp_backup_codes: tuple[str, ...] = ()  # SHA-256 hashes, never the codes
+
+    @property
+    def backup_codes_left(self) -> int:
+        return len(self.totp_backup_codes)
 
     @property
     def can_change(self) -> bool:
@@ -93,6 +110,10 @@ def _row_to_user(row: sqlite3.Row) -> User:
         role=row["role"],
         disabled=bool(row["disabled"]),
         created_at=float(row["created_at"]),
+        totp_secret_encrypted=row["totp_secret_encrypted"],
+        totp_enabled=bool(row["totp_enabled"]),
+        totp_last_step=int(row["totp_last_step"]),
+        totp_backup_codes=tuple(json.loads(row["totp_backup_codes"] or "[]")),
     )
 
 
@@ -248,3 +269,153 @@ def authenticate(conn: sqlite3.Connection, username: str, password: str) -> User
     if user.disabled:
         raise AccountDisabled()
     return user
+
+
+# ---- two-factor sign-in ------------------------------------------------------------
+
+
+def begin_two_factor(conn: sqlite3.Connection, user_id: int, secret_key: str) -> str:
+    """Start two-factor setup: store a new key (encrypted) and return it.
+
+    Two-factor stays off until ``confirm_two_factor`` sees a right code, so
+    a setup left half done changes nothing at sign-in. Starting again
+    replaces the unconfirmed key. Refused while two-factor is on: replacing
+    a working key would leave the account's app making wrong codes.
+    """
+    user = get_user_by_id(conn, user_id)
+    if user is None:
+        raise UserError("That account no longer exists.")
+    if user.totp_enabled:
+        raise UserError("Two-factor sign-in is already on. Turn it off first to set it up again.")
+    secret = generate_secret()
+    conn.execute(
+        "UPDATE users SET totp_secret_encrypted = ?, totp_last_step = 0, "
+        "totp_backup_codes = '[]' WHERE id = ?",
+        (encrypt(secret, secret_key), user_id),
+    )
+    conn.commit()
+    return secret
+
+
+def two_factor_secret(user: User, secret_key: str) -> str | None:
+    """The account's key in plain text (to draw the setup page again), or None.
+
+    None when there is no key, or it can't be read with this secret key.
+    """
+    if not user.totp_secret_encrypted:
+        return None
+    try:
+        return decrypt(user.totp_secret_encrypted, secret_key)
+    except DecryptionError:
+        return None
+
+
+def confirm_two_factor(
+    conn: sqlite3.Connection,
+    user_id: int,
+    code: str,
+    secret_key: str,
+    *,
+    keep_session: str | None = None,
+) -> list[str] | None:
+    """Turn two-factor on once a code from the new key is right.
+
+    Returns the ten backup codes in plain text, to be shown once (only
+    their hashes are kept), or None for a wrong code. The account is signed
+    out everywhere except ``keep_session``: a session someone else already
+    had should not outlive the account getting stronger protection.
+    """
+    user = get_user_by_id(conn, user_id)
+    if user is None or user.totp_enabled:
+        return None
+    secret = two_factor_secret(user, secret_key)
+    if secret is None:
+        return None
+    step = matching_step(secret, code)
+    if step is None:
+        return None
+    codes = generate_backup_codes()
+    conn.execute(
+        "UPDATE users SET totp_enabled = 1, totp_last_step = ?, totp_backup_codes = ? "
+        "WHERE id = ? AND totp_enabled = 0",
+        (step, json.dumps([hash_backup_code(c) for c in codes]), user_id),
+    )
+    conn.commit()
+    destroy_user_sessions(conn, user.username, keep=keep_session)
+    return codes
+
+
+def new_backup_codes(conn: sqlite3.Connection, user_id: int) -> list[str]:
+    """Replace an account's backup codes with ten new ones; the old ones stop working.
+
+    Returns them in plain text, to be shown once.
+    """
+    user = get_user_by_id(conn, user_id)
+    if user is None or not user.totp_enabled:
+        raise UserError("Two-factor sign-in is off for this account.")
+    codes = generate_backup_codes()
+    conn.execute(
+        "UPDATE users SET totp_backup_codes = ? WHERE id = ?",
+        (json.dumps([hash_backup_code(c) for c in codes]), user_id),
+    )
+    conn.commit()
+    return codes
+
+
+def turn_off_two_factor(conn: sqlite3.Connection, user_id: int) -> User:
+    """Turn two-factor off and forget the key and the backup codes.
+
+    Forgetting the key means turning it on again always starts from a new
+    key and a new QR code. Who may do this for which account (yourself with
+    your password, an admin for someone else) is decided by the route.
+    """
+    user = get_user_by_id(conn, user_id)
+    if user is None:
+        raise UserError("That account no longer exists.")
+    conn.execute(
+        "UPDATE users SET totp_enabled = 0, totp_secret_encrypted = NULL, "
+        "totp_last_step = 0, totp_backup_codes = '[]' WHERE id = ?",
+        (user_id,),
+    )
+    conn.commit()
+    return get_user_by_id(conn, user_id) or user
+
+
+def check_second_factor(
+    conn: sqlite3.Connection, user: User, code: str, secret_key: str
+) -> str | None:
+    """Check a sign-in's second step: ``"app"``, ``"backup"`` or None for wrong.
+
+    An app code is accepted once: its 30-second step is stored and that
+    step or an earlier one is refused afterwards, so a code someone saw
+    can't be used again. A backup code is removed when it is used. Both
+    writes only succeed if the row still holds what was read, so two
+    sign-ins sending the same code at the same moment can't both pass.
+    A key that can't be read (the secret key changed) still lets backup
+    codes in, since those are only hashes.
+    """
+    if not user.totp_enabled:
+        return None
+    secret = two_factor_secret(user, secret_key)
+    if secret is not None:
+        step = matching_step(secret, code)
+        if step is not None and step > user.totp_last_step:
+            cursor = conn.execute(
+                "UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?",
+                (step, user.id, step),
+            )
+            conn.commit()
+            if cursor.rowcount == 1:
+                return "app"
+            return None
+
+    hashed = hash_backup_code(code)
+    if hashed not in user.totp_backup_codes:
+        return None
+    remaining = [c for c in user.totp_backup_codes if c != hashed]
+    cursor = conn.execute(
+        "UPDATE users SET totp_backup_codes = ? WHERE id = ? AND totp_backup_codes = ?",
+        (json.dumps(remaining), user.id, json.dumps(list(user.totp_backup_codes))),
+    )
+    conn.commit()
+    return "backup" if cursor.rowcount == 1 else None

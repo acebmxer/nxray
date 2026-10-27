@@ -28,6 +28,7 @@ prose columns; those are a reviewer's job.
 | Limit a route to a role | `app/dependencies.py`, `operator_required` / `admin_required` |
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
+| Two-factor sign-in codes, backup codes, the setup QR code | `app/totp.py`; per account in `app/users.py` |
 | Require a login on a route | `app/dependencies.py`, `login_required` |
 | Redirect after a POST, or to a `?next=` | `app/dependencies.py`, `redirect` and `safe_next` |
 | Render a page | `app/dependencies.py`, `templates` |
@@ -83,16 +84,19 @@ behind.
 | `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends one that expired or whose account is gone or disabled | `security.current_user` | v0.1.0 |
 | `hash_password` | `(plain: str) -> str` | Argon2id hash for storage | `hashpw.main`, `users.create_user`, `users.set_password` | v0.1.0 |
 | `is_rate_limited` | `(conn, ip, max_attempts, window_minutes) -> bool` | True when an address has failed too often | `routes/auth.login_submit` | v0.1.0 |
+| `pending_matches` | `(mark: str, password_hash: str) -> bool` | True when a pending-2FA cookie belongs to this password hash | `routes/auth` | v0.1.0 |
 | `purge_expired_sessions` | `(conn) -> int` | Deletes expired sessions | `main.lifespan` | v0.1.0 |
 | `purge_old_login_attempts` | `(conn, window_minutes: int) -> int` | Drops attempts older than the window | `main.lifespan` | v0.1.0 |
+| `read_pending_2fa` | `(cookie_value: str, secret_key: str) -> tuple[str, str] \| None` | Name and password mark from a pending-2FA cookie; None if forged or older than 5 minutes | `routes/auth` | v0.1.0 |
 | `record_login_failure` | `(conn, ip: str) -> None` | Records a failed login | `routes/auth.login_submit` | v0.1.0 |
 | `session_id_from_request` | `(request) -> str \| None` | The session id in the signed cookie | `security.csrf_token`, `security.csrf_valid` | v0.1.0 |
+| `sign_pending_2fa` | `(username, password_hash, secret_key) -> str` | The short-lived cookie between the password and code steps of a two-factor sign-in | `routes/auth.login_submit` | v0.1.0 |
 | `sign_session_id` | `(session_id: str, secret_key: str) -> str` | Wraps a session id in a signed cookie value | `routes/auth` | v0.1.0 |
 | `touch_session` | `(conn, session_id: str, session_hours: int) -> None` | Slides the expiry forward on use | `security.current_user` | v0.1.0 |
 | `unsign_session_id` | `(cookie_value: str, secret_key: str) -> str \| None` | Recovers an id, None if forged | `security.current_user`, `routes/auth.logout` | v0.1.0 |
 | `verify_password` | `(plain: str, stored_hash: str) -> bool` | Checks a password against its hash | `users.authenticate`, `routes/users.account_password` | v0.1.0 |
 
-`SESSION_COOKIE` is the cookie name; `DUMMY_HASH` is what `users.authenticate`
+`SESSION_COOKIE` is the cookie name (`PENDING_2FA_COOKIE`, valid `PENDING_2FA_MINUTES`, the one between the two sign-in steps); `DUMMY_HASH` is what `users.authenticate`
 checks a password against when there is no such account. Sessions are stored server-side so logout
 really invalidates rather than merely asking the browser to forget.
 
@@ -299,14 +303,20 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `account_page` | `(request, username) -> Response` | `GET /account`, your name, role and password form | router | v0.1.0 |
+| `account_page` | `(request, username) -> Response` | `GET /account`, your name, role, password form and two-factor sign-in | router | v0.1.0 |
+| `account_2fa_codes` | `(request, username, csrf, current_password) -> Response` | `POST /account/2fa/codes`: ten new backup codes, needs your password | router | v0.1.0 |
+| `account_2fa_confirm` | `(request, username, csrf, code) -> Response` | `POST /account/2fa/confirm`: turns two-factor on once the app's code is right, shows the backup codes once | router | v0.1.0 |
+| `account_2fa_off` | `(request, username, csrf, current_password) -> Response` | `POST /account/2fa/off`: turns your own two-factor off, needs your password | router | v0.1.0 |
+| `account_2fa_setup` | `(request, username, csrf) -> Response` | `POST /account/2fa/setup`: a new key and its QR code; nothing changes until confirmed | router | v0.1.0 |
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
 | `change_refused` | `(exc, target) -> str` | The message for a port or VLAN change the switch did not make | `port_change`, `port_vlans_change`, `routes/vlans` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
+| `login_2fa_form` | `(request, next: str = "/") -> Response` | `GET /login/2fa`, the code step; back to `/login` without a recent password step | router | v0.1.0 |
+| `login_2fa_submit` | `(request, code, next) -> Response` | `POST /login/2fa`: an app code (once) or a backup code, throttled like sign-in | router | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
-| `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |
+| `login_submit` | `(request, username, password, next) -> Response` | `POST /login`; for an account with two-factor, on to `/login/2fa` without a session | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs; 404 for an unknown name | router | v0.1.0 |
@@ -323,6 +333,7 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 | `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
+| `users_2fa_off` | `(request, username, csrf, user_id) -> Response` | `POST /users/2fa-off`: an admin turns off someone else's two-factor, no code needed | router | v0.1.0 |
 | `users_disable` | `(request, username, csrf, user_id, disabled) -> Response` | `POST /users/disable`: disables (signs out) or enables an account; not your own | router | v0.1.0 |
 | `users_page` | `(request, username) -> Response` | `GET /users`, every account, admin only | router | v0.1.0 |
 | `users_password` | `(request, username, csrf, user_id, new_password, confirm_password) -> Response` | `POST /users/password`: an admin sets an account's password and signs it out | router | v0.1.0 |
@@ -332,29 +343,50 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
 | `vlans_page` | `(request, username) -> Response` | `GET /vlans`, every VLAN and the ports using it | router | v0.1.0 |
 
+## `app/totp.py` — two-factor codes
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `code_at` | `(secret_b32, step) -> str` | The six-digit code for one 30-second step (tests) | tests | v0.1.0 |
+| `generate_backup_codes` | `() -> list[str]` | Ten one-time codes as XXXXX-XXXXX | `users.confirm_two_factor`, `users.new_backup_codes` | v0.1.0 |
+| `generate_secret` | `() -> str` | A new random base32 key | `users.begin_two_factor` | v0.1.0 |
+| `hash_backup_code` | `(code) -> str` | SHA-256 of a backup code, case, spaces and dash ignored | `users` | v0.1.0 |
+| `matching_step` | `(secret_b32, code, *, at=None) -> int \| None` | The step a typed code belongs to, one step either side of now | `users.confirm_two_factor`, `users.check_second_factor` | v0.1.0 |
+| `provisioning_uri` | `(secret_b32, username) -> str` | The `otpauth://` text in the QR code | `routes/users` | v0.1.0 |
+| `qr_svg` | `(text) -> str` | A QR code as inline `<svg>` (segno) | `routes/users` | v0.1.0 |
+| `spaced_secret` | `(secret_b32) -> str` | The key in groups of four, for typing by hand | `routes/users` | v0.1.0 |
+| `time_step` | `(at=None) -> int` | The 30-second step a moment falls in | `matching_step`, tests | v0.1.0 |
+
 ## `app/users.py` — NXray's own accounts
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `authenticate` | `(conn, username, password) -> User \| None` | Checks a sign-in in constant time; raises `AccountDisabled` for the right password on a disabled account | `routes/auth.login_submit` | v0.1.0 |
 | `bootstrap_admin` | `(conn, admin_user, admin_password_hash) -> bool` | Makes the nxray.env account the first admin, only while there are no accounts | `main.lifespan` | v0.1.0 |
+| `begin_two_factor` | `(conn, user_id, secret_key) -> str` | Stores a new two-factor key (encrypted), still off; refused while it is on | `routes/users.account_2fa_setup` | v0.1.0 |
 | `check_new_password` | `(password, confirm) -> None` | Raises `UserError` unless a new password is long enough and typed twice the same | `create_user`, `routes/users`, `resetpw.main` | v0.1.0 |
+| `check_second_factor` | `(conn, user, code, secret_key) -> str \| None` | `"app"` or `"backup"` for a right code, each usable once; None for wrong | `routes/auth.login_2fa_submit` | v0.1.0 |
+| `confirm_two_factor` | `(conn, user_id, code, secret_key, *, keep_session=None) -> list[str] \| None` | Turns two-factor on for a right code, returns ten backup codes, signs out other sessions | `routes/users.account_2fa_confirm` | v0.1.0 |
 | `create_user` | `(conn, username, password, confirm, role) -> User` | Adds an account after checking name, role and password | `routes/users.users_create` | v0.1.0 |
 | `get_user` | `(conn, username) -> User \| None` | An account by name, case ignored | `dependencies.current_account`, `routes/users`, `resetpw.main` | v0.1.0 |
 | `get_user_by_id` | `(conn, user_id) -> User \| None` | An account by id | `routes/users`, the setters below | v0.1.0 |
 | `list_users` | `(conn) -> list[User]` | Every account, oldest first | `routes/users.users_page` | v0.1.0 |
+| `new_backup_codes` | `(conn, user_id) -> list[str]` | Ten new backup codes; the old ones stop working | `routes/users.account_2fa_codes` | v0.1.0 |
 | `set_disabled` | `(conn, user_id, disabled) -> User` | Disables (and signs out) or enables an account; keeps the last active admin | `routes/users.users_disable`, `resetpw.main` | v0.1.0 |
 | `set_password` | `(conn, user_id, password, *, keep_session=None) -> None` | Stores a new password and signs the account out everywhere but `keep_session` | `routes/users`, `resetpw.main` | v0.1.0 |
 | `set_role` | `(conn, user_id, role) -> User` | Changes an account's role; keeps the last active admin | `routes/users.users_role` | v0.1.0 |
+| `turn_off_two_factor` | `(conn, user_id) -> User` | Turns two-factor off and forgets the key and backup codes | `routes/users`, `resetpw.main` | v0.1.0 |
+| `two_factor_secret` | `(user, secret_key) -> str \| None` | The key in plain text, None if missing or unreadable | `users.check_second_factor`, `routes/users.account_2fa_confirm` | v0.1.0 |
 
 `ROLES` is the three roles, `ROLE_HELP` says what each may do in words, and
 `User.can_change` / `User.is_admin` are what the route guards test.
+`User.backup_codes_left` is how many unused backup codes an account has.
 
 ## `app/resetpw.py` — password reset from the command line
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `main` | `(argv=None) -> int` | Prompts for a new password for a named account, stores it, enables the account | `python -m app.resetpw <username>` | v0.1.0 |
+| `main` | `(argv=None) -> int` | Prompts for a new password for a named account, stores it, enables the account; with `--2fa-off`, turns off its two-factor instead | `python -m app.resetpw [--2fa-off] <username>` | v0.1.0 |
 
 ## `app/hashpw.py` — password hash helper
 

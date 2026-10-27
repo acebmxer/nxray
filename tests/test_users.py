@@ -203,7 +203,16 @@ def test_authenticate_checks_a_password_even_for_no_such_account(settings: Setti
 # ---- what each role may do -------------------------------------------------------
 
 # Routes every signed-in account may use, whatever its role.
-ANY_ROLE_POSTS = {"/login", "/logout", "/account/password"}
+ANY_ROLE_POSTS = {
+    "/login",
+    "/login/2fa",
+    "/logout",
+    "/account/password",
+    "/account/2fa/setup",
+    "/account/2fa/confirm",
+    "/account/2fa/codes",
+    "/account/2fa/off",
+}
 ADMIN_ONLY_POSTS_EXCEPT = {"/switch/save"}
 
 

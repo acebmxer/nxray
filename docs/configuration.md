@@ -13,7 +13,7 @@ message naming the setting; see `docker compose logs nxray`.
 | --- | --- | --- |
 | `NXRAY_ADMIN_USER` | `admin` | The name of the first NXray account, an admin, made on the very first start. Read only while NXray has no accounts yet; later accounts are added on the Users page. |
 | `NXRAY_ADMIN_PASSWORD_HASH` | none, required | Argon2id hash of that first account's password, from `docker compose run --rm nxray python -m app.hashpw`. Never the password itself. Like the name, it is used once: changing it later does not change any password (use the Account page, the Users page, or `python -m app.resetpw`, see [Installation](installation.md#forgotten-password)). |
-| `NXRAY_SECRET_KEY` | generated | Signs session cookies. Left blank, one is generated on first start and kept in `/data/secret_key`. Changing it logs everyone out and makes the stored switch login unreadable, so the switch has to be set up again. |
+| `NXRAY_SECRET_KEY` | generated | Signs session cookies. Left blank, one is generated on first start and kept in `/data/secret_key`. Changing it logs everyone out and makes the stored switch login unreadable, so the switch has to be set up again. Two-factor keys become unreadable too: those accounts sign in with a backup code, or an admin turns two-factor off for them on the Users page. |
 | `NXRAY_HTTPS` | `false` | Set to `true` when NXray is served over HTTPS by a reverse proxy, so the session cookie is marked Secure. Left `true` on plain HTTP, signing in appears to fail. |
 | `NXRAY_SESSION_HOURS` | `12` | How long a session lasts without use, 1 to 720 hours. |
 | `NXRAY_LOGIN_MAX_ATTEMPTS` | `5` | Failed sign-ins from one address before it is blocked, 1 to 100. |

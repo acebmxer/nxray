@@ -16,7 +16,9 @@ Read this before deciding where to run NXray.
 
 **What it holds.** Once a switch is set up, the login of its own account on
 the switch, encrypted with a key derived from `NXRAY_SECRET_KEY` (or the
-generated `secret_key` file on the data volume). The account starts
+generated `secret_key` file on the data volume). The two-factor keys of
+NXray accounts that turned two-factor sign-in on are encrypted the same way.
+NXray's switch account starts
 read-only (`network-operator`). Once port changes are turned on it also has
 the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
 on or off, set or remove its description and set its mode (access or trunk)
@@ -56,7 +58,11 @@ start without one and has no default password. Further accounts get one of
 three roles (admin, operator, viewer), checked on every request that changes
 something, and a disabled account or a new password signs that account out
 at once. Sessions are stored server-side so logout invalidates them
-immediately. Failed logins are throttled per address. Pages are sent with a
+immediately. Failed logins are throttled per address. Optional two-factor
+sign-in (TOTP) per account: once on, a correct password alone opens nothing;
+the six-digit code is accepted once only, wrong codes count towards the same
+throttle, the key is stored AES-GCM encrypted and the ten backup codes only
+as SHA-256 hashes. Pages are sent with a
 strict Content-Security-Policy and may not be framed by other sites. Every
 form that changes something carries a per-session anti-forgery token.
 

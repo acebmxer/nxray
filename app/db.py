@@ -86,6 +86,20 @@ _MIGRATIONS: list[str] = [
         created_at     REAL NOT NULL
     );
     """,
+    # 5 -> 6: optional two-factor sign-in, per account (app/users.py,
+    # app/totp.py). totp_secret_encrypted is AES-GCM encrypted like the
+    # switch password: whoever reads it can make codes forever. It is
+    # written when setup starts, while totp_enabled is still 0, and only
+    # counts once the account confirms a code. totp_last_step is the last
+    # 30-second step a code was accepted for, so the same code can't be used
+    # twice. totp_backup_codes is a JSON list of SHA-256 hashes; a used code
+    # is removed from it.
+    """
+    ALTER TABLE users ADD COLUMN totp_secret_encrypted TEXT;
+    ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN totp_backup_codes TEXT NOT NULL DEFAULT '[]';
+    """,
 ]
 
 

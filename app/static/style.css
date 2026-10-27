@@ -385,4 +385,22 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .table-users select { padding: 0.3rem 0.4rem; }
 .table-users .badge + .inline { margin-left: 0.5rem; }
 
+/* ---- two-factor sign-in ---- */
+
+/* The QR code sits on a white plate in both themes: its squares are black,
+   and phone cameras need the contrast. */
+.qr-code { display: inline-block; padding: 0.75rem; background: #fff; border-radius: 6px; }
+.qr-code svg { display: block; }
+.totp-secret { font-size: 1rem; letter-spacing: 0.05em; word-break: break-all; }
+.backup-codes {
+  list-style: none;
+  margin: 0.75rem 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 0.4rem 2rem;
+}
+.backup-codes code { font-size: 1.05rem; letter-spacing: 0.05em; }
+.card form + form { margin-top: 1.25rem; }
+
 a { color: var(--accent); }

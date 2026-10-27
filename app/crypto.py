@@ -1,15 +1,15 @@
 """Encryption for secrets held in the database.
 
-Only the password of NXray's own switch account needs this. It is stored
-encrypted because the database sits on a volume that gets backed up and
-copied around.
+Two secrets need this: the password of NXray's own switch account, and each
+NXray account's two-factor key (app/users.py). They are stored encrypted
+because the database sits on a volume that gets backed up and copied around.
 
 The key is derived from the application secret key rather than stored beside
 the ciphertext. With NXRAY_SECRET_KEY set in nxray.env, a copy of the data
 volume alone does not decrypt. Left blank, the generated key is kept on the
 data volume too, so the protection is only against a copy of the database
-file by itself. Changing the secret key makes the stored password unreadable,
-which is why the configuration docs say so.
+file by itself. Changing the secret key makes the stored password and the
+two-factor keys unreadable, which is why the configuration docs say so.
 """
 
 from __future__ import annotations

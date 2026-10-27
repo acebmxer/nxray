@@ -11,6 +11,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Two-factor sign-in, optional, per account.** On the Account page, Set up
+  two-factor sign-in shows a QR code to scan with an authenticator app
+  (Google Authenticator, Microsoft Authenticator, Authy, 1Password and
+  others), or a key to type in by hand; it turns on once you type a right
+  code from the app, and then shows ten one-time backup codes, once. After
+  that, signing in asks for the app's six-digit code after the password,
+  or a backup code if the phone is lost. A code works only once, wrong codes
+  count towards the sign-in lockout, and turning it on signs your other
+  sessions out. Turning it off or making new backup codes needs your
+  password. Admins see who has it on, on the Users page, and can turn it off
+  for someone who lost their phone and their backup codes; the only admin
+  can do that for themselves from the Docker host with
+  `docker compose exec nxray python -m app.resetpw --2fa-off <username>`.
+  The key is stored encrypted and the backup codes only as hashes. Off for
+  everyone until they turn it on, so nothing changes when you upgrade. The
+  codes depend on the clock of the machine NXray runs on being right.
 - **More NXray accounts, with roles.** Admins add sign-in accounts on a new
   Users page and give each a role: admin (everything, including the Switch
   page and the Users page), operator (turn ports on or off, edit

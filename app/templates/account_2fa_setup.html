@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Set up two-factor sign-in — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Set up two-factor sign-in</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+
+<section class="card">
+  <p>1. Open your authenticator app on your phone, add an account, and scan
+  this code.</p>
+  <div class="qr-code">{{ qr_svg|safe }}</div>
+
+  <p>Can't scan it? Choose to type a key in the app, and type this one
+  (spaces don't matter):</p>
+  <p><code class="totp-secret">{{ secret }}</code></p>
+  <p class="hint">The app then shows NXray ({{ username }}) with a six-digit code
+  that changes every 30 seconds.</p>
+
+  <p>2. Type the code the app shows now. Two-factor sign-in turns on only once
+  this code is right; until then nothing changes.</p>
+  <form method="post" action="/account/2fa/confirm" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="code">Code from the app</label>
+    <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+           required autofocus spellcheck="false" maxlength="20">
+    <button type="submit" class="btn btn-primary">Turn on two-factor sign-in</button>
+  </form>
+  <p class="note"><a href="/account">Cancel</a>: back to your account, two-factor stays off.</p>
+</section>
+{% endblock %}

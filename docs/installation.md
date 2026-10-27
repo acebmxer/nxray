@@ -69,6 +69,37 @@ their own role or disable themselves.
 These are NXray's own accounts. They have nothing to do with the accounts on
 the switch.
 
+### Two-factor sign-in
+
+Each person can turn it on for their own account: on the Account page, press
+**Set up two-factor sign-in**, scan the QR code with an authenticator app on
+your phone (Google Authenticator, Microsoft Authenticator, Authy, 1Password
+and others), and type the six-digit code the app shows. NXray then shows ten
+backup codes, once: print them or keep them in a password manager. From then
+on, signing in asks for the app's code after your password. Each code works
+once, so after a sign-in you may have to wait for the app's next code to sign
+in again.
+
+The codes depend on the clock of the machine NXray runs on. If every code is
+refused, check that machine's time (for example with `timedatectl`).
+
+Lost your phone? Sign in with a backup code instead of the app's code, then
+on the Account page turn two-factor sign-in off and set it up again on your
+new phone. **New backup codes** on the same page gives you ten fresh ones
+when you are running low. No phone and no backup codes left: another admin
+presses **Turn off** in the Two-factor column on the Users page. If you are
+the only admin, run this on the machine NXray runs on, in the `nxray`
+folder:
+
+    docker compose exec nxray python -m app.resetpw --2fa-off admin
+
+with your account's name in place of `admin`. It turns off two-factor
+sign-in and leaves the password as it is.
+
+Changing `NXRAY_SECRET_KEY` makes the stored two-factor keys unreadable:
+those accounts sign in with a backup code (or one of the ways above) and set
+two-factor sign-in up again.
+
 ### Forgotten password
 
 Another admin can set a new one on the Users page. If nobody who can is

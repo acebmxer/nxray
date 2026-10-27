@@ -35,4 +35,40 @@
     <button type="submit" class="btn btn-primary">Change password</button>
   </form>
 </section>
+
+<section class="card">
+  <h2 class="card-title">Two-factor sign-in</h2>
+  {% if account and account.totp_enabled %}
+  <p><span class="badge badge-ok">on</span> Signing in asks for a code from your
+  authenticator app after your password.
+  {{ account.backup_codes_left }} backup code{{ '' if account.backup_codes_left == 1 else 's' }} left.</p>
+
+  <form method="post" action="/account/2fa/codes" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="codes_password">Current password</label>
+    <input id="codes_password" name="current_password" type="password"
+           autocomplete="current-password" required>
+    <p class="hint">Ten new backup codes; the old ones stop working.</p>
+    <button type="submit" class="btn btn-quiet">New backup codes</button>
+  </form>
+
+  <form method="post" action="/account/2fa/off" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="off_password">Current password</label>
+    <input id="off_password" name="current_password" type="password"
+           autocomplete="current-password" required>
+    <p class="hint">After this, your password alone signs you in.</p>
+    <button type="submit" class="btn btn-quiet">Turn off two-factor sign-in</button>
+  </form>
+  {% else %}
+  <p><span class="badge">off</span> Turn it on and signing in also asks for a
+  six-digit code from an authenticator app on your phone (Google Authenticator,
+  Microsoft Authenticator, Authy, 1Password and others), so your password alone
+  is not enough.</p>
+  <form method="post" action="/account/2fa/setup" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary">Set up two-factor sign-in</button>
+  </form>
+  {% endif %}
+</section>
 {% endblock %}

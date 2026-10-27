@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-498%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-532%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -19,7 +19,7 @@ see the switch's health on the dashboard, look at every port, turn ports on
 or off, edit their descriptions, create, rename and delete VLANs, set the
 VLANs on ports, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
-admin, operator or viewer.
+admin, operator or viewer, each with optional two-factor sign-in.
 
 ## Read next
 
@@ -89,7 +89,8 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 7. **Switch settings in the web interface**: change the switch address or run
    setup again. *(built)*
 8. **HTTPS, more users, two-factor sign-in, self-update, published images.**
-   More users with admin, operator and viewer roles: *(built)*.
+   More users with admin, operator and viewer roles: *(built)*. Optional
+   two-factor sign-in per account: *(built)*.
 9. **History**: temperatures, power and traffic over time, as graphs.
 
 ## Contributing
