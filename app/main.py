@@ -21,7 +21,7 @@ from app.dependencies import (
     templates,
 )
 from app.logging_conf import configure_logging
-from app.routes import auth, dashboard, health, ports, switch_page, users, vlans
+from app.routes import auth, dashboard, health, ports, settings_page, switch_page, users, vlans
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
 from app.users import bootstrap_admin
 
@@ -108,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(users.router)
+    app.include_router(settings_page.router)
     return app
 
 

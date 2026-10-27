@@ -113,6 +113,43 @@ twice, and also enables the account if it was disabled. Changing
 `NXRAY_ADMIN_PASSWORD_HASH` in `nxray.env` does not work for this: that line
 is only read on the very first start, to make the first account.
 
+## HTTPS
+
+Out of the box NXray serves plain HTTP on port 8080, so passwords and sessions
+cross the network unencrypted. To have NXray serve HTTPS itself:
+
+1. In `nxray.env`, set:
+
+       NXRAY_ENABLE_HTTPS=true
+
+2. Check that `docker-compose.yml` has the `"8443:8443"` line under `ports:`
+   (copies made from `docker-compose.yml.example` before HTTPS existed don't;
+   add it below the `"8080:8080"` line).
+
+3. Apply it:
+
+       docker compose up -d
+
+4. Open `https://<that machine's address>:8443`. On the first start NXray
+   makes a self-signed certificate, so the browser warns once; accept it to
+   continue. `http://<that machine's address>:8080` now sends you to the
+   HTTPS address.
+
+To get rid of the warning, upload a certificate your browsers trust (from
+your own certificate authority, for example) on the **Settings** page, as an
+admin: the certificate file (with its chain, the server's own certificate
+first) and its private key, both PEM, the key without a passphrase. The
+certificate must carry the name or address you type in the browser. NXray
+uses it at once; no restart.
+
+If you publish HTTPS on another port (say `"9443:8443"`), also set
+`NXRAY_HTTPS_PORT=9443` in `nxray.env`, so plain-HTTP visits are sent to the
+right port.
+
+The certificate and its key are kept in `/data/tls` on the data volume. To
+go back to plain HTTP, set `NXRAY_ENABLE_HTTPS=false` and run `docker compose
+up -d` again.
+
 ## Updating
 
 In the `nxray` folder:

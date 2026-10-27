@@ -31,16 +31,24 @@ services:
       # container and never changes.
       #
       # This is plain HTTP: your NXray password and session travel
-      # unencrypted. Put NXray behind an HTTPS reverse proxy (and set
-      # NXRAY_HTTPS=true) for anything beyond a trusted management network.
+      # unencrypted. Turn on built-in HTTPS (NXRAY_ENABLE_HTTPS=true in
+      # nxray.env, and the 8443 line below), or put NXray behind an HTTPS
+      # reverse proxy of your own (and set NXRAY_HTTPS=true). With built-in
+      # HTTPS on, this port only redirects to HTTPS.
       # To allow only the Docker host itself (a reverse proxy on the same
       # machine), put the loopback address in front:
       #
       #   - "127.0.0.1:8080:8080"
       #
       - "8080:8080"
+      # HTTPS, answered only with NXRAY_ENABLE_HTTPS=true; nothing listens
+      # here otherwise. If you change the left number, set NXRAY_HTTPS_PORT
+      # in nxray.env to the same, so plain-HTTP visits are sent to the right
+      # port.
+      - "8443:8443"
     volumes:
-      # Holds the SQLite database and the session signing key.
+      # Holds the SQLite database, the session signing key and, with
+      # built-in HTTPS on, its certificate.
       - nxray-data:/data
 
 volumes:

@@ -21,6 +21,7 @@
       {% if nav_role == "admin" %}
       <a class="navlink" href="/switch">Switch</a>
       <a class="navlink" href="/users">Users</a>
+      <a class="navlink" href="/settings">Settings</a>
       {% endif %}
       <a class="navlink who" href="/account" title="Your account">{{ username }}{% if nav_role %} ({{ nav_role }}){% endif %}</a>
       <form method="post" action="/logout" class="inline">

@@ -403,4 +403,8 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .backup-codes code { font-size: 1.05rem; letter-spacing: 0.05em; }
 .card form + form { margin-top: 1.25rem; }
 
+/* ---- settings ---- */
+
+.card h3 { font-size: 1rem; margin: 1.5rem 0 0.25rem; }
+
 a { color: var(--accent); }

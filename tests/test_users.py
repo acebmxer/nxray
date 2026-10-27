@@ -254,7 +254,10 @@ def test_an_operator_is_refused_the_switch_and_users_forms(logged_in: TestClient
     token = _csrf(otto, "/account")
     checked = 0
     for path in _all_posts(otto):
-        if not path.startswith(("/switch", "/users")) or path in ADMIN_ONLY_POSTS_EXCEPT:
+        if (
+            not path.startswith(("/switch", "/users", "/settings"))
+            or path in ADMIN_ONLY_POSTS_EXCEPT
+        ):
             continue
         response = otto.post(path, data={"csrf": token})
         assert response.status_code == 403, f"{path} let an operator through"
@@ -262,7 +265,7 @@ def test_an_operator_is_refused_the_switch_and_users_forms(logged_in: TestClient
     assert checked >= 8
 
 
-@pytest.mark.parametrize("path", ["/switch", "/users"])
+@pytest.mark.parametrize("path", ["/switch", "/users", "/settings"])
 @pytest.mark.parametrize("role", ["viewer", "operator"])
 def test_admin_pages_are_refused_to_other_roles(
     logged_in: TestClient, path: str, role: str

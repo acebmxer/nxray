@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Built-in HTTPS, off by default.** Set `NXRAY_ENABLE_HTTPS=true` in
+  `nxray.env` (and keep the new `8443:8443` line in `docker-compose.yml`)
+  and NXray serves its pages over HTTPS on port 8443 with an nginx inside
+  the container, no reverse proxy of your own needed; plain-HTTP visits to
+  port 8080 are sent there. On the first start it makes a self-signed
+  certificate, so browsers warn until an admin uploads a certificate they
+  trust on the new Settings page; it is checked (matching key, in date, no
+  passphrase) and used at once, with no restart. nginx runs as the same
+  non-root user, allows TLS 1.2 and 1.3 only, and passes on the visitor's
+  address so failed sign-ins are still counted per address. The session
+  cookie is marked Secure by itself. `NXRAY_HTTPS_PORT` tells NXray the
+  port if you publish HTTPS on another one. With the setting off, nothing
+  changes. A `docker-compose.yml` copied before this has no `8443` line;
+  add it before turning HTTPS on.
 - **Two-factor sign-in, optional, per account.** On the Account page, Set up
   two-factor sign-in shows a QR code to scan with an authenticator app
   (Google Authenticator, Microsoft Authenticator, Authy, 1Password and

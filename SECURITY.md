@@ -18,6 +18,8 @@ Read this before deciding where to run NXray.
 the switch, encrypted with a key derived from `NXRAY_SECRET_KEY` (or the
 generated `secret_key` file on the data volume). The two-factor keys of
 NXray accounts that turned two-factor sign-in on are encrypted the same way.
+With built-in HTTPS on, its private key is on the data volume too
+(`/data/tls/key.pem`, readable by the container user only).
 NXray's switch account starts
 read-only (`network-operator`). Once port changes are turned on it also has
 the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
@@ -48,8 +50,14 @@ configuration. Changing the switch address needs no admin login: NXray
 signs in at the new address with its own account before storing it.
 
 **Where it belongs.** On a trusted management network. NXray serves plain
-HTTP on port 8080; put it behind an HTTPS reverse proxy (and set
-`NXRAY_HTTPS=true`) if it is reachable from anywhere you do not trust. It is
+HTTP on port 8080; turn on its built-in HTTPS (`NXRAY_ENABLE_HTTPS=true`), or
+put it behind an HTTPS reverse proxy of your own (and set `NXRAY_HTTPS=true`),
+if it is reachable from anywhere you do not trust. Built-in HTTPS starts with a
+self-signed certificate, so the first visit shows a browser warning and a device
+pretending to be NXray would not be told apart until you upload a certificate
+your browsers trust (Settings page). nginx in front runs as the same non-root
+user, allows TLS 1.2 and 1.3 only, and passes the visitor's address on so
+sign-in throttling still counts per address. It is
 not built to be exposed to the internet.
 
 **What protects it.** Sign-in accounts with Argon2id password hashes. The

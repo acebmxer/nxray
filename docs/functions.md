@@ -29,6 +29,7 @@ prose columns; those are a reviewer's job.
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
 | Two-factor sign-in codes, backup codes, the setup QR code | `app/totp.py`; per account in `app/users.py` |
+| Built-in HTTPS: the certificate and nginx's config | `app/tls.py`; started by `docker/entrypoint.sh` |
 | Require a login on a route | `app/dependencies.py`, `login_required` |
 | Redirect after a POST, or to a `?next=` | `app/dependencies.py`, `redirect` and `safe_next` |
 | Render a page | `app/dependencies.py`, `templates` |
@@ -313,6 +314,8 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `change_refused` | `(exc, target) -> str` | The message for a port or VLAN change the switch did not make | `port_change`, `port_vlans_change`, `routes/vlans` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
+| `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
+| `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS and its certificate, admin only | router | v0.1.0 |
 | `login_2fa_form` | `(request, next: str = "/") -> Response` | `GET /login/2fa`, the code step; back to `/login` without a recent password step | router | v0.1.0 |
 | `login_2fa_submit` | `(request, code, next) -> Response` | `POST /login/2fa`: an app code (once) or a backup code, throttled like sign-in | router | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
@@ -342,6 +345,25 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1 and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
 | `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
 | `vlans_page` | `(request, username) -> Response` | `GET /vlans`, every VLAN and the ports using it | router | v0.1.0 |
+
+## `app/tls.py` — built-in HTTPS
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `current_certificate` | `(tls_dir) -> CertificateInfo \| None` | The certificate nginx serves, read from disk | `routes/settings_page` | v0.1.0 |
+| `ensure_certificate` | `(tls_dir) -> bool` | Makes a self-signed certificate and key (EC P-256, ten years) unless both exist | `tls.main` | v0.1.0 |
+| `install_certificate` | `(tls_dir, cert_pem, key_pem) -> CertificateInfo` | Checks, stores and loads an uploaded pair; raises `CertificateError` | `routes/settings_page.settings_certificate` | v0.1.0 |
+| `main` | `() -> int` | Entrypoint helper: prints `http`, or prepares the certificate and nginx's config and prints `https` | `docker/entrypoint.sh` (`python -m app.tls`) | v0.1.0 |
+| `reload_nginx` | `(pid_file=NGINX_PID_FILE) -> bool` | Sends nginx SIGHUP so it loads the new certificate | `install_certificate` | v0.1.0 |
+| `validate_certificate_pair` | `(cert_pem, key_pem) -> CertificateInfo` | Raises `CertificateError` unless the certificate (chain allowed) and unencrypted key match and are in date | `install_certificate` | v0.1.0 |
+| `write_nginx_config` | `(https_port, tls_dir, template, target) -> None` | nginx's config from `docker/nginx.conf.template` | `tls.main` | v0.1.0 |
+
+## `app/healthcheck.py` — the container health check
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `https_enabled` | `() -> bool` | `NXRAY_ENABLE_HTTPS` read as the app reads it | `healthcheck.main` | v0.1.0 |
+| `main` | `() -> int` | 0 when `/healthz` answers, over HTTPS through nginx when that is on | Dockerfile `HEALTHCHECK` | v0.1.0 |
 
 ## `app/totp.py` — two-factor codes
 

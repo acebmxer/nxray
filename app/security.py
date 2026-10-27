@@ -190,10 +190,13 @@ def purge_expired_sessions(conn: sqlite3.Connection) -> int:
 def client_ip(request: Request) -> str:
     """The address login throttling is counted against.
 
-    The direct peer address only. X-Forwarded-For is deliberately ignored:
+    The direct peer address. X-Forwarded-For sent by a browser is ignored:
     anyone can send that header, and honouring it would let a caller pick a
-    fresh address for every guess. Support for a trusted reverse proxy is a
-    planned setting, not a default.
+    fresh address for every guess. The one exception is NXray's own nginx
+    (built-in HTTPS): uvicorn then runs with --forwarded-allow-ips 127.0.0.1
+    and takes the address nginx puts in that header, which nginx overwrites
+    rather than appends to (docker/entrypoint.sh, docker/nginx.conf.template).
+    Support for a reverse proxy of your own is a planned setting.
     """
     return request.client.host if request.client else "unknown"
 

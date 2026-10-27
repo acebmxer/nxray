@@ -1,0 +1,68 @@
+# nginx in front of NXray, for built-in HTTPS (NXRAY_ENABLE_HTTPS=true).
+#
+# docker/entrypoint.sh starts it only when that setting is on; app/tls.py
+# writes the real config from this template first, filling in @HTTPS_PORT@
+# (NXRAY_HTTPS_PORT, where plain-HTTP visits are sent) and @TLS_DIR@.
+#
+# It runs as the same non-root user as the app: 8080 and 8443 are
+# unprivileged ports, and all of nginx's own files are under /tmp/nginx
+# instead of the root-owned Debian defaults.
+
+pid /tmp/nginx/run/nginx.pid;
+error_log stderr warn;
+worker_processes 1;
+
+events {
+  worker_connections 256;
+}
+
+http {
+  include /etc/nginx/mime.types;
+  default_type application/octet-stream;
+
+  client_body_temp_path /tmp/nginx/client_temp;
+  proxy_temp_path /tmp/nginx/proxy_temp;
+  fastcgi_temp_path /tmp/nginx/client_temp;
+  uwsgi_temp_path /tmp/nginx/client_temp;
+  scgi_temp_path /tmp/nginx/client_temp;
+
+  # The app logs each request itself; nginx would only log them twice.
+  access_log off;
+  server_tokens off;
+
+  # Forms and a certificate upload are small.
+  client_max_body_size 2m;
+
+  # Plain HTTP only ever redirects, so a bookmark or a typed http:// address
+  # still arrives, but nothing is served unencrypted.
+  server {
+    listen 8080;
+    server_name _;
+    location / {
+      return 301 https://$host:@HTTPS_PORT@$request_uri;
+    }
+  }
+
+  server {
+    listen 8443 ssl;
+    server_name _;
+
+    ssl_certificate @TLS_DIR@/cert.pem;
+    ssl_certificate_key @TLS_DIR@/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:nxray_tls:1m;
+    ssl_session_timeout 1h;
+
+    location / {
+      proxy_pass http://127.0.0.1:8081;
+      proxy_http_version 1.1;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-Proto https;
+      # Replaced, never appended to: the app counts failed sign-ins per
+      # address, and an address a browser made up must not be believed.
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_read_timeout 120s;
+    }
+  }
+}

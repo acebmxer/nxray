@@ -104,9 +104,62 @@ jobs:
           test "$uid" != "0" || { echo "::error::container runs as root"; exit 1; }
           echo "runs as uid $uid"
 
+      - name: "Built-in HTTPS: start a second container with it on"
+        run: |
+          HASH=$(printf 'ci-test-password' | docker run --rm -i nxray:ci python -m app.hashpw | grep -oP '(?<=HASH=).*')
+          docker run -d --name nxray-tls -p 8081:8080 -p 8444:8443 \
+            -e NXRAY_ADMIN_PASSWORD_HASH="$HASH" \
+            -e NXRAY_ENABLE_HTTPS=true -e NXRAY_HTTPS_PORT=8444 \
+            nxray:ci
+          for i in $(seq 1 30); do
+            if curl -skf https://localhost:8444/healthz > /dev/null; then
+              echo "HTTPS answers after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::HTTPS never answered"
+          exit 1
+
+      - name: "Built-in HTTPS: self-signed certificate, plain HTTP redirects"
+        run: |
+          subject=$(echo | openssl s_client -connect localhost:8444 2>/dev/null | openssl x509 -noout -subject)
+          echo "$subject" | grep -q "CN *= *nxray" || { echo "::error::unexpected certificate: $subject"; exit 1; }
+          out=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:8081/ports)
+          test "$out" = "301 https://localhost:8444/ports" || { echo "::error::plain HTTP answered: $out"; exit 1; }
+          docker exec nxray-tls python -m app.healthcheck || { echo "::error::health check failed"; exit 1; }
+          echo "certificate $subject; plain HTTP: $out"
+
+      - name: "Built-in HTTPS: sign in, Secure cookie, real visitor address"
+        run: |
+          code=$(curl -sk -o /dev/null -w '%{http_code}' -c tlsjar \
+            -H 'X-Forwarded-For: 203.0.113.9' \
+            --data-urlencode username=admin --data-urlencode password=ci-test-password \
+            --data-urlencode next=/ https://localhost:8444/login)
+          test "$code" = "303" || { echo "::error::login answered $code"; exit 1; }
+          awk -F'\t' '$6 == "nxray_session" && $4 == "TRUE"' tlsjar | grep -q . \
+            || { echo "::error::session cookie is not marked Secure"; cat tlsjar; exit 1; }
+          curl -skf -b tlsjar https://localhost:8444/settings | grep -q "Self-signed" \
+            || { echo "::error::Settings page did not show the certificate"; exit 1; }
+          line=$(docker logs nxray-tls 2>&1 | grep '"POST /login' | tail -1)
+          echo "app saw: $line"
+          test -n "$line" || { echo "::error::no sign-in line in the app's log"; exit 1; }
+          case "$line" in
+            *203.0.113.9*) echo "::error::the app believed a made-up X-Forwarded-For"; exit 1 ;;
+            *127.0.0.1:*) echo "::error::the app sees nginx, not the visitor"; exit 1 ;;
+          esac
+
+      - name: "Built-in HTTPS: nginx and the app run as non-root"
+        run: |
+          docker top nxray-tls -eo user,comm
+          if docker top nxray-tls -eo user | tail -n +2 | grep -qx root; then
+            echo "::error::a process runs as root"; exit 1
+          fi
+
       - name: Show logs on failure
         if: failure()
-        run: docker logs nxray
+        run: |
+          docker logs nxray || true
+          docker logs nxray-tls || true
 
   trivy:
     name: Trivy vulnerability scan

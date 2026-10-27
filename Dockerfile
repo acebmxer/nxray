@@ -30,8 +30,13 @@ RUN pip uninstall --yes pip setuptools wheel 2>/dev/null || true
 
 FROM python:3.14-slim
 
-# Same upgrade as the build stage; this is the stage that ships.
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Same upgrade as the build stage; this is the stage that ships. nginx is
+# for built-in HTTPS (NXRAY_ENABLE_HTTPS, off by default): it sits in front of
+# the app only when that setting is on; see docker/entrypoint.sh. Debian's
+# package enables a system service and log directories nothing here uses.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled /etc/nginx/conf.d
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -48,18 +53,23 @@ RUN python -m pip uninstall --yes pip 2>/dev/null || true \
 
 COPY --from=build /opt/venv /opt/venv
 COPY app/ ./app/
+COPY docker/nginx.conf.template /etc/nxray/nginx.conf.template
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/nxray-entrypoint
 
-# Non-root throughout. The data volume is chowned so the app can write the
-# SQLite database and the session signing key to it.
+# Non-root throughout, nginx included (8080 and 8443 are unprivileged ports).
+# The data volume is chowned so the app can write the SQLite database, the
+# session signing key and, with HTTPS on, the certificate to it.
 RUN useradd --system --create-home --uid 10001 nxray \
     && mkdir -p /data \
     && chown -R nxray:nxray /data /srv/nxray
 USER nxray
 
 VOLUME ["/data"]
-EXPOSE 8080
+# 8080: the app over plain HTTP, or with HTTPS on, a redirect to 8443.
+EXPOSE 8080 8443
 
+# With HTTPS on this asks nginx, not just the app behind it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status == 200 else 1)"
+    CMD ["python", "-m", "app.healthcheck"]
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["/usr/local/bin/nxray-entrypoint"]
