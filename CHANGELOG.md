@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Port changes.** Each port's own page can now turn the port on or off and
+  change or remove its description, with a confirm step that warns when a
+  port that is up is about to be turned off. A Save config button keeps the
+  changes over a restart of the switch, and the pages remind you while
+  changes are unsaved. Port changes are off until you turn them on on the
+  Switch page with the switch's admin login: NXray then signs in to the
+  switch over SSH once to create a role (`nxray-ports`) that lets its
+  account do only that, on the front-panel ports only, and gives it to the
+  account; the switch keeps refusing it everything else, including mgmt0,
+  speeds, VLANs and accounts. The admin password is never stored. Because
+  the switch applies a new role only to an account it has not heard from
+  for a while, NXray then waits about 11 minutes before contacting the
+  switch again and says so on every page. Needs SSH reachable from the
+  machine running NXray.
 - **Ports page.** A new Ports page lists every front-panel port with its
   description, state (with the switch's reason when it is down), speed,
   VLAN, transceiver, traffic in and out over the last 30 seconds, and its

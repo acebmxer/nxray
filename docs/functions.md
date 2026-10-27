@@ -38,6 +38,9 @@ prose columns; those are a reviewer's job.
 | Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports) |
 | Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
 | Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
+| Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
+| Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
+| Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
 
 ---
 
@@ -95,8 +98,9 @@ really invalidates rather than merely asking the browser to forget.
 | --- | --- | --- | --- | --- |
 | `add_security_headers` | `(request, call_next) -> Response` | HTTP middleware adding `SECURITY_HEADERS` to every response | `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
+| `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
-| `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The stored switch, its decrypted login, or the key-changed message | dashboard, ports routes | v0.1.0 |
+| `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The stored switch, its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
@@ -112,14 +116,17 @@ raises, both handled in `main.create_app`.
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page.switch_setup` | v0.1.0 |
 | `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
-| `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `delete_user`, `switch_setup.run_setup` | v0.1.0 |
+| `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `delete_user`, `switch_setup.run_setup`, `port_changes.role_lines` | v0.1.0 |
+| `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
+| `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 
 `NxapiClient(target).show(*commands)` runs show commands in one request.
 The only configuration methods are `create_user(name, password, role)`
 (letters-and-digits password, role `network-operator` only),
-`delete_user(name)` and `save_config()`; each builds its single command from
-checked values.
+`delete_user(name)`, `configure_port(name, description=, enabled=)` (one
+port's description and on/off, nothing else) and `save_config()`; each
+builds its commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -173,7 +180,12 @@ port's own page shows.
 | `load_target` | `(conn, secret_key) -> SwitchTarget` | The stored login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
 | `record_test_result` | `(conn, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_changes_enabled` | `(conn, *, pause_seconds) -> None` | Records that port changes are on and pauses switch calls | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed ports since the last Save config | `routes/ports.port_change`, `routes/switch_page.switch_save` | v0.1.0 |
+
+`SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
+changes are on and how long NXray still waits before calling the switch.
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -190,6 +202,32 @@ port's own page shows.
 
 `SetupError` carries the message the page shows. The admin login lives only
 inside `run_setup`.
+
+## `app/switch_ssh.py` — SSH, for lines NX-API refuses
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `open_paramiko_shell` | `(host, port, username, password, timeout) -> ParamikoShell` | Signs in over SSH with a password only (no local keys or agent) and opens the NX-OS command line | `run_config` (the default opener) | v0.1.0 |
+| `refused` | `(output: str) -> str \| None` | The switch's complaint in a command's output, or None | `run_config` | v0.1.0 |
+| `run_config` | `(*, host, port, username, password, lines, timeout, opener=None) -> None` | Types checked lines between `configure terminal` and `end`; stops at the first refusal | `port_changes.enable_port_changes` | v0.1.0 |
+
+Errors are `SshUnreachable`, `SshAuthError` and `SshCommandError`, all
+subclasses of `SshError`. The switch's host key is accepted unchecked, as its
+NX-API certificate is. Tests pass a pretend opener through
+`app.state.ssh_opener`.
+
+## `app/port_changes.py` — turning on port changes
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
+| `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes` | v0.1.0 |
+| `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
+
+`ROLE_RULES` are the role's only rules; `ROLE_NAME` is `nxray-ports`, shared by
+every NXray install on a switch.
 
 ## `app/logging_conf.py` — application logging
 
@@ -209,14 +247,19 @@ inside `run_setup`.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
+| `change_refused` | `(exc, target) -> str` | The message for a port change the switch did not make | `port_change` | v0.1.0 |
+| `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
+| `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port; 404 for an unknown name | router | v0.1.0 |
 | `ports_page` | `(request, username, show) -> Response` | `GET /ports?show=all\|up\|down\|errors` | router | v0.1.0 |
+| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port changes button | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
+| `switch_save` | `(request, username, csrf) -> Response` | `POST /switch/save`, the Save config button | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 

@@ -65,6 +65,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings or load_settings()
     # Tests put an httpx.MockTransport here so no request reaches a real switch.
     app.state.nxapi_transport = None
+    # ...and a pretend SSH shell opener here (app/switch_ssh.py).
+    app.state.ssh_opener = None
 
     @app.exception_handler(RedirectToLogin)
     async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:

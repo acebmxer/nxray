@@ -15,7 +15,7 @@ verified. This is a project decision, not an oversight.
 
 Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
-``delete_user``, ``save_config``), each building its one command from
+``delete_user``, ``configure_port``, ``save_config``), each building its commands from
 checked values, so nothing that renders a page can change the switch by
 accident and no caller can pass free text to the switch's configuration.
 """
@@ -52,6 +52,15 @@ _SAFE_PASSWORD = re.compile(r"^[A-Za-z0-9]{8,64}$")
 
 # The only roles NXray ever gives its own account.
 ALLOWED_ROLES = frozenset({"network-operator"})
+
+# A front-panel port: Ethernet1/3, or a breakout port such as Ethernet1/49/2.
+_PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
+
+# What NX-OS stores in a port description, found by trying them on the
+# switch: printable ASCII up to 254 characters. NX-API refuses "?" and ";"
+# anywhere in a request, and anything outside ASCII is silently cut off.
+DESCRIPTION_MAX = 254
+_DESCRIPTION = re.compile(r"^[\x20-\x7e]*$")
 
 # Names NX-OS keeps for itself, plus the switch's own admin account.
 RESERVED_ACCOUNT_NAMES = frozenset(
@@ -125,6 +134,32 @@ def validate_account_name(name: str) -> str:
     if name.lower() in RESERVED_ACCOUNT_NAMES:
         raise ValueError(f"{name!r} is reserved on the switch; pick another name")
     return name
+
+
+def validate_port_name(name: str) -> str:
+    """Return the name, or raise ValueError if it is not a front-panel Ethernet port."""
+    if not _PORT_NAME.match(name):
+        raise ValueError(f"{name!r} is not a front-panel port name such as Ethernet1/3")
+    return name
+
+
+def validate_description(text: str) -> str:
+    """Return the description as the switch will store it, or raise ValueError.
+
+    Leading spaces are dropped (the switch drops them too). An empty result
+    means "no description".
+    """
+    cleaned = text.lstrip(" ").rstrip("\r\n")
+    if len(cleaned) > DESCRIPTION_MAX:
+        raise ValueError(f"a description is at most {DESCRIPTION_MAX} characters")
+    if not _DESCRIPTION.match(cleaned):
+        raise ValueError(
+            "a description can only use plain letters, digits, spaces and the usual "
+            "punctuation (no accented letters, tabs or line breaks)"
+        )
+    if "?" in cleaned or ";" in cleaned:
+        raise ValueError('a description cannot contain "?" or ";" (NX-API refuses them)')
+    return cleaned
 
 
 def validate_show_command(command: str) -> str:
@@ -274,6 +309,25 @@ class NxapiClient:
         validate_account_name(name)
         command = f"no username {name}"
         self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port(
+        self, name: str, *, description: str | None = None, enabled: bool | None = None
+    ) -> None:
+        """Set one port's description and/or turn it on or off, in one request.
+
+        ``description=""`` removes the description. Only these two settings
+        exist here, matching the role NXray's account is given for them.
+        """
+        validate_port_name(name)
+        if description is None and enabled is None:
+            raise ValueError("nothing to change")
+        commands = [f"interface {name}"]
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if enabled is not None:
+            commands.append("no shutdown" if enabled else "shutdown")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot."""

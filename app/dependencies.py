@@ -93,19 +93,33 @@ def login_required(request: Request) -> str:
     return username
 
 
+def paused_message(seconds: int) -> str:
+    """What every page says while NXray leaves the switch alone after a role change."""
+    minutes = max(1, (seconds + 59) // 60)
+    return (
+        "NXray is leaving the switch alone for about "
+        f"{minutes} more minute{'s' if minutes != 1 else ''} so the switch applies the "
+        "new permissions for port changes. The switch is not contacted until then; "
+        "reload this page afterwards."
+    )
+
+
 def stored_switch(
     request: Request,
 ) -> tuple[SwitchConnection | None, SwitchTarget | None, str | None]:
     """The stored switch, its decrypted login, and an error message.
 
     (None, None, None) when no switch is set up; (connection, None, message)
-    when the stored login cannot be decrypted.
+    when the stored login cannot be decrypted, or while NXray waits for the
+    switch to apply a new role (see app/port_changes.py).
     """
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
         connection = get_connection(conn)
         if connection is None:
             return None, None, None
+        if waiting := connection.paused_seconds():
+            return connection, None, paused_message(waiting)
         try:
             return connection, load_target(conn, settings.secret_key), None
         except DecryptionError:

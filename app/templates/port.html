@@ -20,6 +20,21 @@
   <p class="alert alert-error" role="alert">The switch has no port called {{ name }}.</p>
 </div>
 {% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if connection.unsaved_changes %}
+<div class="warning warning-row">
+  <span>NXray changed ports since the switch configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
 <div class="grid">
   <section class="card">
     <h2 class="card-title">Port</h2>
@@ -72,6 +87,36 @@
     </table>
   </section>
 </div>
+
+<section class="card">
+  <h2 class="card-title">Change this port</h2>
+  {% if connection.changes_enabled %}
+  <form method="post" action="/ports/change" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <input type="hidden" name="action" value="description">
+    <label for="description">Description</label>
+    <input id="description" name="description" type="text" value="{{ description }}"
+           maxlength="254" spellcheck="false">
+    <p class="hint">Up to 254 plain characters, no "?" or ";". Leave empty to remove it.</p>
+    <button type="submit" class="btn btn-primary">Change description</button>
+  </form>
+  <form method="post" action="/ports/change" class="inline-actions">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    {% if port.admin_up %}
+    <input type="hidden" name="action" value="off">
+    <button type="submit" class="btn btn-quiet">Turn off this port</button>
+    {% else %}
+    <input type="hidden" name="action" value="on">
+    <button type="submit" class="btn btn-quiet">Turn on this port</button>
+    {% endif %}
+  </form>
+  <p class="note">Each change asks you to confirm first.</p>
+  {% else %}
+  <p class="lead">Port changes are off. <a href="/switch">Turn them on on the Switch page</a> to turn this port on or off and edit its description.</p>
+  {% endif %}
+</section>
 <p class="note">"Now" is the average over the last 30 seconds. Totals count since the counters were last cleared.</p>
 {% endif %}
 {% endblock %}

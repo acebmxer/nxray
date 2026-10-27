@@ -31,6 +31,20 @@ class SwitchConnection:
     last_tested_at: float | None
     last_test_ok: bool | None
     last_test_message: str | None
+    changes_enabled_at: float | None = None
+    paused_until: float | None = None
+    unsaved_changes: bool = False
+
+    @property
+    def changes_enabled(self) -> bool:
+        """True once NXray's account has been given the port-changes role."""
+        return self.changes_enabled_at is not None
+
+    def paused_seconds(self, now: float | None = None) -> int:
+        """Seconds NXray still leaves the switch alone; 0 when not paused."""
+        if self.paused_until is None:
+            return 0
+        return max(0, int(self.paused_until - (time.time() if now is None else now) + 0.999))
 
 
 def save_connection(
@@ -84,7 +98,26 @@ def get_connection(conn: sqlite3.Connection) -> SwitchConnection | None:
         last_tested_at=row["last_tested_at"],
         last_test_ok=None if row["last_test_ok"] is None else bool(row["last_test_ok"]),
         last_test_message=row["last_test_message"],
+        changes_enabled_at=row["changes_enabled_at"],
+        paused_until=row["paused_until"],
+        unsaved_changes=bool(row["unsaved_changes"]),
     )
+
+
+def set_changes_enabled(conn: sqlite3.Connection, *, pause_seconds: float) -> None:
+    """Record that port changes are on, and pause switch calls for ``pause_seconds``."""
+    now = time.time()
+    conn.execute(
+        "UPDATE switch_connection SET changes_enabled_at = ?, paused_until = ? WHERE id = 1",
+        (now, now + pause_seconds),
+    )
+    conn.commit()
+
+
+def set_unsaved_changes(conn: sqlite3.Connection, unsaved: bool) -> None:
+    """Remember whether NXray changed the switch since the config was last saved."""
+    conn.execute("UPDATE switch_connection SET unsaved_changes = ? WHERE id = 1", (int(unsaved),))
+    conn.commit()
 
 
 def set_config_saved(conn: sqlite3.Connection, saved: bool) -> None:
@@ -145,5 +178,7 @@ __all__ = [
     "load_target",
     "record_test_result",
     "save_connection",
+    "set_changes_enabled",
     "set_config_saved",
+    "set_unsaved_changes",
 ]

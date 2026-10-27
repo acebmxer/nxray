@@ -10,6 +10,9 @@
 {% if notice %}
 <p class="alert alert-ok" role="status">{{ notice }}</p>
 {% endif %}
+{% if paused and not error and not notice %}
+<p class="alert alert-warn" role="status">{{ paused }}</p>
+{% endif %}
 
 {% if connection %}
 <section class="card">
@@ -17,7 +20,7 @@
   <dl class="facts">
     <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
     <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
-    <dt>NXray's account</dt><dd>{{ connection.username }} (read-only)</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
     <dt>Config saved</dt>
     <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
     <dt>Last test</dt>
@@ -42,6 +45,73 @@
     <code>no username {{ connection.username }}</code>, <code>end</code>,
     <code>copy running-config startup-config</code>.
   </p>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Port changes</h2>
+  {% if connection.changes_enabled %}
+  <p class="lead">
+    On. NXray's account may turn the front ports on or off and edit their
+    descriptions (on each port's own page), and save the configuration. The
+    switch refuses it everything else.
+  </p>
+  {% if connection.unsaved_changes %}
+  <p class="warning">NXray changed ports since the switch configuration was last saved. Until you save, a restart of the switch undoes them.</p>
+  {% endif %}
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary">Save config</button>
+  </form>
+  <p class="note">
+    Save config runs <code>copy running-config startup-config</code>, which also
+    saves any other unsaved changes on the switch. To take port changes away
+    again, sign in to the switch over SSH as admin and run
+    <code>configure terminal</code>, <code>no username {{ connection.username }} role {{ role_name }}</code>,
+    <code>end</code>, <code>copy running-config startup-config</code>.
+  </p>
+  {% else %}
+  <p class="lead">
+    Off: NXray's account can only read. Turning port changes on gives it a role
+    ({{ role_name }}) that allows exactly this, on the front ports only: turning a
+    port on or off, editing its description, and saving the configuration. The
+    switch keeps refusing everything else, including mgmt0, speeds, VLANs and
+    accounts.
+  </p>
+  <p class="lead">
+    NX-API cannot create this kind of role, so NXray signs in to the switch over
+    SSH once with the admin login below, types the role in, and checks it took.
+    The admin password is used for this only and never stored.
+  </p>
+
+  <form method="post" action="/switch/enable-changes" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="ch_admin_user">Switch admin username</label>
+    <input id="ch_admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="ch_admin_password">Switch admin password</label>
+    <input id="ch_admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="ssh_port">SSH port</label>
+    <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="22" required>
+
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch. Then it leaves the switch
+      alone for about 11 minutes: the switch only applies the new role to an
+      account it has not heard from for a while, so the pages show a waiting
+      message until then.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration, and wait before using NXray.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Turn on port changes</button>
+  </form>
+  {% endif %}
 </section>
 {% else %}
 <section class="card">

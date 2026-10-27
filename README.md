@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-219%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-315%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,9 +13,10 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 4 of the [roadmap](#roadmap) are built: you
+**Status:** early. Stages 1 to 5 of the [roadmap](#roadmap) are built: you
 can install NXray, sign in, connect it to a switch, see the switch's health
-on the dashboard, and look at every port.
+on the dashboard, look at every port, turn ports on or off and edit their
+descriptions.
 
 ## Read next
 
@@ -48,16 +49,22 @@ Then open `http://<that machine>:8080` and sign in. The full steps are in
 
 - Linux with Docker Engine and the Compose plugin, 2.30 or newer.
 - A Cisco Nexus switch with NX-API turned on (`feature nxapi`), reachable from
-  the Docker host on port 443.
+  the Docker host on port 443. Turning on port changes also needs the
+  switch's SSH (port 22) reachable from the Docker host, once.
 
 ## How it talks to the switch
 
-Only through NX-API, the switch's own HTTPS interface: the same commands you
+Through NX-API, the switch's own HTTPS interface: the same commands you
 type over SSH, answered as structured data. NXray uses its own read-only
 account on the switch, never `admin`: the Switch page signs in with the admin
 login once, creates that account with a long random password, saves the
 switch configuration, and keeps only that account's login. The admin
 password is never stored. See [Switch setup](docs/switch-setup.md).
+
+Turning on port changes is the one step that uses SSH: NX-API cannot create
+the role that lets NXray's account turn front ports on or off and edit their
+descriptions (and nothing else), so NXray types it in over SSH with the admin
+login, once.
 
 The switch's self-signed HTTPS certificate is accepted without checking; see
 [SECURITY.md](SECURITY.md) for what that means.
@@ -74,7 +81,7 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 4. **Ports page**: every port's state, speed, VLAN, description, transceiver,
    traffic and error counters. Read-only. *(built)*
 5. **Port changes**: turn a port on or off and edit its description, with a
-   confirm step, plus "Save config".
+   confirm step, plus "Save config". *(built)*
 6. **VLANs**: create, delete and rename VLANs; set the VLANs on ports.
 7. **Switch settings in the web interface**: change the switch address or run
    setup again.

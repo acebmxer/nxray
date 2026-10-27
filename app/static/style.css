@@ -346,4 +346,22 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .dim { margin-left: 0; }
 .breadcrumb { margin: 0 0 0.5rem; font-size: 0.9rem; }
 
+/* ---- port changes ---- */
+
+.alert-warn {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--text);
+}
+.warning-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+.inline-actions { margin-top: 1.25rem; }
+.confirm-summary { color: var(--text); font-size: 1.05rem; font-weight: 600; }
+.button-row .btn-quiet { padding: 0.6rem 0.9rem; font-size: inherit; }
+
 a { color: var(--accent); }

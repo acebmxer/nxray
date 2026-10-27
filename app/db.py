@@ -52,6 +52,16 @@ _MIGRATIONS: list[str] = [
         last_test_message  TEXT
     );
     """,
+    # 2 -> 3: port changes. changes_enabled_at is when NXray's account was
+    # given the port-changes role; NXray leaves the switch alone until
+    # paused_until so the switch drops its cached session for the account
+    # and applies the role. unsaved_changes is set by a port change and
+    # cleared by Save config.
+    """
+    ALTER TABLE switch_connection ADD COLUMN changes_enabled_at REAL;
+    ALTER TABLE switch_connection ADD COLUMN paused_until REAL;
+    ALTER TABLE switch_connection ADD COLUMN unsaved_changes INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 
