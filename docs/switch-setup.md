@@ -78,6 +78,12 @@ NXray then:
          rule 3 permit command conf t ; interface * ; description *
          rule 4 permit command conf t ; interface * ; no description
          rule 5 permit command copy running-config startup-config
+         rule 6 permit command conf t ; vlan * ; name *
+         rule 7 permit command conf t ; no vlan *
+         rule 8 permit command conf t ; interface * ; switchport mode *
+         rule 9 permit command conf t ; interface * ; switchport access vlan *
+         rule 10 permit command conf t ; interface * ; switchport trunk allowed vlan *
+         rule 11 permit command conf t ; interface * ; switchport trunk native vlan *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -90,16 +96,25 @@ NXray then:
    `copy running-config startup-config` (again saving any other unsaved
    changes on the switch).
 
-The role lets NXray's account turn front-panel ports on or off and set or
-remove their descriptions, and save the configuration. The switch refuses
-it everything else: mgmt0, speed, MTU, VLANs, accounts and switch-wide
-settings. Every NXray install on a switch uses the same `nxray-ports` role.
+The role lets NXray's account turn front-panel ports on or off, set or
+remove their descriptions and set their mode (access or trunk) and VLANs;
+create, name and delete VLANs; and save the configuration. The switch
+refuses it everything else: mgmt0, speed, MTU, shutting a VLAN down or
+suspending it, accounts and other switch-wide settings. Every NXray install
+on a switch uses the same `nxray-ports` role.
 
 **The wait.** The switch keeps an account's permissions in its NX-API
 session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so.
+
+**Installs that turned port changes on before VLANs existed.** Their role
+has rules 1 to 5 only. The Switch page then shows a **VLAN changes** card:
+type the admin login, tick the box and press **Turn on VLAN changes**. NXray
+types the same lines as above (adding rules 6 to 11) and saves the
+configuration. There is no wait this time: the switch applies new rules in a
+role the account already has at once.
 
 **Changing a port.** On a port's own page (Ports, then the port's name),
 **Change description** and **Turn off this port** / **Turn on this port**
@@ -108,6 +123,26 @@ up warns that whatever is plugged in loses its connection. A change takes
 effect at once but is not saved: press **Save config** (on the port's page or
 the Switch page) to keep it over a restart of the switch. Descriptions are
 up to 254 plain characters; NX-API refuses `?` and `;`.
+
+**A port's VLANs.** The same page shows the port's mode and VLANs. **Change
+VLANs** sets the mode (access: one untagged VLAN; trunk: several tagged
+VLANs plus one native, untagged VLAN), the access or native VLAN (picked
+from the VLANs on the switch) and the VLANs a trunk carries (typed as
+`10,20-30`, `all` or `none`; this replaces the whole list). Only the
+settings of the chosen mode are sent, and only those that change. The
+confirm page warns when the port switches between access and trunk (the
+device on it may lose its connection for a moment), when an access port
+moves to another VLAN, and when a trunk stops carrying VLANs.
+
+**VLANs.** The **VLANs** page lists every VLAN with the ports using it, and
+creates (number and optional name), renames and deletes VLANs. Names are up
+to 32 letters, digits, dots, dashes or underscores, without spaces: the
+switch refuses spaces and silently ignores a longer name. VLAN 1 cannot be
+renamed or deleted, and the switch keeps 3968 to 4094 for itself. A VLAN
+that a port still uses cannot be deleted: an access port in it, a trunk
+using it as native VLAN, or a trunk that names it in its list (a trunk
+carrying every VLAN does not count). Move those ports first; the page lists
+them. Deleting asks you to confirm.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 
@@ -130,6 +165,7 @@ up to 254 plain characters; NX-API refuses `?` and `;`.
 | NXray is leaving the switch alone for about N more minutes | Port changes were just turned on; the switch is applying the new role. Wait, then reload |
 | could not reach the switch over SSH | Turning on port changes needs SSH from the NXray machine to the switch; check SSH is on and the port |
 | may not make this change yet | The switch has not applied the port-changes role, or it was removed. Leave NXray's pages closed for 10 minutes and try again, or turn port changes on again |
+| VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN changes** on the Switch page |
 
 ## The certificate and the SSH host key
 

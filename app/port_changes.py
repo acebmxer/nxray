@@ -1,9 +1,11 @@
 """Turning on port changes: give NXray's switch account a role that allows them.
 
-The role allows exactly these, on the front-panel Ethernet ports only:
-turning a port on or off, setting or removing its description, and saving
-the configuration. Everything else (mgmt0, speed, MTU, VLANs, accounts,
-switch-wide settings) stays refused by the switch itself, not just by NXray.
+The role allows exactly these: on the front-panel Ethernet ports only,
+turning a port on or off, setting or removing its description, and setting
+its mode (access or trunk) and VLANs; switch-wide, creating, naming and
+deleting VLANs; and saving the configuration. Everything else (mgmt0, speed,
+MTU, a VLAN's own on/off state, accounts, other switch-wide settings) stays
+refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
 the admin login entered on the Switch page (``app/switch_ssh.py``). Checks
@@ -17,8 +19,14 @@ same rules.
 NX-OS caches an account's roles in its NX-API session, which ends after
 NX-API's idle timeout (``show nxapi``, 10 minutes by default). Until then the
 account keeps its old permissions, so NXray stops calling the switch for that
-long plus a minute. The wait was measured on an N9K-C92160YC-X with NX-OS
-9.3(16).
+long plus a minute. New rules in a role the account already has apply at
+once, so an account that already had the role (port changes turned on
+before VLAN changes existed) needs no wait. Both were measured on an
+N9K-C92160YC-X with NX-OS 9.3(16).
+
+``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
+the VLAN rules. NXray stores the version it gave its account, so the
+Switch page can offer the update when the code knows newer rules.
 """
 
 from __future__ import annotations
@@ -68,6 +76,23 @@ ROLE_RULES = (
     "rule 5 permit command copy running-config startup-config",
 )
 
+# VLAN rules, added in ROLE_VERSION 2. "conf t ; vlan * ; name *" also lets
+# the account create a VLAN (entering a VLAN is allowed when a rule names a
+# command inside it) but not shut one down or suspend it; a bare
+# "conf t ; vlan *" would allow every VLAN setting. The "no switchport ..."
+# forms are not needed: setting the default values back leaves a port's
+# configuration as bare as removing them does (checked on the switch).
+VLAN_RULES = (
+    "rule 6 permit command conf t ; vlan * ; name *",
+    "rule 7 permit command conf t ; no vlan *",
+    "rule 8 permit command conf t ; interface * ; switchport mode *",
+    "rule 9 permit command conf t ; interface * ; switchport access vlan *",
+    "rule 10 permit command conf t ; interface * ; switchport trunk allowed vlan *",
+    "rule 11 permit command conf t ; interface * ; switchport trunk native vlan *",
+)
+
+ROLE_VERSION = 2
+
 
 @dataclass(frozen=True)
 class EnableResult:
@@ -75,6 +100,8 @@ class EnableResult:
     port_count: int
     config_saved: bool
     save_error: str | None
+    # True when the account already had the role, so only its rules changed.
+    had_role: bool = False
 
 
 def front_ports(interface_brief_body: dict) -> list[str]:
@@ -101,8 +128,9 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: turn front ports on or off, edit descriptions, save config",
+        "description NXray: front ports on/off, descriptions, VLANs, save config",
         *ROLE_RULES,
+        *VLAN_RULES,
         "interface policy deny",
         *permits,
         "exit",
@@ -169,6 +197,7 @@ def enable_port_changes(
                 f"NXray's account {account_name} is no longer on the switch. Forget this "
                 "switch and set it up again."
             )
+        had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         lines = role_lines(ports, account_name)
 
@@ -197,7 +226,16 @@ def enable_port_changes(
                     admin_password,
                 )
             ) from exc
-        log.info("gave switch account %s the %s role on %s", account_name, ROLE_NAME, host)
+        log.info(
+            "%s switch account %s the %s role (version %d) on %s",
+            "updated" if had_role else "gave",
+            account_name,
+            ROLE_NAME,
+            ROLE_VERSION,
+            host,
+        )
+        # Rules added to a role the account already has apply at once.
+        wait = 0 if had_role else pause_seconds(nxapi)
 
         try:
             (users,) = client.show("show user-account")
@@ -215,9 +253,7 @@ def enable_port_changes(
             client.save_config()
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
-            return EnableResult(
-                pause_seconds(nxapi), len(ports), False, _scrub(str(exc), admin_password)
-            )
+            return EnableResult(wait, len(ports), False, _scrub(str(exc), admin_password), had_role)
 
     log.info("saved the switch configuration on %s", host)
-    return EnableResult(pause_seconds(nxapi), len(ports), True, None)
+    return EnableResult(wait, len(ports), True, None, had_role)

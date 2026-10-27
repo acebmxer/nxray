@@ -34,11 +34,17 @@ class SwitchConnection:
     changes_enabled_at: float | None = None
     paused_until: float | None = None
     unsaved_changes: bool = False
+    role_version: int = 0
 
     @property
     def changes_enabled(self) -> bool:
         """True once NXray's account has been given the port-changes role."""
         return self.changes_enabled_at is not None
+
+    @property
+    def vlan_changes_enabled(self) -> bool:
+        """True once that role includes the VLAN rules (role version 2 or later)."""
+        return self.changes_enabled and self.role_version >= 2
 
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
@@ -101,15 +107,29 @@ def get_connection(conn: sqlite3.Connection) -> SwitchConnection | None:
         changes_enabled_at=row["changes_enabled_at"],
         paused_until=row["paused_until"],
         unsaved_changes=bool(row["unsaved_changes"]),
+        role_version=row["role_version"],
     )
 
 
-def set_changes_enabled(conn: sqlite3.Connection, *, pause_seconds: float) -> None:
-    """Record that port changes are on, and pause switch calls for ``pause_seconds``."""
-    now = time.time()
+def set_changes_enabled(
+    conn: sqlite3.Connection, *, pause_seconds: float, role_version: int
+) -> None:
+    """Record that port changes are on with the given role version.
+
+    Switch calls pause for ``pause_seconds`` (0: no new pause). A pause
+    still running from an earlier change is kept, never shortened: the
+    switch may still be holding the account's old permissions.
+    """
+    until = time.time() + max(pause_seconds, 0)
     conn.execute(
-        "UPDATE switch_connection SET changes_enabled_at = ?, paused_until = ? WHERE id = 1",
-        (now, now + pause_seconds),
+        """
+        UPDATE switch_connection
+           SET changes_enabled_at = ?,
+               paused_until = MAX(COALESCE(paused_until, 0), ?),
+               role_version = ?
+         WHERE id = 1
+        """,
+        (time.time(), until, role_version),
     )
     conn.commit()
 

@@ -19,10 +19,12 @@ the switch, encrypted with a key derived from `NXRAY_SECRET_KEY` (or the
 generated `secret_key` file on the data volume). The account starts
 read-only (`network-operator`). Once port changes are turned on it also has
 the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
-on or off and set or remove its description, and it may run `copy
-running-config startup-config`; the switch refuses it anything else. Anyone
-who takes over NXray can do whatever that account can, so with port changes
-on that includes turning ports off. Like any local NX-OS account it can also
+on or off, set or remove its description and set its mode (access or trunk)
+and VLANs; it may create, name and delete VLANs; and it may run `copy
+running-config startup-config`. The switch refuses it anything else,
+including mgmt0. Anyone who takes over NXray can do whatever that account
+can, so with port changes on that includes turning ports off and moving them
+to other VLANs. Like any local NX-OS account it can also
 sign in over SSH, with a password nobody has seen.
 
 **The admin login.** The switch's admin username and password are typed into

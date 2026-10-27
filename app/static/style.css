@@ -136,7 +136,8 @@ body {
 .stack label:not(:first-of-type) { margin-top: 0.75rem; }
 
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+select {
   padding: 0.6rem 0.7rem;
   font: inherit;
   color: var(--text);
@@ -363,5 +364,16 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .inline-actions { margin-top: 1.25rem; }
 .confirm-summary { color: var(--text); font-size: 1.05rem; font-weight: 600; }
 .button-row .btn-quiet { padding: 0.6rem 0.9rem; font-size: inherit; }
+
+/* ---- VLANs ---- */
+
+.table-vlans td { vertical-align: middle; }
+.row-actions { display: flex; gap: 0.5rem; align-items: center; }
+.row-form { display: flex; gap: 0.4rem; align-items: center; margin: 0; }
+.row-form input[type="text"] { padding: 0.3rem 0.5rem; width: 14rem; }
+.form-after { margin-top: 1rem; }
+.choice { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.choice legend { font-size: 0.85rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.3rem; }
+.choice label.check { display: flex; gap: 0.5rem; align-items: center; margin-top: 0; font-size: 0.92rem; color: var(--text); }
 
 a { color: var(--accent); }

@@ -115,17 +115,24 @@ raises, both handled in `main.create_app`.
 | `build_payload` | `(commands: list[str]) -> list[dict]` | The JSON-RPC request body for running commands in order | `NxapiClient.show` | v0.1.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page.switch_setup` | v0.1.0 |
+| `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
 | `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
+| `parse_vlan_list` | `(text: str) -> list[int]` | A typed VLAN list (`10,20-30`, `all`, `none`) as numbers; refuses anything else | `vlans` | v0.1.0 |
 | `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `delete_user`, `switch_setup.run_setup`, `port_changes.role_lines` | v0.1.0 |
 | `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
+| `validate_vlan_id` | `(value: int \| str) -> int` | A VLAN number 1-4094, else `ValueError` | VLAN client methods, `vlans`, `routes/vlans` | v0.1.0 |
+| `validate_vlan_name` | `(name: str) -> str` | A VLAN name the switch stores: 1-32 letters, digits, `.`, `-`, `_` | `NxapiClient.configure_vlan`, `routes/vlans` | v0.1.0 |
 
 `NxapiClient(target).show(*commands)` runs show commands in one request.
 The only configuration methods are `create_user(name, password, role)`
 (letters-and-digits password, role `network-operator` only),
 `delete_user(name)`, `configure_port(name, description=, enabled=)` (one
-port's description and on/off, nothing else) and `save_config()`; each
+port's description and on/off, nothing else), `configure_vlan(vlan_id,
+name=None)` (create or rename), `delete_vlan(vlan_id)` (never VLAN 1),
+`configure_port_vlans(name, mode=, access_vlan=, native_vlan=,
+allowed_vlans=)` (one port's mode and VLANs) and `save_config()`; each
 builds its commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
@@ -180,12 +187,14 @@ port's own page shows.
 | `load_target` | `(conn, secret_key) -> SwitchTarget` | The stored login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
 | `record_test_result` | `(conn, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
-| `set_changes_enabled` | `(conn, *, pause_seconds) -> None` | Records that port changes are on and pauses switch calls | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup | `routes/switch_page.switch_setup` | v0.1.0 |
-| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed ports since the last Save config | `routes/ports.port_change`, `routes/switch_page.switch_save` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
-changes are on and how long NXray still waits before calling the switch.
+changes are on and how long NXray still waits before calling the switch;
+`vlan_changes_enabled` says whether the role includes the VLAN rules
+(`role_version` 2 or later).
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -226,8 +235,26 @@ NX-API certificate is. Tests pass a pretend opener through
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes` | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
-`ROLE_RULES` are the role's only rules; `ROLE_NAME` is `nxray-ports`, shared by
-every NXray install on a switch.
+`ROLE_RULES` (ports) and `VLAN_RULES` are the role's only rules; `ROLE_NAME`
+is `nxray-ports`, shared by every NXray install on a switch. `ROLE_VERSION`
+counts the rule sets (1 ports, 2 ports and VLANs). `EnableResult.had_role`
+is true when the account already had the role, so only its rules changed and
+there is no wait.
+
+## `app/vlans.py` — VLANs
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `describe_port_vlans` | `(current, change) -> tuple[list[str], list[str]]` | A port's VLAN change in words, plus warnings (mode change, VLANs dropped, port moved) | `routes/ports.port_vlans_change` | v0.1.0 |
+| `load_ports_with_vlans` | `(client) -> tuple[list[Port], VlanView]` | Everything a port's own page shows, from one request | `routes/ports` | v0.1.0 |
+| `load_vlans` | `(client) -> VlanView` | The VLAN list and every port's VLAN settings, from one request | `routes/vlans` | v0.1.0 |
+| `parse_switchports` | `(body) -> dict[str, PortVlans]` | Each Ethernet port's mode, access, native and carried VLANs from `show interface switchport` | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
+| `parse_vlans` | `(body) -> list[Vlan]` | Every VLAN from `show vlan brief`, lowest first | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
+| `plan_port_vlans` | `(current, view, *, mode, access_vlan, native_vlan, allowed) -> PortVlanChange` | Checks a port's VLAN form against the switch (VLANs must exist) and keeps only what changes | `routes/ports.port_vlans_change` | v0.1.0 |
+
+`PortVlans.uses(vlan_id)` says whether deleting a VLAN would cut a port off
+(access VLAN, native VLAN, or a trunk naming it; a trunk carrying every VLAN
+does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 
 ## `app/logging_conf.py` — application logging
 
@@ -247,21 +274,26 @@ every NXray install on a switch.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
-| `change_refused` | `(exc, target) -> str` | The message for a port change the switch did not make | `port_change` | v0.1.0 |
+| `change_refused` | `(exc, target) -> str` | The message for a port or VLAN change the switch did not make | `port_change`, `port_vlans_change`, `routes/vlans` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
-| `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port; 404 for an unknown name | router | v0.1.0 |
+| `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs; 404 for an unknown name | router | v0.1.0 |
+| `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `ports_page` | `(request, username, show) -> Response` | `GET /ports?show=all\|up\|down\|errors` | router | v0.1.0 |
-| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port changes button | router | v0.1.0 |
+| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port changes and Turn on VLAN changes buttons | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_save` | `(request, username, csrf) -> Response` | `POST /switch/save`, the Save config button | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
+| `vlan_create` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/create`; refuses a VLAN that exists | router | v0.1.0 |
+| `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1 and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
+| `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
+| `vlans_page` | `(request, username) -> Response` | `GET /vlans`, every VLAN and the ports using it | router | v0.1.0 |
 
 ## `app/hashpw.py` — password hash helper
 

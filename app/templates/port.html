@@ -28,7 +28,7 @@
 {% endif %}
 {% if connection.unsaved_changes %}
 <div class="warning warning-row">
-  <span>NXray changed ports since the switch configuration was last saved.</span>
+  <span>NXray changed the switch since its configuration was last saved.</span>
   <form method="post" action="/switch/save" class="inline">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <button type="submit" class="btn btn-quiet">Save config</button>
@@ -117,6 +117,55 @@
   <p class="lead">Port changes are off. <a href="/switch">Turn them on on the Switch page</a> to turn this port on or off and edit its description.</p>
   {% endif %}
 </section>
+
+{% if vlans %}
+<section class="card">
+  <h2 class="card-title">VLANs on this port</h2>
+  {% if not vlans.switchport %}
+  <p class="lead">This is a routed port, so it has no VLANs.</p>
+  {% else %}
+  <dl class="facts">
+    <dt>Mode</dt><dd>{{ vlans.mode }}</dd>
+    {% if vlans.mode == "trunk" %}
+    <dt>Native (untagged) VLAN</dt><dd>{{ vlans.native_vlan }}{% if view.get(vlans.native_vlan) %} ({{ view.get(vlans.native_vlan).name }}){% else %} <span class="reason">not created on the switch</span>{% endif %}</dd>
+    <dt>VLANs carried</dt><dd>{{ vlans.allowed_text }}</dd>
+    {% else %}
+    <dt>Access VLAN</dt><dd>{{ vlans.access_vlan }}{% if view.get(vlans.access_vlan) %} ({{ view.get(vlans.access_vlan).name }}){% else %} <span class="reason">not created on the switch</span>{% endif %}</dd>
+    {% endif %}
+  </dl>
+  {% if connection.vlan_changes_enabled %}
+  <form method="post" action="/ports/vlans" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <fieldset class="choice">
+      <legend>Mode</legend>
+      <label class="check"><input type="radio" name="mode" value="access" {% if vlan_form.mode != "trunk" %}checked{% endif %}> Access: one VLAN, untagged</label>
+      <label class="check"><input type="radio" name="mode" value="trunk" {% if vlan_form.mode == "trunk" %}checked{% endif %}> Trunk: several VLANs, tagged</label>
+    </fieldset>
+    <label for="access_vlan">Access VLAN (used in access mode)</label>
+    <select id="access_vlan" name="access_vlan">
+      {% for vlan in view.vlans %}
+      <option value="{{ vlan.id }}" {% if vlan_form.access_vlan == vlan.id|string %}selected{% endif %}>{{ vlan.id }} {{ vlan.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="native_vlan">Native VLAN (trunk mode: carries untagged traffic)</label>
+    <select id="native_vlan" name="native_vlan">
+      {% for vlan in view.vlans %}
+      <option value="{{ vlan.id }}" {% if vlan_form.native_vlan == vlan.id|string %}selected{% endif %}>{{ vlan.id }} {{ vlan.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="allowed">VLANs carried (trunk mode)</label>
+    <input id="allowed" name="allowed" type="text" value="{{ vlan_form.allowed }}" spellcheck="false">
+    <p class="hint">Numbers and ranges such as 10,20-30, or all (1-4094), or none. This replaces the whole list.</p>
+    <button type="submit" class="btn btn-primary">Change VLANs</button>
+  </form>
+  <p class="note">The change asks you to confirm first. VLANs are created on the <a href="/vlans">VLANs page</a>.</p>
+  {% elif connection.changes_enabled %}
+  <p class="lead">VLAN changes are off. <a href="/switch">Turn them on on the Switch page</a> to set this port's VLANs.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
 <p class="note">"Now" is the average over the last 30 seconds. Totals count since the counters were last cleared.</p>
 {% endif %}
 {% endblock %}

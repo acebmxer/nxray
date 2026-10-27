@@ -198,7 +198,7 @@ def test_description_change_asks_first_then_applies(
     text = _text(done.text)
     assert "Done: Ethernet1/3 now has the description &#34;xcp-host-1 &lt;storage&gt;&#34;" in text
     assert "Description xcp-host-1 &lt;storage&gt;" in text  # read back from the switch
-    assert "changed ports since the switch configuration was last saved" in text
+    assert "changed the switch since its configuration was last saved" in text
 
 
 def test_removing_a_description(logged_in: TestClient, enabled: FakeSwitch) -> None:
@@ -298,13 +298,13 @@ def test_switch_refusal_is_explained(logged_in: TestClient, enabled: FakeSwitch)
 
 def test_save_config_clears_the_reminder(logged_in: TestClient, enabled: FakeSwitch) -> None:
     _change(logged_in, "Ethernet1/3", "off", confirm="yes")
-    assert "changed ports since" in logged_in.get("/switch").text
+    assert "changed the switch since" in logged_in.get("/switch").text
     saved = logged_in.post("/switch/save", data={"csrf": _csrf(logged_in)})
     assert "Saved: the switch keeps its current configuration" in saved.text
     assert enabled.saved
     assert enabled.requests[-1] == ["copy running-config startup-config"]
-    assert "changed ports since" not in logged_in.get("/switch").text
-    assert "changed ports since" not in logged_in.get("/ports/detail?name=Ethernet1/3").text
+    assert "changed the switch since" not in logged_in.get("/switch").text
+    assert "changed the switch since" not in logged_in.get("/ports/detail?name=Ethernet1/3").text
 
 
 def test_failed_save_keeps_the_reminder(logged_in: TestClient, enabled: FakeSwitch) -> None:
@@ -312,7 +312,7 @@ def test_failed_save_keeps_the_reminder(logged_in: TestClient, enabled: FakeSwit
     enabled.save_text = "Copy failed\n"
     response = logged_in.post("/switch/save", data={"csrf": _csrf(logged_in)})
     assert "lost if the switch restarts" in response.text
-    assert "changed ports since" in logged_in.get("/switch").text
+    assert "changed the switch since" in logged_in.get("/switch").text
 
 
 # ---- protection -------------------------------------------------------------

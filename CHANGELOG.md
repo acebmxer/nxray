@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **VLANs.** A new VLANs page lists every VLAN with the ports that use it,
+  and creates, renames and deletes VLANs; deleting asks to confirm, and a
+  VLAN a port still uses is not deleted (the page names the ports to move
+  first). Each port's own page now shows its mode and VLANs and can set
+  them: access or trunk, the access or native VLAN, and the VLANs a trunk
+  carries, with a confirm step that warns when a port switches between
+  access and trunk, moves to another VLAN or stops carrying VLANs. VLAN
+  names are checked before they reach the switch, which silently ignores
+  names longer than 32 characters. Turning on port changes now also allows
+  these VLAN changes. An install that turned port changes on before this
+  shows a Turn on VLAN changes button on the Switch page: it asks for the
+  admin login once more to add the VLAN rules to NXray's role, with no wait
+  this time. The unsaved-changes reminder now says NXray changed the
+  switch, as it also covers VLAN changes.
 - **Port changes.** Each port's own page can now turn the port on or off and
   change or remove its description, with a confirm step that warns when a
   port that is up is about to be turned off. A Save config button keeps the
@@ -20,7 +34,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   switch over SSH once to create a role (`nxray-ports`) that lets its
   account do only that, on the front-panel ports only, and gives it to the
   account; the switch keeps refusing it everything else, including mgmt0,
-  speeds, VLANs and accounts. The admin password is never stored. Because
+  speeds and accounts. The admin password is never stored. Because
   the switch applies a new role only to an account it has not heard from
   for a while, NXray then waits about 11 minutes before contacting the
   switch again and says so on every page. Needs SSH reachable from the

@@ -15,7 +15,8 @@ verified. This is a project decision, not an oversight.
 
 Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
-``delete_user``, ``configure_port``, ``save_config``), each building its commands from
+``delete_user``, ``configure_port``, ``configure_vlan``, ``delete_vlan``,
+``configure_port_vlans``, ``save_config``), each building its commands from
 checked values, so nothing that renders a page can change the switch by
 accident and no caller can pass free text to the switch's configuration.
 """
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,6 +63,24 @@ _PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
 # anywhere in a request, and anything outside ASCII is silently cut off.
 DESCRIPTION_MAX = 254
 _DESCRIPTION = re.compile(r"^[\x20-\x7e]*$")
+
+# VLAN numbers a port or the VLAN list can name. VLAN 1 always exists and
+# cannot be deleted; NX-OS keeps a block at the top (3968-4094 unless changed
+# on the switch) for itself and refuses to create those with its own message.
+VLAN_MIN = 1
+VLAN_MAX = 4094
+
+# What NX-OS 9.3 stores as a VLAN name, found by trying them on the switch:
+# no spaces ("% Invalid command"), and a name of 33 to 128 characters is
+# accepted but silently not stored. NXray allows the plainest subset.
+VLAN_NAME_MAX = 32
+_VLAN_NAME = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+
+# One item of a VLAN list as typed: "10" or "10-20".
+_VLAN_LIST_ITEM = re.compile(r"^([0-9]{1,4})(?:-([0-9]{1,4}))?$")
+
+# The two port modes NXray sets.
+PORT_MODES = ("access", "trunk")
 
 # Names NX-OS keeps for itself, plus the switch's own admin account.
 RESERVED_ACCOUNT_NAMES = frozenset(
@@ -160,6 +180,69 @@ def validate_description(text: str) -> str:
     if "?" in cleaned or ";" in cleaned:
         raise ValueError('a description cannot contain "?" or ";" (NX-API refuses them)')
     return cleaned
+
+
+def validate_vlan_id(value: int | str) -> int:
+    """Return the VLAN number as an int, or raise ValueError if it is not 1-4094."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not VLAN_MIN <= int(text) <= VLAN_MAX:
+        raise ValueError(f"a VLAN is a number from {VLAN_MIN} to {VLAN_MAX}")
+    return int(text)
+
+
+def validate_vlan_name(name: str) -> str:
+    """Return the VLAN name, or raise ValueError if the switch would not store it."""
+    cleaned = name.strip()
+    if not _VLAN_NAME.match(cleaned):
+        raise ValueError(
+            f"a VLAN name is 1-{VLAN_NAME_MAX} letters, digits, dots, dashes or "
+            "underscores, with no spaces"
+        )
+    return cleaned
+
+
+def parse_vlan_list(text: str) -> list[int]:
+    """Turn a typed VLAN list into numbers: "10,20-22" gives [10, 20, 21, 22].
+
+    "all" gives 1-4094 and "none" (or nothing) gives []. Raises ValueError
+    for anything else, so only numbers reach a command.
+    """
+    cleaned = text.strip().lower()
+    if cleaned == "all":
+        return list(range(VLAN_MIN, VLAN_MAX + 1))
+    if cleaned in ("none", ""):
+        return []
+    found: set[int] = set()
+    # Spaces are allowed around the commas only: "10 20" is refused, not read as 1020.
+    for item in (part.strip() for part in cleaned.split(",")):
+        match = _VLAN_LIST_ITEM.match(item)
+        if not match:
+            raise ValueError(
+                f"{item!r} is not a VLAN or range; write VLANs like 10,20-30, or all, or none"
+            )
+        first = validate_vlan_id(match.group(1))
+        last = validate_vlan_id(match.group(2)) if match.group(2) else first
+        if last < first:
+            raise ValueError(f"the range {item} runs backwards")
+        found.update(range(first, last + 1))
+    return sorted(found)
+
+
+def format_vlan_list(vlans: Iterable[int]) -> str:
+    """[1, 10, 11, 12, 30] -> "1,10-12,30", as the switch writes it; [] -> "none"."""
+    ordered = sorted({validate_vlan_id(vlan) for vlan in vlans})
+    if not ordered:
+        return "none"
+    parts: list[str] = []
+    start = previous = ordered[0]
+    for vlan in [*ordered[1:], None]:
+        if vlan is not None and vlan == previous + 1:
+            previous = vlan
+            continue
+        parts.append(str(start) if start == previous else f"{start}-{previous}")
+        if vlan is not None:
+            start = previous = vlan
+    return ",".join(parts)
 
 
 def validate_show_command(command: str) -> str:
@@ -327,6 +410,56 @@ class NxapiClient:
             commands.append(f"description {text}" if text else "no description")
         if enabled is not None:
             commands.append("no shutdown" if enabled else "shutdown")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_vlan(self, vlan_id: int, name: str | None = None) -> None:
+        """Create a VLAN, or rename one: ``vlan <n>`` then ``name <name>``.
+
+        ``vlan <n>`` creates the VLAN when it does not exist yet and only
+        selects it when it does, so the caller decides which one it means.
+        """
+        vlan = validate_vlan_id(vlan_id)
+        commands = [f"vlan {vlan}"]
+        if name is not None:
+            commands.append(f"name {validate_vlan_name(name)}")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_vlan(self, vlan_id: int) -> None:
+        """``no vlan <n>``. VLAN 1 is refused here as it is on the switch."""
+        vlan = validate_vlan_id(vlan_id)
+        if vlan == 1:
+            raise ValueError("VLAN 1 cannot be deleted")
+        command = f"no vlan {vlan}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port_vlans(
+        self,
+        name: str,
+        *,
+        mode: str | None = None,
+        access_vlan: int | None = None,
+        native_vlan: int | None = None,
+        allowed_vlans: list[int] | None = None,
+    ) -> None:
+        """Set a port's mode and VLANs, in one request; only the values given are sent.
+
+        ``mode`` is access or trunk. ``allowed_vlans`` is the trunk's whole
+        list (it replaces the old one); an empty list allows none.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        if mode is not None:
+            if mode not in PORT_MODES:
+                raise ValueError(f"mode {mode!r} is not access or trunk")
+            commands.append(f"switchport mode {mode}")
+        if access_vlan is not None:
+            commands.append(f"switchport access vlan {validate_vlan_id(access_vlan)}")
+        if native_vlan is not None:
+            commands.append(f"switchport trunk native vlan {validate_vlan_id(native_vlan)}")
+        if allowed_vlans is not None:
+            commands.append(f"switchport trunk allowed vlan {format_vlan_list(allowed_vlans)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:

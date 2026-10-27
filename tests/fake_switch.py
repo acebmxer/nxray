@@ -10,7 +10,12 @@ Permissions copy what cisco-25gb did when tried (see app/port_changes.py):
 network-admin may do anything; another account may enter an Ethernet port
 only when one of its roles has a "conf t ; interface * ; ..." rule and its
 interface policy permits that port, and may then run only the commands its
-rules name. A batch stops at the first refused command.
+rules name. Entering a VLAN (which creates it) likewise needs a
+"conf t ; vlan * ; ..." rule. A batch stops at the first refused command.
+
+VLANs live in ``vlans`` (number -> name) and each port's VLAN settings in
+``port_state`` next to its description, so ``show vlan brief`` and ``show
+interface switchport`` answer with what the commands set.
 """
 
 from __future__ import annotations
@@ -38,6 +43,21 @@ _RECORDED = {
 }
 
 _INTERFACE_COMMANDS = ("shutdown", "no shutdown", "no description")
+
+# Interface commands with a value, and the rule entity that permits each.
+_SWITCHPORT = (
+    (re.compile(r"switchport mode (access|trunk)"), "switchport mode *", "mode"),
+    (re.compile(r"switchport access vlan (\d+)"), "switchport access vlan *", "access"),
+    (re.compile(r"switchport trunk native vlan (\d+)"), "switchport trunk native vlan *", "native"),
+    (
+        re.compile(r"switchport trunk allowed vlan ([0-9,-]+|none|all)"),
+        "switchport trunk allowed vlan *",
+        "allowed",
+    ),
+)
+
+# VLANs NX-OS keeps for itself (show system vlan reserved).
+RESERVED_VLANS = range(3968, 4096)
 
 
 @dataclass
@@ -67,8 +87,10 @@ class FakeSwitch:
     ssh_lines: list[str] = field(default_factory=list)
     # Show commands answered from these bodies instead of the recorded ones.
     bodies: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # Port settings changed through NX-API: name -> {"desc": str, "admin_up": bool}.
+    # Port settings changed through NX-API: name -> {"desc": str, "admin_up": bool,
+    # "mode": str, "access": str, "native": str, "allowed": str}.
     port_state: dict[str, dict[str, Any]] = field(default_factory=dict)
+    vlans: dict[int, str] = field(default_factory=lambda: {1: "default"})
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -85,13 +107,13 @@ class FakeSwitch:
         entries = json.loads(request.content)
         self.requests.append([entry["params"]["cmd"] for entry in entries])
         replies: list[dict[str, Any]] = []
-        interface: str | None = None
+        context: tuple[str, str] | None = None  # ("interface", name) or ("vlan", number)
         for entry in entries:
             ident = entry["id"]
             if replies and "error" in replies[-1]:
                 replies.append(_error(ident, "Command not ran due to previous failures"))
                 continue
-            reply, interface = self._run(user, entry["params"]["cmd"], ident, interface)
+            reply, context = self._run(user, entry["params"]["cmd"], ident, context)
             replies.append(reply)
         status = 500 if any("error" in reply for reply in replies) else 200
         return httpx.Response(status, json=replies[0] if len(replies) == 1 else replies)
@@ -114,41 +136,43 @@ class FakeSwitch:
             if interface is not None and role.interface_policy_deny:
                 if interface.lower() not in role.interfaces:
                     continue
-            if entity == "interface":
-                if any(e.startswith("conf t ; interface * ; ") for e in role.entities):
+            if entity in ("interface", "vlan"):
+                if any(e.startswith(f"conf t ; {entity} * ; ") for e in role.entities):
                     return True
             elif entity in role.entities:
                 return True
         return False
 
     def _run(
-        self, user: str, cmd: str, ident: int, interface: str | None
-    ) -> tuple[dict[str, Any], str | None]:
+        self, user: str, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None]:
         if any(cmd.startswith(prefix) for prefix in self.reject):
             # Echoes the whole command, password included, so tests can check
             # NXray never passes a switch error on unscrubbed.
-            return _error(ident, f"% Rejected by the fake switch: {cmd}\n"), interface
+            return _error(ident, f"% Rejected by the fake switch: {cmd}\n"), context
         if ";" in cmd or "?" in cmd:
-            return _error(ident, "Request contains invalid special characters"), interface
+            return _error(ident, "Request contains invalid special characters"), context
         is_admin = "network-admin" in self.roles_of(user)
         denied = _error(ident, "% Permission denied for the role\n")
+        interface = context[1] if context and context[0] == "interface" else None
+        vlan = int(context[1]) if context and context[0] == "vlan" else None
 
         if cmd in self.bodies:
-            return _ok(ident, self.bodies[cmd]), interface
+            return _ok(ident, self.bodies[cmd]), context
         if cmd.startswith("show "):
-            return self._show(cmd, ident), interface
+            return self._show(cmd, ident), context
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
             if not (is_admin or self._role_allows(user, "interface", name)):
                 return denied, None
-            return _ok(ident, None), name
+            return _ok(ident, None), ("interface", name)
         if interface is not None and (cmd in _INTERFACE_COMMANDS or cmd.startswith("description ")):
             entity = "description *" if cmd.startswith("description ") else cmd
             if not (
                 is_admin or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)
             ):
-                return denied, interface
+                return denied, context
             state = self.port_state.setdefault(interface, {})
             if cmd == "shutdown":
                 state["admin_up"] = False
@@ -158,25 +182,99 @@ class FakeSwitch:
                 state["desc"] = ""
             else:
                 state["desc"] = cmd[len("description ") :]
-            return _ok(ident, None), interface
+            return _ok(ident, None), context
+        if interface is not None:
+            for pattern, entity, key in _SWITCHPORT:
+                if match := pattern.fullmatch(cmd):
+                    if not (
+                        is_admin
+                        or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)
+                    ):
+                        return denied, context
+                    value = match.group(1)
+                    self.port_state.setdefault(interface, {})[key] = (
+                        "1-4094" if value == "all" else value
+                    )
+                    return _ok(ident, None), context
+        if match := re.fullmatch(r"vlan (\d+)", cmd):
+            number = int(match.group(1))
+            if not (is_admin or self._role_allows(user, "vlan", None)):
+                return denied, None
+            if number in RESERVED_VLANS:
+                return _error(ident, "invalid vlans (reserved values)\n"), None
+            self.vlans.setdefault(number, f"VLAN{number:04d}")
+            return _ok(ident, None), ("vlan", str(number))
+        if vlan is not None and (match := re.fullmatch(r"name (\S+)", cmd)):
+            if not (is_admin or self._role_allows(user, "conf t ; vlan * ; name *", None)):
+                return denied, context
+            self.vlans[vlan] = match.group(1)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"no vlan (\d+)", cmd):
+            if not (is_admin or self._role_allows(user, "conf t ; no vlan *", None)):
+                return denied, context
+            number = int(match.group(1))
+            if number == 1:
+                return _error(ident, "Deletion of VLAN 1 is not allowed!!\n"), context
+            self.vlans.pop(number, None)
+            return _ok(ident, None), context
         if cmd == "copy running-config startup-config":
             if not (is_admin or self._role_allows(user, cmd, None)):
-                return denied, interface
+                return denied, context
             if self.save_text is not None:
-                return _ok(ident, self.save_text), interface
+                return _ok(ident, self.save_text), context
             self.saved = True
-            return _ok(ident, None), interface
+            return _ok(ident, None), context
         if not is_admin:
-            return denied, interface
+            return denied, context
         if match := re.fullmatch(r"username (\S+) password (\S+) role (\S+)", cmd):
             name, password, role = match.groups()
             self.users[name] = (password, role)
-            return _ok(ident, None), interface
+            return _ok(ident, None), context
         if match := re.fullmatch(r"no username (\S+)", cmd):
             self.users.pop(match.group(1), None)
             self.extra_roles.pop(match.group(1), None)
-            return _ok(ident, None), interface
-        return _error(ident, f"% Invalid command: {cmd.split()[0]}\n"), interface
+            return _ok(ident, None), context
+        return _error(ident, f"% Invalid command: {cmd.split()[0]}\n"), context
+
+    def switchports(self) -> dict[str, Any]:
+        """``show interface switchport`` with the VLAN settings changed so far."""
+        body = load_fixture("show_interface_switchport")
+        for row in body["TABLE_interface"]["ROW_interface"]:
+            state = self.port_state.get(row["interface"], {})
+            if "mode" in state:
+                row["oper_mode"] = state["mode"]
+            if "access" in state:
+                row["access_vlan"] = state["access"]
+            if "native" in state:
+                row["native_vlan"] = state["native"]
+            if "allowed" in state:
+                row["trunk_vlans"] = state["allowed"]
+        return body
+
+    def vlan_brief(self) -> dict[str, Any]:
+        """``show vlan brief`` for ``vlans``; ports listed as the switch lists them."""
+        ports = self.switchports()["TABLE_interface"]["ROW_interface"]
+        rows = []
+        for number, name in sorted(self.vlans.items()):
+            members = []
+            for port in ports:
+                if port["oper_mode"] == "access" and int(port["access_vlan"]) == number:
+                    members.append(port["interface"])
+                elif port["oper_mode"] == "trunk" and number in _vlan_numbers(port["trunk_vlans"]):
+                    members.append(port["interface"])
+            row = {
+                "vlanshowbr-vlanid": str(number),
+                "vlanshowbr-vlanid-utf": str(number),
+                "vlanshowbr-vlanname": name,
+                "vlanshowbr-vlanstate": "active",
+                "vlanshowbr-shutstate": "noshutdown",
+            }
+            if members:
+                row["vlanshowplist-ifidx"] = ",".join(members)
+            rows.append(row)
+        return {
+            "TABLE_vlanbriefxbrief": {"ROW_vlanbriefxbrief": rows[0] if len(rows) == 1 else rows}
+        }
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
         if cmd in _RECORDED:
@@ -197,6 +295,10 @@ class FakeSwitch:
                 elif state.get("admin_up") is True:
                     row["admin_state"] = "up"
             return _ok(ident, body)
+        if cmd == "show interface switchport":
+            return _ok(ident, self.switchports())
+        if cmd == "show vlan brief":
+            return _ok(ident, self.vlan_brief())
         if cmd == "show hostname":
             return _ok(ident, {"hostname": "nexus-lab"})
         if cmd == "show nxapi":
@@ -289,6 +391,16 @@ class FakeShell:
 
     def close(self) -> None:
         self.closed = True
+
+
+def _vlan_numbers(text: str) -> set[int]:
+    if text == "none":
+        return set()
+    found: set[int] = set()
+    for item in text.split(","):
+        first, _, last = item.partition("-")
+        found.update(range(int(first), int(last or first) + 1))
+    return found
 
 
 def _ok(ident: int, body: Any) -> dict[str, Any]:

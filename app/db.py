@@ -62,6 +62,14 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN paused_until REAL;
     ALTER TABLE switch_connection ADD COLUMN unsaved_changes INTEGER NOT NULL DEFAULT 0;
     """,
+    # 3 -> 4: VLAN changes. role_version is the rule set NXray's account was
+    # given (app/port_changes.py ROLE_VERSION): 0 none, 1 port rules only,
+    # 2 port and VLAN rules. Installs that turned port changes on before
+    # this have version 1.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_version INTEGER NOT NULL DEFAULT 0;
+    UPDATE switch_connection SET role_version = 1 WHERE changes_enabled_at IS NOT NULL;
+    """,
 ]
 
 

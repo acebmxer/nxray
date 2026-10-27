@@ -18,7 +18,7 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
-from app.port_changes import ROLE_NAME, enable_port_changes
+from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes
 from app.security import csrf_token
 from app.switch_connection import (
     DecryptionError,
@@ -73,6 +73,7 @@ def _render(
             "form": form or {"host": "", "port": "443", "account_name": DEFAULT_ACCOUNT_NAME},
             "csrf_token": csrf_token(request),
             "role_name": ROLE_NAME,
+            "role_version": ROLE_VERSION,
             "paused": paused_message(connection.paused_seconds())
             if connection and connection.paused_seconds()
             else None,
@@ -257,14 +258,22 @@ def switch_enable_changes(
         _setup_lock.release()
 
     with open_db(settings.db_path) as conn:
-        set_changes_enabled(conn, pause_seconds=result.pause_seconds)
-    minutes = result.pause_seconds // 60
-    done = (
-        f"Port changes are on: {connection.username} may now turn the "
-        f"{result.port_count} front ports on or off and edit their descriptions. The switch "
-        f"applies this once it has not heard from NXray for a while, so NXray now waits "
-        f"about {minutes} minutes before contacting it again."
-    )
+        set_changes_enabled(conn, pause_seconds=result.pause_seconds, role_version=ROLE_VERSION)
+    if result.had_role:
+        done = (
+            f"VLAN changes are on: {connection.username} may now also create, rename and "
+            f"delete VLANs and set the VLANs of the {result.port_count} front ports. The "
+            "switch applies this at once, so there is no wait."
+        )
+    else:
+        minutes = result.pause_seconds // 60
+        done = (
+            f"Port changes are on: {connection.username} may now turn the "
+            f"{result.port_count} front ports on or off, edit their descriptions and set "
+            "their VLANs, and create, rename and delete VLANs. The switch applies this once "
+            "it has not heard from NXray for a while, so NXray now waits about "
+            f"{minutes} minutes before contacting it again."
+        )
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
     return _render(
