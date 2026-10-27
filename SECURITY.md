@@ -60,6 +60,13 @@ user, allows TLS 1.2 and 1.3 only, and passes the visitor's address on so
 sign-in throttling still counts per address. It is
 not built to be exposed to the internet.
 
+**Self-update.** Off by default, and then NXray never contacts Docker or
+ghcr.io. Turning it on means mounting the Docker socket into the container,
+which is root on the host: anyone who can make NXray misbehave could start a
+privileged container. Only admins can press Update now (and every form is
+CSRF-protected); the one outside call is ghcr.io, once a day and on Check
+now. Enable it only on a host where you already trust this image with root.
+
 **What protects it.** Sign-in accounts with Argon2id password hashes. The
 first one, an admin, comes from a hash in configuration; the app refuses to
 start without one and has no default password. Further accounts get one of

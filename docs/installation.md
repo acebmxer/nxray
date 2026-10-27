@@ -151,6 +151,38 @@ The certificate and its key are kept in `/data/tls` on the data volume. To
 go back to plain HTTP, set `NXRAY_ENABLE_HTTPS=false` and run `docker compose
 up -d` again.
 
+## Self-update
+
+Off by default. With it on, an admin presses **Update now** on the Settings
+page instead of running the two commands under Updating, and NXray checks
+ghcr.io once a day to say when one is waiting. The page shows what ghcr.io
+has for the tag your compose file uses: `:latest` follows every release, a
+pinned `:0.1.0` stays where it is.
+
+It needs the Docker socket inside the container, and **the Docker socket is
+root on the machine**: anything that can use it can start a privileged
+container. Turn it on only where you already trust this image with root. With
+it off, NXray never contacts ghcr.io or Docker.
+
+1. In `docker-compose.yml`, uncomment the `/var/run/docker.sock` volume line
+   and the `group_add` lines. NXray runs as a normal user and the socket
+   belongs to the `docker` group, so put your group's number in place of
+   `999` (find it with `getent group docker | cut -d: -f3`).
+2. In `nxray.env`, set `NXRAY_ENABLE_SELF_UPDATE=true`.
+3. Run `docker compose up -d`.
+
+**Update now** pulls the new image and has Docker replace the container, so
+the page is gone for a few seconds and then reloads itself. Sessions, accounts
+and the switch login are on the data volume and carry over. The pull and
+restart are done by a short-lived container named `nxray_updater`, started
+from the same image; its logs (`docker logs nxray_updater`) say what happened
+if a failure is shown. If the page says the container was not recreated, run
+`docker compose up -d` in the compose folder to finish by hand.
+
+It works only for a container started by `docker compose` from the published
+image. A copy built from a clone (`docker-compose.dev.yml`) is never reported
+out of date.
+
 ## Building from a clone
 
 To run your own changes, or code that has no release yet, clone the

@@ -8,4 +8,8 @@
 
 services:
   nxray:
-    build: .
+    build:
+      context: .
+      args:
+        # Tells the update check this is a local build, not the published image.
+        NXRAY_DEV_BUILD: "true"

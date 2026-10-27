@@ -55,6 +55,29 @@ services:
       # Holds the SQLite database, the session signing key and, with
       # built-in HTTPS on, its certificate.
       - nxray-data:/data
+      #
+      # Self-update (NXRAY_ENABLE_SELF_UPDATE, off by default): lets an admin
+      # press "Update now" on the Settings page instead of running
+      # `docker compose pull && docker compose up -d` by hand. Uncomment this
+      # line and the group_add lines below AND set NXRAY_ENABLE_SELF_UPDATE=true
+      # in nxray.env. The mount alone does nothing. docker-compose.yml and
+      # nxray.env need no mounting in here: the pull and restart are handed to
+      # a throwaway container that mounts this folder at its real path.
+      #
+      # This gives the container the Docker socket, which is root on this
+      # machine: anything that can use it can start a privileged container.
+      # Enable it only where you already trust this image with root.
+      #
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # Self-update, continued: NXray runs as a non-root user and the socket is
+    # owned by root:docker, so without joining that group every call to it is
+    # "permission denied". Put your docker group's number here (the one the
+    # sample shows is only an example); find yours with:
+    #
+    #   getent group docker | cut -d: -f3
+    #
+    # group_add:
+    #   - "999"
 
 volumes:
   nxray-data:

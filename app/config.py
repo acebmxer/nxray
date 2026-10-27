@@ -64,6 +64,13 @@ class Settings:
     # The port browsers reach HTTPS on: the left number of the 8443 mapping in
     # docker-compose.yml. Plain-HTTP visits are redirected there.
     https_port: int = 8443
+    # Self-update (app/update.py): checks GHCR for a newer image and, on an
+    # admin's say-so, has the Docker socket recreate this container. Off
+    # unless the operator has mounted the socket; see docs/installation.md.
+    enable_self_update: bool = False
+    # True only on an image built from source (docker-compose.dev.yml sets
+    # the build argument): its digest is never the published one.
+    dev_build: bool = False
 
     # Derived paths. Kept here so no other module builds a path by hand.
     db_path: Path = field(init=False)
@@ -147,4 +154,6 @@ def load_settings() -> Settings:
         log_level=log_level,
         enable_https=enable_https,
         https_port=_env_int("NXRAY_HTTPS_PORT", 8443, 1, 65535),
+        enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
+        dev_build=_env_bool("NXRAY_DEV_BUILD", False),
     )

@@ -11,6 +11,33 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Self-update, off by default.** Set `NXRAY_ENABLE_SELF_UPDATE=true` in
+  `nxray.env` and uncomment the `docker.sock` mount and `group_add` lines in
+  `docker-compose.yml`, and the Settings page gets an Updates card: NXray
+  checks ghcr.io once a day (and on **Check now**) for a newer image under the
+  tag the container runs, and an admin presses **Update now** to have Docker
+  replace the container with it. Without the setting NXray never contacts
+  ghcr.io or Docker, and the card only explains how to turn it on. What runs
+  is read from Docker (`docker inspect`) and compared by image digest, so a
+  manual `docker compose pull && up -d` cannot leave the page wrong; the pull
+  and restart are done by a short-lived `nxray_updater` container started from
+  the same image, because a container cannot replace itself, and it learns the
+  compose project, folder and files from the labels compose puts on the
+  container, so no path has to be configured. The replacement container
+  records the success when it starts. The update is admin-only and
+  CSRF-protected like the other Settings actions. An image built from a clone
+  (`docker-compose.dev.yml`, which now passes `NXRAY_DEV_BUILD`) is never
+  reported out of date, since its digest differs from the published one
+  whether it is behind or ahead. The image now includes the Docker CLI and
+  Compose plugin from Docker's own apt repository (client only, no daemon;
+  Debian's Compose is too old to read the sample's `env_file` with
+  `format: raw`). Schema version 7 adds the `update_state` table. The CI image
+  job gained a step checking that the update controls are absent with the
+  setting off and that the Docker client is in the image; Trivy flags one
+  HIGH in the Compose plugin's bundled `golang.org/x/net` (CVE-2026-78669,
+  HTTP/2 denial of service, fixed upstream but not yet in a Compose release),
+  accepted in `.trivyignore` with the reasoning, since the plugin serves
+  nothing.
 - **Published image on GitHub Container Registry.** A new workflow,
   `.github/workflows/release.yml`, builds the image and pushes it to
   `ghcr.io/acebmxer/nxray` whenever a version tag is pushed (as `:X.Y.Z`,

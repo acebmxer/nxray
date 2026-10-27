@@ -1,15 +1,24 @@
-"""The Settings page (admin only): built-in HTTPS and its certificate."""
+"""The Settings page (admin only): built-in HTTPS, its certificate, and self-update."""
 
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
+from app.db import open_db
 from app.dependencies import admin_required, require_csrf, templates
 from app.security import csrf_token
 from app.tls import MAX_PEM_BYTES, CertificateError, current_certificate, install_certificate
+from app.update import (
+    apply_update,
+    check_for_updates,
+    clear_result,
+    current_state,
+    reap_stalled_update,
+)
 
 router = APIRouter()
 log = logging.getLogger("nxray.settings")
@@ -31,11 +40,23 @@ def _render(
     status_code: int = 200,
 ) -> Response:
     settings = request.app.state.settings
+    update = None
+    checked_at = ""
+    if settings.enable_self_update:
+        with open_db(settings.db_path) as conn:
+            reap_stalled_update(conn)
+            update = current_state(conn)
+        if update.latest_checked_at:
+            checked_at = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(update.latest_checked_at))
     return templates.TemplateResponse(
         request,
         "settings.html",
         {
             "username": username,
+            "enable_self_update": settings.enable_self_update,
+            "dev_build": settings.dev_build,
+            "update": update,
+            "update_checked_at": checked_at,
             "enable_https": settings.enable_https,
             "https_port": settings.https_port,
             "certificate": current_certificate(settings.tls_dir) if settings.enable_https else None,
@@ -85,3 +106,61 @@ async def settings_certificate(
             "Reload the page if your browser still shows the old one."
         ),
     )
+
+
+@router.post("/settings/update/check", response_class=HTMLResponse)
+def settings_update_check(
+    request: Request, username: str = Depends(admin_required), csrf: str = Form("")
+) -> Response:
+    """Look at GHCR now instead of waiting for the daily check."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    if not settings.enable_self_update:
+        return _render(request, username, error="Self-update is off.", status_code=400)
+    with open_db(settings.db_path) as conn:
+        reap_stalled_update(conn)
+        outcome = check_for_updates(conn, dev_build=settings.dev_build)
+    if outcome == "available":
+        return _render(request, username, notice="A newer image is available.")
+    if outcome == "current":
+        return _render(request, username, notice="NXray is up to date.")
+    return _render(request, username, error=outcome)
+
+
+@router.post("/settings/update/apply", response_class=HTMLResponse)
+def settings_update_apply(
+    request: Request, username: str = Depends(admin_required), csrf: str = Form("")
+) -> Response:
+    """Pull the new image and have Docker recreate this container."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    if not settings.enable_self_update:
+        return _render(request, username, error="Self-update is off.", status_code=400)
+    with open_db(settings.db_path) as conn:
+        state = current_state(conn)
+    if state.in_progress:
+        return _render(request, username, error="An update is already running.", status_code=409)
+    if not state.available:
+        return _render(request, username, error="No update is available.", status_code=409)
+    log.info("%s started an update to %s", username, state.latest_digest[:19])
+    error = apply_update(settings.db_path)
+    if error:
+        return _render(request, username, error=f"Could not start the update: {error}")
+    return _render(
+        request,
+        username,
+        notice="Update started. NXray pulls the new image and restarts; this page reloads itself.",
+    )
+
+
+@router.post("/settings/update/dismiss", response_class=HTMLResponse)
+def settings_update_dismiss(
+    request: Request, username: str = Depends(admin_required), csrf: str = Form("")
+) -> Response:
+    """Hide the last update result (success or failure)."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    if settings.enable_self_update:
+        with open_db(settings.db_path) as conn:
+            clear_result(conn)
+    return _render(request, username)

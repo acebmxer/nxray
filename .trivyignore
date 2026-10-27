@@ -2,3 +2,14 @@
 #
 # One CVE ID per line, with a comment explaining why it is accepted rather
 # than fixed. Anything listed here is a deliberate call, not an oversight.
+
+# CVE-2026-78669: golang.org/x/net v0.58.0 inside the Docker Compose plugin
+# (usr/libexec/docker/cli-plugins/docker-compose), fixed upstream in x/net
+# 0.60.0 but not yet in a Compose release. A denial of service from excessive
+# HTTP/2 SETTINGS frames, so it needs a malicious HTTP/2 peer. The plugin
+# serves nothing: it only runs, with self-update on, against the local Docker
+# socket and ghcr.io. It is also not on the path of any NXray request.
+# Remove this line once the image builds with a Compose that bundles x/net
+# 0.60.0 or later; Trivy does not warn about an ignore that is no longer
+# needed, so re-check when Compose releases a newer version.
+CVE-2026-78669

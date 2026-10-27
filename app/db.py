@@ -100,6 +100,24 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE users ADD COLUMN totp_backup_codes TEXT NOT NULL DEFAULT '[]';
     """,
+    # 6 -> 7: self-update (app/update.py). One row (id = 1). latest_digest is
+    # what GHCR's :latest pointed at when last checked; available is set when
+    # that is not what this container runs. in_progress is set from pressing
+    # Update until the replacement container starts and clears it
+    # (update.finish_pending_update). last_result is "success", or a failure
+    # message; last_result_at lets a success age off the page.
+    """
+    CREATE TABLE update_state (
+        id                INTEGER PRIMARY KEY CHECK (id = 1),
+        latest_digest     TEXT,
+        latest_checked_at REAL,
+        available         INTEGER NOT NULL DEFAULT 0,
+        in_progress       INTEGER NOT NULL DEFAULT 0,
+        started_at        REAL,
+        last_result       TEXT NOT NULL DEFAULT '',
+        last_result_at    REAL
+    );
+    """,
 ]
 
 

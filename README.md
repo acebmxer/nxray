@@ -92,8 +92,8 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 8. **HTTPS, more users, two-factor sign-in, self-update, published images.**
    More users with admin, operator and viewer roles: *(built)*. Optional
    two-factor sign-in per account: *(built)*. Built-in HTTPS, off by
-   default: *(built)*. Published images on GHCR: *(built)*. Self-update is still
-to come.
+   default: *(built)*. Published images on GHCR: *(built)*. Self-update, off by
+default: *(built)*.
 9. **History**: temperatures, power and traffic over time, as graphs.
 
 ## Contributing

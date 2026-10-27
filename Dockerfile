@@ -38,10 +38,38 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled /etc/nginx/conf.d
 
+# The Docker CLI and Compose plugin, for self-update (NXRAY_ENABLE_SELF_UPDATE,
+# off by default; see app/update.py). Client only, no daemon, so having them
+# here grants nothing: the privilege is the Docker socket mount, which the
+# compose sample leaves commented out.
+#
+# From Docker's own apt repository, not Debian's docker-cli/docker-compose
+# packages: Debian's Compose predates `format: raw` in env_file, which
+# docker-compose.yml.example needs to hand the Argon2 hash to the container
+# unmangled, and would refuse to read the file the update recreates from.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && . /etc/os-release \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $VERSION_CODENAME stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && apt-get purge -y --auto-remove curl gnupg \
+    && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
+
+# Set only by docker-compose.dev.yml, never by the release workflow, so it is
+# empty on every published image. An image built from source gets its own
+# digest, which differs from the published one whether it is behind or ahead,
+# so the update check must not call it out of date.
+ARG NXRAY_DEV_BUILD=""
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
-    NXRAY_DATA_DIR=/data
+    NXRAY_DATA_DIR=/data \
+    NXRAY_DEV_BUILD=${NXRAY_DEV_BUILD}
 
 WORKDIR /srv/nxray
 

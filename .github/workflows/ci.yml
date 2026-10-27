@@ -157,6 +157,21 @@ jobs:
             echo "::error::a process runs as root"; exit 1
           fi
 
+      - name: "Self-update: off by default, and the image carries Docker's client"
+        run: |
+          # Off: the Settings page says how to turn it on and offers no button.
+          curl -sf -b jar http://localhost:8080/settings | grep -q "NXRAY_ENABLE_SELF_UPDATE=true" \
+            || { echo "::error::Settings page did not explain self-update"; exit 1; }
+          if curl -sf -b jar http://localhost:8080/settings | grep -q "/settings/update/apply"; then
+            echo "::error::an Update button shows with self-update off"; exit 1
+          fi
+          # The client (no daemon) that applying an update runs; a Compose too
+          # old to read `format: raw` would make every update fail.
+          docker exec nxray docker --version
+          docker exec nxray docker compose version
+          # No socket here, so asking Docker about itself finds nothing.
+          docker exec nxray python -c "from app.update import deployment; assert deployment() is None"
+
       - name: Show logs on failure
         if: failure()
         run: |

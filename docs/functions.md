@@ -46,6 +46,7 @@ prose columns; those are a reviewer's job.
 | Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
+| Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
 
 ---
 
@@ -315,7 +316,10 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
-| `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS and its certificate, admin only | router | v0.1.0 |
+| `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
+| `settings_update_apply` | `(request, username, csrf) -> Response` | `POST /settings/update/apply`: refuses unless an update is waiting and none is running, then starts it | router | v0.1.0 |
+| `settings_update_check` | `(request, username, csrf) -> Response` | `POST /settings/update/check`: compares ghcr.io with this container now | router | v0.1.0 |
+| `settings_update_dismiss` | `(request, username, csrf) -> Response` | `POST /settings/update/dismiss`: hides the last update result | router | v0.1.0 |
 | `login_2fa_form` | `(request, next: str = "/") -> Response` | `GET /login/2fa`, the code step; back to `/login` without a recent password step | router | v0.1.0 |
 | `login_2fa_submit` | `(request, code, next) -> Response` | `POST /login/2fa`: an app code (once) or a backup code, throttled like sign-in | router | v0.1.0 |
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
@@ -415,3 +419,21 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `main` | `() -> int` | Prompts for a password, prints the env line with its hash | `python -m app.hashpw` | v0.1.0 |
+
+## `app/update.py` — self-update
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `apply_update` | `(db_path) -> str \| None` | Marks an update running, starts the throwaway container that pulls and recreates, and watches it on a thread; an error text or `None` | `routes/settings_page.settings_update_apply` | v0.1.0 |
+| `check_for_updates` | `(conn, *, dev_build=False) -> str` | Compares ghcr.io's digest for this container's tag with what runs; `"available"`, `"current"` or why nothing was compared | `routes/settings_page.settings_update_check`, `start_background_checker` | v0.1.0 |
+| `clear_result` | `(conn) -> None` | Forgets the last update result | `routes/settings_page.settings_update_dismiss` | v0.1.0 |
+| `current_state` | `(conn) -> UpdateState` | The update row, with an old success hidden | `routes/settings_page`, `watch_update` | v0.1.0 |
+| `deployed_digests` | `(image_id) -> set[str] \| None` | Registry digests of the image the container runs; `None` for an image built locally | `check_for_updates` | v0.1.0 |
+| `deployment` | `() -> Deployment \| None` | Asks Docker what this container was made from and which compose project owns it | `check_for_updates`, `start_update` | v0.1.0 |
+| `finish_pending_update` | `(conn) -> None` | At start: an update still running means this is its replacement, so record success | `main.lifespan` | v0.1.0 |
+| `ghcr_digest` | `(tag) -> str \| None` | The digest ghcr.io has for a tag; `None` on any failure | `check_for_updates` | v0.1.0 |
+| `own_container` | `() -> str` | The name Docker knows this container by (its hostname) | `deployment` | v0.1.0 |
+| `reap_stalled_update` | `(conn) -> None` | Fails an update that never replaced the container | `routes/settings_page` | v0.1.0 |
+| `start_background_checker` | `(settings) -> None` | Checks once a day on a thread; does nothing with self-update off | `main.lifespan` | v0.1.0 |
+| `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator | `apply_update` | v0.1.0 |
+| `watch_update` | `(db_path) -> None` | Waits for the recreator; records a failure (or a no-op success) if this container is still alive | `apply_update` | v0.1.0 |

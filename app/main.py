@@ -23,6 +23,7 @@ from app.dependencies import (
 from app.logging_conf import configure_logging
 from app.routes import auth, dashboard, health, ports, settings_page, switch_page, users, vlans
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
+from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
 
 
@@ -42,6 +43,9 @@ async def lifespan(app: FastAPI):
             log.info(
                 "created the first NXray account %s (admin) from nxray.env", settings.admin_user
             )
+        # An update still marked in progress means this is the container the
+        # update just created; see app/update.py.
+        finish_pending_update(conn)
         sessions = purge_expired_sessions(conn)
         attempts = purge_old_login_attempts(conn, settings.login_lockout_minutes)
     log.info(
@@ -52,6 +56,8 @@ async def lifespan(app: FastAPI):
         sessions,
         attempts,
     )
+
+    start_background_checker(settings)
 
     yield
 
