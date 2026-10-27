@@ -2,8 +2,9 @@
 
 [← back to the README](../README.md)
 
-NXray runs as one Docker container. There is no published image yet, so for
-now it is built from a clone of this repository on the machine that runs it.
+NXray runs as one Docker container. The image is published to GitHub
+Container Registry, so two files are the whole deployment: there is nothing
+to clone and nothing to build.
 
 ## Requirements
 
@@ -17,36 +18,36 @@ now it is built from a clone of this repository on the machine that runs it.
 
 In a terminal on the machine that will run NXray:
 
-1. Get the code and go into it:
+1. Make a folder and download the two sample files into it:
 
-       git clone https://github.com/acebmxer/nxray.git
-       cd nxray
+       mkdir nxray && cd nxray
+       curl -o docker-compose.yml https://raw.githubusercontent.com/acebmxer/nxray/main/docker-compose.yml.example
+       curl -o nxray.env https://raw.githubusercontent.com/acebmxer/nxray/main/nxray.env.example
 
-2. Make your own copies of the compose file and the settings file:
+   The settings file must be called `nxray.env`, not `.env`: Compose treats a
+   file of that name as its own variable source and mangles the password
+   hash.
 
-       cp docker-compose.yml.example docker-compose.yml
-       cp nxray.env.example nxray.env
-
-3. Create the hash of the password you will sign in with. This builds the
+2. Create the hash of the password you will sign in with. This pulls the
    image the first time, then asks for the password twice:
 
        docker compose run --rm nxray python -m app.hashpw
 
    It prints a line starting with `NXRAY_ADMIN_PASSWORD_HASH=$argon2id$`.
 
-4. Open `nxray.env` in a text editor, replace the empty
+3. Open `nxray.env` in a text editor, replace the empty
    `NXRAY_ADMIN_PASSWORD_HASH=` line with the printed line, and save.
 
-5. Start it:
+4. Start it:
 
        docker compose up -d
 
-6. Open `http://<that machine's address>:8080` in a browser and sign in as
+5. Open `http://<that machine's address>:8080` in a browser and sign in as
    `admin` (or the `NXRAY_ADMIN_USER` you set) with the password from step 3.
    That first account is an admin. Add accounts for other people on the
    **Users** page; see [Accounts and roles](#accounts-and-roles).
 
-7. Click **Switch** at the top and set up the switch. What that does on the
+6. Click **Switch** at the top and set up the switch. What that does on the
    switch is described in [Switch setup](switch-setup.md).
 
 ## Accounts and roles
@@ -150,12 +151,38 @@ The certificate and its key are kept in `/data/tls` on the data volume. To
 go back to plain HTTP, set `NXRAY_ENABLE_HTTPS=false` and run `docker compose
 up -d` again.
 
+## Building from a clone
+
+To run your own changes, or code that has no release yet, clone the
+repository instead and build it:
+
+    git clone https://github.com/acebmxer/nxray.git
+    cd nxray
+    cp docker-compose.yml.example docker-compose.yml
+    cp nxray.env.example nxray.env
+
+`docker-compose.dev.yml` is in the clone and adds `build: .`, so the image is
+built from your folder instead of pulled. Add it to every `docker compose`
+command, including the hash step (step 2 above), or Compose pulls the
+published image instead of running your build:
+
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm nxray python -m app.hashpw
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
 ## Updating
 
-In the `nxray` folder:
+The sample compose file uses the `:latest` tag, which follows every release,
+so in the `nxray` folder:
 
-    git pull
-    docker compose up -d --build
+    docker compose pull
+    docker compose up -d
+
+To stay on one version until you choose to move, put that version in the
+compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.1.0`) and
+change it when you want to upgrade; then run the same two commands.
+
+From a clone, run `git pull` and then
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.
 
 Your `docker-compose.yml`, `nxray.env` and the data volume are kept.
 

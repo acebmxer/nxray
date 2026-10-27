@@ -1,14 +1,19 @@
 services:
   nxray:
-    # Built from this folder. There is no published image yet; one on GHCR
-    # comes with the release workflow in a later stage. Until then, run
-    # this from a clone of the repository:
+    # Published to GHCR by .github/workflows/release.yml, so this file plus
+    # nxray.env is a complete deployment: no clone and no local build.
     #
-    #   cp docker-compose.yml.example docker-compose.yml
-    #   docker compose up -d --build
+    # Working from a clone instead? docker-compose.dev.yml builds the source
+    # beside you, and is used alongside this file:
     #
-    build: .
-    image: nxray:local
+    #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    #
+    # :latest tracks every release, so "docker compose pull" moves you onto a
+    # new version. Pin one instead to stay put until you choose to move:
+    #
+    #   image: ghcr.io/acebmxer/nxray:0.1.0
+    #
+    image: ghcr.io/acebmxer/nxray:latest
     container_name: nxray
     restart: unless-stopped
     env_file:

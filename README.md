@@ -39,9 +39,9 @@ built-in HTTPS.
 On a Linux machine with Docker and Compose 2.30 or newer:
 
 ```bash
-git clone https://github.com/acebmxer/nxray.git && cd nxray
-cp docker-compose.yml.example docker-compose.yml
-cp nxray.env.example nxray.env
+mkdir nxray && cd nxray
+curl -o docker-compose.yml https://raw.githubusercontent.com/acebmxer/nxray/main/docker-compose.yml.example
+curl -o nxray.env https://raw.githubusercontent.com/acebmxer/nxray/main/nxray.env.example
 docker compose run --rm nxray python -m app.hashpw   # paste the printed line into nxray.env
 docker compose up -d
 ```
@@ -92,7 +92,8 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 8. **HTTPS, more users, two-factor sign-in, self-update, published images.**
    More users with admin, operator and viewer roles: *(built)*. Optional
    two-factor sign-in per account: *(built)*. Built-in HTTPS, off by
-   default: *(built)*.
+   default: *(built)*. Published images on GHCR: *(built)*. Self-update is still
+to come.
 9. **History**: temperatures, power and traffic over time, as graphs.
 
 ## Contributing

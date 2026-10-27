@@ -11,6 +11,19 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Published image on GitHub Container Registry.** A new workflow,
+  `.github/workflows/release.yml`, builds the image and pushes it to
+  `ghcr.io/acebmxer/nxray` whenever a version tag is pushed (as `:X.Y.Z`,
+  `:X.Y` and `:latest`), and can be run by hand against a branch to publish
+  a branch-named tag. `docker-compose.yml.example` now pulls
+  `ghcr.io/acebmxer/nxray:latest`, so the compose file and `nxray.env` are a
+  whole install with no clone and no build; updating is `docker compose pull`
+  then `docker compose up -d`, and a version can be pinned in the `image:`
+  line. To build from a clone, the new `docker-compose.dev.yml` is added to
+  every command (`docker compose -f docker-compose.yml -f
+  docker-compose.dev.yml up -d --build`). A `docker-compose.yml` copied from
+  the older sample keeps building from its folder until it is replaced. No
+  image exists on GHCR until the first version tag is pushed.
 - **Built-in HTTPS, off by default.** Set `NXRAY_ENABLE_HTTPS=true` in
   `nxray.env` (and keep the new `8443:8443` line in `docker-compose.yml`)
   and NXray serves its pages over HTTPS on port 8443 with an nginx inside

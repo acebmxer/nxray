@@ -150,8 +150,10 @@ jobs:
 
       - name: "Built-in HTTPS: nginx and the app run as non-root"
         run: |
-          docker top nxray-tls -eo user,comm
-          if docker top nxray-tls -eo user | tail -n +2 | grep -qx root; then
+          # docker top hands its arguments to ps and needs the pid column in
+          # the output, so pid is always asked for; the user is column 2.
+          docker top nxray-tls -eo pid,user,comm
+          if docker top nxray-tls -eo pid,user | tail -n +2 | awk '{print $2}' | grep -qx root; then
             echo "::error::a process runs as root"; exit 1
           fi
 
