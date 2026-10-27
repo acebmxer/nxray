@@ -355,3 +355,16 @@ def test_anonymous_vlan_posts_go_to_login(client: TestClient) -> None:
         response = client.post(path, data={"csrf": "x"})
         assert response.status_code == 303
         assert response.headers["location"].startswith("/login")
+
+
+def test_save_from_the_vlans_page_stays_there(logged_in: TestClient, enabled: FakeSwitch) -> None:
+    _post(logged_in, "/vlans/create", vlan_id="20", name="storage")
+    page = logged_in.get("/vlans").text
+    assert '<input type="hidden" name="back" value="vlans">' in page
+    saved = _post(logged_in, "/switch/save", "/vlans", back="vlans")
+    assert saved.status_code == 200
+    assert '<h1 class="page-title">VLANs</h1>' in saved.text
+    assert "Saved: the switch keeps its current configuration" in saved.text
+    assert "changed the switch since" not in saved.text
+    assert "storage" in saved.text  # the page was read again
+    assert enabled.saved

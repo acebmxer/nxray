@@ -71,6 +71,13 @@ def vlans_page(request: Request, username: str = Depends(login_required)) -> Res
     return _render(request, username)
 
 
+def render_vlans_page(
+    request: Request, username: str, *, error: str | None = None, notice: str | None = None
+) -> Response:
+    """Read the switch fresh and show the VLANs page, with an optional message."""
+    return _render(request, username, error=error, notice=notice)
+
+
 def _changing(request: Request):
     """(connection, target, view, error message) for a VLAN change."""
     connection, target, problem = stored_switch(request)

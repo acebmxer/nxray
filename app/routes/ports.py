@@ -153,8 +153,22 @@ def _render_port(
 def port_detail(
     request: Request, name: str = "", username: str = Depends(login_required)
 ) -> Response:
+    return render_port_page(request, username, name)
+
+
+def render_port_page(
+    request: Request,
+    username: str,
+    name: str,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+) -> Response:
+    """Read the switch fresh and show one port's page, with an optional message."""
     connection, _, status, ports, view = _read_port_page(request)
-    return _render_port(request, username, name, connection, status, ports, view)
+    return _render_port(
+        request, username, name, connection, status, ports, view, error=error, notice=notice
+    )
 
 
 def change_summary(port: Port, action: str, description: str) -> tuple[str, str | None]:

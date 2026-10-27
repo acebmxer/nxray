@@ -315,6 +315,59 @@ def test_failed_save_keeps_the_reminder(logged_in: TestClient, enabled: FakeSwit
     assert "changed the switch since" in logged_in.get("/switch").text
 
 
+def _page_title(html: str) -> str:
+    match = re.search(r'<h1 class="page-title">([^<]+)</h1>', html)
+    assert match, "no page title"
+    return match.group(1)
+
+
+def test_save_from_a_port_page_stays_on_that_port(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    _change(logged_in, "Ethernet1/3", "off", confirm="yes")
+    page = logged_in.get("/ports/detail?name=Ethernet1/3").text
+    assert '<input type="hidden" name="back" value="port">' in page
+    assert '<input type="hidden" name="port" value="Ethernet1/3">' in page
+    saved = logged_in.post(
+        "/switch/save",
+        data={"csrf": _csrf(logged_in), "back": "port", "port": "Ethernet1/3"},
+    )
+    assert saved.status_code == 200
+    assert _page_title(saved.text) == "Ethernet1/3"
+    assert "Saved: the switch keeps its current configuration" in saved.text
+    assert "changed the switch since" not in saved.text
+    assert enabled.saved
+
+
+def test_failed_save_from_a_port_page_says_so_there(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    _change(logged_in, "Ethernet1/3", "off", confirm="yes")
+    enabled.save_text = "Copy failed\n"
+    response = logged_in.post(
+        "/switch/save",
+        data={"csrf": _csrf(logged_in), "back": "port", "port": "Ethernet1/3"},
+    )
+    assert _page_title(response.text) == "Ethernet1/3"
+    assert "lost if the switch restarts" in response.text
+    assert "changed the switch since" in response.text
+
+
+@pytest.mark.parametrize(
+    "back", ["", "https://example.com/", "//example.com/", "/vlans", "switch", "PORT"]
+)
+def test_save_with_another_back_value_shows_the_switch_page(
+    logged_in: TestClient, enabled: FakeSwitch, back: str
+) -> None:
+    saved = logged_in.post(
+        "/switch/save", data={"csrf": _csrf(logged_in), "back": back, "port": "Ethernet1/3"}
+    )
+    assert saved.status_code == 200
+    assert _page_title(saved.text) == "Switch"
+    assert "Saved: the switch keeps its current configuration" in saved.text
+    assert "location" not in saved.headers
+
+
 # ---- protection -------------------------------------------------------------
 
 

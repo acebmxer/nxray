@@ -19,6 +19,8 @@ from app.dependencies import (
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
 from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes
+from app.routes.ports import render_port_page
+from app.routes.vlans import render_vlans_page
 from app.security import csrf_token
 from app.switch_connection import (
     DecryptionError,
@@ -289,22 +291,37 @@ def switch_enable_changes(
 
 @router.post("/switch/save", response_class=HTMLResponse)
 def switch_save(
-    request: Request, username: str = Depends(login_required), csrf: str = Form("")
+    request: Request,
+    username: str = Depends(login_required),
+    csrf: str = Form(""),
+    back: str = Form(""),
+    port: str = Form(""),
 ) -> Response:
-    """Save config: copy running-config startup-config with NXray's own account."""
+    """Save config: copy running-config startup-config with NXray's own account.
+
+    ``back`` names the page the button was on (``port`` with ``port`` set,
+    or ``vlans``); the answer is shown there. Anything else means the
+    Switch page, so the field can never send the browser elsewhere.
+    """
     require_csrf(request, csrf)
+
+    def answer(*, error: str | None = None, notice: str | None = None) -> Response:
+        if back == "port" and port:
+            return render_port_page(request, username, port, error=error, notice=notice)
+        if back == "vlans":
+            return render_vlans_page(request, username, error=error, notice=notice)
+        return _render(request, username, error=error, notice=notice)
+
     connection, target, error = stored_switch(request)
     if connection is None:
         return redirect("/switch")
     if target is None:
-        return _render(request, username, error=error)
+        return answer(error=error)
     try:
         with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
             client.save_config()
     except NxapiError as exc:
-        return _render(
-            request,
-            username,
+        return answer(
             error=connection_error(exc, target)
             + " The changes are still active, but are lost if the switch restarts.",
         )
@@ -312,9 +329,7 @@ def switch_save(
     with open_db(settings.db_path) as conn:
         set_unsaved_changes(conn, False)
     log.info("saved the switch configuration on %s", connection.host)
-    return _render(
-        request, username, notice="Saved: the switch keeps its current configuration on restart."
-    )
+    return answer(notice="Saved: the switch keeps its current configuration on restart.")
 
 
 @router.post("/switch/forget", response_class=HTMLResponse)

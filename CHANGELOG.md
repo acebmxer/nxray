@@ -39,6 +39,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   for a while, NXray then waits about 11 minutes before contacting the
   switch again and says so on every page. Needs SSH reachable from the
   machine running NXray.
+
+  Save config pressed on a port's page (or on the VLANs page) used to jump
+  to the Switch page after saving; it now stays on that page and shows
+  that the configuration was saved, or why saving failed.
 - **Ports page.** A new Ports page lists every front-panel port with its
   description, state (with the switch's reason when it is down), speed,
   VLAN, transceiver, traffic in and out over the last 30 seconds, and its
