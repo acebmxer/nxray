@@ -474,7 +474,7 @@ def switch_enable_changes(
     else:
         minutes = result.pause_seconds // 60
         done = (
-            f"Port changes are on: {connection.username} may now turn the "
+            f"Port and VLAN changes are on: {connection.username} may now turn the "
             f"{result.port_count} front ports on or off, edit their descriptions and set "
             "their VLANs, and create, rename and delete VLANs. The switch applies this once "
             "it has not heard from NXray for a while, so NXray now waits about "

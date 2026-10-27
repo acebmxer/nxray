@@ -66,7 +66,9 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   access and trunk, moves to another VLAN or stops carrying VLANs. VLAN
   names are checked before they reach the switch, which silently ignores
   names longer than 32 characters. Turning on port changes now also allows
-  these VLAN changes. An install that turned port changes on before this
+  these VLAN changes: on a new install, one button (Turn on port and VLAN
+  changes) turns on both, with a single wait of about 11 minutes, and the
+  Switch page says so. An install that turned port changes on before this
   shows a Turn on VLAN changes button on the Switch page: it asks for the
   admin login once more to add the VLAN rules to NXray's role, with no wait
   this time. The unsaved-changes reminder now says NXray changed the

@@ -158,7 +158,7 @@ def paused_message(seconds: int) -> str:
     return (
         "NXray is leaving the switch alone for about "
         f"{minutes} more minute{'s' if minutes != 1 else ''} so the switch applies the "
-        "new permissions for port changes. The switch is not contacted until then; "
+        "new permissions for port and VLAN changes. The switch is not contacted until then; "
         "reload this page afterwards."
     )
 

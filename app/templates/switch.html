@@ -68,7 +68,8 @@
       also saves any other unsaved changes on the switch. Then it leaves the switch
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
-      message until then.
+      message until then. This wait happens once: after it, port and VLAN
+      changes take effect straight away, with no further waits.
     </p>
     <label class="check">
       <input type="checkbox" name="confirm_save" value="yes" required>
@@ -91,7 +92,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port changes</h2>
+  <h2 class="card-title">Port and VLAN changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.vlan_changes_enabled %}
   <p class="lead">
@@ -115,8 +116,8 @@
   </form>
   <p class="note">
     Save config runs <code>copy running-config startup-config</code>, which also
-    saves any other unsaved changes on the switch. To take port changes away
-    again, sign in to the switch over SSH as admin and run
+    saves any other unsaved changes on the switch. To take port and VLAN changes
+    away again, sign in to the switch over SSH as admin and run
     <code>configure terminal</code>, <code>no username {{ connection.username }} role {{ role_name }}</code>,
     <code>end</code>, <code>copy running-config startup-config</code>.
   </p>
@@ -138,7 +139,7 @@
 {% endif %}
 {% else %}
   <p class="lead">
-    Off: NXray's account can only read. Turning port changes on gives it a role
+    Off: NXray's account can only read. Turning port and VLAN changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports only, turning
     a port on or off, editing its description, and setting its mode (access or
     trunk) and VLANs; creating, renaming and deleting VLANs; and saving the
@@ -150,7 +151,7 @@
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port changes", true) }}
+  {{ admin_form("Turn on port and VLAN changes", true) }}
 </section>
 {% endif %}
 

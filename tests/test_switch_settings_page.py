@@ -311,7 +311,7 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     assert f"Port changes are now off: the {ROLE_NAME} role is no longer on the switch" in text
     row = _row(settings)
     assert row["changes_enabled_at"] is None and row["role_version"] == 0
-    assert "Turn on port changes" in logged_in.get("/switch").text
+    assert "Turn on port and VLAN changes" in logged_in.get("/switch").text
 
 
 def test_unreadable_login_after_a_key_change_is_repaired(

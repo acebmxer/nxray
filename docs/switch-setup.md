@@ -109,7 +109,8 @@ new role, because signing in would make the wait start over.
 
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
-under **Port changes**, tick the box and press **Turn on port changes**.
+under **Port and VLAN changes**, tick the box and press **Turn on port and
+VLAN changes**. One press turns on both, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -153,7 +154,8 @@ on a switch uses the same `nxray-ports` role.
 session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
-minutes, and every page says so.
+minutes, and every page says so. This happens once: after it, port and VLAN
+changes take effect straight away.
 
 **Installs that turned port changes on before VLANs existed.** Their role
 has rules 1 to 5 only. The Switch page then shows a **VLAN changes** card:
@@ -212,7 +214,7 @@ them. Deleting asks you to confirm.
 | could not reach the switch over SSH | Turning on port changes needs SSH from the NXray machine to the switch; check SSH is on and the port |
 | may not make this change yet | The switch has not applied the port-changes role, or it was removed. Leave NXray's pages closed for 10 minutes and try again, or turn port changes on again |
 | NXray kept the address | Change the switch address could not sign in at the new address with NXray's account; the message after it says why |
-| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port changes** to make it again |
+| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port and VLAN changes** to make it again |
 | VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN changes** on the Switch page |
 
 ## The certificate and the SSH host key
