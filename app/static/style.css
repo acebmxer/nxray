@@ -284,6 +284,7 @@ a.btn { display: inline-block; text-decoration: none; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem;
   margin-bottom: 1.25rem;
+  align-items: start;
 }
 .grid .card + .card { margin-top: 0; }
 .grid + .card { margin-top: 0; }
@@ -321,3 +322,28 @@ a.btn { display: inline-block; text-decoration: none; }
 .facts-after { margin: 1rem 0 0; }
 
 meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
+
+/* ---- ports ---- */
+
+.filters { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.filter {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+.filter:hover { color: var(--text); border-color: var(--text-dim); }
+.filter-on { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+.filter-on:hover { color: var(--accent-text); }
+
+.card-flush { padding: 0.5rem 1.25rem; }
+.table .num, .table th.num { text-align: right; }
+.table-ports td { white-space: nowrap; }
+.table-ports td:nth-child(2) { white-space: normal; }
+.reason, .dim { color: var(--text-dim); font-size: 0.82rem; margin-left: 0.3rem; }
+.dim { margin-left: 0; }
+.breadcrumb { margin: 0 0 0.5rem; font-size: 0.9rem; }
+
+a { color: var(--accent); }

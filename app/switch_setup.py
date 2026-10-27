@@ -259,14 +259,26 @@ def check_connection(
     return ConnectionStatus(True, f"Connected to {system.hostname} as {target.username}.", system)
 
 
+def read_switch[T](
+    target: SwitchTarget,
+    reader: Callable[[NxapiClient], T],
+    transport: httpx.BaseTransport | None = None,
+) -> tuple[ConnectionStatus, T | None]:
+    """Run ``reader`` with NXray's own account; its result, or why it failed."""
+    try:
+        with NxapiClient(target, transport=transport) as client:
+            result = reader(client)
+    except NxapiError as exc:
+        return ConnectionStatus(False, connection_error(exc, target)), None
+    return ConnectionStatus(True, f"Connected as {target.username}."), result
+
+
 def load_dashboard_status(
     target: SwitchTarget, transport: httpx.BaseTransport | None = None
 ) -> tuple[ConnectionStatus, Dashboard | None]:
     """Everything the dashboard shows, or why it could not be read."""
-    try:
-        with NxapiClient(target, transport=transport) as client:
-            dashboard = load_dashboard(client)
-    except NxapiError as exc:
-        return ConnectionStatus(False, connection_error(exc, target)), None
+    status, dashboard = read_switch(target, load_dashboard, transport)
+    if dashboard is None:
+        return status, None
     message = f"Connected to {dashboard.system.hostname} as {target.username}."
     return ConnectionStatus(True, message, dashboard.system), dashboard

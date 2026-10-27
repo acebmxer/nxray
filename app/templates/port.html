@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} — NXray{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/ports">← All ports</a></p>
+<h1 class="page-title">{{ name }}</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+</div>
+{% elif ports is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message }}</p>
+</div>
+{% elif port is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">The switch has no port called {{ name }}.</p>
+</div>
+{% else %}
+<div class="grid">
+  <section class="card">
+    <h2 class="card-title">Port</h2>
+    <dl class="facts">
+      <dt>State</dt>
+      <dd><span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
+        {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}</dd>
+      <dt>Description</dt><dd>{{ port.description or "none" }}</dd>
+      <dt>Speed</dt><dd>{{ port.speed }}</dd>
+      <dt>VLAN</dt><dd>{{ port.vlan }}{% if port.mode %} ({{ port.mode }}){% endif %}</dd>
+      <dt>MTU</dt><dd>{{ port.mtu }}</dd>
+      <dt>Hardware</dt><dd>{{ port.hardware }}</dd>
+      <dt>MAC address</dt><dd>{{ port.mac }}</dd>
+      <dt>Last link change</dt><dd>{{ port.last_flap }}</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Transceiver</h2>
+    {% if port.transceiver.present %}
+    <dl class="facts">
+      <dt>Type</dt><dd>{{ port.transceiver.type }}</dd>
+      <dt>Vendor</dt><dd>{{ port.transceiver.vendor }}</dd>
+      <dt>Part number</dt><dd>{{ port.transceiver.part_number }}</dd>
+      <dt>Serial number</dt><dd>{{ port.transceiver.serial }}</dd>
+    </dl>
+    {% else %}
+    <p class="lead">Nothing plugged in.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Traffic</h2>
+    <dl class="facts">
+      <dt>In now</dt><dd>{{ port.in_bits_per_second|rate }}</dd>
+      <dt>Out now</dt><dd>{{ port.out_bits_per_second|rate }}</dd>
+      <dt>Received</dt><dd>{{ port.in_bytes|bytes }} in {{ "{:,}".format(port.in_packets) }} packets</dd>
+      <dt>Sent</dt><dd>{{ port.out_bytes|bytes }} in {{ "{:,}".format(port.out_packets) }} packets</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Counters</h2>
+    <table class="table">
+      <tbody>
+        {% for key, label in counter_labels.items() %}
+        <tr><td>{{ label }}</td><td class="num">{{ "{:,}".format(port.counters.get(key, 0)) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+<p class="note">"Now" is the average over the last 30 seconds. Totals count since the counters were last cleared.</p>
+{% endif %}
+{% endblock %}

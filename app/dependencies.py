@@ -14,7 +14,12 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
+from app.db import open_db
+from app.nxapi import SwitchTarget
+from app.ports import human_bytes, human_rate
 from app.security import csrf_valid, current_user
+from app.switch_connection import DecryptionError, SwitchConnection, get_connection, load_target
+from app.switch_setup import KEY_CHANGED_MESSAGE
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -23,6 +28,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Every template shows the version in the footer; injecting it globally avoids
 # each route having to remember to pass it.
 templates.env.globals["app_version"] = __version__
+templates.env.filters["bytes"] = human_bytes
+templates.env.filters["rate"] = human_rate
 
 # Sent on every response. The pages use no inline script, no inline style and
 # nothing from another site, so the policy can be strict. frame-ancestors and
@@ -84,6 +91,25 @@ def login_required(request: Request) -> str:
     if username is None:
         raise RedirectToLogin(request.url.path)
     return username
+
+
+def stored_switch(
+    request: Request,
+) -> tuple[SwitchConnection | None, SwitchTarget | None, str | None]:
+    """The stored switch, its decrypted login, and an error message.
+
+    (None, None, None) when no switch is set up; (connection, None, message)
+    when the stored login cannot be decrypted.
+    """
+    settings = request.app.state.settings
+    with open_db(settings.db_path) as conn:
+        connection = get_connection(conn)
+        if connection is None:
+            return None, None, None
+        try:
+            return connection, load_target(conn, settings.secret_key), None
+        except DecryptionError:
+            return connection, None, KEY_CHANGED_MESSAGE
 
 
 def safe_next(target: str) -> str:

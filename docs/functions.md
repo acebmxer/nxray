@@ -35,7 +35,9 @@ prose columns; those are a reviewer's job.
 | Check NXray can reach the switch | `app/switch_setup.py`, `check_connection` |
 | Encrypt a secret for the database | `app/crypto.py` |
 | Protect a form against forgery | `app/dependencies.py`, `require_csrf`; token from `security.csrf_token` |
-| Turn switch output into page data | `app/switch.py` |
+| Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports) |
+| Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
+| Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
 
 ---
 
@@ -94,6 +96,7 @@ really invalidates rather than merely asking the browser to forget.
 | `add_security_headers` | `(request, call_next) -> Response` | HTTP middleware adding `SECURITY_HEADERS` to every response | `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
+| `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The stored switch, its decrypted login, or the key-changed message | dashboard, ports routes | v0.1.0 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
@@ -140,6 +143,20 @@ self-signed certificate is accepted on purpose.
 NX-OS JSON holds a one-row table as an object and only a several-row table as
 a list; `rows` hides that.
 
+## `app/ports.py` — the front-panel ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `human_bytes` | `(count: int) -> str` | `1536` -> `1.5 KB` (powers of 1024) | `bytes` template filter | v0.1.0 |
+| `human_rate` | `(bits_per_second: int) -> str` | `12500000` -> `12.5 Mb/s` (powers of 1000) | `rate` template filter | v0.1.0 |
+| `load_ports` | `(client: NxapiClient) -> list[Port]` | Every port, from one request of `PORTS_COMMANDS` | `routes/ports` | v0.1.0 |
+| `parse_ports` | `(interface_body, status_body, transceiver_body) -> list[Port]` | Every Ethernet port in front-panel order, mgmt0 left out | `ports.load_ports` | v0.1.0 |
+| `parse_transceivers` | `(body) -> dict[str, Transceiver]` | What is plugged into each port | `ports.parse_ports` | v0.1.0 |
+| `port_sort_key` | `(name: str) -> tuple[int, ...]` | Sorts Ethernet1/2 before Ethernet1/10 | `ports.parse_ports` | v0.1.0 |
+
+`Port.errors` adds up `ERROR_COUNTERS`; `COUNTER_LABELS` names the counters a
+port's own page shows.
+
 ## `app/crypto.py` — secrets in the database
 
 | Function | Signature | Does | Used by | Since |
@@ -164,9 +181,10 @@ a list; `rows` hides that.
 | --- | --- | --- | --- | --- |
 | `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup` | v0.1.0 |
 | `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page Test connection | v0.1.0 |
-| `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `load_dashboard_status` | v0.1.0 |
+| `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `read_switch` | v0.1.0 |
 | `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `connection_error` | v0.1.0 |
 | `load_dashboard_status` | `(target, transport=None) -> tuple[ConnectionStatus, Dashboard \| None]` | The whole dashboard from one request, or why it failed | `routes/dashboard.dashboard` | v0.1.0 |
+| `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
 
@@ -195,6 +213,8 @@ inside `run_setup`.
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login` | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
+| `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port; 404 for an unknown name | router | v0.1.0 |
+| `ports_page` | `(request, username, show) -> Response` | `GET /ports?show=all\|up\|down\|errors` | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |

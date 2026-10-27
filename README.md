@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-192%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-219%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,9 +13,9 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 3 of the [roadmap](#roadmap) are built: you
-can install NXray, sign in, connect it to a switch, and see the switch's
-health on the dashboard.
+**Status:** early. Stages 1 to 4 of the [roadmap](#roadmap) are built: you
+can install NXray, sign in, connect it to a switch, see the switch's health
+on the dashboard, and look at every port.
 
 ## Read next
 
@@ -72,7 +72,7 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
    their limits, fans, power supplies and power draw, CPU and memory, port
    counts. *(built)*
 4. **Ports page**: every port's state, speed, VLAN, description, transceiver,
-   traffic and error counters. Read-only.
+   traffic and error counters. Read-only. *(built)*
 5. **Port changes**: turn a port on or off and edit its description, with a
    confirm step, plus "Save config".
 6. **VLANs**: create, delete and rename VLANs; set the VLANs on ports.

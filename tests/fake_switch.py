@@ -85,6 +85,9 @@ class FakeSwitch:
             "show environment": "show_environment",
             "show system resources": "show_system_resources",
             "show interface brief": "show_interface_brief",
+            "show interface": "show_interface",
+            "show interface status": "show_interface_status",
+            "show interface transceiver": "show_interface_transceiver",
         }
         if cmd in recorded:
             return ok(load_fixture(recorded[cmd]))

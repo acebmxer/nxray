@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Ports page.** A new Ports page lists every front-panel port with its
+  description, state (with the switch's reason when it is down), speed,
+  VLAN, transceiver, traffic in and out over the last 30 seconds, and its
+  error count, with filters for up, down and ports with errors. Each port
+  has its own page with its MAC address, MTU, last link change, the
+  transceiver's vendor, part and serial number, totals sent and received,
+  and every error and discard counter. Read-only.
 - **Switch setup.** The new Switch page connects NXray to a switch. It signs
   in to NX-API once with the switch's admin login, creates NXray's own
   read-only account (role `network-operator`) with a long random password,
