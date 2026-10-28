@@ -251,6 +251,8 @@ code {
 
 .button-row { display: flex; gap: 0.75rem; align-items: center; }
 .button-row .btn-primary { margin-top: 0; }
+/* .card form + form spaces stacked forms apart; side by side they must not drop. */
+.card .button-row form + form { margin-top: 0; }
 
 a.btn { display: inline-block; text-decoration: none; }
 .actions { margin-top: 1.25rem; }

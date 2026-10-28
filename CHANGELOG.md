@@ -31,7 +31,9 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   whether it is behind or ahead. The image now includes the Docker CLI and
   Compose plugin from Docker's own apt repository (client only, no daemon;
   Debian's Compose is too old to read the sample's `env_file` with
-  `format: raw`). Schema version 7 adds the `update_state` table. The CI image
+  `format: raw`). Its buttons use the same row layout as the Switch page's, so the quiet and
+  primary buttons line up (the second form was being pushed 20px down by the
+  rule that spaces stacked forms apart). Schema version 7 adds the `update_state` table. The CI image
   job gained a step checking that the update controls are absent with the
   setting off and that the Docker client is in the image; Trivy flags one
   HIGH in the Compose plugin's bundled `golang.org/x/net` (CVE-2026-78669,
