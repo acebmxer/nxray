@@ -3,12 +3,11 @@ name: Publish image
 # Builds the image and pushes it to GHCR so a user can deploy with only
 # docker-compose.yml and nxray.env: no clone, no local build.
 #
-# Fires on a version tag (v0.2.0 -> :0.2.0, :0.2 and :latest) and can be run by
-# hand against any branch, which publishes only the branch-named tag.
+# Fires on a version tag (v0.2.0 -> :0.2.0, :0.2 and :latest). Betas from the
+# dev branch are published by hand with beta.yml instead.
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -42,7 +41,6 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=branch
           labels: |
             org.opencontainers.image.title=NXray
             org.opencontainers.image.description=Web interface for Cisco Nexus switches, built on NX-API

@@ -67,8 +67,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 - **Published image on GitHub Container Registry.** A new workflow,
   `.github/workflows/release.yml`, builds the image and pushes it to
   `ghcr.io/acebmxer/nxray` whenever a version tag is pushed (as `:X.Y.Z`,
-  `:X.Y` and `:latest`), and can be run by hand against a branch to publish
-  a branch-named tag. `docker-compose.yml.example` now pulls
+  `:X.Y` and `:latest`). A second workflow, `.github/workflows/beta.yml`, is
+  run by hand from the Actions tab on the `dev` branch and publishes a beta
+  as `:dev` (the dev channel, which moves with every beta),
+  `:X.Y.Z-beta.N` and `:dev-<short sha>`, never touching `:latest`. A
+  container started from `ghcr.io/acebmxer/nxray:dev` follows the dev channel,
+  and Settings > Updates there compares against `:dev`.
+  `docker-compose.yml.example` now pulls
   `ghcr.io/acebmxer/nxray:latest`, so the compose file and `nxray.env` are a
   whole install with no clone and no build; updating is `docker compose pull`
   then `docker compose up -d`, and a version can be pinned in the `image:`

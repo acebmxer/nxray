@@ -86,3 +86,7 @@ hostnames, addresses, usernames and port descriptions before adding a fixture.
 Work happens on `dev` and reaches `main` through a pull request. The changelog
 version section is part of the branch the pull request carries. The tag is
 created on `main` after the merge.
+
+To publish a beta, open **Actions > Publish beta (dev channel) > Run
+workflow** with the `dev` branch selected. It pushes `:dev`, `:X.Y.Z-beta.N`
+and `:dev-<short sha>` to GHCR and creates no git tag.
