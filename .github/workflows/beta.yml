@@ -11,12 +11,13 @@ name: Publish beta (dev channel)
 # moves those. A container started from `:dev` follows the dev channel, and
 # Settings > Updates there compares against `:dev`.
 #
-# No git tag is created: a tag belongs on `main` after a merge.
+# A GitHub pre-release `vX.Y.Z-beta.N` is also created on the dev commit, so
+# the beta shows on the Releases page. It is marked pre-release, never latest.
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -75,6 +76,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Create the GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.name.outputs.beta }}" \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --latest=false \
+            --generate-notes \
+            --title "v${{ steps.name.outputs.beta }}" \
+            --notes "Dev-channel beta. Image: \`${{ steps.name.outputs.image }}:dev\`"
 
       - name: Say what was published
         run: |
