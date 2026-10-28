@@ -11,6 +11,32 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Front panel picture on the Ports page.** A drawing of the switch's front
+  panel sits above the port table, with every port in its place: in pairs with
+  the odd number on top, the 48 small SFP cages in blocks of six pairs and the
+  six wide QSFP cages after them. Which cages are wide comes from what the
+  switch reports for each port (40 Gb/s or more), and a QSFP port split into
+  four (breakout) is drawn as one cage cut into four. Buttons above it colour
+  the ports by **State** (up; down with something plugged in; empty; turned
+  off), **Traffic** (the busier direction as a share of the link's speed: under
+  1 %, 1 to 10 %, 10 to 50 %, 50 % or more), **Errors** (errors or discards
+  counted since the counters were cleared) or **VLAN** (one colour per access
+  VLAN, trunks hatched, routed ports grey, ports without a link faded; colours
+  repeat after eight VLANs). A legend under the picture counts the ports in
+  each colour. Hovering over a port shows its name, label, state, speed, VLAN,
+  description, transceiver, traffic and errors; clicking it opens the port's
+  page. The picture is inline SVG drawn on the server with no script, like the
+  History charts. State, Traffic and Errors use the same single request to the
+  switch as before; VLAN adds `show vlan brief` and `show interface
+  switchport` to that request for the VLAN names.
+- **Port labels.** Each port's page has a **Label** card for your own note on
+  the port, such as "Proxmox node 2, NIC 1" (up to 64 characters, one line).
+  Labels are kept in NXray's database only and never sent to the switch, so
+  they can hold any text, need no confirm step and work while port changes are
+  off. They show on the port's page, under the port's name in the Ports table,
+  in the front panel's tooltip, and as a dot on the picture. Operators and
+  admins can set them; viewers see them. Schema version 9 adds the
+  `port_labels` table.
 - **History: graphs of the switch over time.** NXray now reads the switch
   once a minute (`NXRAY_HISTORY_INTERVAL`, 10 to 3600 seconds, `0` for off) and
   keeps 30 days. A background thread runs `show environment`, `show system

@@ -17,6 +17,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
+from app.face import MODES, color_mode, draw_face
 from app.history import RANGE_LABELS, port_charts, range_key
 from app.nxapi import (
     NxapiClient,
@@ -25,6 +26,7 @@ from app.nxapi import (
     SwitchTarget,
     validate_description,
 )
+from app.port_labels import LABEL_MAX, get_labels, set_label
 from app.ports import COUNTER_LABELS, Port, load_ports
 from app.security import csrf_token
 from app.switch_connection import SwitchConnection, set_unsaved_changes
@@ -81,15 +83,32 @@ def _read_port_page(
     return connection, target, status, ports, view
 
 
+def _labels(request: Request) -> dict[str, str]:
+    with open_db(request.app.state.settings.db_path) as conn:
+        return get_labels(conn)
+
+
 @router.get("/ports", response_class=HTMLResponse)
 def ports_page(
-    request: Request, username: str = Depends(login_required), show: str = "all"
+    request: Request,
+    username: str = Depends(login_required),
+    show: str = "all",
+    color: str = "state",
 ) -> Response:
-    connection, _, status, ports = _read_ports(request)
+    color = color_mode(color)
+    vlan_names: dict[int, str] = {}
+    if color == "vlan":
+        # Only this mode needs the VLAN names, so only it asks the switch for them.
+        connection, _, status, ports, view = _read_port_page(request)
+        vlan_names = {vlan.id: vlan.name for vlan in view.vlans} if view else {}
+    else:
+        connection, _, status, ports = _read_ports(request)
     if show not in FILTERS:
         show = "all"
+    labels = _labels(request)
     shown: list[Port] = [port for port in ports or [] if FILTERS[show](port)]
     counts = {name: sum(1 for port in ports or [] if keep(port)) for name, keep in FILTERS.items()}
+    face = draw_face(ports, color, labels, vlan_names) if ports else None
     return templates.TemplateResponse(
         request,
         "ports.html",
@@ -101,6 +120,10 @@ def ports_page(
             "shown": shown,
             "show": show,
             "counts": counts,
+            "labels": labels,
+            "face": face,
+            "color": color,
+            "modes": MODES,
         },
     )
 
@@ -118,9 +141,13 @@ def _render_port(
     notice: str | None = None,
     description: str | None = None,
     vlan_form: dict[str, str] | None = None,
+    label: str | None = None,
     status_code: int | None = None,
 ) -> Response:
     port = next((p for p in ports or [] if p.name == name), None)
+    stored_label = _labels(request).get(name, "")
+    if label is None:
+        label = stored_label
     vlans = view.ports.get(name) if view else None
     if vlan_form is None and vlans is not None:
         vlan_form = {
@@ -160,6 +187,10 @@ def _render_port(
             "charts": charts,
             "range": period,
             "ranges": RANGE_LABELS,
+            # The stored label, and what the label box holds (what was typed, after a refusal).
+            "stored_label": stored_label,
+            "label": label,
+            "label_max": LABEL_MAX,
         },
         status_code=status_code,
     )
@@ -402,3 +433,31 @@ def port_vlans_change(
             "the switch."
         ),
     )
+
+
+@router.post("/ports/label", response_class=HTMLResponse)
+def port_label(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    label: str = Form(""),
+) -> Response:
+    """Set or remove a port's label. Kept in NXray only, so no confirm step and no switch call."""
+    require_csrf(request, csrf)
+    connection, _, status, ports, view = _read_port_page(request)
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return _render_port(request, username, name, connection, status, ports, view, **kwargs)
+
+    if port is None:
+        return again()
+    try:
+        with open_db(request.app.state.settings.db_path) as conn:
+            stored = set_label(conn, name, label, username)
+    except ValueError as exc:
+        return again(error=f"Label not saved: {exc}.", label=label, status_code=400)
+    log.info("port label on %s by %s: %r", name, username, stored)
+    done = f'{name} now has the label "{stored}".' if stored else f"{name} no longer has a label."
+    return again(notice=f"Done: {done} Labels are kept in NXray only; the switch is not changed.")

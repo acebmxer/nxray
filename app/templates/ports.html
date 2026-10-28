@@ -21,9 +21,31 @@
   {% if current_role(request) == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
 </div>
 {% else %}
+<section class="card">
+  <h2 class="card-title">Front panel</h2>
+  <nav class="filters" aria-label="Colour the ports by">
+    {% for key, label in modes.items() %}
+    <a class="filter{% if color == key %} filter-on{% endif %}" href="/ports?show={{ show }}&amp;color={{ key }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  {{ face.svg }}
+  <ul class="legend">
+    {% for entry in face.legend %}
+    <li><span class="swatch {{ entry.css }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.count }}</span></li>
+    {% endfor %}
+    {% if labels %}<li><span class="swatch swatch-mark"></span>Has a label</li>{% endif %}
+  </ul>
+  <p class="note">
+    Hover over a port for its details; click it to open its page.
+    {% if color == "traffic" %}Traffic is the busier direction over the last 30 seconds, as a share of the link's speed.{% endif %}
+    {% if color == "errors" %}Errors and discards count since the switch's counters were last cleared.{% endif %}
+    {% if color == "vlan" %}Ports without a link are drawn faded. Colours repeat after eight VLANs; hover to be sure.{% endif %}
+  </p>
+</section>
+
 <nav class="filters" aria-label="Show ports">
   {% for key, label in [("all", "All"), ("up", "Up"), ("down", "Down"), ("errors", "With errors")] %}
-  <a class="filter{% if show == key %} filter-on{% endif %}" href="/ports?show={{ key }}">{{ label }} ({{ counts[key] }})</a>
+  <a class="filter{% if show == key %} filter-on{% endif %}" href="/ports?show={{ key }}{% if color != 'state' %}&amp;color={{ color }}{% endif %}">{{ label }} ({{ counts[key] }})</a>
   {% endfor %}
 </nav>
 
@@ -38,7 +60,7 @@
     <tbody>
       {% for port in shown %}
       <tr>
-        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a></td>
+        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a>{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
         <td>{{ port.description }}</td>
         <td>
           <span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>

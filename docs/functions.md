@@ -46,6 +46,8 @@ prose columns; those are a reviewer's job.
 | Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
+| Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
+| Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
 
@@ -329,7 +331,8 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs; 404 for an unknown name | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
-| `ports_page` | `(request, username, show) -> Response` | `GET /ports?show=all\|up\|down\|errors` | router | v0.1.0 |
+| `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
+| `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
@@ -463,6 +466,29 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `nice_ticks` | `(low, high, target=5) -> list[float]` | Round axis values covering a range | `line_chart` | v0.1.0 |
 | `time_label` | `(moment, step) -> str` | An axis label: the clock time, or the date for a midnight or labels a day apart (UTC) | `line_chart` | v0.1.0 |
 | `time_ticks` | `(start, end) -> (list[float], int)` | Round UTC times to label an axis (at most seven) and the step between them | `line_chart` | v0.1.0 |
+
+## `app/face.py` — the front-panel picture
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `color_mode` | `(value) -> str` | A valid `?color=` name; `state` for anything else | `draw_face`, `routes/ports.ports_page` | v0.1.0 |
+| `draw_face` | `(ports, mode, labels=None, vlan_names=None) -> Face` | The front panel as inline SVG (each port a link with a tooltip) and a legend with a count per colour | `routes/ports.ports_page` | v0.1.0 |
+| `panel_layout` | `(ports) -> tuple[list[Cage], float, float]` | Where each port sits: pairs with the odd port on top, SFP cages in blocks of six pairs, then QSFP cages (40 Gb/s or more, or broken out); plus width and height | `draw_face` | v0.1.0 |
+| `port_colour` | `(port, mode, colours, vlan_names=None) -> tuple[str, str]` | A port's CSS classes and legend words in one colour mode | `draw_face` | v0.1.0 |
+| `tooltip` | `(port, label="", vlan_names=None) -> str` | What hovering over a port shows, one fact per line | `draw_face` | v0.1.0 |
+| `vlan_colours` | `(ports) -> dict[str, int]` | A colour number (0-7, repeating) per access VLAN in use, lowest first | `draw_face` | v0.1.0 |
+
+The colours are CSS classes (`f-up`, `f-t2`, `f-vlan s3`, ...) in
+`static/style.css`; the SVG carries no inline style, so the strict
+Content-Security-Policy holds.
+
+## `app/port_labels.py` — port labels
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `get_labels` | `(conn) -> dict[str, str]` | Every port's label, by port name | `routes/ports` | v0.1.0 |
+| `set_label` | `(conn, port, label, username) -> str` | Checks and stores a label (empty removes it); returns what was stored | `routes/ports.port_label` | v0.1.0 |
+| `validate_label` | `(text: str) -> str` | Trims a label; refuses over 64 characters or control characters (any other text is fine, the switch never sees it) | `set_label` | v0.1.0 |
 
 ## `app/routes/history.py` — the History page
 

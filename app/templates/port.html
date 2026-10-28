@@ -51,6 +51,7 @@
       <dt>State</dt>
       <dd><span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
         {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}</dd>
+      <dt>Label</dt><dd>{{ stored_label or "none" }}</dd>
       <dt>Description</dt><dd>{{ port.description or "none" }}</dd>
       <dt>Speed</dt><dd>{{ port.speed }}</dd>
       <dt>VLAN</dt><dd>{{ port.vlan }}{% if port.mode %} ({{ port.mode }}){% endif %}</dd>
@@ -96,6 +97,23 @@
     </table>
   </section>
 </div>
+
+<section class="card">
+  <h2 class="card-title">Label</h2>
+  <p class="lead">Your own note on this port, such as which device is plugged in. It is kept in NXray only and shown on the Ports page's front panel; the switch is not changed.</p>
+  {% if can_change %}
+  <form method="post" action="/ports/label" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <label for="label">Label</label>
+    <input id="label" name="label" type="text" value="{{ label }}" maxlength="{{ label_max }}" spellcheck="false">
+    <p class="hint">Up to {{ label_max }} characters on one line. Leave empty to remove it.</p>
+    <button type="submit" class="btn btn-primary">Save label</button>
+  </form>
+  {% else %}
+  <p class="note">Your role ({{ role }}) can look at labels but not change them.</p>
+  {% endif %}
+</section>
 
 <section class="card">
   <h2 class="card-title">Change this port</h2>

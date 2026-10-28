@@ -131,6 +131,17 @@ _MIGRATIONS: list[str] = [
     CREATE INDEX idx_history_series ON history (metric, item, ts);
     CREATE INDEX idx_history_ts ON history (ts);
     """,
+    # 8 -> 9: port labels (app/port_labels.py). NXray's own note on a port
+    # ("Proxmox node 2, NIC 1"), shown on the front-panel picture and the
+    # port's page. Kept in NXray only; the switch never sees it.
+    """
+    CREATE TABLE port_labels (
+        port        TEXT PRIMARY KEY,
+        label       TEXT NOT NULL,
+        updated_at  REAL NOT NULL,
+        updated_by  TEXT NOT NULL
+    );
+    """,
 ]
 
 

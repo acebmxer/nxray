@@ -432,3 +432,41 @@ a { color: var(--accent); }
 .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; margin-right: 0.4rem; border-radius: 2px; background: var(--series); vertical-align: middle; }
 .legend-values { color: var(--text-dim); }
 .card + .filters, .filters + .card { margin-top: 1.25rem; }
+
+/* ---- front panel (app/face.py draws the SVG; colours live here) ---- */
+
+.face { width: 100%; height: auto; display: block; margin: 0.25rem 0 0.5rem; }
+.face-body { fill: var(--bg); stroke: var(--border); stroke-width: 1; }
+.face-number { fill: var(--text-dim); font-size: 9px; }
+.face-cell { fill: var(--face); stroke: var(--face-edge, transparent); stroke-width: 1; }
+.face-port:hover .face-cell, .face-port:focus .face-cell { stroke: var(--text); stroke-width: 2; }
+.face-port:focus { outline: none; }
+.face-mark { fill: var(--text); stroke: var(--surface); stroke-width: 0.8; pointer-events: none; }
+.face-hatch-bg { fill: #5b6f86; }
+.face-hatch-line { stroke: #9fb3c8; stroke-width: 2.5; }
+
+.f-up { --face: var(--ok); }
+.f-down { --face: #e0a800; }
+.f-empty { --face: var(--surface); --face-edge: var(--text-dim); }
+.f-off { --face: #6b7785; }
+.f-none { --face: var(--surface); --face-edge: var(--border); }
+.f-t0 { --face: #a8d8b9; }
+.f-t1 { --face: #4fae72; }
+.f-t2 { --face: #e0a800; }
+.f-t3 { --face: #d9534f; }
+.f-clean { --face: var(--ok); }
+.f-err { --face: #d9534f; }
+.f-vlan { --face: var(--series); }
+.f-trunk { --face: url(#face-hatch); }
+.f-routed { --face: var(--text-dim); }
+.f-faded { opacity: 0.4; }
+
+.swatch.f-up, .swatch.f-down, .swatch.f-empty, .swatch.f-off, .swatch.f-none,
+.swatch.f-t0, .swatch.f-t1, .swatch.f-t2, .swatch.f-t3, .swatch.f-clean,
+.swatch.f-err, .swatch.f-vlan, .swatch.f-routed {
+  background: var(--face);
+  border: 1px solid var(--face-edge, transparent);
+}
+.swatch.f-trunk { background: repeating-linear-gradient(45deg, #5b6f86 0 3px, #9fb3c8 3px 5px); }
+.swatch.swatch-mark { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--text); }
+.port-label { display: block; font-size: 0.85rem; color: var(--text-dim); }

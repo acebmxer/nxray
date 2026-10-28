@@ -71,6 +71,8 @@ class Port:
     in_packets: int
     out_packets: int
     counters: dict[str, int] = field(default_factory=dict)
+    # The link's bandwidth (the running speed when up), 0 when not reported.
+    bandwidth_bits: int = 0
 
     @property
     def errors(self) -> int:
@@ -175,6 +177,8 @@ def parse_ports(
                 in_packets=_int(row.get("eth_inpkts")),
                 out_packets=_int(row.get("eth_outpkts")),
                 counters={key: _int(row.get(key)) for key in COUNTER_LABELS},
+                # eth_bw is in kilobits per second.
+                bandwidth_bits=_int(row.get("eth_bw")) * 1000,
             )
         )
     ports.sort(key=lambda port: port_sort_key(port.name))
