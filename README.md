@@ -13,7 +13,8 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Every stage of the [roadmap](#roadmap) is built: you can
+**Status:** early. Stages 1 to 9 of the [roadmap](#roadmap) are built, and
+stages 10 to 22 (the advanced switch features) are planned. Today you can
 install NXray, sign in, connect it to a switch,
 see the switch's health on the dashboard, look at every port, turn ports on
 or off, edit their descriptions, create, rename and delete VLANs, set the
@@ -100,6 +101,26 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
    errors over time, as graphs. *(built)*
+10. **Switch face**: a picture of the front panel with every port colored by
+    state, traffic or VLAN; hover for details, click to open the port; your
+    own labels on ports. *(planned)*
+11. **Port settings**: speed, duplex, MTU and jumbo frames, FEC, breakout,
+    storm control, flow control, layer 2 or layer 3 per port. *(planned)*
+12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,
+    which device is on a port. *(planned)*
+13. **Features**: turn switch features on and off. *(planned)*
+14. **Link aggregation**: port-channels and LACP. *(planned)*
+15. **Layer 3**: VLAN interfaces, routed ports, VRFs, static routes, routing
+    protocols. *(planned)*
+16. **Spanning tree.** *(planned)*
+17. **Switch admin**: hostname, clock and NTP, DNS, logging, SNMP, banner.
+    *(planned)*
+18. **Security and config tools**: ACLs, port security, config diff, backup
+    and rollback. *(planned)*
+19. **Alerts** by e-mail and webhook. *(planned)*
+20. **Activity log** and a viewer for the switch's own log. *(planned)*
+21. **Several switches** in one NXray. *(planned)*
+22. **Everything else** the switch offers over NX-API. *(planned)*
 
 ## Contributing
 

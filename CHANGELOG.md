@@ -34,7 +34,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   when it starts and when it ends rather than every minute, and deletes rows
   older than 30 days once an hour. Opening the pages reads only the database
   and never contacts the switch. About 7 MB a day is stored with a dozen
-  ports up. Schema version 8 adds the `history` table. Completes the roadmap.
+  ports up. Schema version 8 adds the `history` table.
 - **Self-update, off by default.** Set `NXRAY_ENABLE_SELF_UPDATE=true` in
   `nxray.env` and uncomment the `docker.sock` mount and `group_add` lines in
   `docker-compose.yml`, and the Settings page gets an Updates card: NXray
