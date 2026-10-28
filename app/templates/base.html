@@ -6,15 +6,26 @@
   <title>{% block title %}NXray{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
   {% if username %}
+  {% set nav_role = current_role(request) %}
   <header class="topbar">
     <a class="brand" href="/">
       <span class="brand-mark">◈</span> NXray
     </a>
     <nav class="topnav">
-      <span class="who">{{ username }}</span>
+      <a class="navlink" href="/">Dashboard</a>
+      <a class="navlink" href="/ports">Ports</a>
+      <a class="navlink" href="/vlans">VLANs</a>
+      <a class="navlink" href="/history">History</a>
+      {% if nav_role == "admin" %}
+      <a class="navlink" href="/switch">Switch</a>
+      <a class="navlink" href="/users">Users</a>
+      <a class="navlink" href="/settings">Settings</a>
+      {% endif %}
+      <a class="navlink who" href="/account" title="Your account">{{ username }}{% if nav_role %} ({{ nav_role }}){% endif %}</a>
       <form method="post" action="/logout" class="inline">
         <button type="submit" class="btn btn-quiet">Log out</button>
       </form>

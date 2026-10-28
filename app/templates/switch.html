@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Switch — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Switch</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if paused and not error and not notice %}
+<p class="alert alert-warn" role="status">{{ paused }}</p>
+{% endif %}
+
+{% if connection %}
+<section class="card">
+  <h2 class="card-title">Connected switch</h2>
+  <dl class="facts">
+    <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
+    <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
+    <dt>Config saved</dt>
+    <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
+    <dt>Last test</dt>
+    <dd>{% if connection.last_tested_at is none %}never{% elif connection.last_test_ok %}worked{% else %}failed: {{ connection.last_test_message }}{% endif %}</dd>
+  </dl>
+
+  <div class="button-row">
+    <form method="post" action="/switch/test" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Test connection</button>
+    </form>
+    <form method="post" action="/switch/forget" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Forget this switch</button>
+    </form>
+  </div>
+
+  <p class="note">
+    Forget this switch removes NXray's copy of the login only. The account
+    {{ connection.username }} stays on the switch. To remove it, sign in to the
+    switch over SSH as admin and run <code>configure terminal</code>,
+    <code>no username {{ connection.username }}</code>, <code>end</code>,
+    <code>copy running-config startup-config</code>.
+  </p>
+</section>
+
+{% macro admin_form(button, wait) %}
+  <form method="post" action="/switch/enable-changes" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="ch_admin_user">Switch admin username</label>
+    <input id="ch_admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="ch_admin_password">Switch admin password</label>
+    <input id="ch_admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="ssh_port">SSH port</label>
+    <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="22" required>
+
+    {% if wait %}
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch. Then it leaves the switch
+      alone for about 11 minutes: the switch only applies the new role to an
+      account it has not heard from for a while, so the pages show a waiting
+      message until then. This wait happens once: after it, port and VLAN
+      changes take effect straight away, with no further waits.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration, and wait before using NXray.
+    </label>
+    {% else %}
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch. There is no wait this
+      time: the switch applies new rules in a role the account already has at once.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration.
+    </label>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">{{ button }}</button>
+  </form>
+{% endmacro %}
+
+<section class="card">
+  <h2 class="card-title">Port and VLAN changes</h2>
+  {% if connection.changes_enabled %}
+  {% if connection.vlan_changes_enabled %}
+  <p class="lead">
+    On. NXray's account may turn the front ports on or off, edit their
+    descriptions and set their VLANs (on each port's own page), create, rename
+    and delete VLANs (on the VLANs page), and save the configuration. The switch
+    refuses it everything else.
+  </p>
+  {% else %}
+  <p class="lead">
+    On for ports: NXray's account may turn the front ports on or off and edit
+    their descriptions, and save the configuration.
+  </p>
+  {% endif %}
+  {% if connection.unsaved_changes %}
+  <p class="warning">NXray changed the switch since its configuration was last saved. Until you save, a restart of the switch undoes those changes.</p>
+  {% endif %}
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary">Save config</button>
+  </form>
+  <p class="note">
+    Save config runs <code>copy running-config startup-config</code>, which also
+    saves any other unsaved changes on the switch. To take port and VLAN changes
+    away again, sign in to the switch over SSH as admin and run
+    <code>configure terminal</code>, <code>no username {{ connection.username }} role {{ role_name }}</code>,
+    <code>end</code>, <code>copy running-config startup-config</code>.
+  </p>
+</section>
+
+{% if not connection.vlan_changes_enabled %}
+<section class="card">
+  <h2 class="card-title">VLAN changes</h2>
+  <p class="lead">
+    Off: this version of NXray can also create, rename and delete VLANs and set
+    the VLANs on the front ports, but NXray's role on the switch
+    ({{ role_name }}) was made before that and does not allow it yet. NXray signs
+    in to the switch over SSH once more with the admin login below and adds the
+    VLAN rules to the role. The admin password is used for this only and never
+    stored.
+  </p>
+  {{ admin_form("Turn on VLAN changes", false) }}
+</section>
+{% endif %}
+{% else %}
+  <p class="lead">
+    Off: NXray's account can only read. Turning port and VLAN changes on gives it a role
+    ({{ role_name }}) that allows exactly this: on the front ports only, turning
+    a port on or off, editing its description, and setting its mode (access or
+    trunk) and VLANs; creating, renaming and deleting VLANs; and saving the
+    configuration. The switch keeps refusing everything else, including mgmt0,
+    speeds, MTU and accounts.
+  </p>
+  <p class="lead">
+    NX-API cannot create this kind of role, so NXray signs in to the switch over
+    SSH once with the admin login below, types the role in, and checks it took.
+    The admin password is used for this only and never stored.
+  </p>
+  {{ admin_form("Turn on port and VLAN changes", true) }}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Change the switch address</h2>
+  <p class="lead">
+    For when the switch's management address or NX-API port changed. NXray
+    signs in at the new address with its own account first, and keeps the old
+    address if that does not work. No admin login is needed.
+  </p>
+  <form method="post" action="/switch/address" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="addr_host">Switch address</label>
+    <input id="addr_host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="addr_port">NX-API port</label>
+    <input id="addr_port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <button type="submit" class="btn btn-primary">Change address</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Run setup again</h2>
+  <p class="lead">
+    For when NXray's login stopped working: the account's password was changed
+    or the account was removed on the switch, or NXray can no longer read its
+    stored copy. NXray signs in to the switch's NX-API once with the admin login
+    below and gives its account {{ connection.username }} a new random password,
+    or makes it again under the same name if it is gone. The account keeps its
+    permissions: port changes stay on if the switch still has the
+    {{ role_name }} role. The admin password is used for this only and never
+    stored.
+  </p>
+  <p class="hint">
+    To use another account name instead, press Forget this switch and set it up
+    again with the new name.
+  </p>
+  <form method="post" action="/switch/repair" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="rp_host">Switch address</label>
+    <input id="rp_host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="rp_port">NX-API port</label>
+    <input id="rp_port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <label for="rp_admin_user">Switch admin username</label>
+    <input id="rp_admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="rp_admin_password">Switch admin password</label>
+    <input id="rp_admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Run setup again</button>
+  </form>
+</section>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Set up the switch</h2>
+  <p class="lead">
+    NXray signs in to the switch's NX-API once with an admin login, creates its
+    own read-only account (role network-operator) with a long random password,
+    and from then on uses only that account. The admin password is used for
+    this setup only and is never stored.
+  </p>
+
+  <form method="post" action="/switch/setup" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="host">Switch address</label>
+    <input id="host" name="host" type="text" value="{{ form.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="port">NX-API port</label>
+    <input id="port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
+
+    <label for="admin_user">Switch admin username</label>
+    <input id="admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="admin_password">Switch admin password</label>
+    <input id="admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="account_name">Name for NXray's account on the switch</label>
+    <input id="account_name" name="account_name" type="text" value="{{ form.account_name }}"
+           required spellcheck="false" maxlength="28">
+    <p class="hint">
+      Each NXray install needs its own name, for example nxray on the production
+      machine and nxray-dev on a test machine. Setup stops if the name already
+      exists on the switch.
+    </p>
+
+    <p class="warning">
+      When the account is made, NXray runs <code>copy running-config startup-config</code>
+      so the account survives a restart of the switch. That also saves any other
+      changes on the switch that have not been saved yet.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration after creating the account.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Create the account and connect</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

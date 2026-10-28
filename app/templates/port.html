@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% from "_chart.html" import chart, range_links %}
+{% block title %}{{ name }} — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+{% set can_change = role in ("admin", "operator") %}
+<p class="breadcrumb"><a href="/ports">← All ports</a></p>
+<h1 class="page-title">{{ name }}</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% elif ports is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message }}</p>
+</div>
+{% elif port is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">The switch has no port called {{ name }}.</p>
+</div>
+{% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if connection.unsaved_changes and can_change %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="port">
+    <input type="hidden" name="port" value="{{ name }}">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+<div class="grid">
+  <section class="card">
+    <h2 class="card-title">Port</h2>
+    <dl class="facts">
+      <dt>State</dt>
+      <dd><span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
+        {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}</dd>
+      <dt>Description</dt><dd>{{ port.description or "none" }}</dd>
+      <dt>Speed</dt><dd>{{ port.speed }}</dd>
+      <dt>VLAN</dt><dd>{{ port.vlan }}{% if port.mode %} ({{ port.mode }}){% endif %}</dd>
+      <dt>MTU</dt><dd>{{ port.mtu }}</dd>
+      <dt>Hardware</dt><dd>{{ port.hardware }}</dd>
+      <dt>MAC address</dt><dd>{{ port.mac }}</dd>
+      <dt>Last link change</dt><dd>{{ port.last_flap }}</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Transceiver</h2>
+    {% if port.transceiver.present %}
+    <dl class="facts">
+      <dt>Type</dt><dd>{{ port.transceiver.type }}</dd>
+      <dt>Vendor</dt><dd>{{ port.transceiver.vendor }}</dd>
+      <dt>Part number</dt><dd>{{ port.transceiver.part_number }}</dd>
+      <dt>Serial number</dt><dd>{{ port.transceiver.serial }}</dd>
+    </dl>
+    {% else %}
+    <p class="lead">Nothing plugged in.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Traffic</h2>
+    <dl class="facts">
+      <dt>In now</dt><dd>{{ port.in_bits_per_second|rate }}</dd>
+      <dt>Out now</dt><dd>{{ port.out_bits_per_second|rate }}</dd>
+      <dt>Received</dt><dd>{{ port.in_bytes|bytes }} in {{ "{:,}".format(port.in_packets) }} packets</dd>
+      <dt>Sent</dt><dd>{{ port.out_bytes|bytes }} in {{ "{:,}".format(port.out_packets) }} packets</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Counters</h2>
+    <table class="table">
+      <tbody>
+        {% for key, label in counter_labels.items() %}
+        <tr><td>{{ label }}</td><td class="num">{{ "{:,}".format(port.counters.get(key, 0)) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<section class="card">
+  <h2 class="card-title">Change this port</h2>
+  {% if not can_change %}
+  <p class="lead">Your role ({{ role }}) can look at ports but not change them.</p>
+  {% elif connection.changes_enabled %}
+  <form method="post" action="/ports/change" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <input type="hidden" name="action" value="description">
+    <label for="description">Description</label>
+    <input id="description" name="description" type="text" value="{{ description }}"
+           maxlength="254" spellcheck="false">
+    <p class="hint">Up to 254 plain characters, no "?" or ";". Leave empty to remove it.</p>
+    <button type="submit" class="btn btn-primary">Change description</button>
+  </form>
+  <form method="post" action="/ports/change" class="inline-actions">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    {% if port.admin_up %}
+    <input type="hidden" name="action" value="off">
+    <button type="submit" class="btn btn-quiet">Turn off this port</button>
+    {% else %}
+    <input type="hidden" name="action" value="on">
+    <button type="submit" class="btn btn-quiet">Turn on this port</button>
+    {% endif %}
+  </form>
+  <p class="note">Each change asks you to confirm first.</p>
+  {% else %}
+  <p class="lead">Port changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn this port on or off, edit its description and set its VLANs.</p>
+  {% endif %}
+</section>
+
+{% if vlans %}
+<section class="card">
+  <h2 class="card-title">VLANs on this port</h2>
+  {% if not vlans.switchport %}
+  <p class="lead">This is a routed port, so it has no VLANs.</p>
+  {% else %}
+  <dl class="facts">
+    <dt>Mode</dt><dd>{{ vlans.mode }}</dd>
+    {% if vlans.mode == "trunk" %}
+    <dt>Native (untagged) VLAN</dt><dd>{{ vlans.native_vlan }}{% if view.get(vlans.native_vlan) %} ({{ view.get(vlans.native_vlan).name }}){% else %} <span class="reason">not created on the switch</span>{% endif %}</dd>
+    <dt>VLANs carried</dt><dd>{{ vlans.allowed_text }}</dd>
+    {% else %}
+    <dt>Access VLAN</dt><dd>{{ vlans.access_vlan }}{% if view.get(vlans.access_vlan) %} ({{ view.get(vlans.access_vlan).name }}){% else %} <span class="reason">not created on the switch</span>{% endif %}</dd>
+    {% endif %}
+  </dl>
+  {% if connection.vlan_changes_enabled and can_change %}
+  <form method="post" action="/ports/vlans" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <fieldset class="choice">
+      <legend>Mode</legend>
+      <label class="check"><input type="radio" name="mode" value="access" {% if vlan_form.mode != "trunk" %}checked{% endif %}> Access: one VLAN, untagged</label>
+      <label class="check"><input type="radio" name="mode" value="trunk" {% if vlan_form.mode == "trunk" %}checked{% endif %}> Trunk: several VLANs, tagged</label>
+    </fieldset>
+    <label for="access_vlan">Access VLAN (used in access mode)</label>
+    <select id="access_vlan" name="access_vlan">
+      {% for vlan in view.vlans %}
+      <option value="{{ vlan.id }}" {% if vlan_form.access_vlan == vlan.id|string %}selected{% endif %}>{{ vlan.id }} {{ vlan.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="native_vlan">Native VLAN (trunk mode: carries untagged traffic)</label>
+    <select id="native_vlan" name="native_vlan">
+      {% for vlan in view.vlans %}
+      <option value="{{ vlan.id }}" {% if vlan_form.native_vlan == vlan.id|string %}selected{% endif %}>{{ vlan.id }} {{ vlan.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="allowed">VLANs carried (trunk mode)</label>
+    <input id="allowed" name="allowed" type="text" value="{{ vlan_form.allowed }}" spellcheck="false">
+    <p class="hint">Numbers and ranges such as 10,20-30, or all (1-4094), or none. This replaces the whole list.</p>
+    <button type="submit" class="btn btn-primary">Change VLANs</button>
+  </form>
+  <p class="note">The change asks you to confirm first. VLANs are created on the <a href="/vlans">VLANs page</a>.</p>
+  {% elif connection.changes_enabled and can_change %}
+  <p class="lead">VLAN changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to set this port's VLANs.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+{{ range_links("/ports/detail", range, ranges, "name=" ~ (name|urlencode) ~ "&") }}
+{% for view in charts %}
+{{ chart(view) }}
+{% endfor %}
+<p class="note">"Now" is the average over the last 30 seconds. Totals count since the counters were last cleared.</p>
+{% endif %}
+{% endblock %}

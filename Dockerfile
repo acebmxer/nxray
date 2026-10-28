@@ -30,13 +30,46 @@ RUN pip uninstall --yes pip setuptools wheel 2>/dev/null || true
 
 FROM python:3.14-slim
 
-# Same upgrade as the build stage; this is the stage that ships.
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Same upgrade as the build stage; this is the stage that ships. nginx is
+# for built-in HTTPS (NXRAY_ENABLE_HTTPS, off by default): it sits in front of
+# the app only when that setting is on; see docker/entrypoint.sh. Debian's
+# package enables a system service and log directories nothing here uses.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled /etc/nginx/conf.d
+
+# The Docker CLI and Compose plugin, for self-update (NXRAY_ENABLE_SELF_UPDATE,
+# off by default; see app/update.py). Client only, no daemon, so having them
+# here grants nothing: the privilege is the Docker socket mount, which the
+# compose sample leaves commented out.
+#
+# From Docker's own apt repository, not Debian's docker-cli/docker-compose
+# packages: Debian's Compose predates `format: raw` in env_file, which
+# docker-compose.yml.example needs to hand the Argon2 hash to the container
+# unmangled, and would refuse to read the file the update recreates from.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && . /etc/os-release \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $VERSION_CODENAME stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && apt-get purge -y --auto-remove curl gnupg \
+    && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.asc
+
+# Set only by docker-compose.dev.yml, never by the release workflow, so it is
+# empty on every published image. An image built from source gets its own
+# digest, which differs from the published one whether it is behind or ahead,
+# so the update check must not call it out of date.
+ARG NXRAY_DEV_BUILD=""
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
-    NXRAY_DATA_DIR=/data
+    NXRAY_DATA_DIR=/data \
+    NXRAY_DEV_BUILD=${NXRAY_DEV_BUILD}
 
 WORKDIR /srv/nxray
 
@@ -48,18 +81,23 @@ RUN python -m pip uninstall --yes pip 2>/dev/null || true \
 
 COPY --from=build /opt/venv /opt/venv
 COPY app/ ./app/
+COPY docker/nginx.conf.template /etc/nxray/nginx.conf.template
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/nxray-entrypoint
 
-# Non-root throughout. The data volume is chowned so the app can write the
-# SQLite database and the session signing key to it.
+# Non-root throughout, nginx included (8080 and 8443 are unprivileged ports).
+# The data volume is chowned so the app can write the SQLite database, the
+# session signing key and, with HTTPS on, the certificate to it.
 RUN useradd --system --create-home --uid 10001 nxray \
     && mkdir -p /data \
     && chown -R nxray:nxray /data /srv/nxray
 USER nxray
 
 VOLUME ["/data"]
-EXPOSE 8080
+# 8080: the app over plain HTTP, or with HTTPS on, a redirect to 8443.
+EXPOSE 8080 8443
 
+# With HTTPS on this asks nginx, not just the app behind it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status == 200 else 1)"
+    CMD ["python", "-m", "app.healthcheck"]
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+ENTRYPOINT ["/usr/local/bin/nxray-entrypoint"]

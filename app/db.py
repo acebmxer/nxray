@@ -34,6 +34,103 @@ _MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_login_attempts_ip_time ON login_attempts (ip, attempted_at);
     """,
+    # 1 -> 2: the switch NXray talks to, and its own account on it. One row
+    # (id = 1). The password is AES-GCM encrypted (app/crypto.py); the admin
+    # login used during setup is never stored.
+    """
+    CREATE TABLE switch_connection (
+        id                 INTEGER PRIMARY KEY CHECK (id = 1),
+        host               TEXT NOT NULL,
+        port               INTEGER NOT NULL,
+        username           TEXT NOT NULL,
+        password_encrypted TEXT NOT NULL,
+        switch_hostname    TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        config_saved       INTEGER NOT NULL,
+        last_tested_at     REAL,
+        last_test_ok       INTEGER,
+        last_test_message  TEXT
+    );
+    """,
+    # 2 -> 3: port changes. changes_enabled_at is when NXray's account was
+    # given the port-changes role; NXray leaves the switch alone until
+    # paused_until so the switch drops its cached session for the account
+    # and applies the role. unsaved_changes is set by a port change and
+    # cleared by Save config.
+    """
+    ALTER TABLE switch_connection ADD COLUMN changes_enabled_at REAL;
+    ALTER TABLE switch_connection ADD COLUMN paused_until REAL;
+    ALTER TABLE switch_connection ADD COLUMN unsaved_changes INTEGER NOT NULL DEFAULT 0;
+    """,
+    # 3 -> 4: VLAN changes. role_version is the rule set NXray's account was
+    # given (app/port_changes.py ROLE_VERSION): 0 none, 1 port rules only,
+    # 2 port and VLAN rules. Installs that turned port changes on before
+    # this have version 1.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_version INTEGER NOT NULL DEFAULT 0;
+    UPDATE switch_connection SET role_version = 1 WHERE changes_enabled_at IS NOT NULL;
+    """,
+    # 4 -> 5: NXray's own sign-in accounts (app/users.py). Before this, the
+    # only account was the one in nxray.env; it becomes the first admin row
+    # at the next start (users.bootstrap_admin). Names are unique whatever
+    # their case. sessions.username stays a bare name: a session of a
+    # removed or disabled account is refused when it is looked up
+    # (security.get_session_user).
+    """
+    CREATE TABLE users (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        username       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash  TEXT NOT NULL,
+        role           TEXT NOT NULL CHECK (role IN ('admin', 'operator', 'viewer')),
+        disabled       INTEGER NOT NULL DEFAULT 0,
+        created_at     REAL NOT NULL
+    );
+    """,
+    # 5 -> 6: optional two-factor sign-in, per account (app/users.py,
+    # app/totp.py). totp_secret_encrypted is AES-GCM encrypted like the
+    # switch password: whoever reads it can make codes forever. It is
+    # written when setup starts, while totp_enabled is still 0, and only
+    # counts once the account confirms a code. totp_last_step is the last
+    # 30-second step a code was accepted for, so the same code can't be used
+    # twice. totp_backup_codes is a JSON list of SHA-256 hashes; a used code
+    # is removed from it.
+    """
+    ALTER TABLE users ADD COLUMN totp_secret_encrypted TEXT;
+    ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN totp_backup_codes TEXT NOT NULL DEFAULT '[]';
+    """,
+    # 6 -> 7: self-update (app/update.py). One row (id = 1). latest_digest is
+    # what GHCR's :latest pointed at when last checked; available is set when
+    # that is not what this container runs. in_progress is set from pressing
+    # Update until the replacement container starts and clears it
+    # (update.finish_pending_update). last_result is "success", or a failure
+    # message; last_result_at lets a success age off the page.
+    """
+    CREATE TABLE update_state (
+        id                INTEGER PRIMARY KEY CHECK (id = 1),
+        latest_digest     TEXT,
+        latest_checked_at REAL,
+        available         INTEGER NOT NULL DEFAULT 0,
+        in_progress       INTEGER NOT NULL DEFAULT 0,
+        started_at        REAL,
+        last_result       TEXT NOT NULL DEFAULT '',
+        last_result_at    REAL
+    );
+    """,
+    # 7 -> 8: history (app/history.py). One row per number per sample: metric
+    # says what it is, item names the sensor or port (empty for whole-switch
+    # numbers). Rows older than 30 days are deleted by the sampler.
+    """
+    CREATE TABLE history (
+        ts     REAL NOT NULL,
+        metric TEXT NOT NULL,
+        item   TEXT NOT NULL DEFAULT '',
+        value  REAL NOT NULL
+    );
+    CREATE INDEX idx_history_series ON history (metric, item, ts);
+    CREATE INDEX idx_history_ts ON history (ts);
+    """,
 ]
 
 

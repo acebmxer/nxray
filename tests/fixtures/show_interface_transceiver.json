@@ -1,0 +1,222 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "Ethernet1/1",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/2",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/3",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/4",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/5",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/6",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/7",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/8",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/9",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/10",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/11",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/12",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/13",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/14",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/15",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/16",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/17",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/18",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/19",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/20",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/21",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/22",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/23",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/24",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/25",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/26",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/27",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/28",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/29",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/30",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/31",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/32",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/33",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/34",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/35",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/36",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/37",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/38",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/39",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/40",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/41",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/42",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/43",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/44",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/45",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/46",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/47",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/48",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/49",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/50",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/51",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/52",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/53",
+        "sfp": "not present"
+      },
+      {
+        "interface": "Ethernet1/54",
+        "sfp": "not present"
+      }
+    ]
+  }
+}

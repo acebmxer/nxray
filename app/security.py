@@ -8,6 +8,7 @@ browser to forget it.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 import sqlite3
@@ -22,17 +23,24 @@ from app.db import open_db
 
 SESSION_COOKIE = "nxray_session"
 
+# Carries an account from the password step of a two-factor sign-in to the
+# code step (/login/2fa). Not a session: it proves only that the password was
+# right a moment ago, opens no other page, and runs out after a few minutes.
+PENDING_2FA_COOKIE = "nxray_pending_2fa"
+PENDING_2FA_MINUTES = 5
+
 # argon2-cffi's defaults are the RFC 9106 low-memory profile, which suits a
 # cost paid once per interactive login.
 _hasher = PasswordHasher()
 
-# Checked against when the username is wrong, so a wrong username and a wrong
-# password cost the same time and cannot be told apart from outside.
-_DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
+# Checked against when there is no such account (app/users.py authenticate),
+# so a wrong username and a wrong password cost the same time and cannot be
+# told apart from outside.
+DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
 
 
 def hash_password(plain: str) -> str:
-    """Return an Argon2id hash for storage in the environment."""
+    """Return an Argon2id hash for storage."""
     return _hasher.hash(plain)
 
 
@@ -42,17 +50,6 @@ def verify_password(plain: str, stored_hash: str) -> bool:
         return _hasher.verify(stored_hash, plain)
     except (VerifyMismatchError, VerificationError, InvalidHashError, ValueError):
         return False
-
-
-def check_credentials(username: str, password: str, admin_user: str, admin_hash: str) -> bool:
-    """True only for the configured admin's username and password.
-
-    The password is always verified, against a dummy hash when the username
-    is wrong, so the answer takes the same time either way.
-    """
-    user_ok = hmac.compare_digest(username.encode(), admin_user.encode())
-    password_ok = verify_password(password, admin_hash if user_ok else _DUMMY_HASH)
-    return user_ok and password_ok
 
 
 def _serializer(secret_key: str) -> URLSafeSerializer:
@@ -73,6 +70,49 @@ def unsign_session_id(cookie_value: str, secret_key: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _pending_serializer(secret_key: str) -> URLSafeSerializer:
+    # Its own salt, so a pending cookie can never pass as a session cookie
+    # or the other way round.
+    return URLSafeSerializer(secret_key, salt="nxray-pending-2fa")
+
+
+def _password_mark(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def sign_pending_2fa(username: str, password_hash: str, secret_key: str) -> str:
+    """The pending-2FA cookie value for an account whose password was just right.
+
+    It holds the name, the time, and a mark of the password hash, so a
+    password changed in the meantime makes it worthless.
+    """
+    payload = {"u": username, "t": time.time(), "p": _password_mark(password_hash)}
+    return _pending_serializer(secret_key).dumps(payload)
+
+
+def read_pending_2fa(cookie_value: str, secret_key: str) -> tuple[str, str] | None:
+    """(username, password mark) from a pending-2FA cookie; None if forged or too old."""
+    try:
+        payload = _pending_serializer(secret_key).loads(cookie_value)
+    except BadSignature:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    username, issued, mark = payload.get("u"), payload.get("t"), payload.get("p")
+    if not isinstance(username, str) or not isinstance(mark, str):
+        return None
+    if not isinstance(issued, int | float) or isinstance(issued, bool):
+        return None
+    if not 0 <= time.time() - issued <= PENDING_2FA_MINUTES * 60:
+        return None
+    return username, mark
+
+
+def pending_matches(mark: str, password_hash: str) -> bool:
+    """True when a pending cookie's mark belongs to this password hash."""
+    return hmac.compare_digest(mark, _password_mark(password_hash))
+
+
 def create_session(conn: sqlite3.Connection, username: str, session_hours: int) -> str:
     """Record a new session and return its id."""
     session_id = secrets.token_urlsafe(32)
@@ -86,7 +126,12 @@ def create_session(conn: sqlite3.Connection, username: str, session_hours: int) 
 
 
 def get_session_user(conn: sqlite3.Connection, session_id: str) -> str | None:
-    """Return the username of a live session; None if missing or expired."""
+    """Return the username of a live session.
+
+    None, and the session ended, when it expired or its account no longer
+    exists or is disabled: disabling an account signs it out on its next
+    click, not when its session runs out hours later.
+    """
     row = conn.execute(
         "SELECT username, expires_at FROM sessions WHERE id = ?", (session_id,)
     ).fetchone()
@@ -95,7 +140,13 @@ def get_session_user(conn: sqlite3.Connection, session_id: str) -> str | None:
     if row["expires_at"] < time.time():
         destroy_session(conn, session_id)
         return None
-    return row["username"]
+    account = conn.execute(
+        "SELECT username, disabled FROM users WHERE username = ?", (row["username"],)
+    ).fetchone()
+    if account is None or account["disabled"]:
+        destroy_session(conn, session_id)
+        return None
+    return account["username"]
 
 
 def touch_session(conn: sqlite3.Connection, session_id: str, session_hours: int) -> None:
@@ -113,6 +164,22 @@ def destroy_session(conn: sqlite3.Connection, session_id: str) -> None:
     conn.commit()
 
 
+def destroy_user_sessions(
+    conn: sqlite3.Connection, username: str, *, keep: str | None = None
+) -> int:
+    """Sign an account out everywhere, except the session ``keep``.
+
+    Used when its password changes or it is disabled. Returns how many
+    sessions ended.
+    """
+    cursor = conn.execute(
+        "DELETE FROM sessions WHERE username = ? COLLATE NOCASE AND id != ?",
+        (username, keep or ""),
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
 def purge_expired_sessions(conn: sqlite3.Connection) -> int:
     """Delete every expired session. Returns how many were removed."""
     cursor = conn.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))
@@ -123,10 +190,13 @@ def purge_expired_sessions(conn: sqlite3.Connection) -> int:
 def client_ip(request: Request) -> str:
     """The address login throttling is counted against.
 
-    The direct peer address only. X-Forwarded-For is deliberately ignored:
+    The direct peer address. X-Forwarded-For sent by a browser is ignored:
     anyone can send that header, and honouring it would let a caller pick a
-    fresh address for every guess. Support for a trusted reverse proxy is a
-    planned setting, not a default.
+    fresh address for every guess. The one exception is NXray's own nginx
+    (built-in HTTPS): uvicorn then runs with --forwarded-allow-ips 127.0.0.1
+    and takes the address nginx puts in that header, which nginx overwrites
+    rather than appends to (docker/entrypoint.sh, docker/nginx.conf.template).
+    Support for a reverse proxy of your own is a planned setting.
     """
     return request.client.host if request.client else "unknown"
 
@@ -163,12 +233,38 @@ def purge_old_login_attempts(conn: sqlite3.Connection, window_minutes: int) -> i
     return cursor.rowcount
 
 
+def session_id_from_request(request: Request) -> str | None:
+    """The session id in the request's signed cookie, or None."""
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if not cookie:
+        return None
+    return unsign_session_id(cookie, request.app.state.settings.secret_key)
+
+
+def csrf_token(request: Request) -> str:
+    """The anti-forgery token forms on this session must send back.
+
+    Derived from the session id with the secret key, so it needs no storage,
+    changes with every login, and cannot be computed by another site.
+    """
+    session_id = session_id_from_request(request) or ""
+    key = request.app.state.settings.secret_key.encode()
+    return hmac.new(key, f"csrf:{session_id}".encode(), hashlib.sha256).hexdigest()
+
+
+def csrf_valid(request: Request, token: str) -> bool:
+    """True when a submitted form carries this session's token."""
+    if session_id_from_request(request) is None or not token:
+        return False
+    return hmac.compare_digest(token, csrf_token(request))
+
+
 def current_user(request: Request) -> str | None:
     """Return the logged-in username for a request, or None.
 
-    Reads the signed cookie, resolves it against the sessions table, and
-    slides the expiry forward. A session for a username that is no longer the
-    configured admin (NXRAY_ADMIN_USER changed) is ended.
+    Reads the signed cookie, resolves it against the sessions table (which
+    also checks the account still exists and is not disabled), and slides the
+    expiry forward.
     """
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
@@ -182,9 +278,6 @@ def current_user(request: Request) -> str | None:
     with open_db(settings.db_path) as conn:
         username = get_session_user(conn, session_id)
         if username is None:
-            return None
-        if username != settings.admin_user:
-            destroy_session(conn, session_id)
             return None
         touch_session(conn, session_id, settings.session_hours)
     return username

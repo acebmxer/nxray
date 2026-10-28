@@ -13,15 +13,21 @@ self-signed certificate it generates itself, and NXray deliberately accepts
 it: the traffic is still encrypted, but the switch's identity is not
 verified. This is a project decision, not an oversight.
 
-Only read-only ``show`` commands are exposed so far. Configuration changes
-will get their own, separately guarded method when the first feature needs
-one, so nothing that renders a page can change the switch by accident.
+Read-only ``show`` commands go through ``show()``. The few configuration
+commands NXray needs have their own methods (``create_user``,
+``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
+``delete_vlan``, ``configure_port_vlans``, ``save_config``), each building
+its commands from checked values, so nothing that renders a page can change
+the switch by accident and no caller can pass free text to the switch's
+configuration.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import re
+import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +45,66 @@ _HOSTNAME = re.compile(
 # " ;". Refusing ";" and line breaks keeps one request entry equal to exactly
 # one command, so a value that reaches show() cannot smuggle a second one in.
 _FORBIDDEN_IN_COMMAND = re.compile(r"[;\r\n]")
+
+# NX-OS user names: up to 28 characters. Stricter than NX-OS itself (which
+# also allows + and =) so a name is always safe inside a command line.
+_ACCOUNT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,27}$")
+
+# Only letters and digits: no character the NX-OS command line could read as
+# a separator, a quote or a request for help ("?").
+_SAFE_PASSWORD = re.compile(r"^[A-Za-z0-9]{8,64}$")
+
+# The only role NXray creates its own account with.
+ALLOWED_ROLES = frozenset({"network-operator"})
+
+# The role that allows port and VLAN changes (app/port_changes.py builds it).
+# The only role NXray ever adds to its account afterwards.
+PORT_CHANGES_ROLE = "nxray-ports"
+
+# A front-panel port: Ethernet1/3, or a breakout port such as Ethernet1/49/2.
+_PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
+
+# What NX-OS stores in a port description, found by trying them on the
+# switch: printable ASCII up to 254 characters. NX-API refuses "?" and ";"
+# anywhere in a request, and anything outside ASCII is silently cut off.
+DESCRIPTION_MAX = 254
+_DESCRIPTION = re.compile(r"^[\x20-\x7e]*$")
+
+# VLAN numbers a port or the VLAN list can name. VLAN 1 always exists and
+# cannot be deleted; NX-OS keeps a block at the top (3968-4094 unless changed
+# on the switch) for itself and refuses to create those with its own message.
+VLAN_MIN = 1
+VLAN_MAX = 4094
+
+# What NX-OS 9.3 stores as a VLAN name, found by trying them on the switch:
+# no spaces ("% Invalid command"), and a name of 33 to 128 characters is
+# accepted but silently not stored. NXray allows the plainest subset.
+VLAN_NAME_MAX = 32
+_VLAN_NAME = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
+
+# One item of a VLAN list as typed: "10" or "10-20".
+_VLAN_LIST_ITEM = re.compile(r"^([0-9]{1,4})(?:-([0-9]{1,4}))?$")
+
+# The two port modes NXray sets.
+PORT_MODES = ("access", "trunk")
+
+# Names NX-OS keeps for itself, plus the switch's own admin account.
+RESERVED_ACCOUNT_NAMES = frozenset(
+    {
+        "admin", "adm", "bin", "daemon", "ftp", "ftpuser", "games", "gdm", "gopher",
+        "halt", "lp", "mail", "mailnull", "man", "mtsuser", "news", "nobody", "nscd",
+        "operator", "root", "rpc", "rpcuser", "shutdown", "sync", "sys", "uucp", "xfs",
+    }
+)  # fmt: skip
+
+# Saving the configuration can take a while on a busy switch.
+SAVE_CONFIG_TIMEOUT = 120.0
+
+# One save at a time from this process. NX-OS refuses a second copy while
+# one runs ("another request for config change is already in progress"),
+# so a double-clicked Save config would turn a save that worked into an
+# error on the page. A second save waits here for the first, then runs.
+_save_lock = threading.Lock()
 
 
 class NxapiError(Exception):
@@ -90,6 +156,107 @@ def is_valid_host(value: str) -> bool:
         return bool(_HOSTNAME.match(value))
 
 
+def validate_account_name(name: str) -> str:
+    """Return the name, or raise ValueError if NXray would not use it on a switch."""
+    if not _ACCOUNT_NAME.match(name):
+        raise ValueError(
+            "an account name is 1-28 characters: a letter first, then letters, "
+            "digits, dots, dashes or underscores"
+        )
+    if name.lower() in RESERVED_ACCOUNT_NAMES:
+        raise ValueError(f"{name!r} is reserved on the switch; pick another name")
+    return name
+
+
+def validate_port_name(name: str) -> str:
+    """Return the name, or raise ValueError if it is not a front-panel Ethernet port."""
+    if not _PORT_NAME.match(name):
+        raise ValueError(f"{name!r} is not a front-panel port name such as Ethernet1/3")
+    return name
+
+
+def validate_description(text: str) -> str:
+    """Return the description as the switch will store it, or raise ValueError.
+
+    Leading spaces are dropped (the switch drops them too). An empty result
+    means "no description".
+    """
+    cleaned = text.lstrip(" ").rstrip("\r\n")
+    if len(cleaned) > DESCRIPTION_MAX:
+        raise ValueError(f"a description is at most {DESCRIPTION_MAX} characters")
+    if not _DESCRIPTION.match(cleaned):
+        raise ValueError(
+            "a description can only use plain letters, digits, spaces and the usual "
+            "punctuation (no accented letters, tabs or line breaks)"
+        )
+    if "?" in cleaned or ";" in cleaned:
+        raise ValueError('a description cannot contain "?" or ";" (NX-API refuses them)')
+    return cleaned
+
+
+def validate_vlan_id(value: int | str) -> int:
+    """Return the VLAN number as an int, or raise ValueError if it is not 1-4094."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not VLAN_MIN <= int(text) <= VLAN_MAX:
+        raise ValueError(f"a VLAN is a number from {VLAN_MIN} to {VLAN_MAX}")
+    return int(text)
+
+
+def validate_vlan_name(name: str) -> str:
+    """Return the VLAN name, or raise ValueError if the switch would not store it."""
+    cleaned = name.strip()
+    if not _VLAN_NAME.match(cleaned):
+        raise ValueError(
+            f"a VLAN name is 1-{VLAN_NAME_MAX} letters, digits, dots, dashes or "
+            "underscores, with no spaces"
+        )
+    return cleaned
+
+
+def parse_vlan_list(text: str) -> list[int]:
+    """Turn a typed VLAN list into numbers: "10,20-22" gives [10, 20, 21, 22].
+
+    "all" gives 1-4094 and "none" (or nothing) gives []. Raises ValueError
+    for anything else, so only numbers reach a command.
+    """
+    cleaned = text.strip().lower()
+    if cleaned == "all":
+        return list(range(VLAN_MIN, VLAN_MAX + 1))
+    if cleaned in ("none", ""):
+        return []
+    found: set[int] = set()
+    # Spaces are allowed around the commas only: "10 20" is refused, not read as 1020.
+    for item in (part.strip() for part in cleaned.split(",")):
+        match = _VLAN_LIST_ITEM.match(item)
+        if not match:
+            raise ValueError(
+                f"{item!r} is not a VLAN or range; write VLANs like 10,20-30, or all, or none"
+            )
+        first = validate_vlan_id(match.group(1))
+        last = validate_vlan_id(match.group(2)) if match.group(2) else first
+        if last < first:
+            raise ValueError(f"the range {item} runs backwards")
+        found.update(range(first, last + 1))
+    return sorted(found)
+
+
+def format_vlan_list(vlans: Iterable[int]) -> str:
+    """[1, 10, 11, 12, 30] -> "1,10-12,30", as the switch writes it; [] -> "none"."""
+    ordered = sorted({validate_vlan_id(vlan) for vlan in vlans})
+    if not ordered:
+        return "none"
+    parts: list[str] = []
+    start = previous = ordered[0]
+    for vlan in [*ordered[1:], None]:
+        if vlan is not None and vlan == previous + 1:
+            previous = vlan
+            continue
+        parts.append(str(start) if start == previous else f"{start}-{previous}")
+        if vlan is not None:
+            start = previous = vlan
+    return ",".join(parts)
+
+
 def validate_show_command(command: str) -> str:
     """Return the command stripped, or raise ValueError if it is not a lone show."""
     cleaned = command.strip()
@@ -113,13 +280,24 @@ def build_payload(commands: list[str]) -> list[dict[str, Any]]:
     ]
 
 
-def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
+def parse_response(
+    payload: Any,
+    commands: list[str],
+    labels: list[str] | None = None,
+    allow_text: bool = False,
+) -> list[dict[str, Any]]:
     """Turn a JSON-RPC reply into one body per command, in request order.
 
     NX-API answers a one-command request with a single object rather than a
     one-element list, so both shapes are accepted. A command that prints
     nothing comes back with a null body, returned here as an empty dict.
+
+    ``labels`` replace the commands in error messages, for commands that
+    carry a secret (a password) that must never reach a log or a page.
+    ``allow_text`` accepts a plain-text answer (configuration commands have
+    no structured output) and returns it as ``{"text": ...}``.
     """
+    names = labels if labels is not None else commands
     entries = payload if isinstance(payload, list) else [payload]
     if len(entries) != len(commands):
         raise NxapiProtocolError(
@@ -133,7 +311,7 @@ def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
         by_id[entry["id"]] = entry
 
     bodies: list[dict[str, Any]] = []
-    for index, command in enumerate(commands, start=1):
+    for index, command in enumerate(names, start=1):
         entry = by_id.get(index)
         if entry is None:
             raise NxapiProtocolError(f"no answer for {command!r}")
@@ -148,6 +326,8 @@ def parse_response(payload: Any, commands: list[str]) -> list[dict[str, Any]]:
             bodies.append({})
         elif isinstance(body, dict):
             bodies.append(body)
+        elif allow_text and isinstance(body, str):
+            bodies.append({"text": body})
         else:
             raise NxapiProtocolError(f"{command!r} returned text, not structured data")
     return bodies
@@ -197,13 +377,153 @@ class NxapiClient:
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
+        return self._send(cleaned, cleaned, self._target.timeout)
 
+    def create_user(self, name: str, password: str, role: str) -> None:
+        """Create a local switch account. Needs an admin login.
+
+        Every value is checked before anything is sent, so the one command
+        built here can only ever be ``username <name> password <pw> role <r>``.
+        The password never appears in an error message.
+        """
+        validate_account_name(name)
+        if not _SAFE_PASSWORD.match(password):
+            raise ValueError("the password must be 8-64 letters and digits")
+        if role not in ALLOWED_ROLES:
+            raise ValueError(f"role {role!r} is not one NXray gives its account")
+        command = f"username {name} password {password} role {role}"
+        label = f"username {name} password ... role {role}"
+        self._send([command], [label], self._target.timeout, allow_text=True)
+
+    def give_role(self, name: str, role: str) -> None:
+        """Add NXray's port-changes role to an account. Needs an admin login.
+
+        Used by Run setup again when it makes NXray's account again: the
+        role must be on the account before its first sign-in, because the
+        switch keeps a signed-in account's roles until its NX-API session
+        ends.
+        """
+        validate_account_name(name)
+        if role != PORT_CHANGES_ROLE:
+            raise ValueError(f"role {role!r} is not one NXray gives its account")
+        command = f"username {name} role {role}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def delete_user(self, name: str) -> None:
+        """Remove a local switch account. Needs an admin login.
+
+        Only used to undo an account NXray created moments earlier when the
+        rest of setup failed, so a retry is not blocked by a leftover. The
+        switch refuses it while the account has an NX-API session.
+        """
+        validate_account_name(name)
+        command = f"no username {name}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port(
+        self, name: str, *, description: str | None = None, enabled: bool | None = None
+    ) -> None:
+        """Set one port's description and/or turn it on or off, in one request.
+
+        ``description=""`` removes the description. Only these two settings
+        exist here, matching the role NXray's account is given for them.
+        """
+        validate_port_name(name)
+        if description is None and enabled is None:
+            raise ValueError("nothing to change")
+        commands = [f"interface {name}"]
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if enabled is not None:
+            commands.append("no shutdown" if enabled else "shutdown")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_vlan(self, vlan_id: int, name: str | None = None) -> None:
+        """Create a VLAN, or rename one: ``vlan <n>`` then ``name <name>``.
+
+        ``vlan <n>`` creates the VLAN when it does not exist yet and only
+        selects it when it does, so the caller decides which one it means.
+        """
+        vlan = validate_vlan_id(vlan_id)
+        commands = [f"vlan {vlan}"]
+        if name is not None:
+            commands.append(f"name {validate_vlan_name(name)}")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_vlan(self, vlan_id: int) -> None:
+        """``no vlan <n>``. VLAN 1 is refused here as it is on the switch."""
+        vlan = validate_vlan_id(vlan_id)
+        if vlan == 1:
+            raise ValueError("VLAN 1 cannot be deleted")
+        command = f"no vlan {vlan}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port_vlans(
+        self,
+        name: str,
+        *,
+        mode: str | None = None,
+        access_vlan: int | None = None,
+        native_vlan: int | None = None,
+        allowed_vlans: list[int] | None = None,
+    ) -> None:
+        """Set a port's mode and VLANs, in one request; only the values given are sent.
+
+        ``mode`` is access or trunk. ``allowed_vlans`` is the trunk's whole
+        list (it replaces the old one); an empty list allows none.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        if mode is not None:
+            if mode not in PORT_MODES:
+                raise ValueError(f"mode {mode!r} is not access or trunk")
+            commands.append(f"switchport mode {mode}")
+        if access_vlan is not None:
+            commands.append(f"switchport access vlan {validate_vlan_id(access_vlan)}")
+        if native_vlan is not None:
+            commands.append(f"switchport trunk native vlan {validate_vlan_id(native_vlan)}")
+        if allowed_vlans is not None:
+            commands.append(f"switchport trunk allowed vlan {format_vlan_list(allowed_vlans)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def save_config(self) -> None:
+        """``copy running-config startup-config``: keep changes over a reboot.
+
+        Saves from this process run one after another (``_save_lock``).
+        """
+        command = "copy running-config startup-config"
+        timeout = max(self._target.timeout, SAVE_CONFIG_TIMEOUT)
+        if not _save_lock.acquire(timeout=timeout):
+            raise NxapiCommandError(
+                f"{command!r}: another save from NXray is still running; try again shortly"
+            )
         try:
-            response = self._http.post(self._target.url, json=build_payload(cleaned))
+            (body,) = self._send([command], [command], timeout, allow_text=True)
+        finally:
+            _save_lock.release()
+        # The switch reports a failed copy as text, not as an error.
+        text = str(body.get("text", ""))
+        if "fail" in text.lower() or "error" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
+
+    def _send(
+        self,
+        commands: list[str],
+        labels: list[str],
+        timeout: float,
+        allow_text: bool = False,
+    ) -> list[dict[str, Any]]:
+        """POST commands as one JSON-RPC request and parse the answer."""
+        try:
+            response = self._http.post(
+                self._target.url, json=build_payload(commands), timeout=timeout
+            )
         except httpx.TimeoutException as exc:
             raise NxapiUnreachable(
-                f"no answer from {self._target.host}:{self._target.port} "
-                f"within {self._target.timeout:g} seconds"
+                f"no answer from {self._target.host}:{self._target.port} within {timeout:g} seconds"
             ) from exc
         except httpx.HTTPError as exc:
             raise NxapiUnreachable(
@@ -223,4 +543,4 @@ class NxapiClient:
                 "(is this address really NX-API?)"
             ) from exc
 
-        return parse_response(payload, cleaned)
+        return parse_response(payload, commands, labels, allow_text)

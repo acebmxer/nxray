@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Settings — NXray{% endblock %}
+
+{% block head_extra %}
+{% if update and update.in_progress %}<meta http-equiv="refresh" content="4;url=/settings">{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Settings</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">HTTPS</h2>
+  {% if enable_https %}
+  <p><span class="badge badge-ok">on</span> NXray serves its pages over HTTPS on
+  port {{ https_port }}, and plain HTTP visits are sent there.</p>
+
+  {% if certificate %}
+  <dl class="facts">
+    <dt>Certificate</dt><dd>{{ certificate.subject }}</dd>
+    {% if certificate.names %}<dt>Names</dt><dd>{{ certificate.names|join(", ") }}</dd>{% endif %}
+    <dt>Valid until</dt><dd>{{ certificate.not_after }}</dd>
+    <dt>Kind</dt>
+    <dd>{% if certificate.self_signed and certificate.subject == "CN=nxray" %}Self-signed, made by
+      NXray on its first start: browsers warn about it until you upload your own{% elif certificate.self_signed %}Uploaded,
+      self-signed: browsers warn unless they were set to trust it{% else %}Uploaded{% endif %}</dd>
+  </dl>
+  {% else %}
+  <p class="warning">NXray can't read its certificate file. Restart the container to make a
+  new self-signed one, or upload your own below.</p>
+  {% endif %}
+
+  <h3>Use your own certificate</h3>
+  <p class="hint">A certificate (with its chain, if it has one, the server's own first) and
+  its private key, both PEM files; the key without a passphrase. It must carry the name or
+  address you type into the browser. NXray checks they belong together and starts using
+  them at once, with no restart.</p>
+  <form method="post" action="/settings/certificate" enctype="multipart/form-data"
+        class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="cert_file">Certificate (.pem, .crt)</label>
+    <input id="cert_file" name="cert_file" type="file" accept=".pem,.crt,.cer" required>
+    <label for="key_file">Private key (.pem, .key)</label>
+    <input id="key_file" name="key_file" type="file" accept=".pem,.key" required>
+    <button type="submit" class="btn btn-primary">Upload certificate</button>
+  </form>
+  {% else %}
+  <p><span class="badge">off</span> NXray serves plain HTTP, so passwords and sessions
+  cross the network unencrypted.</p>
+  <p>To turn on built-in HTTPS, set <code>NXRAY_ENABLE_HTTPS=true</code> in
+  <code>nxray.env</code>, make sure the <code>8443:8443</code> line is in the ports of
+  <code>docker-compose.yml</code>, and run <code>docker compose up -d</code>. NXray then
+  makes a self-signed certificate (upload your own here afterwards) and answers on
+  <code>https://&lt;this machine&gt;:8443</code>.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Updates</h2>
+  {% if enable_self_update %}
+  <p><span class="badge badge-ok">on</span> NXray checks ghcr.io once a day for a newer image
+  and can replace its own container with it.</p>
+  <dl class="facts">
+    <dt>Running</dt><dd>v{{ app_version }}{% if dev_build %} (built from source){% endif %}</dd>
+    <dt>Last checked</dt><dd>{% if update_checked_at %}{{ update_checked_at }}{% else %}not yet{% endif %}</dd>
+  </dl>
+
+  {% if update.in_progress %}
+  <p class="alert" role="status">Updating: pulling the new image and restarting. This page reloads
+  itself; it is unavailable for a few seconds while the container is replaced.</p>
+  {% elif update.last_result == "success" %}
+  <p class="alert alert-ok" role="status">The update was applied. NXray v{{ app_version }} is running.</p>
+  {% elif update.last_result %}
+  <p class="alert alert-error" role="alert">The update failed: {{ update.last_result }}</p>
+  {% elif update.available %}
+  <p class="alert" role="status">A newer image is available. Applying it pulls the image and
+  restarts NXray; the page is unavailable for a few seconds, and signed-in sessions stay valid.</p>
+  {% elif dev_build %}
+  <p class="hint">This image was built from source, so it is never compared with the published
+  one.</p>
+  {% endif %}
+
+  <div class="button-row">
+    <form method="post" action="/settings/update/check" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet" {% if update.in_progress %}disabled{% endif %}>Check now</button>
+    </form>
+    {% if update.available and not update.in_progress %}
+    <form method="post" action="/settings/update/apply" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Update now</button>
+    </form>
+    {% endif %}
+    {% if update.last_result and not update.in_progress %}
+    <form method="post" action="/settings/update/dismiss" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Dismiss</button>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p><span class="badge">off</span> NXray never contacts ghcr.io or Docker. Update by hand with
+  <code>docker compose pull</code> then <code>docker compose up -d</code>.</p>
+  <p>To let NXray do it from this page, uncomment the <code>docker.sock</code> mount and the
+  <code>group_add</code> lines in <code>docker-compose.yml</code>, set
+  <code>NXRAY_ENABLE_SELF_UPDATE=true</code> in <code>nxray.env</code> and run
+  <code>docker compose up -d</code>. The Docker socket is root on the host, so read the note in
+  <a href="https://github.com/acebmxer/nxray/blob/main/docs/installation.md#self-update">the
+  installation guide</a> first.</p>
+  {% endif %}
+</section>
+{% endblock %}

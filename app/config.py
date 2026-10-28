@@ -59,12 +59,28 @@ class Settings:
     login_max_attempts: int
     login_lockout_minutes: int
     log_level: str
+    # Built-in HTTPS (docker/entrypoint.sh starts nginx in front of the app).
+    enable_https: bool = False
+    # The port browsers reach HTTPS on: the left number of the 8443 mapping in
+    # docker-compose.yml. Plain-HTTP visits are redirected there.
+    https_port: int = 8443
+    # Self-update (app/update.py): checks GHCR for a newer image and, on an
+    # admin's say-so, has the Docker socket recreate this container. Off
+    # unless the operator has mounted the socket; see docs/installation.md.
+    enable_self_update: bool = False
+    # True only on an image built from source (docker-compose.dev.yml sets
+    # the build argument): its digest is never the published one.
+    dev_build: bool = False
+    # Seconds between history samples (app/history.py); 0 turns history off.
+    history_interval: int = 60
 
     # Derived paths. Kept here so no other module builds a path by hand.
     db_path: Path = field(init=False)
+    tls_dir: Path = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "db_path", self.data_dir / "nxray.db")
+        object.__setattr__(self, "tls_dir", self.data_dir / "tls")
 
 
 def _load_or_create_secret_key(data_dir: Path) -> str:
@@ -123,14 +139,31 @@ def load_settings() -> Settings:
             f"NXRAY_LOG_LEVEL must be DEBUG, INFO, WARNING or ERROR, got {log_level!r}"
         )
 
+    # Built-in HTTPS means the browser is always on HTTPS (NXray's own nginx
+    # terminates it), so it implies the Secure cookie flag. NXRAY_HTTPS stays
+    # for the other case: a reverse proxy of your own, which NXray can't see.
+    enable_https = _env_bool("NXRAY_ENABLE_HTTPS", False)
+
+    history_interval = _env_int("NXRAY_HISTORY_INTERVAL", 60, 0, 3600)
+    if 0 < history_interval < 10:
+        raise ConfigError(
+            "NXRAY_HISTORY_INTERVAL must be 0 (history off) or at least 10 seconds, "
+            f"got {history_interval}"
+        )
+
     return Settings(
         data_dir=data_dir,
         admin_user=_env_str("NXRAY_ADMIN_USER", "admin") or "admin",
         admin_password_hash=password_hash,
         secret_key=_load_or_create_secret_key(data_dir),
-        https_only=_env_bool("NXRAY_HTTPS", False),
+        https_only=_env_bool("NXRAY_HTTPS", enable_https),
         session_hours=_env_int("NXRAY_SESSION_HOURS", 12, 1, 720),
         login_max_attempts=_env_int("NXRAY_LOGIN_MAX_ATTEMPTS", 5, 1, 100),
         login_lockout_minutes=_env_int("NXRAY_LOGIN_LOCKOUT_MINUTES", 15, 1, 1440),
         log_level=log_level,
+        enable_https=enable_https,
+        https_port=_env_int("NXRAY_HTTPS_PORT", 8443, 1, 65535),
+        enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
+        dev_build=_env_bool("NXRAY_DEV_BUILD", False),
+        history_interval=history_interval,
     )

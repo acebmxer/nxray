@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Backup codes — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ heading }}</h1>
+
+<section class="card">
+  <p class="alert alert-ok" role="status">Save these ten backup codes now: print
+  them or keep them in your password manager. This is the only time NXray shows
+  them.</p>
+
+  <ul class="backup-codes">
+    {% for code in codes %}
+    <li><code>{{ code }}</code></li>
+    {% endfor %}
+  </ul>
+
+  <p>If you lose your phone, type one of them instead of the app's code when you
+  sign in. Each works once.{% if turned_on %} Your other NXray sessions were
+  signed out when two-factor sign-in was turned on; this one stays.{% else %}
+  The backup codes you had before no longer work.{% endif %}</p>
+
+  <a class="btn btn-primary" href="/account">I saved them</a>
+</section>
+{% endblock %}

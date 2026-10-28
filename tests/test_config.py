@@ -19,10 +19,13 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "NXRAY_ADMIN_PASSWORD_HASH",
         "NXRAY_SECRET_KEY",
         "NXRAY_HTTPS",
+        "NXRAY_ENABLE_HTTPS",
+        "NXRAY_HTTPS_PORT",
         "NXRAY_SESSION_HOURS",
         "NXRAY_LOGIN_MAX_ATTEMPTS",
         "NXRAY_LOGIN_LOCKOUT_MINUTES",
         "NXRAY_LOG_LEVEL",
+        "NXRAY_HISTORY_INTERVAL",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("NXRAY_DATA_DIR", str(tmp_path))
@@ -100,3 +103,58 @@ def test_https_setting_is_read(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
     monkeypatch.setenv("NXRAY_HTTPS", "true")
     assert load_settings().https_only is True
+
+
+def test_built_in_https_is_off_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    settings = load_settings()
+    assert settings.enable_https is False and settings.https_only is False
+    assert settings.https_port == 8443 and settings.tls_dir == tmp_path / "tls"
+
+
+def test_built_in_https_turns_on_the_secure_cookie(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv("NXRAY_ENABLE_HTTPS", "yes")
+    monkeypatch.setenv("NXRAY_HTTPS_PORT", "9443")
+    settings = load_settings()
+    assert settings.enable_https and settings.https_only and settings.https_port == 9443
+    # An explicit NXRAY_HTTPS still wins.
+    monkeypatch.setenv("NXRAY_HTTPS", "false")
+    assert load_settings().https_only is False
+
+
+@pytest.mark.parametrize(
+    ("name", "value"), [("NXRAY_ENABLE_HTTPS", "maybe"), ("NXRAY_HTTPS_PORT", "0")]
+)
+def test_bad_https_settings_are_refused(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigError, match=name):
+        load_settings()
+
+
+def test_history_interval_defaults_to_a_minute(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    assert load_settings().history_interval == 60
+
+
+@pytest.mark.parametrize("value, expected", [("0", 0), ("10", 10), ("300", 300)])
+def test_history_interval_accepts_off_or_ten_seconds_and_up(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: int
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv("NXRAY_HISTORY_INTERVAL", value)
+    assert load_settings().history_interval == expected
+
+
+@pytest.mark.parametrize("value", ["5", "-1", "3601", "often"])
+def test_history_interval_outside_its_range_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv("NXRAY_HISTORY_INTERVAL", value)
+    with pytest.raises(ConfigError) as excinfo:
+        load_settings()
+    assert "NXRAY_HISTORY_INTERVAL" in str(excinfo.value)

@@ -1,0 +1,91 @@
+name: Publish beta (dev channel)
+
+# Run by hand from the Actions tab to build the image from `dev` and publish it
+# to GHCR as a beta:
+#
+#   :dev                  the dev channel; moves with every beta
+#   :X.Y.Z-beta.N         this beta (X.Y.Z from pyproject.toml, N = run number)
+#   :dev-<short sha>      the exact commit
+#
+# `:latest` and `:X.Y` are never touched; only a version tag (release.yml)
+# moves those. A container started from `:dev` follows the dev channel, and
+# Settings > Updates there compares against `:dev`.
+#
+# No git tag is created: a tag belongs on `main` after a merge.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build and push the beta to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only the dev branch is published as a beta
+        if: github.ref != 'refs/heads/dev'
+        run: |
+          echo "::error::Run this workflow on the dev branch (it was run on ${GITHUB_REF_NAME})."
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ghcr.io requires a lowercase path; the repository name is not
+      # guaranteed to be one.
+      - name: Work out the image name and beta version
+        id: name
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "::error::No version found in pyproject.toml"
+            exit 1
+          fi
+          echo "beta=${version}-beta.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ steps.name.outputs.image }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=dev
+            type=raw,value=${{ steps.name.outputs.beta }}
+            type=sha,prefix=dev-,format=short
+          labels: |
+            org.opencontainers.image.title=NXray
+            org.opencontainers.image.description=Web interface for Cisco Nexus switches, built on NX-API
+            org.opencontainers.image.version=${{ steps.name.outputs.beta }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Say what was published
+        run: |
+          {
+            echo "### Beta published"
+            echo
+            echo "Version: \`${{ steps.name.outputs.beta }}\`"
+            echo
+            echo "Tags:"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

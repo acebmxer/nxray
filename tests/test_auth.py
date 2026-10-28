@@ -5,10 +5,13 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.db import open_db
 from app.security import SESSION_COOKIE
+from app.users import create_user, get_user, set_disabled, set_password
 from tests.conftest import TEST_PASSWORD, TEST_USER, with_settings
 
 
@@ -98,17 +101,27 @@ def test_cookie_signed_with_another_key_is_rejected(
     assert other.get("/").status_code == 303
 
 
-def test_session_ends_when_the_admin_user_is_renamed(
-    settings: Settings, make_client: Callable[[Settings], TestClient]
+@pytest.mark.parametrize("cut_off", ["disabled", "password reset", "account gone"])
+def test_session_ends_when_its_account_is_cut_off(
+    settings: Settings, make_client: Callable[[Settings], TestClient], cut_off: str
 ) -> None:
-    first = make_client(settings)
-    assert _login(first, TEST_USER, TEST_PASSWORD).status_code == 303
-    cookie = first.cookies.get(SESSION_COOKIE)
-    assert cookie
+    client = make_client(settings)
+    with open_db(settings.db_path) as conn:
+        create_user(conn, "otto", "otto-password", "otto-password", "operator")
+    assert _login(client, "otto", "otto-password").status_code == 303
+    assert client.get("/").status_code == 200
 
-    renamed = make_client(with_settings(settings, admin_user="someone-else"))
-    renamed.cookies.set(SESSION_COOKIE, cookie)
-    assert renamed.get("/").status_code == 303
+    with open_db(settings.db_path) as conn:
+        otto = get_user(conn, "otto")
+        assert otto is not None
+        if cut_off == "disabled":
+            set_disabled(conn, otto.id, True)
+        elif cut_off == "password reset":
+            set_password(conn, otto.id, "a-new-password")
+        else:
+            conn.execute("DELETE FROM users WHERE id = ?", (otto.id,))
+            conn.commit()
+    assert client.get("/").status_code == 303
 
 
 def test_expired_session_is_refused(

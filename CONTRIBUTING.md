@@ -68,8 +68,10 @@ and `docs/configuration.md`.
 `app/db.py`. Editing an applied migration leaves existing databases behind.
 
 **Nothing changes the switch by accident.** Only `show` commands go through
-`NxapiClient.show()`. Configuration changes get their own, separately guarded
-method when the first feature needs one.
+`NxapiClient.show()`. Each configuration change has its own method
+(`create_user`, `delete_user`, `save_config`) that builds its one command
+from checked values; add a new method like them rather than a way to send
+free text. Every form that changes something calls `require_csrf` first.
 
 **Never commit real switch output unscrubbed.** Replace serial numbers,
 hostnames, addresses, usernames and port descriptions before adding a fixture.
@@ -84,3 +86,7 @@ hostnames, addresses, usernames and port descriptions before adding a fixture.
 Work happens on `dev` and reaches `main` through a pull request. The changelog
 version section is part of the branch the pull request carries. The tag is
 created on `main` after the merge.
+
+To publish a beta, open **Actions > Publish beta (dev channel) > Run
+workflow** with the `dev` branch selected. It pushes `:dev`, `:X.Y.Z-beta.N`
+and `:dev-<short sha>` to GHCR and creates no git tag.

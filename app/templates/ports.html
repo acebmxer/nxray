@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Ports — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Ports</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if current_role(request) == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% elif ports is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message }}</p>
+  {% if current_role(request) == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+<nav class="filters" aria-label="Show ports">
+  {% for key, label in [("all", "All"), ("up", "Up"), ("down", "Down"), ("errors", "With errors")] %}
+  <a class="filter{% if show == key %} filter-on{% endif %}" href="/ports?show={{ key }}">{{ label }} ({{ counts[key] }})</a>
+  {% endfor %}
+</nav>
+
+<section class="card card-flush">
+  <table class="table table-ports">
+    <thead>
+      <tr>
+        <th>Port</th><th>Description</th><th>State</th><th>Speed</th><th>VLAN</th>
+        <th>Transceiver</th><th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for port in shown %}
+      <tr>
+        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a></td>
+        <td>{{ port.description }}</td>
+        <td>
+          <span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
+          {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}
+        </td>
+        <td>{{ port.speed }}</td>
+        <td>{{ port.vlan }}</td>
+        <td>{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
+        <td class="num">{{ port.in_bits_per_second|rate }}</td>
+        <td class="num">{{ port.out_bits_per_second|rate }}</td>
+        <td class="num">{% if port.errors %}<span class="badge badge-crit">{{ port.errors }}</span>{% else %}0{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9">No ports match this filter.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<p class="note">
+  In and Out are the average over the last 30 seconds. Errors adds up input and
+  output errors and discards since the counters were last cleared. Read from the
+  switch when this page opened; reload for fresh values.
+</p>
+{% endif %}
+{% endblock %}

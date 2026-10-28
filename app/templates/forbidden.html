@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Not allowed — NXray{% endblock %}
+
+{% block content %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>Your role can't do that</h2>
+  <p>
+    This needs the {{ required_role }} role{% if required_role == "operator" %} or admin{% endif %}.
+    Your account is {{ role or "unknown" }}. Ask an NXray admin if you need it.
+  </p>
+  <p class="actions"><a class="btn btn-quiet" href="/">Back to the dashboard</a></p>
+</div>
+{% endblock %}

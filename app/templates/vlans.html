@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}VLANs — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+{% set can_change = role in ("admin", "operator") %}
+<h1 class="page-title">VLANs</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+  {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+{% if connection.unsaved_changes and can_change %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="vlans">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<section class="card card-flush">
+  <table class="table table-vlans">
+    <thead>
+      <tr>
+        <th>VLAN</th><th>Name</th><th>State</th><th>Used by</th>
+        {% if connection.vlan_changes_enabled and can_change %}<th>Change</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for vlan in view.vlans %}
+      <tr>
+        <td>{{ vlan.id }}</td>
+        <td>{{ vlan.name }}</td>
+        <td><span class="badge {{ 'badge-ok' if vlan.state == 'active' else 'badge-warn' }}">{{ vlan.state }}</span></td>
+        <td>
+          {% set using = usage[vlan.id] %}
+          {% if not using %}<span class="dim">no port</span>
+          {% elif using|length > 6 %}{{ using|length }} ports
+          {% else %}{% for name in using %}<a href="/ports/detail?name={{ name|urlencode }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </td>
+        {% if connection.vlan_changes_enabled and can_change %}
+        <td>
+          {% if vlan.id != 1 %}
+          <div class="row-actions">
+            <form method="post" action="/vlans/rename" class="row-form">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="vlan_id" value="{{ vlan.id }}">
+              <input name="name" type="text" value="{{ vlan.name }}" maxlength="{{ name_max }}"
+                     spellcheck="false" aria-label="New name for VLAN {{ vlan.id }}" required>
+              <button type="submit" class="btn btn-quiet">Rename</button>
+            </form>
+            <form method="post" action="/vlans/delete" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="vlan_id" value="{{ vlan.id }}">
+              <button type="submit" class="btn btn-quiet">Delete</button>
+            </form>
+          </div>
+          {% else %}<span class="dim">the default VLAN; cannot be renamed or deleted</span>{% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<p class="note">
+  Used by lists access ports in the VLAN, and trunks that use it as their native
+  VLAN or name it in their list of VLANs. A trunk that carries every VLAN (the
+  switch's default) is not listed. A VLAN that a port uses cannot be deleted:
+  move the port to another VLAN on its own page first.
+</p>
+
+<section class="card">
+  <h2 class="card-title">Create a VLAN</h2>
+  {% if not can_change %}
+  <p class="lead">Your role ({{ role }}) can look at VLANs but not change them.</p>
+  {% elif connection.vlan_changes_enabled %}
+  <form method="post" action="/vlans/create" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="vlan_id">VLAN number</label>
+    <input id="vlan_id" name="vlan_id" type="text" inputmode="numeric" value="{{ form.vlan_id }}"
+           required maxlength="4">
+    <p class="hint">2 to 3967. The switch keeps 3968 to 4094 for itself.</p>
+    <label for="vlan_name">Name (optional)</label>
+    <input id="vlan_name" name="name" type="text" value="{{ form.name }}" maxlength="{{ name_max }}"
+           spellcheck="false">
+    <p class="hint">Up to {{ name_max }} letters, digits, dots, dashes or underscores, no spaces. Without one the switch names it VLAN followed by its number.</p>
+    <button type="submit" class="btn btn-primary">Create VLAN</button>
+  </form>
+  {% else %}
+  <p class="lead">VLAN changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to create, rename and delete VLANs.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

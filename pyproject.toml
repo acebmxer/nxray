@@ -15,6 +15,11 @@ dependencies = [
     "itsdangerous>=2.2",
     "argon2-cffi>=23.1",
     "httpx>=0.27",
+    "cryptography>=43",
+    # SSH, only for the role that lets NXray change ports (app/switch_ssh.py).
+    "paramiko>=4",
+    # QR code on the two-factor setup page (app/totp.py); pure Python.
+    "segno>=1.6",
 ]
 
 [project.optional-dependencies]

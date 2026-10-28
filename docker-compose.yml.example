@@ -1,14 +1,19 @@
 services:
   nxray:
-    # Built from this folder. There is no published image yet; one on GHCR
-    # comes with the release workflow in a later stage. Until then, run
-    # this from a clone of the repository:
+    # Published to GHCR by .github/workflows/release.yml, so this file plus
+    # nxray.env is a complete deployment: no clone and no local build.
     #
-    #   cp docker-compose.yml.example docker-compose.yml
-    #   docker compose up -d --build
+    # Working from a clone instead? docker-compose.dev.yml builds the source
+    # beside you, and is used alongside this file:
     #
-    build: .
-    image: nxray:local
+    #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    #
+    # :latest tracks every release, so "docker compose pull" moves you onto a
+    # new version. Pin one instead to stay put until you choose to move:
+    #
+    #   image: ghcr.io/acebmxer/nxray:0.1.0
+    #
+    image: ghcr.io/acebmxer/nxray:latest
     container_name: nxray
     restart: unless-stopped
     env_file:
@@ -31,17 +36,48 @@ services:
       # container and never changes.
       #
       # This is plain HTTP: your NXray password and session travel
-      # unencrypted. Put NXray behind an HTTPS reverse proxy (and set
-      # NXRAY_HTTPS=true) for anything beyond a trusted management network.
+      # unencrypted. Turn on built-in HTTPS (NXRAY_ENABLE_HTTPS=true in
+      # nxray.env, and the 8443 line below), or put NXray behind an HTTPS
+      # reverse proxy of your own (and set NXRAY_HTTPS=true). With built-in
+      # HTTPS on, this port only redirects to HTTPS.
       # To allow only the Docker host itself (a reverse proxy on the same
       # machine), put the loopback address in front:
       #
       #   - "127.0.0.1:8080:8080"
       #
       - "8080:8080"
+      # HTTPS, answered only with NXRAY_ENABLE_HTTPS=true; nothing listens
+      # here otherwise. If you change the left number, set NXRAY_HTTPS_PORT
+      # in nxray.env to the same, so plain-HTTP visits are sent to the right
+      # port.
+      - "8443:8443"
     volumes:
-      # Holds the SQLite database and the session signing key.
+      # Holds the SQLite database, the session signing key and, with
+      # built-in HTTPS on, its certificate.
       - nxray-data:/data
+      #
+      # Self-update (NXRAY_ENABLE_SELF_UPDATE, off by default): lets an admin
+      # press "Update now" on the Settings page instead of running
+      # `docker compose pull && docker compose up -d` by hand. Uncomment this
+      # line and the group_add lines below AND set NXRAY_ENABLE_SELF_UPDATE=true
+      # in nxray.env. The mount alone does nothing. docker-compose.yml and
+      # nxray.env need no mounting in here: the pull and restart are handed to
+      # a throwaway container that mounts this folder at its real path.
+      #
+      # This gives the container the Docker socket, which is root on this
+      # machine: anything that can use it can start a privileged container.
+      # Enable it only where you already trust this image with root.
+      #
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # Self-update, continued: NXray runs as a non-root user and the socket is
+    # owned by root:docker, so without joining that group every call to it is
+    # "permission denied". Put your docker group's number here (the one the
+    # sample shows is only an example); find yours with:
+    #
+    #   getent group docker | cut -d: -f3
+    #
+    # group_add:
+    #   - "999"
 
 volumes:
   nxray-data:

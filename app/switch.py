@@ -271,3 +271,31 @@ def load_dashboard(client: NxapiClient) -> Dashboard:
         resources=parse_resources(resources),
         ports=parse_port_summary(interfaces),
     )
+
+
+def health_problems(dashboard: Dashboard) -> list[str]:
+    """What needs attention, in plain words; empty when everything is fine.
+
+    Based only on the switch's own judgement: a sensor's alarm status and
+    thresholds, and the status the switch reports for each fan and power
+    supply.
+    """
+    problems: list[str] = []
+    for sensor in dashboard.environment.temperatures:
+        if sensor.level == "crit":
+            problems.append(
+                f"Temperature {sensor.name} is {sensor.current_c}°C, at or above its "
+                f"major limit of {sensor.major_c}°C."
+            )
+        elif sensor.level == "warn":
+            problems.append(
+                f"Temperature {sensor.name} is {sensor.current_c}°C, at or above its "
+                f"minor limit of {sensor.minor_c}°C."
+            )
+    for fan in dashboard.environment.fans:
+        if not fan.ok:
+            problems.append(f"Fan {fan.name} reports {fan.status or 'no status'}.")
+    for supply in dashboard.environment.power_supplies:
+        if not supply.ok:
+            problems.append(f"Power supply {supply.number} reports {supply.status or 'no status'}.")
+    return problems
