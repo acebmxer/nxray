@@ -1,29 +1,40 @@
 name: Publish beta (dev channel)
 
-# Run by hand from the Actions tab to build the image from `dev` and publish it
-# to GHCR as a beta:
+run-name: ${{ inputs.description || 'Publish beta' }}
+
+# Run by hand from the Actions tab (Actions -> Publish beta -> Run workflow)
+# with the `dev` branch selected. It builds the image from `dev`, pushes it to
+# GHCR, and announces it as a GitHub pre-release:
 #
-#   :dev                  the dev channel; moves with every beta
-#   :X.Y.Z-beta.N         this beta (X.Y.Z from pyproject.toml, N = run number)
+#   :beta                 the beta channel; moves with every beta
+#   :X.Y.Z-beta.N         this beta
 #   :dev-<short sha>      the exact commit
+#   vX.Y.Z-beta.N         GitHub pre-release (never "latest")
+#
+# X.Y.Z is the version in pyproject.toml on the branch. N counts up per
+# version (v0.2.0-beta.1, .2, ...) from the beta tags that already exist. Once
+# vX.Y.Z is tagged as a release, a beta run stops until pyproject.toml is
+# bumped for the next release.
 #
 # `:latest` and `:X.Y` are never touched; only a version tag (release.yml)
-# moves those. A container started from `:dev` follows the dev channel, and
-# Settings > Updates there compares against `:dev`.
-#
-# A GitHub pre-release `vX.Y.Z-beta.N` is also created on the dev commit, so
-# the beta shows on the Releases page. It is marked pre-release, never latest.
+# moves those. A container started from `:beta` follows the beta channel, and
+# Settings > Updates there compares against `:beta`.
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
-  packages: write
+    inputs:
+      description:
+        description: Title shown in the Actions run list (optional)
+        required: false
+        type: string
 
 jobs:
-  publish:
-    name: Build and push the beta to GHCR
+  # Works out the beta name once, so the image and the pre-release agree on it.
+  prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      beta: ${{ steps.beta.outputs.tag }}
     steps:
       - name: Only the dev branch is published as a beta
         if: github.ref != 'refs/heads/dev'
@@ -31,6 +42,31 @@ jobs:
           echo "::error::Run this workflow on the dev branch (it was run on ${GITHUB_REF_NAME})."
           exit 1
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Name this beta
+        id: beta
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n 1)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::pyproject.toml must hold a plain x.y.z version, found '$version'"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "::error::v$version is already released; bump the version in pyproject.toml on this branch first"
+            exit 1
+          fi
+          last=$(git ls-remote --tags origin "refs/tags/v$version-beta.*" \
+            | sed -n 's|.*-beta\.\([0-9]*\)$|\1|p' | sort -n | tail -1)
+          echo "tag=$version-beta.$(( ${last:-0} + 1 ))" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: docker/setup-buildx-action@v4
@@ -43,16 +79,9 @@ jobs:
 
       # ghcr.io requires a lowercase path; the repository name is not
       # guaranteed to be one.
-      - name: Work out the image name and beta version
+      - name: Work out the image name
         id: name
-        run: |
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n 1)"
-          if [ -z "$version" ]; then
-            echo "::error::No version found in pyproject.toml"
-            exit 1
-          fi
-          echo "beta=${version}-beta.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/metadata-action@v6
         id: meta
@@ -60,13 +89,13 @@ jobs:
           images: ${{ steps.name.outputs.image }}
           flavor: latest=false
           tags: |
-            type=raw,value=dev
-            type=raw,value=${{ steps.name.outputs.beta }}
+            type=raw,value=beta
+            type=raw,value=${{ needs.prepare.outputs.beta }}
             type=sha,prefix=dev-,format=short
           labels: |
             org.opencontainers.image.title=NXray
             org.opencontainers.image.description=Web interface for Cisco Nexus switches, built on NX-API
-            org.opencontainers.image.version=${{ steps.name.outputs.beta }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.beta }}
 
       - uses: docker/build-push-action@v7
         with:
@@ -77,28 +106,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create the GitHub pre-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ steps.name.outputs.beta }}" \
-            --target "${GITHUB_SHA}" \
-            --prerelease \
-            --latest=false \
-            --generate-notes \
-            --title "v${{ steps.name.outputs.beta }}" \
-            --notes "Dev-channel beta. Image: \`${{ steps.name.outputs.image }}:dev\`"
+  # A beta is announced as a GitHub pre-release. Created only after the image
+  # is pushed, so the tag never exists for a build that failed.
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Say what was published
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA: ${{ needs.prepare.outputs.beta }}
         run: |
-          {
-            echo "### Beta published"
-            echo
-            echo "Version: \`${{ steps.name.outputs.beta }}\`"
-            echo
-            echo "Tags:"
-            echo
-            echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          tag="v$BETA"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          # What is new in this beta is what CHANGELOG.md lists under [Unreleased].
+          unreleased=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md)
+          notes=$(printf '%s\n\n%s' "Beta build from the dev branch, for testing before it reaches main. To run it, use the image tag :beta (or :$BETA to pin this build): $image:beta" "$unreleased")
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$tag" --prerelease --notes "$notes"

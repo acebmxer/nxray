@@ -233,9 +233,10 @@ To stay on one version until you choose to move, put that version in the
 compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.1.0`) and
 change it when you want to upgrade; then run the same two commands.
 
-To try betas, put `ghcr.io/acebmxer/nxray:dev` in the `image:` line. That tag
-is the dev channel: it moves with every beta published from the `dev` branch,
+To try betas, put `ghcr.io/acebmxer/nxray:beta` in the `image:` line. That tag
+is the beta channel: it moves with every beta published from the `dev` branch,
 so it can change and break between runs, and `:latest` never receives it.
+Each beta is also listed as a pre-release on the GitHub Releases page.
 
 From a clone, run `git pull` and then
 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.

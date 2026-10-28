@@ -88,5 +88,8 @@ version section is part of the branch the pull request carries. The tag is
 created on `main` after the merge.
 
 To publish a beta, open **Actions > Publish beta (dev channel) > Run
-workflow** with the `dev` branch selected. It pushes `:dev`, `:X.Y.Z-beta.N`
-and `:dev-<short sha>` to GHCR and creates no git tag.
+workflow** with the `dev` branch selected. It pushes `:beta`, `:X.Y.Z-beta.N`
+and `:dev-<short sha>` to GHCR, then creates a GitHub pre-release
+`vX.Y.Z-beta.N` whose notes are the `[Unreleased]` section of the changelog.
+N counts up per version, and the run stops once `vX.Y.Z` has been released
+until the version in `pyproject.toml` is bumped.
