@@ -18,6 +18,7 @@ message naming the setting; see `docker compose logs nxray`.
 | `NXRAY_HTTPS_PORT` | `8443` | The port browsers use for HTTPS, where plain-HTTP visits are sent: the left number of the `8443` line in the compose file. Only change it when you change that number. |
 | `NXRAY_HTTPS` | `false`, or `true` with built-in HTTPS | Set to `true` when NXray is served over HTTPS by a reverse proxy of your own, so the session cookie is marked Secure. Left `true` on plain HTTP, signing in appears to fail. |
 | `NXRAY_ENABLE_SELF_UPDATE` | `false` | Self-update. When `true`, NXray checks ghcr.io once a day for a newer image and an admin can press **Update now** on the Settings page. Needs the `docker.sock` mount and `group_add` lines in the compose file. The Docker socket is root on the host: see [Installation](installation.md#self-update). |
+| `NXRAY_HISTORY_INTERVAL` | `60` | Seconds between history samples, 10 to 3600; `0` turns history off. Each sample is the same three read-only commands the dashboard runs. 30 days are kept. See [Installation](installation.md#history). |
 | `NXRAY_DEV_BUILD` | empty | Set by `docker-compose.dev.yml` when the image is built from a clone, never by hand. An image built from source is not compared with the published one. |
 | `NXRAY_SESSION_HOURS` | `12` | How long a session lasts without use, 1 to 720 hours. |
 | `NXRAY_LOGIN_MAX_ATTEMPTS` | `5` | Failed sign-ins from one address before it is blocked, 1 to 100. |

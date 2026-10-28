@@ -118,6 +118,19 @@ _MIGRATIONS: list[str] = [
         last_result_at    REAL
     );
     """,
+    # 7 -> 8: history (app/history.py). One row per number per sample: metric
+    # says what it is, item names the sensor or port (empty for whole-switch
+    # numbers). Rows older than 30 days are deleted by the sampler.
+    """
+    CREATE TABLE history (
+        ts     REAL NOT NULL,
+        metric TEXT NOT NULL,
+        item   TEXT NOT NULL DEFAULT '',
+        value  REAL NOT NULL
+    );
+    CREATE INDEX idx_history_series ON history (metric, item, ts);
+    CREATE INDEX idx_history_ts ON history (ts);
+    """,
 ]
 
 

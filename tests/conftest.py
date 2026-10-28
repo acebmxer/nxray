@@ -44,6 +44,8 @@ def settings(tmp_path: Path) -> Settings:
         login_max_attempts=5,
         login_lockout_minutes=15,
         log_level="WARNING",
+        # No sampling thread in tests: they run the sampler by hand.
+        history_interval=0,
     )
 
 

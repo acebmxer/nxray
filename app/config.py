@@ -71,6 +71,8 @@ class Settings:
     # True only on an image built from source (docker-compose.dev.yml sets
     # the build argument): its digest is never the published one.
     dev_build: bool = False
+    # Seconds between history samples (app/history.py); 0 turns history off.
+    history_interval: int = 60
 
     # Derived paths. Kept here so no other module builds a path by hand.
     db_path: Path = field(init=False)
@@ -142,6 +144,13 @@ def load_settings() -> Settings:
     # for the other case: a reverse proxy of your own, which NXray can't see.
     enable_https = _env_bool("NXRAY_ENABLE_HTTPS", False)
 
+    history_interval = _env_int("NXRAY_HISTORY_INTERVAL", 60, 0, 3600)
+    if 0 < history_interval < 10:
+        raise ConfigError(
+            "NXRAY_HISTORY_INTERVAL must be 0 (history off) or at least 10 seconds, "
+            f"got {history_interval}"
+        )
+
     return Settings(
         data_dir=data_dir,
         admin_user=_env_str("NXRAY_ADMIN_USER", "admin") or "admin",
@@ -156,4 +165,5 @@ def load_settings() -> Settings:
         https_port=_env_int("NXRAY_HTTPS_PORT", 8443, 1, 65535),
         enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
         dev_build=_env_bool("NXRAY_DEV_BUILD", False),
+        history_interval=history_interval,
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -16,6 +17,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
+from app.history import RANGE_LABELS, port_charts, range_key
 from app.nxapi import (
     NxapiClient,
     NxapiCommandError,
@@ -131,6 +133,11 @@ def _render_port(
         status_code = 404 if ports is not None and port is None else 200
     if description is None:
         description = port.description if port else ""
+    period = range_key(request.query_params.get("range"))
+    charts = []
+    if port:
+        with open_db(request.app.state.settings.db_path) as conn:
+            charts = port_charts(conn, name, period, time.time())
     return templates.TemplateResponse(
         request,
         "port.html",
@@ -150,6 +157,9 @@ def _render_port(
             "view": view,
             "vlans": vlans,
             "vlan_form": vlan_form,
+            "charts": charts,
+            "range": period,
+            "ranges": RANGE_LABELS,
         },
         status_code=status_code,
     )

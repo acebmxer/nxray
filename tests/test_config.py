@@ -25,6 +25,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "NXRAY_LOGIN_MAX_ATTEMPTS",
         "NXRAY_LOGIN_LOCKOUT_MINUTES",
         "NXRAY_LOG_LEVEL",
+        "NXRAY_HISTORY_INTERVAL",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("NXRAY_DATA_DIR", str(tmp_path))
@@ -132,3 +133,28 @@ def test_bad_https_settings_are_refused(
     monkeypatch.setenv(name, value)
     with pytest.raises(ConfigError, match=name):
         load_settings()
+
+
+def test_history_interval_defaults_to_a_minute(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    assert load_settings().history_interval == 60
+
+
+@pytest.mark.parametrize("value, expected", [("0", 0), ("10", 10), ("300", 300)])
+def test_history_interval_accepts_off_or_ten_seconds_and_up(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: int
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv("NXRAY_HISTORY_INTERVAL", value)
+    assert load_settings().history_interval == expected
+
+
+@pytest.mark.parametrize("value", ["5", "-1", "3601", "often"])
+def test_history_interval_outside_its_range_is_refused(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    monkeypatch.setenv("NXRAY_HISTORY_INTERVAL", value)
+    with pytest.raises(ConfigError) as excinfo:
+        load_settings()
+    assert "NXRAY_HISTORY_INTERVAL" in str(excinfo.value)

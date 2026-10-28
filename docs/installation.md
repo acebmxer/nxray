@@ -183,6 +183,26 @@ It works only for a container started by `docker compose` from the published
 image. A copy built from a clone (`docker-compose.dev.yml`) is never reported
 out of date.
 
+## History
+
+Once a switch is set up, NXray reads it every minute (`NXRAY_HISTORY_INTERVAL`
+changes that, `0` turns it off) with three read-only commands, the same ones
+the dashboard runs when it opens: `show environment`, `show system resources`
+and `show interface`. It stores temperatures, total power draw, fan speed, CPU
+and memory use, the traffic of every port that is up and each port's new
+errors and discards, and deletes anything older than 30 days. The History page
+draws them for the last hour, 6 hours, 24 hours, 7 days or 30 days, and each
+port's page draws its own traffic and errors. Times are UTC. Opening the pages
+never contacts the switch.
+
+The numbers live in NXray's database on the data volume and take space with
+the number of ports that are up: roughly 7 MB a day with a dozen up, so about
+200 MB once 30 days have built up. Nothing is recorded while NXray cannot
+reach the switch or is waiting for it to apply a new role after **Turn on port
+changes**; the charts show that as a gap. A port's errors are recorded as the
+increase since the previous sample, so the first sample after NXray starts
+records none.
+
 ## Building from a clone
 
 To run your own changes, or code that has no release yet, clone the

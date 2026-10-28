@@ -11,6 +11,30 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **History: graphs of the switch over time.** NXray now reads the switch
+  once a minute (`NXRAY_HISTORY_INTERVAL`, 10 to 3600 seconds, `0` for off) and
+  keeps 30 days. A background thread runs `show environment`, `show system
+  resources` and `show interface` in one NX-API request, the same three
+  commands the dashboard runs when it opens, and stores temperatures per
+  sensor, total power draw, fan speed, CPU and memory use, the traffic of all
+  ports together, and for each port that is up its in and out rate, plus each
+  port's new errors and discards. A new **History** page draws them as line
+  charts for the last hour, 6 hours, 24 hours, 7 days or 30 days, and every
+  port's page gets its own traffic and error charts under the same range
+  links. The charts are drawn on the server as inline SVG with no script and
+  no chart library, so the strict Content-Security-Policy stays as it is; the
+  colours come from CSS classes. Times are UTC. Longer ranges average the
+  stored samples into at most 500 points per line. A line breaks where
+  samples are missing, which is how a stretch when the switch could not be
+  reached shows. A port's errors are stored as the increase since the
+  previous sample (the switch's counters only ever grow until cleared), so the
+  first sample after NXray starts stores none and a counter that went down
+  stores none. The sampler leaves the switch alone while NXray waits for a new
+  role to apply (the pause after **Turn on port changes**), logs a failure
+  when it starts and when it ends rather than every minute, and deletes rows
+  older than 30 days once an hour. Opening the pages reads only the database
+  and never contacts the switch. About 7 MB a day is stored with a dozen
+  ports up. Schema version 8 adds the `history` table. Completes the roadmap.
 - **Self-update, off by default.** Set `NXRAY_ENABLE_SELF_UPDATE=true` in
   `nxray.env` and uncomment the `docker.sock` mount and `group_add` lines in
   `docker-compose.yml`, and the Settings page gets an Updates card: NXray

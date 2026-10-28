@@ -1,0 +1,24 @@
+{% macro chart(view) %}
+<section class="card">
+  <h2 class="card-title">{{ view.title }}</h2>
+  {% if view.svg %}
+  {{ view.svg }}
+  <ul class="legend">
+    {% for entry in view.legend %}
+    <li><span class="swatch s{{ entry.colour }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.summary }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if view.note %}<p class="note">{{ view.note }}</p>{% endif %}
+  {% else %}
+  <p class="lead">{{ view.empty }}</p>
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% macro range_links(base, selected, ranges, extra="") %}
+<nav class="filters" aria-label="Time range">
+  {% for key, label in ranges.items() %}
+  <a class="filter{% if selected == key %} filter-on{% endif %}" href="{{ base }}?{{ extra }}range={{ key }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+{% endmacro %}

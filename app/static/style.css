@@ -410,3 +410,25 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .card h3 { font-size: 1rem; margin: 1.5rem 0 0.25rem; }
 
 a { color: var(--accent); }
+
+/* ---- history charts (app/charts.py draws the SVG; colours live here) ---- */
+
+.s0 { --series: #1f77b4; }
+.s1 { --series: #e07b00; }
+.s2 { --series: #2ca02c; }
+.s3 { --series: #c0392b; }
+.s4 { --series: #8e5bd0; }
+.s5 { --series: #17a2b8; }
+.s6 { --series: #b8860b; }
+.s7 { --series: #7f7f7f; }
+
+.chart { width: 100%; height: auto; display: block; }
+.chart-grid { stroke: var(--border); stroke-width: 1; }
+.chart-text { fill: var(--text-dim); font-size: 11px; }
+.chart-line { fill: none; stroke: var(--series); stroke-width: 1.75; stroke-linejoin: round; }
+.chart-dot { fill: var(--series); }
+
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0.5rem 0 0; padding: 0; font-size: 0.9rem; }
+.swatch { display: inline-block; width: 0.8rem; height: 0.8rem; margin-right: 0.4rem; border-radius: 2px; background: var(--series); vertical-align: middle; }
+.legend-values { color: var(--text-dim); }
+.card + .filters, .filters + .card { margin-top: 1.25rem; }

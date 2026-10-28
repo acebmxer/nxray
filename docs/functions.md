@@ -46,6 +46,7 @@ prose columns; those are a reviewer's job.
 | Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
+| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
 
 ---
@@ -437,3 +438,34 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `start_background_checker` | `(settings) -> None` | Checks once a day on a thread; does nothing with self-update off | `main.lifespan` | v0.1.0 |
 | `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator | `apply_update` | v0.1.0 |
 | `watch_update` | `(db_path) -> None` | Waits for the recreator; records a failure (or a no-op success) if this container is still alive | `apply_update` | v0.1.0 |
+
+## `app/history.py` — history
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `bucket_seconds` | `(span: int) -> int` | How wide one chart point is: a minute at least, and at most 500 points | `system_charts`, `port_charts` | v0.1.0 |
+| `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_once` | v0.1.0 |
+| `fill_zeros` | `(points, start, end, bucket) -> list` | Every bucket of a range, 0 where there is no point | `port_charts` | v0.1.0 |
+| `last_sample_time` | `(conn) -> float \| None` | When the newest row was stored | `routes/history.history_page` | v0.1.0 |
+| `port_charts` | `(conn, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
+| `purge` | `(conn, now, keep_days=30) -> int` | Deletes rows older than the retention; how many went | `start_sampler` | v0.1.0 |
+| `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
+| `read_series` | `(conn, metric, *, start, end, bucket, item=None, total=False) -> dict` | A metric's rows averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
+| `record` | `(conn, moment, rows) -> None` | Stores one sample's rows | `Sampler.sample_once` | v0.1.0 |
+| `start_sampler` | `(settings, transport) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
+| `system_charts` | `(conn, key, now) -> list[ChartView]` | The History page's charts for a range | `routes/history.history_page` | v0.1.0 |
+
+## `app/charts.py` — SVG line charts
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `line_chart` | `(lines, *, start, end, bucket, fmt, zero_based=True, y_max=None, label="") -> Markup` | Draws lines over a time range as inline SVG, breaking a line where samples are missing | `history._chart` | v0.1.0 |
+| `nice_ticks` | `(low, high, target=5) -> list[float]` | Round axis values covering a range | `line_chart` | v0.1.0 |
+| `time_label` | `(moment, step) -> str` | An axis label: the clock time, or the date for a midnight or labels a day apart (UTC) | `line_chart` | v0.1.0 |
+| `time_ticks` | `(start, end) -> (list[float], int)` | Round UTC times to label an axis (at most seven) and the step between them | `line_chart` | v0.1.0 |
+
+## `app/routes/history.py` — the History page
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `history_page` | `(request, username, period) -> Response` | `GET /history`: the charts for the chosen range, from the database only | the router | v0.1.0 |

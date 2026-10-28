@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_chart.html" import chart, range_links %}
+{% block title %}History — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">History</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>History is recorded once a switch is set up.</p>
+  {% if current_role(request) == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% else %}
+{% if not interval %}
+<p class="alert alert-error" role="alert">History is turned off (NXRAY_HISTORY_INTERVAL is 0), so nothing new is being recorded.</p>
+{% endif %}
+{{ range_links("/history", range, ranges) }}
+{% for view in charts %}
+{{ chart(view) }}
+{% endfor %}
+<p class="note">
+  {% if interval %}NXray reads the switch every {{ interval }} seconds{% else %}NXray is not reading the switch{% endif %}
+  and keeps {{ keep_days }} days.
+  {% if last_sample_ago is not none %}Last sample {{ last_sample_ago }} second{{ "" if last_sample_ago == 1 else "s" }} ago.{% endif %}
+  Times are UTC. Longer ranges show averages.
+</p>
+{% endif %}
+{% endblock %}

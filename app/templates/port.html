@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_chart.html" import chart, range_links %}
 {% block title %}{{ name }} — NXray{% endblock %}
 
 {% block content %}
@@ -176,6 +177,10 @@
   {% endif %}
 </section>
 {% endif %}
+{{ range_links("/ports/detail", range, ranges, "name=" ~ (name|urlencode) ~ "&") }}
+{% for view in charts %}
+{{ chart(view) }}
+{% endfor %}
 <p class="note">"Now" is the average over the last 30 seconds. Totals count since the counters were last cleared.</p>
 {% endif %}
 {% endblock %}

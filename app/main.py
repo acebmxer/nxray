@@ -20,8 +20,19 @@ from app.dependencies import (
     current_role,
     templates,
 )
+from app.history import start_sampler
 from app.logging_conf import configure_logging
-from app.routes import auth, dashboard, health, ports, settings_page, switch_page, users, vlans
+from app.routes import (
+    auth,
+    dashboard,
+    health,
+    history,
+    ports,
+    settings_page,
+    switch_page,
+    users,
+    vlans,
+)
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
@@ -58,9 +69,12 @@ async def lifespan(app: FastAPI):
     )
 
     start_background_checker(settings)
+    stop_sampler = start_sampler(settings, lambda: app.state.nxapi_transport)
 
     yield
 
+    if stop_sampler is not None:
+        stop_sampler.set()
     log.info("NXray stopped")
 
 
@@ -111,6 +125,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(dashboard.router)
     app.include_router(ports.router)
+    app.include_router(history.router)
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(users.router)

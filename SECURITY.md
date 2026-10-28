@@ -20,6 +20,9 @@ generated `secret_key` file on the data volume). The two-factor keys of
 NXray accounts that turned two-factor sign-in on are encrypted the same way.
 With built-in HTTPS on, its private key is on the data volume too
 (`/data/tls/key.pem`, readable by the container user only).
+It also keeps 30 days of history in its database, unencrypted: temperatures,
+power, fan speed, CPU and memory use, and each port's traffic rate and error
+counts (no addresses, no packet contents).
 NXray's switch account starts
 read-only (`network-operator`). Once port changes are turned on it also has
 the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
