@@ -20,7 +20,7 @@
   <dl class="facts">
     <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
     <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
-    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.settings_changes_enabled %}read, plus port changes, VLANs and port settings{% elif connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
     <dt>Config saved</dt>
     <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
     <dt>Last test</dt>
@@ -68,8 +68,8 @@
       also saves any other unsaved changes on the switch. Then it leaves the switch
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
-      message until then. This wait happens once: after it, port and VLAN
-      changes take effect straight away, with no further waits.
+      message until then. This wait happens once: after it, port, VLAN and
+      port settings changes take effect straight away, with no further waits.
     </p>
     <label class="check">
       <input type="checkbox" name="confirm_save" value="yes" required>
@@ -92,14 +92,22 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port and VLAN changes</h2>
+  <h2 class="card-title">Port, VLAN and port settings changes</h2>
   {% if connection.changes_enabled %}
-  {% if connection.vlan_changes_enabled %}
+  {% if connection.settings_changes_enabled %}
   <p class="lead">
     On. NXray's account may turn the front ports on or off, edit their
-    descriptions and set their VLANs (on each port's own page), create, rename
-    and delete VLANs (on the VLANs page), and save the configuration. The switch
-    refuses it everything else.
+    descriptions, set their VLANs and their settings (speed, MTU, FEC, flow
+    control, storm control, switched or routed), and split or join the 100G
+    ports (on each port's own page); create, rename and delete VLANs (on the
+    VLANs page); and save the configuration. The switch refuses it everything
+    else.
+  </p>
+  {% elif connection.vlan_changes_enabled %}
+  <p class="lead">
+    On for ports and VLANs: NXray's account may turn the front ports on or off,
+    edit their descriptions and set their VLANs, create, rename and delete
+    VLANs, and save the configuration.
   </p>
   {% else %}
   <p class="lead">
@@ -116,42 +124,64 @@
   </form>
   <p class="note">
     Save config runs <code>copy running-config startup-config</code>, which also
-    saves any other unsaved changes on the switch. To take port and VLAN changes
+    saves any other unsaved changes on the switch. To take these changes
     away again, sign in to the switch over SSH as admin and run
     <code>configure terminal</code>, <code>no username {{ connection.username }} role {{ role_name }}</code>,
     <code>end</code>, <code>copy running-config startup-config</code>.
   </p>
 </section>
 
-{% if not connection.vlan_changes_enabled %}
+{% if not connection.settings_changes_enabled %}
 <section class="card">
-  <h2 class="card-title">VLAN changes</h2>
+  <h2 class="card-title">{% if connection.vlan_changes_enabled %}Port settings changes{% else %}VLAN and port settings changes{% endif %}</h2>
   <p class="lead">
-    Off: this version of NXray can also create, rename and delete VLANs and set
-    the VLANs on the front ports, but NXray's role on the switch
-    ({{ role_name }}) was made before that and does not allow it yet. NXray signs
-    in to the switch over SSH once more with the admin login below and adds the
-    VLAN rules to the role. The admin password is used for this only and never
-    stored.
+    Off: this version of NXray can also {% if not connection.vlan_changes_enabled %}create,
+    rename and delete VLANs, set the VLANs on the front ports, and {% endif %}set
+    the front ports' speed, MTU, FEC, flow control, storm control and layer
+    (switched or routed, with an IPv4 address), and split a 100G port into four
+    or join it again. NXray's role on the switch ({{ role_name }}) was made
+    before that and does not allow it yet. NXray signs in to the switch over SSH
+    once more with the admin login below and adds the rules to the role. The
+    admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on VLAN changes", false) }}
+  {% if connection.vlan_changes_enabled %}
+  {{ admin_form("Turn on port settings changes", false) }}
+  {% else %}
+  {{ admin_form("Turn on VLAN and port settings changes", false) }}
+  {% endif %}
+</section>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Update the port list</h2>
+  <p class="lead">
+    NXray's role names every front port it may change one by one. After a 100G
+    port is split into four, or four split ports are joined again, the role
+    does not name the new ports yet, and the switch refuses NXray's changes to
+    them. NXray signs in to the switch over SSH with the admin login below and
+    adds the ports the switch has now. The admin password is used for this
+    only and never stored.
+  </p>
+  {{ admin_form("Update the port list", false) }}
 </section>
 {% endif %}
 {% else %}
   <p class="lead">
-    Off: NXray's account can only read. Turning port and VLAN changes on gives it a role
-    ({{ role_name }}) that allows exactly this: on the front ports only, turning
-    a port on or off, editing its description, and setting its mode (access or
-    trunk) and VLANs; creating, renaming and deleting VLANs; and saving the
-    configuration. The switch keeps refusing everything else, including mgmt0,
-    speeds, MTU and accounts.
+    Off: NXray's account can only read. Turning port, VLAN and port settings
+    changes on gives it a role ({{ role_name }}) that allows exactly this: on the
+    front ports only, turning a port on or off, editing its description, setting
+    its mode (access or trunk) and VLANs, and setting its speed, MTU, FEC, flow
+    control, storm control and layer (switched or routed, with an IPv4
+    address); splitting a 100G port into four and joining it again; creating,
+    renaming and deleting VLANs; and saving the configuration. The switch keeps
+    refusing everything else, including mgmt0, other switch-wide settings and
+    accounts.
   </p>
   <p class="lead">
     NX-API cannot create this kind of role, so NXray signs in to the switch over
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port and VLAN changes", true) }}
+  {{ admin_form("Turn on port, VLAN and port settings changes", true) }}
 </section>
 {% endif %}
 

@@ -46,6 +46,11 @@ class SwitchConnection:
         """True once that role includes the VLAN rules (role version 2 or later)."""
         return self.changes_enabled and self.role_version >= 2
 
+    @property
+    def settings_changes_enabled(self) -> bool:
+        """True once that role includes the port settings rules (role version 3 or later)."""
+        return self.changes_enabled and self.role_version >= 3
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

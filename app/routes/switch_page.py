@@ -465,20 +465,37 @@ def switch_enable_changes(
 
     with open_db(settings.db_path) as conn:
         set_changes_enabled(conn, pause_seconds=result.pause_seconds, role_version=ROLE_VERSION)
-    if result.had_role:
+    account = connection.username
+    count = result.port_count
+    settings_words = (
+        f"set the speed, MTU, FEC, flow control, storm control and layer (switched or "
+        f"routed) of the {count} front ports, and split or join the 100G ports"
+    )
+    if not result.had_role:
+        minutes = result.pause_seconds // 60
         done = (
-            f"VLAN changes are on: {connection.username} may now also create, rename and "
-            f"delete VLANs and set the VLANs of the {result.port_count} front ports. The "
+            f"Port, VLAN and port settings changes are on: {account} may now turn the "
+            f"{count} front ports on or off, edit their descriptions, set their VLANs and "
+            "their speed, MTU, FEC, flow control, storm control and layer (switched or "
+            "routed), split or join the 100G ports, and create, rename and delete VLANs. "
+            "The switch applies this once it has not heard from NXray for a while, so NXray "
+            f"now waits about {minutes} minutes before contacting it again."
+        )
+    elif connection.role_version >= ROLE_VERSION:
+        done = (
+            f"The port list is updated: NXray's role now names the {count} front ports the "
+            "switch has now. The switch applies this at once, so there is no wait."
+        )
+    elif connection.role_version < 2:
+        done = (
+            f"VLAN and port settings changes are on: {account} may now also create, rename "
+            f"and delete VLANs, set the VLANs of the front ports, and {settings_words}. The "
             "switch applies this at once, so there is no wait."
         )
     else:
-        minutes = result.pause_seconds // 60
         done = (
-            f"Port and VLAN changes are on: {connection.username} may now turn the "
-            f"{result.port_count} front ports on or off, edit their descriptions and set "
-            "their VLANs, and create, rename and delete VLANs. The switch applies this once "
-            "it has not heard from NXray for a while, so NXray now waits about "
-            f"{minutes} minutes before contacting it again."
+            f"Port settings changes are on: {account} may now also {settings_words}. The "
+            "switch applies this at once, so there is no wait."
         )
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")

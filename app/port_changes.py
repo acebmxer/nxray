@@ -1,11 +1,13 @@
 """Turning on port changes: give NXray's switch account a role that allows them.
 
 The role allows exactly these: on the front-panel Ethernet ports only,
-turning a port on or off, setting or removing its description, and setting
-its mode (access or trunk) and VLANs; switch-wide, creating, naming and
-deleting VLANs; and saving the configuration. Everything else (mgmt0, speed,
-MTU, a VLAN's own on/off state, accounts, other switch-wide settings) stays
-refused by the switch itself, not just by NXray.
+turning a port on or off, setting or removing its description, setting its
+mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
+control, storm control, switched or routed with an IPv4 address);
+switch-wide, creating, naming and deleting VLANs, splitting a 100G port into
+four and joining it again; and saving the configuration. Everything else
+(mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
+stays refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
 the admin login entered on the Switch page (``app/switch_ssh.py``). Checks
@@ -25,7 +27,7 @@ before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
-the VLAN rules. NXray stores the version it gave its account, so the
+the VLAN rules, 3 the port settings rules. NXray stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
 
@@ -92,7 +94,33 @@ VLAN_RULES = (
     "rule 11 permit command conf t ; interface * ; switchport trunk native vlan *",
 )
 
-ROLE_VERSION = 2
+# Port settings rules, added in ROLE_VERSION 3. Each names one command
+# with its value as "*", so the account can set these and nothing else
+# inside a port. A storm-control level goes back to "no limit" by setting
+# 100.00 (the switch's default), so only the action needs a "no" form. The
+# breakout lines are typed outside any port: the role's port list does not
+# cover them, so they are named on their own. The ports a split makes are not
+# in the role's port list until it is updated (Switch page).
+SETTINGS_RULES = (
+    "rule 12 permit command conf t ; interface * ; speed *",
+    "rule 13 permit command conf t ; interface * ; mtu *",
+    "rule 14 permit command conf t ; interface * ; fec *",
+    "rule 15 permit command conf t ; interface * ; flowcontrol receive *",
+    "rule 16 permit command conf t ; interface * ; flowcontrol send *",
+    "rule 17 permit command conf t ; interface * ; storm-control broadcast level *",
+    "rule 18 permit command conf t ; interface * ; storm-control multicast level *",
+    "rule 19 permit command conf t ; interface * ; storm-control unicast level *",
+    "rule 20 permit command conf t ; interface * ; storm-control action *",
+    "rule 21 permit command conf t ; interface * ; no storm-control action *",
+    "rule 22 permit command conf t ; interface * ; switchport",
+    "rule 23 permit command conf t ; interface * ; no switchport",
+    "rule 24 permit command conf t ; interface * ; ip address *",
+    "rule 25 permit command conf t ; interface * ; no ip address *",
+    "rule 26 permit command conf t ; interface breakout module * port * map *",
+    "rule 27 permit command conf t ; no interface breakout module * port * map *",
+)
+
+ROLE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -129,9 +157,10 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: front ports on/off, descriptions, VLANs, save config",
+        "description NXray: front ports, their settings, VLANs, save config",
         *ROLE_RULES,
         *VLAN_RULES,
+        *SETTINGS_RULES,
         "interface policy deny",
         *permits,
         "exit",

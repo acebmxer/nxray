@@ -1,0 +1,492 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "Ethernet1/1",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/2",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/3",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/4",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/5",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/6",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/7",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/8",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/9",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/10",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/11",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/12",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/13",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/14",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/15",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/16",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/17",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/18",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/19",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/20",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/21",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/22",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/23",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/24",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/25",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/26",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/27",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/28",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/29",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/30",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/31",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/32",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/33",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/34",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/35",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/36",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/37",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/38",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/39",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/40",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/41",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/42",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/43",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/44",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/45",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/46",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/47",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/48",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/49",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/50",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/51",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/52",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/53",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      },
+      {
+        "interface": "Ethernet1/54",
+        "send_admin": "off",
+        "send_oper": "off",
+        "recv_admin": "off",
+        "recv_oper": "off",
+        "rxpause": 0,
+        "txpause": 0
+      }
+    ]
+  }
+}

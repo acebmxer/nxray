@@ -147,6 +147,118 @@
   {% endif %}
 </section>
 
+<section class="card">
+  <h2 class="card-title">Port settings</h2>
+  {% if settings is none %}
+  <p class="lead">The switch did not report this port's settings.</p>
+  {% else %}
+  <dl class="facts">
+    <dt>Layer</dt><dd>{% if settings.routed %}routed (layer 3){% else %}switched (layer 2){% endif %}</dd>
+    {% if settings.routed %}
+    <dt>IPv4 address</dt><dd>{{ settings.ip_address or "none" }}{% if settings.vrf and settings.vrf != "default" %} (VRF {{ settings.vrf }}){% endif %}</dd>
+    {% endif %}
+    <dt>Speed</dt><dd>{{ speed_label(settings.speed) }}{% if port.up %} <span class="reason">running at {{ port.speed }}</span>{% endif %}</dd>
+    <dt>Duplex</dt><dd>{{ settings.duplex or "unknown" }}</dd>
+    <dt>MTU</dt><dd>{{ settings.mtu }}{% if settings.mtu == jumbo_mtu %} (jumbo frames){% endif %}</dd>
+    <dt>FEC</dt><dd>{{ settings.fec or "unknown" }}{% if settings.fec_oper and settings.fec_oper != settings.fec %} <span class="reason">in use: {{ settings.fec_oper }}</span>{% endif %}</dd>
+    <dt>Flow control</dt><dd>receive {{ settings.flow_receive }}, send {{ settings.flow_send }}</dd>
+    {% if not settings.routed %}
+    <dt>Storm control</dt><dd>broadcast {{ settings.storm_text("broadcast") }}, multicast {{ settings.storm_text("multicast") }}, unicast {{ settings.storm_text("unicast") }}; action {{ settings.storm_action }}</dd>
+    {% endif %}
+  </dl>
+  {% if can_change and connection.settings_changes_enabled %}
+  <form method="post" action="/ports/settings" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    {% if settings.routed_capable %}
+    <fieldset class="choice">
+      <legend>Layer</legend>
+      <label class="check"><input type="radio" name="layer" value="switched" {% if settings_form.layer != "routed" %}checked{% endif %}> Switched (layer 2): carries VLANs</label>
+      <label class="check"><input type="radio" name="layer" value="routed" {% if settings_form.layer == "routed" %}checked{% endif %}> Routed (layer 3): its own IPv4 address, no VLANs</label>
+    </fieldset>
+    <label for="ip_address">IPv4 address (routed only)</label>
+    <input id="ip_address" name="ip_address" type="text" value="{{ settings_form.ip_address }}" spellcheck="false" placeholder="192.0.2.1/24">
+    <p class="hint">With the prefix length, such as 192.0.2.1/24. Leave empty for none.</p>
+    {% endif %}
+    <label for="speed">Speed</label>
+    <select id="speed" name="speed">
+      <option value="auto" {% if settings_form.speed == "auto" %}selected{% endif %}>Auto</option>
+      {% for speed in settings.speeds %}
+      <option value="{{ speed }}" {% if settings_form.speed == speed %}selected{% endif %}>{{ speed_label(speed) }}</option>
+      {% endfor %}
+    </select>
+    {% if port.up %}<p class="hint">While the port is up the switch reports the speed it runs at, so a port set to Auto may show that speed here.</p>{% endif %}
+    <label for="mtu">MTU</label>
+    <input id="mtu" name="mtu" type="text" inputmode="numeric" value="{{ settings_form.mtu }}">
+    <p class="hint">Switched: {{ standard_mtu }} (standard) or {{ jumbo_mtu }} (jumbo frames). Routed: 576 to 9216.</p>
+    <label for="fec">FEC</label>
+    <select id="fec" name="fec">
+      {% for value, text in fec_labels.items() %}
+      <option value="{{ value }}" {% if settings_form.fec == value %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">The switch refuses a FEC mode the port's speed or transceiver cannot use.</p>
+    <label for="flow_receive">Flow control, receive</label>
+    <select id="flow_receive" name="flow_receive">
+      <option value="off" {% if settings_form.flow_receive != "on" %}selected{% endif %}>Off</option>
+      <option value="on" {% if settings_form.flow_receive == "on" %}selected{% endif %}>On</option>
+    </select>
+    <label for="flow_send">Flow control, send</label>
+    <select id="flow_send" name="flow_send">
+      <option value="off" {% if settings_form.flow_send != "on" %}selected{% endif %}>Off</option>
+      <option value="on" {% if settings_form.flow_send == "on" %}selected{% endif %}>On</option>
+    </select>
+    {% if not settings.routed %}
+    <label for="storm_broadcast">Storm control, broadcast (% of the link)</label>
+    <input id="storm_broadcast" name="storm_broadcast" type="text" inputmode="decimal" value="{{ settings_form.storm_broadcast }}">
+    <label for="storm_multicast">Storm control, multicast (% of the link)</label>
+    <input id="storm_multicast" name="storm_multicast" type="text" inputmode="decimal" value="{{ settings_form.storm_multicast }}">
+    <label for="storm_unicast">Storm control, unknown unicast (% of the link)</label>
+    <input id="storm_unicast" name="storm_unicast" type="text" inputmode="decimal" value="{{ settings_form.storm_unicast }}">
+    <p class="hint">0 to 100, up to two decimals, such as 10 or 2.5. Leave empty for no limit.</p>
+    <label for="storm_action">When traffic goes over a level</label>
+    <select id="storm_action" name="storm_action">
+      <option value="none" {% if settings_form.storm_action not in ("shutdown", "trap") %}selected{% endif %}>Drop the extra traffic only</option>
+      <option value="trap" {% if settings_form.storm_action == "trap" %}selected{% endif %}>Drop it and send an SNMP trap</option>
+      <option value="shutdown" {% if settings_form.storm_action == "shutdown" %}selected{% endif %}>Turn the port off</option>
+    </select>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">Change settings</button>
+  </form>
+  <p class="note">Only the settings you change are sent. The change asks you to confirm first.</p>
+  {% elif can_change and connection.changes_enabled %}
+  <p class="lead">Port settings changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to change this port's speed, MTU, FEC, flow control, storm control and layer.</p>
+  {% endif %}
+  {% endif %}
+</section>
+
+{% if settings and (settings.breakout_capable or settings.is_breakout_port) %}
+<section class="card">
+  <h2 class="card-title">Split port</h2>
+  {% if settings.is_breakout_port %}
+  <p class="lead">{{ name }} is one of four ports {{ settings.parent }} was split into. Joining them gives back one {{ settings.parent }}.</p>
+  {% else %}
+  <p class="lead">This 100G port can be split into four ports, {{ name }}/1 to {{ name }}/4, for a breakout cable.</p>
+  {% endif %}
+  {% if can_change and connection.settings_changes_enabled %}
+  <form method="post" action="/ports/breakout" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <input type="hidden" name="action" value="{{ 'join' if settings.is_breakout_port else 'split' }}">
+    <label for="mapping">{% if settings.is_breakout_port %}The split it has now{% else %}Split into{% endif %}</label>
+    <select id="mapping" name="mapping">
+      {% for value, text in breakout_labels.items() %}
+      <option value="{{ value }}" {% if breakout_guess == value or (not breakout_guess and value == "25g-4x") %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+    {% if settings.is_breakout_port and not breakout_guess %}<p class="hint">NXray cannot tell which split this is; pick the one the port was split with.</p>{% endif %}
+    <button type="submit" class="btn btn-quiet">{% if settings.is_breakout_port %}Join the four ports{% else %}Split this port{% endif %}</button>
+  </form>
+  <p class="note">The change asks you to confirm first and says what it removes.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if vlans %}
 <section class="card">
   <h2 class="card-title">VLANs on this port</h2>

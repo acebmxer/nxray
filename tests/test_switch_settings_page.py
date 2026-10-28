@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.port_changes import ROLE_NAME
+from app.port_changes import ROLE_NAME, ROLE_VERSION
 from app.routes import switch_page
 from tests.conftest import TEST_PASSWORD, TEST_USER, load_fixture, with_settings
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
@@ -273,10 +273,10 @@ def test_removed_account_is_made_again_and_keeps_port_changes(
     assert f"gave the account the {ROLE_NAME} role again, so port changes stay on" in text
     assert switch.roles_of("nxray") == {"network-operator", ROLE_NAME}
     row = _row(settings)
-    assert row["changes_enabled_at"] is not None and row["role_version"] == 2
+    assert row["changes_enabled_at"] is not None and row["role_version"] == ROLE_VERSION
     assert row["paused_until"] <= time.time()  # no new wait for a fresh account
     page = _text(logged_in.get("/switch").text)
-    assert "read, plus port changes and VLANs" in page
+    assert "read, plus port changes, VLANs and port settings" in page
     assert "leaving the switch alone" not in page
 
 
@@ -286,7 +286,7 @@ def test_existing_account_keeps_its_port_changes(
     text = _text(_repair(logged_in).text)
     assert "a new password. Its port changes stay on." in text
     assert ROLE_NAME in with_port_changes.roles_of("nxray")
-    assert _row(settings)["role_version"] == 2
+    assert _row(settings)["role_version"] == ROLE_VERSION
 
 
 def test_account_that_lost_the_role_gets_it_back_with_the_wait(
@@ -311,7 +311,7 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     assert f"Port changes are now off: the {ROLE_NAME} role is no longer on the switch" in text
     row = _row(settings)
     assert row["changes_enabled_at"] is None and row["role_version"] == 0
-    assert "Turn on port and VLAN changes" in logged_in.get("/switch").text
+    assert "Turn on port, VLAN and port settings changes" in logged_in.get("/switch").text
 
 
 def test_unreadable_login_after_a_key_change_is_repaired(

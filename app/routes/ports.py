@@ -27,6 +27,19 @@ from app.nxapi import (
     validate_description,
 )
 from app.port_labels import LABEL_MAX, get_labels, set_label
+from app.port_settings import (
+    BREAKOUT_LABELS,
+    FEC_LABELS,
+    JUMBO_MTU,
+    STANDARD_MTU,
+    PortSettings,
+    describe_port_settings,
+    guess_breakout_map,
+    plan_breakout,
+    plan_port_settings,
+    speed_label,
+    try_load_port_settings,
+)
 from app.ports import COUNTER_LABELS, Port, load_ports
 from app.security import csrf_token
 from app.switch_connection import SwitchConnection, set_unsaved_changes
@@ -63,24 +76,38 @@ def _read_ports(
 
 
 def _read_port_page(
-    request: Request,
+    request: Request, name: str | None = None
 ) -> tuple[
     SwitchConnection | None,
     SwitchTarget | None,
     ConnectionStatus | None,
     list[Port] | None,
     VlanView | None,
+    PortSettings | None,
 ]:
-    """Like _read_ports, plus the VLANs, for a port's own page: one request."""
+    """Like _read_ports, plus the VLANs, for a port's own page.
+
+    With ``name``, also that port's settings, read in a second request once
+    the first shows the port exists (a show command naming a missing port
+    would fail the whole request). Settings are None when they could not be
+    read.
+    """
     connection, target, error = stored_switch(request)
     if target is None:
         status = ConnectionStatus(False, error) if error else None
-        return connection, None, status, None, None
-    status, both = read_switch(
-        target, load_ports_with_vlans, transport=request.app.state.nxapi_transport
-    )
-    ports, view = both if both else (None, None)
-    return connection, target, status, ports, view
+        return connection, None, status, None, None, None
+
+    def reader(client: NxapiClient) -> tuple[list[Port], VlanView, PortSettings | None]:
+        ports, view = load_ports_with_vlans(client)
+        port = next((p for p in ports if p.name == name), None)
+        settings = None
+        if port is not None:
+            settings = try_load_port_settings(client, port, view.ports.get(port.name))
+        return ports, view, settings
+
+    status, found = read_switch(target, reader, transport=request.app.state.nxapi_transport)
+    ports, view, settings = found if found else (None, None, None)
+    return connection, target, status, ports, view, settings
 
 
 def _labels(request: Request) -> dict[str, str]:
@@ -99,7 +126,7 @@ def ports_page(
     vlan_names: dict[int, str] = {}
     if color == "vlan":
         # Only this mode needs the VLAN names, so only it asks the switch for them.
-        connection, _, status, ports, view = _read_port_page(request)
+        connection, _, status, ports, view, _ = _read_port_page(request)
         vlan_names = {vlan.id: vlan.name for vlan in view.vlans} if view else {}
     else:
         connection, _, status, ports = _read_ports(request)
@@ -136,15 +163,19 @@ def _render_port(
     status: ConnectionStatus | None,
     ports: list[Port] | None,
     view: VlanView | None = None,
+    port_settings: PortSettings | None = None,
     *,
     error: str | None = None,
     notice: str | None = None,
     description: str | None = None,
     vlan_form: dict[str, str] | None = None,
+    settings_form: dict[str, str] | None = None,
     label: str | None = None,
     status_code: int | None = None,
 ) -> Response:
     port = next((p for p in ports or [] if p.name == name), None)
+    if settings_form is None and port_settings is not None:
+        settings_form = _settings_form(port_settings)
     stored_label = _labels(request).get(name, "")
     if label is None:
         label = stored_label
@@ -191,6 +222,14 @@ def _render_port(
             "stored_label": stored_label,
             "label": label,
             "label_max": LABEL_MAX,
+            "settings": port_settings,
+            "settings_form": settings_form,
+            "speed_label": speed_label,
+            "fec_labels": FEC_LABELS,
+            "breakout_labels": BREAKOUT_LABELS,
+            "breakout_guess": _breakout_guess(port_settings, ports),
+            "standard_mtu": STANDARD_MTU,
+            "jumbo_mtu": JUMBO_MTU,
         },
         status_code=status_code,
     )
@@ -212,9 +251,18 @@ def render_port_page(
     notice: str | None = None,
 ) -> Response:
     """Read the switch fresh and show one port's page, with an optional message."""
-    connection, _, status, ports, view = _read_port_page(request)
+    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
     return _render_port(
-        request, username, name, connection, status, ports, view, error=error, notice=notice
+        request,
+        username,
+        name,
+        connection,
+        status,
+        ports,
+        view,
+        port_settings,
+        error=error,
+        notice=notice,
     )
 
 
@@ -236,7 +284,14 @@ def change_summary(port: Port, action: str, description: str) -> tuple[str, str 
 
 def change_refused(exc: NxapiError, target: SwitchTarget) -> str:
     """The message for a port change the switch did not make."""
-    if isinstance(exc, NxapiCommandError) and "permission denied" in str(exc).lower():
+    text = str(exc).lower()
+    if isinstance(exc, NxapiCommandError) and "interface permission denied" in text:
+        return (
+            "The switch refused: NXray's role on the switch does not name this port. That "
+            "happens to the ports a 100G port was split into, or joined back into. An NXray "
+            "admin presses Update the port list on the Switch page, then try again."
+        )
+    if isinstance(exc, NxapiCommandError) and "permission denied" in text:
         return (
             "The switch refused: NXray's account may not make this change yet. If port "
             "changes were turned on a few minutes ago the switch may not have applied them; "
@@ -257,11 +312,13 @@ def port_change(
 ) -> Response:
     """Change one port. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view = _read_port_page(request)
+    connection, target, status, ports, view, port_settings = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(request, username, name, connection, status, ports, view, **kwargs)
+        return _render_port(
+            request, username, name, connection, status, ports, view, port_settings, **kwargs
+        )
 
     if connection is None or target is None or port is None:
         return again()
@@ -312,7 +369,7 @@ def port_change(
     log.info("port change on %s by %s: %s", connection.host, username, summary)
 
     # Read the port back so the page shows what the switch now reports.
-    connection, _, status, ports, view = _read_port_page(request)
+    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
     if action == "description":
         done = (
             f'{name} now has the description "{description}".'
@@ -329,6 +386,7 @@ def port_change(
         status,
         ports,
         view,
+        port_settings,
         notice=f"Done: {done} Not saved yet: Save config keeps it over a restart of the switch.",
     )
 
@@ -347,7 +405,7 @@ def port_vlans_change(
 ) -> Response:
     """Set a port's mode and VLANs. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view = _read_port_page(request)
+    connection, target, status, ports, view, port_settings = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
     current = view.ports.get(name) if view else None
     form = {
@@ -358,7 +416,9 @@ def port_vlans_change(
     }
 
     def again(**kwargs) -> Response:
-        return _render_port(request, username, name, connection, status, ports, view, **kwargs)
+        return _render_port(
+            request, username, name, connection, status, ports, view, port_settings, **kwargs
+        )
 
     if connection is None or target is None or port is None or view is None:
         return again()
@@ -419,7 +479,7 @@ def port_vlans_change(
         set_unsaved_changes(conn, True)
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
 
-    connection, _, status, ports, view = _read_port_page(request)
+    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
     return _render_port(
         request,
         username,
@@ -428,6 +488,7 @@ def port_vlans_change(
         status,
         ports,
         view,
+        port_settings,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -445,11 +506,13 @@ def port_label(
 ) -> Response:
     """Set or remove a port's label. Kept in NXray only, so no confirm step and no switch call."""
     require_csrf(request, csrf)
-    connection, _, status, ports, view = _read_port_page(request)
+    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(request, username, name, connection, status, ports, view, **kwargs)
+        return _render_port(
+            request, username, name, connection, status, ports, view, port_settings, **kwargs
+        )
 
     if port is None:
         return again()
@@ -461,3 +524,235 @@ def port_label(
     log.info("port label on %s by %s: %r", name, username, stored)
     done = f'{name} now has the label "{stored}".' if stored else f"{name} no longer has a label."
     return again(notice=f"Done: {done} Labels are kept in NXray only; the switch is not changed.")
+
+
+# ---- port settings and breakout ---------------------------------------------
+
+
+def _settings_form(current: PortSettings) -> dict[str, str]:
+    """The settings form filled with what the switch reports now."""
+    return {
+        "layer": current.layer,
+        "ip_address": current.ip_address,
+        "speed": current.speed,
+        "mtu": str(current.mtu),
+        "fec": current.fec,
+        "flow_receive": current.flow_receive,
+        "flow_send": current.flow_send,
+        "storm_broadcast": current.storm_field("broadcast"),
+        "storm_multicast": current.storm_field("multicast"),
+        "storm_unicast": current.storm_field("unicast"),
+        "storm_action": current.storm_action,
+    }
+
+
+def _breakout_guess(settings: PortSettings | None, ports: list[Port] | None) -> str | None:
+    """For one of four split ports: the split they were made with, when it shows."""
+    if settings is None or not settings.is_breakout_port:
+        return None
+    prefix = settings.parent + "/"
+    return guess_breakout_map(
+        [port.status_speed for port in ports or [] if port.name.startswith(prefix)]
+    )
+
+
+@router.post("/ports/settings", response_class=HTMLResponse)
+def port_settings_change(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    layer: str = Form(""),
+    ip_address: str = Form(""),
+    speed: str = Form(""),
+    mtu: str = Form(""),
+    fec: str = Form(""),
+    flow_receive: str = Form(""),
+    flow_send: str = Form(""),
+    storm_broadcast: str = Form(""),
+    storm_multicast: str = Form(""),
+    storm_unicast: str = Form(""),
+    storm_action: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Change a port's settings. Without confirm=yes, shows what would happen and asks."""
+    require_csrf(request, csrf)
+    form = {
+        "layer": layer,
+        "ip_address": ip_address,
+        "speed": speed,
+        "mtu": mtu,
+        "fec": fec,
+        "flow_receive": flow_receive,
+        "flow_send": flow_send,
+        "storm_broadcast": storm_broadcast,
+        "storm_multicast": storm_multicast,
+        "storm_unicast": storm_unicast,
+        "storm_action": storm_action,
+    }
+    connection, target, status, ports, view, current = _read_port_page(request, name)
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return _render_port(
+            request, username, name, connection, status, ports, view, current, **kwargs
+        )
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.settings_changes_enabled:
+        return again(
+            error="Port settings changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if current is None:
+        return again(error=f"The switch did not report the settings of {name}.", status_code=400)
+    try:
+        change = plan_port_settings(current, form)
+    except ValueError as exc:
+        return again(error=f"Not changed: {exc}.", settings_form=form, status_code=400)
+    if change.empty:
+        return again(notice="Nothing to change: the port already has these settings.")
+
+    lines, warnings = describe_port_settings(current, change, up=port.up)
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
+                "back_label": port.name,
+                "lines": lines,
+                "warnings": warnings,
+                "action": "/ports/settings",
+                "fields": {"name": port.name, **form},
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.configure_port_settings(
+                name,
+                layer=change.layer,
+                remove_ip=change.remove_ip,
+                ip_address=change.ip_address,
+                speed=change.speed,
+                mtu=change.mtu,
+                fec=change.fec,
+                flow_receive=change.flow_receive,
+                flow_send=change.flow_send,
+                storm_levels=change.storm_levels,
+                storm_action=change.storm_action,
+                old_storm_action=current.storm_action,
+            )
+    except NxapiError as exc:
+        log.warning("settings change on %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), settings_form=form, status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, True)
+    log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
+
+    connection, _, status, ports, view, current = _read_port_page(request, name)
+    return _render_port(
+        request,
+        username,
+        name,
+        connection,
+        status,
+        ports,
+        view,
+        current,
+        notice=(
+            f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
+            "the switch."
+        ),
+    )
+
+
+@router.post("/ports/breakout", response_class=HTMLResponse)
+def port_breakout(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    action: str = Form(""),
+    mapping: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Split a 100G port into four, or join four back. Asks to confirm first."""
+    require_csrf(request, csrf)
+    connection, target, status, ports, view, current = _read_port_page(request, name)
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return _render_port(
+            request, username, name, connection, status, ports, view, current, **kwargs
+        )
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.settings_changes_enabled:
+        return again(
+            error="Port settings changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if current is None:
+        return again(error=f"The switch did not report the settings of {name}.", status_code=400)
+    try:
+        plan = plan_breakout(current, action, mapping)
+    except ValueError as exc:
+        return again(error=f"Not changed: {exc}.", status_code=400)
+
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
+                "back_label": port.name,
+                "lines": plan.lines,
+                "warnings": plan.warnings,
+                "action": "/ports/breakout",
+                "fields": {"name": port.name, "action": action, "mapping": mapping},
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            if plan.action == "split":
+                client.breakout_port(plan.port, plan.mapping)
+            else:
+                client.join_port(plan.port, plan.mapping)
+    except NxapiError as exc:
+        log.warning("%s of %s refused: %s", plan.action, plan.port, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, True)
+    log.info("%s of %s by %s (%s)", plan.action, plan.port, username, plan.mapping)
+
+    # The port this page was for is gone now; show the one that replaced it.
+    shown = f"{plan.port}/1" if plan.action == "split" else plan.port
+    connection, _, status, ports, view, current = _read_port_page(request, shown)
+    return _render_port(
+        request,
+        username,
+        shown,
+        connection,
+        status,
+        ports,
+        view,
+        current,
+        notice=(
+            f"Done: {' '.join(plan.lines)} An NXray admin now presses Update the port list on "
+            "the Switch page so NXray may change the new ports. Not saved yet: Save config "
+            "keeps it over a restart of the switch."
+        ),
+    )

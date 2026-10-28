@@ -16,7 +16,8 @@ verified. This is a project decision, not an oversight.
 Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
-``delete_vlan``, ``configure_port_vlans``, ``save_config``), each building
+``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
+``breakout_port``, ``join_port``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -87,6 +88,18 @@ _VLAN_LIST_ITEM = re.compile(r"^([0-9]{1,4})(?:-([0-9]{1,4}))?$")
 
 # The two port modes NXray sets.
 PORT_MODES = ("access", "trunk")
+
+# Port settings (app/port_settings.py checks a form against the port first).
+# Speeds are in Mb/s, as the switch's "speed" command takes them.
+PORT_SPEEDS = ("auto", "100", "1000", "10000", "25000", "40000", "50000", "100000")
+FEC_MODES = ("auto", "off", "fc-fec", "rs-fec", "rs-ieee", "rs-cons16")
+ON_OFF = ("on", "off")
+STORM_TYPES = ("broadcast", "multicast", "unicast")
+STORM_ACTIONS = ("shutdown", "trap")
+MTU_MIN = 576
+MTU_MAX = 9216
+# How a 100G port is split: four 10G or four 25G ports.
+BREAKOUT_MAPS = ("10g-4x", "25g-4x")
 
 # Names NX-OS keeps for itself, plus the switch's own admin account.
 RESERVED_ACCOUNT_NAMES = frozenset(
@@ -255,6 +268,47 @@ def format_vlan_list(vlans: Iterable[int]) -> str:
         if vlan is not None:
             start = previous = vlan
     return ",".join(parts)
+
+
+def validate_ip_interface(text: str) -> str:
+    """Return an IPv4 address with its prefix ("192.0.2.1/24"), or raise ValueError.
+
+    The address must be one a port can have: not the network's own address
+    or its broadcast address (both allowed on /31 and /32).
+    """
+    cleaned = text.strip()
+    try:
+        interface = ipaddress.IPv4Interface(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an IPv4 address with a prefix length, such as 192.0.2.1/24"
+        ) from exc
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /24")
+    network = interface.network
+    if network.prefixlen < 31 and interface.ip in (
+        network.network_address,
+        network.broadcast_address,
+    ):
+        raise ValueError(f"{cleaned} is the network's own or broadcast address")
+    return f"{interface.ip}/{network.prefixlen}"
+
+
+def validate_storm_level(value: str | float) -> str:
+    """A storm-control level as the switch writes it ("10.00"), or raise ValueError."""
+    text = str(value).strip()
+    if not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,2})?", text) or not 0 <= float(text) <= 100:
+        raise ValueError(
+            "a storm-control level is a percentage from 0 to 100, with up to two decimals"
+        )
+    return f"{float(text):.2f}"
+
+
+def breakout_numbers(name: str) -> tuple[int, int]:
+    """(module, port) of a port or breakout port: Ethernet1/50/2 gives (1, 50)."""
+    validate_port_name(name)
+    module, port = name[len("Ethernet") :].split("/")[:2]
+    return int(module), int(port)
 
 
 def validate_show_command(command: str) -> str:
@@ -488,6 +542,90 @@ class NxapiClient:
         if len(commands) == 1:
             raise ValueError("nothing to change")
         self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_port_settings(
+        self,
+        name: str,
+        *,
+        layer: str | None = None,
+        remove_ip: str | None = None,
+        ip_address: str | None = None,
+        speed: str | None = None,
+        mtu: int | None = None,
+        fec: str | None = None,
+        flow_receive: str | None = None,
+        flow_send: str | None = None,
+        storm_levels: dict[str, str] | None = None,
+        storm_action: str | None = None,
+        old_storm_action: str | None = None,
+    ) -> None:
+        """Change a port's settings in one request; only the values given are sent.
+
+        ``layer`` is "switched" (``switchport``) or "routed" (``no
+        switchport``). ``remove_ip`` is the address to take off the port, sent
+        before a new ``ip_address`` and before ``switchport``. A storm-control
+        level of 100.00 is the switch's own default (no limit).
+        ``storm_action`` "none" removes ``old_storm_action``.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        if layer is not None and layer not in ("switched", "routed"):
+            raise ValueError(f"layer {layer!r} is not switched or routed")
+        if remove_ip is not None:
+            commands.append(f"no ip address {validate_ip_interface(remove_ip)}")
+        if layer == "switched":
+            commands.append("switchport")
+        elif layer == "routed":
+            commands.append("no switchport")
+        if ip_address is not None:
+            commands.append(f"ip address {validate_ip_interface(ip_address)}")
+        if speed is not None:
+            if speed not in PORT_SPEEDS:
+                raise ValueError(f"speed {speed!r} is not one the switch takes")
+            commands.append(f"speed {speed}")
+        if mtu is not None:
+            if not MTU_MIN <= int(mtu) <= MTU_MAX:
+                raise ValueError(f"an MTU is {MTU_MIN} to {MTU_MAX}")
+            commands.append(f"mtu {int(mtu)}")
+        if fec is not None:
+            if fec not in FEC_MODES:
+                raise ValueError(f"FEC {fec!r} is not one NXray sets")
+            commands.append(f"fec {fec}")
+        for direction, value in (("receive", flow_receive), ("send", flow_send)):
+            if value is not None:
+                if value not in ON_OFF:
+                    raise ValueError("flow control is on or off")
+                commands.append(f"flowcontrol {direction} {value}")
+        for kind, level in (storm_levels or {}).items():
+            if kind not in STORM_TYPES:
+                raise ValueError(f"storm-control type {kind!r} is not known")
+            commands.append(f"storm-control {kind} level {validate_storm_level(level)}")
+        if storm_action is not None:
+            if storm_action in STORM_ACTIONS:
+                commands.append(f"storm-control action {storm_action}")
+            elif storm_action == "none" and old_storm_action in STORM_ACTIONS:
+                commands.append(f"no storm-control action {old_storm_action}")
+            else:
+                raise ValueError("storm-control action is none, shutdown or trap")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def breakout_port(self, name: str, mapping: str) -> None:
+        """Split a 100G port into four: ``interface breakout module M port P map <map>``."""
+        if mapping not in BREAKOUT_MAPS:
+            raise ValueError(f"split {mapping!r} is not 10g-4x or 25g-4x")
+        module, port = breakout_numbers(name)
+        command = f"interface breakout module {module} port {port} map {mapping}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def join_port(self, name: str, mapping: str) -> None:
+        """Join a split port's four ports back into one: the ``no`` form of the split."""
+        if mapping not in BREAKOUT_MAPS:
+            raise ValueError(f"split {mapping!r} is not 10g-4x or 25g-4x")
+        module, port = breakout_numbers(name)
+        command = f"no interface breakout module {module} port {port} map {mapping}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.

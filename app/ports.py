@@ -73,6 +73,13 @@ class Port:
     counters: dict[str, int] = field(default_factory=dict)
     # The link's bandwidth (the running speed when up), 0 when not reported.
     bandwidth_bits: int = 0
+    # The speed column of ``show interface status``: the configured speed
+    # ("auto", "10G", "1000") while the port is down, the running one while up.
+    status_speed: str = ""
+    duplex: str = ""
+    # Forward error correction: what is set, and what the link runs with.
+    fec: str = ""
+    fec_oper: str = ""
 
     @property
     def errors(self) -> int:
@@ -179,6 +186,10 @@ def parse_ports(
                 counters={key: _int(row.get(key)) for key in COUNTER_LABELS},
                 # eth_bw is in kilobits per second.
                 bandwidth_bits=_int(row.get("eth_bw")) * 1000,
+                status_speed=str(status.get("speed", "")).strip(),
+                duplex=str(row.get("eth_duplex", "")).strip(),
+                fec=str(row.get("eth_admin_fec_state", "")).strip(),
+                fec_oper=str(row.get("eth_oper_fec_state", "")).strip(),
             )
         )
     ports.sort(key=lambda port: port_sort_key(port.name))

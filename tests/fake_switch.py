@@ -15,7 +15,10 @@ rules name. Entering a VLAN (which creates it) likewise needs a
 
 VLANs live in ``vlans`` (number -> name) and each port's VLAN settings in
 ``port_state`` next to its description, so ``show vlan brief`` and ``show
-interface switchport`` answer with what the commands set.
+interface switchport`` answer with what the commands set. Port settings
+(speed, MTU, FEC, flow control, storm control, routed with an address) live
+there too, and a split 100G port in ``breakouts`` (port -> map), so the show
+commands list its four ports instead.
 """
 
 from __future__ import annotations
@@ -49,6 +52,42 @@ _RECORDED = {
 }
 
 _INTERFACE_COMMANDS = ("shutdown", "no shutdown", "no description")
+
+# Port settings commands, the rule entity that permits each, and the
+# port_state key the value goes to (None: the command itself is the value).
+_SETTINGS = (
+    (re.compile(r"speed (\S+)"), "speed *", "speed"),
+    (re.compile(r"mtu (\d+)"), "mtu *", "mtu"),
+    (re.compile(r"fec (\S+)"), "fec *", "fec"),
+    (re.compile(r"flowcontrol receive (on|off)"), "flowcontrol receive *", "flow_receive"),
+    (re.compile(r"flowcontrol send (on|off)"), "flowcontrol send *", "flow_send"),
+    (
+        re.compile(r"storm-control broadcast level (\S+)"),
+        "storm-control broadcast level *",
+        "storm_broadcast",
+    ),
+    (
+        re.compile(r"storm-control multicast level (\S+)"),
+        "storm-control multicast level *",
+        "storm_multicast",
+    ),
+    (
+        re.compile(r"storm-control unicast level (\S+)"),
+        "storm-control unicast level *",
+        "storm_unicast",
+    ),
+    (re.compile(r"storm-control action (shutdown|trap)"), "storm-control action *", "storm_action"),
+    (re.compile(r"no storm-control action (\S+)"), "no storm-control action *", None),
+    (re.compile(r"switchport"), "switchport", None),
+    (re.compile(r"no switchport"), "no switchport", None),
+    (re.compile(r"ip address (\S+)"), "ip address *", "ip"),
+    (re.compile(r"no ip address (\S+)"), "no ip address *", None),
+)
+
+# The speed column of show interface status for a speed command's value.
+_STATUS_SPEED = {"auto": "auto", "1000": "1000", "100": "100"}
+
+_BREAKOUT = re.compile(r"(no )?interface breakout module (\d+) port (\d+) map (10g-4x|25g-4x)")
 
 # Interface commands with a value, and the rule entity that permits each.
 _SWITCHPORT = (
@@ -107,6 +146,8 @@ class FakeSwitch:
     # As on cisco-25gb: a copy takes a while (2-3 s there), and a second copy
     # sent meanwhile is refused. 0 means instant.
     save_seconds: float = 0.0
+    # Split 100G ports: "Ethernet1/50" -> "25g-4x".
+    breakouts: dict[str, str] = field(default_factory=dict)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -182,9 +223,36 @@ class FakeSwitch:
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
+            if name not in self.port_names():
+                return _error(ident, "% Invalid interface\n"), None
             if not (is_admin or self._role_allows(user, "interface", name)):
+                if self._role_allows(user, "interface", None):
+                    # As on cisco-25gb: the role has port rules, but not for this port.
+                    return _error(ident, "% Interface permission denied\n"), None
                 return denied, None
             return _ok(ident, None), ("interface", name)
+        if match := _BREAKOUT.fullmatch(cmd):
+            undo, module, port, mapping = match.groups()
+            rule = (
+                "conf t ; no interface breakout module * port * map *"
+                if undo
+                else "conf t ; interface breakout module * port * map *"
+            )
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            parent = f"Ethernet{module}/{port}"
+            if undo:
+                if self.breakouts.get(parent) != mapping:
+                    return _error(ident, "% Breakout not configured with this map\n"), context
+                del self.breakouts[parent]
+            elif parent not in ("Ethernet1/50", "Ethernet1/52") or parent in self.breakouts:
+                return _error(ident, "% Port does not support breakout\n"), context
+            else:
+                self.breakouts[parent] = mapping
+            for name in list(self.port_state):
+                if name == parent or name.startswith(parent + "/"):
+                    del self.port_state[name]
+            return _ok(ident, None), context
         if interface is not None and (cmd in _INTERFACE_COMMANDS or cmd.startswith("description ")):
             entity = "description *" if cmd.startswith("description ") else cmd
             if not (
@@ -202,6 +270,14 @@ class FakeSwitch:
                 state["desc"] = cmd[len("description ") :]
             return _ok(ident, None), context
         if interface is not None:
+            for pattern, entity, key in _SETTINGS:
+                if match := pattern.fullmatch(cmd):
+                    if not (
+                        is_admin
+                        or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)
+                    ):
+                        return denied, context
+                    return self._setting(ident, interface, cmd, key, match), context
             for pattern, entity, key in _SWITCHPORT:
                 if match := pattern.fullmatch(cmd):
                     if not (
@@ -279,11 +355,122 @@ class FakeSwitch:
             return _ok(ident, None), context
         return _error(ident, f"% Invalid command: {cmd.split()[0]}\n"), context
 
+    def _setting(
+        self, ident: int, interface: str, cmd: str, key: str | None, match: re.Match[str]
+    ) -> dict[str, Any]:
+        state = self.port_state.setdefault(interface, {})
+        routed = state.get("routed", False)
+        if cmd == "switchport":
+            if state.get("ip"):
+                return _error(ident, "ERROR: Remove the IP address first\n")
+            state["routed"] = False
+        elif cmd == "no switchport":
+            state["routed"] = True
+        elif cmd.startswith("no storm-control action"):
+            state.pop("storm_action", None)
+        elif cmd.startswith("no ip address"):
+            if state.get("ip") != match.group(1):
+                return _error(ident, "% Address not found\n")
+            state.pop("ip", None)
+        elif key == "ip" and not routed:
+            return _error(ident, "% IP address not allowed on a switched port\n")
+        elif key == "mtu" and not routed and match.group(1) not in ("1500", "9216"):
+            return _error(ident, "ERROR: MTU on L2 interfaces can only be 1500 or 9216\n")
+        elif key is not None:
+            state[key] = match.group(1)
+        return _ok(ident, None)
+
+    def port_names(self) -> list[str]:
+        """Every Ethernet port, with split ports listed as their four parts."""
+        names = [row["interface"] for row in self._expand(load_fixture("show_interface_status"))]
+        return [name for name in names if name.startswith("Ethernet")]
+
+    def _expand(self, body: dict[str, Any]) -> list[dict[str, Any]]:
+        """A body's rows, a split port's row replaced by four renamed copies."""
+        found = []
+        for row in body["TABLE_interface"]["ROW_interface"]:
+            mapping = self.breakouts.get(row.get("interface", ""))
+            if mapping is None:
+                found.append(row)
+                continue
+            for part in range(1, 5):
+                copy = dict(row, interface=f"{row['interface']}/{part}")
+                if "speed" in copy:
+                    copy["speed"] = "25G" if mapping == "25g-4x" else "10G"
+                if "eth_bw" in copy:
+                    copy["eth_bw"] = 25_000_000 if mapping == "25g-4x" else 10_000_000
+                found.append(copy)
+        body["TABLE_interface"]["ROW_interface"] = found
+        return found
+
+    def _row_for(self, fixture: str, name: str, template: str) -> dict[str, Any]:
+        """One port's row from a recorded all-ports body; a split port's from its parent."""
+        rows = load_fixture(fixture)["TABLE_interface"]["ROW_interface"]
+        by_name = {row["interface"]: row for row in rows}
+        row = by_name.get(name) or by_name.get(name.rsplit("/", 1)[0]) or by_name[template]
+        return dict(row, interface=name)
+
+    def capabilities(self, name: str) -> dict[str, Any]:
+        """``show interface <port> capabilities``, from the two recorded kinds."""
+        base = name.rsplit("/", 1)[0] if name.count("/") == 2 else name
+        fixture = (
+            "show_interface_capabilities_qsfp"
+            if base in ("Ethernet1/50", "Ethernet1/52") and base == name
+            else "show_interface_capabilities_sfp"
+        )
+        row = dict(load_fixture(fixture)["TABLE_interface"]["ROW_interface"], interface=name)
+        if name.count("/") == 2:
+            row["speed"] = "10000,25000"
+        return {"TABLE_interface": {"ROW_interface": row}}
+
+    def flowcontrol(self, name: str) -> dict[str, Any]:
+        row = self._row_for("show_interface_flowcontrol", name, "Ethernet1/1")
+        state = self.port_state.get(name, {})
+        if "flow_receive" in state:
+            row["recv_admin"] = row["recv_oper"] = state["flow_receive"]
+        if "flow_send" in state:
+            row["send_admin"] = row["send_oper"] = state["flow_send"]
+        return {"TABLE_interface": {"ROW_interface": row}}
+
+    def storm_control(self, name: str) -> dict[str, Any]:
+        row = self._row_for("show_interface_counters_storm_control", name, "Ethernet1/1")
+        state = self.port_state.get(name, {})
+        for key, field_name in (
+            ("storm_broadcast", "eth_bcast_supp"),
+            ("storm_multicast", "eth_mcast_supp"),
+            ("storm_unicast", "eth_ucast_supp"),
+        ):
+            if key in state:
+                row[field_name] = state[key]
+        if "storm_action" in state:
+            row["supp_action"] = f"[{state['storm_action']}]"
+        return {"TABLE_interface": {"ROW_interface": row}}
+
+    def ip_interfaces(self) -> dict[str, Any]:
+        """``show ip interface vrf all``: mgmt0 as recorded, plus routed ports with an address."""
+        body = load_fixture("show_ip_interface_vrf_all")
+        rows = [body["TABLE_intf"]["ROW_intf"]]
+        for name, state in sorted(self.port_state.items()):
+            if state.get("routed") and state.get("ip"):
+                address, _, masklen = state["ip"].partition("/")
+                rows.append(
+                    {
+                        "vrf-name-out": "default",
+                        # Written short, as NX-OS writes port names here.
+                        "intf-name": name.replace("Ethernet", "Eth"),
+                        "prefix": address,
+                        "masklen": int(masklen),
+                    }
+                )
+        return {"TABLE_intf": {"ROW_intf": rows[0] if len(rows) == 1 else rows}}
+
     def switchports(self) -> dict[str, Any]:
         """``show interface switchport`` with the VLAN settings changed so far."""
         body = load_fixture("show_interface_switchport")
-        for row in body["TABLE_interface"]["ROW_interface"]:
+        for row in self._expand(body):
             state = self.port_state.get(row["interface"], {})
+            if state.get("routed"):
+                row["switchport"] = "Disabled"
             if "mode" in state:
                 row["oper_mode"] = state["mode"]
             if "access" in state:
@@ -320,12 +507,41 @@ class FakeSwitch:
         }
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        port_show = re.fullmatch(
+            r"show interface (Ethernet\S+) (capabilities|flowcontrol|counters storm-control)", cmd
+        )
+        if port_show:
+            name, what = port_show.groups()
+            if name not in self.port_names():
+                return _error(ident, "% Invalid interface format\n")
+            if what == "capabilities":
+                return _ok(ident, self.capabilities(name))
+            if what == "flowcontrol":
+                return _ok(ident, self.flowcontrol(name))
+            return _ok(ident, self.storm_control(name))
+        if cmd == "show ip interface vrf all":
+            return _ok(ident, self.ip_interfaces())
+        if cmd == "show interface brief":
+            body = load_fixture("show_interface_brief")
+            self._expand(body)
+            return _ok(ident, body)
+        if cmd == "show interface status":
+            body = load_fixture("show_interface_status")
+            for row in self._expand(body):
+                speed = self.port_state.get(row["interface"], {}).get("speed")
+                if speed is not None:
+                    row["speed"] = _STATUS_SPEED.get(speed, f"{int(speed) // 1000}G")
+            return _ok(ident, body)
         if cmd in _RECORDED:
             return _ok(ident, load_fixture(_RECORDED[cmd]))
         if cmd == "show interface":
             body = load_fixture("show_interface")
-            for row in body["TABLE_interface"]["ROW_interface"]:
+            for row in self._expand(body):
                 state = self.port_state.get(row["interface"], {})
+                if "mtu" in state:
+                    row["eth_mtu"] = state["mtu"]
+                if "fec" in state:
+                    row["eth_admin_fec_state"] = state["fec"]
                 if "desc" in state:
                     if state["desc"]:
                         row["desc"] = state["desc"]

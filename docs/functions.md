@@ -44,6 +44,7 @@ prose columns; those are a reviewer's job.
 | Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
 | Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
 | Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
+| Read or change a port's speed, MTU, FEC, flow control, storm control, layer, or split it | `app/port_settings.py` (`plan_port_settings`, `plan_breakout`); commands from `NxapiClient.configure_port_settings`, `breakout_port`, `join_port` |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
 | Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
@@ -130,6 +131,7 @@ raises, all handled in `main.create_app`.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `breakout_numbers` | `(name: str) -> tuple[int, int]` | Module and port of a port or split port: Ethernet1/50/2 gives (1, 50) | `NxapiClient.breakout_port`, `join_port` | v0.1.0 |
 | `build_payload` | `(commands: list[str]) -> list[dict]` | The JSON-RPC request body for running commands in order | `NxapiClient.show` | v0.1.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page` (setup, address, repair) | v0.1.0 |
@@ -139,7 +141,9 @@ raises, all handled in `main.create_app`.
 | `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `give_role`, `delete_user`, `switch_setup.run_setup`, `switch_repair.run_repair`, `port_changes.role_lines` | v0.1.0 |
 | `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
+| `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
+| `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
 | `validate_vlan_id` | `(value: int \| str) -> int` | A VLAN number 1-4094, else `ValueError` | VLAN client methods, `vlans`, `routes/vlans` | v0.1.0 |
 | `validate_vlan_name` | `(name: str) -> str` | A VLAN name the switch stores: 1-32 letters, digits, `.`, `-`, `_` | `NxapiClient.configure_vlan`, `routes/vlans` | v0.1.0 |
 
@@ -151,8 +155,13 @@ The only configuration methods are `create_user(name, password, role)`
 port's description and on/off, nothing else), `configure_vlan(vlan_id,
 name=None)` (create or rename), `delete_vlan(vlan_id)` (never VLAN 1),
 `configure_port_vlans(name, mode=, access_vlan=, native_vlan=,
-allowed_vlans=)` (one port's mode and VLANs) and `save_config()`; each
-builds its commands from checked values.
+allowed_vlans=)` (one port's mode and VLANs), `configure_port_settings(name,
+layer=, remove_ip=, ip_address=, speed=, mtu=, fec=, flow_receive=,
+flow_send=, storm_levels=, storm_action=, old_storm_action=)` (one port's
+settings, only the ones given), `breakout_port(name, mapping)` and
+`join_port(name, mapping)` (split a 100G port into four, or join them;
+`10g-4x` or `25g-4x` only) and `save_config()`; each builds its commands
+from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -270,9 +279,10 @@ NX-API certificate is. Tests pass a pretend opener through
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
-`ROLE_RULES` (ports) and `VLAN_RULES` are the role's only rules; `ROLE_NAME`
-is `nxray-ports`, shared by every NXray install on a switch. `ROLE_VERSION`
-counts the rule sets (1 ports, 2 ports and VLANs). `EnableResult.had_role`
+`ROLE_RULES` (ports), `VLAN_RULES` and `SETTINGS_RULES` are the role's only
+rules; `ROLE_NAME` is `nxray-ports`, shared by every NXray install on a
+switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and VLANs, 3
+also port settings). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 there is no wait.
 
@@ -290,6 +300,27 @@ there is no wait.
 `PortVlans.uses(vlan_id)` says whether deleting a VLAN would cut a port off
 (access VLAN, native VLAN, or a trunk naming it; a trunk carrying every VLAN
 does not count); `VlanView.ports_using(vlan_id)` lists those ports.
+
+## `app/port_settings.py` — port settings and breakout
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `describe_port_settings` | `(current, change, *, up) -> tuple[list[str], list[str]]` | A port's settings change in words, plus warnings (link drops, layer change, smaller MTU, shutdown action) | `routes/ports.port_settings_change` | v0.1.0 |
+| `guess_breakout_map` | `(sibling_speeds: list[str]) -> str \| None` | The split four ports were made with (`10g-4x`, `25g-4x`) from their speed column, or None | `routes/ports` | v0.1.0 |
+| `load_port_settings` | `(client, port, vlans) -> PortSettings` | One port's settings, from one request of `settings_commands` | `try_load_port_settings` | v0.1.0 |
+| `parse_ip_addresses` | `(body) -> dict[str, tuple[str, str]]` | Each port's IPv4 address with prefix, and its VRF, from `show ip interface vrf all` | `parse_port_settings` | v0.1.0 |
+| `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, address and breakout | `load_port_settings` | v0.1.0 |
+| `plan_breakout` | `(settings, action, mapping) -> BreakoutPlan` | Checks a split or join against the port, with its lines and warnings for the confirm page | `routes/ports.port_breakout` | v0.1.0 |
+| `plan_port_settings` | `(current, form) -> SettingsChange` | Checks the settings form against the port (speeds it can run, MTU for its layer, FEC, levels) and keeps only what changes | `routes/ports.port_settings_change` | v0.1.0 |
+| `settings_commands` | `(name: str) -> tuple[str, ...]` | The per-port show commands a port's settings need | `load_port_settings` | v0.1.0 |
+| `speed_label` | `(mbps: str) -> str` | `10000` -> `10 Gb/s`, `auto` -> `Auto` | `describe_port_settings`, port page | v0.1.0 |
+| `speed_mbps` | `(text: str) -> str` | The switch's speed words as the `speed` command takes them: `10G` -> `10000` | `parse_port_settings`, `guess_breakout_map` | v0.1.0 |
+| `try_load_port_settings` | `(client, port, vlans) -> PortSettings \| None` | Like `load_port_settings`, None when the switch refuses a command | `routes/ports` | v0.1.0 |
+
+NXray's account may not read the running configuration, so the settings come
+from show commands. While a port is up the switch reports the speed it runs
+at, which may come from Auto; the form starts from that, so leaving it alone
+sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 
 ## `app/logging_conf.py` — application logging
 
@@ -315,7 +346,7 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `account_2fa_setup` | `(request, username, csrf) -> Response` | `POST /account/2fa/setup`: a new key and its QR code; nothing changes until confirmed | router | v0.1.0 |
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
-| `change_refused` | `(exc, target) -> str` | The message for a port or VLAN change the switch did not make | `port_change`, `port_vlans_change`, `routes/vlans` | v0.1.0 |
+| `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `routes/vlans` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
@@ -328,15 +359,17 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login`; for an account with two-factor, on to `/login/2fa` without a session | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
+| `port_breakout` | `(request, username, csrf, name, action, mapping, confirm) -> Response` | `POST /ports/breakout`: asks to confirm, then splits a 100G port into four or joins them, and shows the port that replaced it | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs; 404 for an unknown name | router | v0.1.0 |
+| `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
 | `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
-| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port and VLAN changes and Turn on VLAN changes buttons | router | v0.1.0 |
+| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN and port settings changes, Turn on (VLAN and) port settings changes and Update the port list buttons | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
