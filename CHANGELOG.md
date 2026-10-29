@@ -118,6 +118,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   HTTP/2 denial of service, fixed upstream but not yet in a Compose release),
   accepted in `.trivyignore` with the reasoning, since the plugin serves
   nothing.
+
+  The sample's `getent group docker` hint sat on its own commented line
+  directly above `group_add`, so uncommenting the block took the shell command
+  with it and Compose refused the file (`did not find expected '-'
+  indicator`). The command is now part of the comment's sentence, and the two
+  `group_add` lines are the only ones below it to uncomment.
 - **Published image on GitHub Container Registry.** A new workflow,
   `.github/workflows/release.yml`, builds the image and pushes it to
   `ghcr.io/acebmxer/nxray` whenever a version tag is pushed (as `:X.Y.Z`,

@@ -71,11 +71,10 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock
     # Self-update, continued: NXray runs as a non-root user and the socket is
     # owned by root:docker, so without joining that group every call to it is
-    # "permission denied". Put your docker group's number here (the one the
-    # sample shows is only an example); find yours with:
-    #
-    #   getent group docker | cut -d: -f3
-    #
+    # "permission denied". Uncomment the two lines below and put your docker
+    # group's number in place of 999 (that one is only an example). The
+    # command `getent group docker | cut -d: -f3`, run in a terminal on this
+    # machine, prints yours.
     # group_add:
     #   - "999"
 
