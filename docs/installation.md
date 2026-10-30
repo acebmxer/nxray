@@ -57,7 +57,7 @@ Each NXray account has one of three roles:
 | Role | May |
 | --- | --- |
 | admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN and port settings changes, updating the port list) and the Users page, plus what an operator may do. |
-| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, Save config. |
+| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, Save config. Also set the labels NXray keeps on ports. |
 | viewer | Look only: the dashboard, ports and VLANs. |
 
 Admins add accounts, change roles, disable accounts and set new passwords on
