@@ -19,6 +19,7 @@ from app.dependencies import (
 )
 from app.face import MODES, color_mode, draw_face
 from app.history import RANGE_LABELS, port_charts, range_key
+from app.neighbors import NeighborView, try_load_neighbors
 from app.nxapi import (
     NxapiClient,
     NxapiCommandError,
@@ -64,15 +65,25 @@ ACTIONS = ("description", "off", "on")
 def _read_ports(
     request: Request,
 ) -> tuple[
-    SwitchConnection | None, SwitchTarget | None, ConnectionStatus | None, list[Port] | None
+    SwitchConnection | None,
+    SwitchTarget | None,
+    ConnectionStatus | None,
+    list[Port] | None,
+    NeighborView | None,
 ]:
-    """(connection, target, status, ports): ports is None when they could not be read."""
+    """(connection, target, status, ports, neighbors): ports is None when they
+    could not be read, neighbors when the switch refused to give them."""
     connection, target, error = stored_switch(request)
     if target is None:
         status = ConnectionStatus(False, error) if error else None
-        return connection, None, status, None
-    status, ports = read_switch(target, load_ports, transport=request.app.state.nxapi_transport)
-    return connection, target, status, ports
+        return connection, None, status, None, None
+
+    def reader(client: NxapiClient) -> tuple[list[Port], NeighborView | None]:
+        return load_ports(client), try_load_neighbors(client)
+
+    status, found = read_switch(target, reader, transport=request.app.state.nxapi_transport)
+    ports, neighbors = found if found else (None, None)
+    return connection, target, status, ports, neighbors
 
 
 def _read_port_page(
@@ -84,30 +95,33 @@ def _read_port_page(
     list[Port] | None,
     VlanView | None,
     PortSettings | None,
+    NeighborView | None,
 ]:
     """Like _read_ports, plus the VLANs, for a port's own page.
 
     With ``name``, also that port's settings, read in a second request once
     the first shows the port exists (a show command naming a missing port
     would fail the whole request). Settings are None when they could not be
-    read.
+    read, and so are the neighbors.
     """
     connection, target, error = stored_switch(request)
     if target is None:
         status = ConnectionStatus(False, error) if error else None
-        return connection, None, status, None, None, None
+        return connection, None, status, None, None, None, None
 
-    def reader(client: NxapiClient) -> tuple[list[Port], VlanView, PortSettings | None]:
+    def reader(
+        client: NxapiClient,
+    ) -> tuple[list[Port], VlanView, PortSettings | None, NeighborView | None]:
         ports, view = load_ports_with_vlans(client)
         port = next((p for p in ports if p.name == name), None)
         settings = None
         if port is not None:
             settings = try_load_port_settings(client, port, view.ports.get(port.name))
-        return ports, view, settings
+        return ports, view, settings, try_load_neighbors(client)
 
     status, found = read_switch(target, reader, transport=request.app.state.nxapi_transport)
-    ports, view, settings = found if found else (None, None, None)
-    return connection, target, status, ports, view, settings
+    ports, view, settings, neighbors = found if found else (None, None, None, None)
+    return connection, target, status, ports, view, settings, neighbors
 
 
 def _labels(request: Request) -> dict[str, str]:
@@ -126,16 +140,16 @@ def ports_page(
     vlan_names: dict[int, str] = {}
     if color == "vlan":
         # Only this mode needs the VLAN names, so only it asks the switch for them.
-        connection, _, status, ports, view, _ = _read_port_page(request)
+        connection, _, status, ports, view, _, neighbors = _read_port_page(request)
         vlan_names = {vlan.id: vlan.name for vlan in view.vlans} if view else {}
     else:
-        connection, _, status, ports = _read_ports(request)
+        connection, _, status, ports, neighbors = _read_ports(request)
     if show not in FILTERS:
         show = "all"
     labels = _labels(request)
     shown: list[Port] = [port for port in ports or [] if FILTERS[show](port)]
     counts = {name: sum(1 for port in ports or [] if keep(port)) for name, keep in FILTERS.items()}
-    face = draw_face(ports, color, labels, vlan_names) if ports else None
+    face = draw_face(ports, color, labels, vlan_names, neighbors) if ports else None
     return templates.TemplateResponse(
         request,
         "ports.html",
@@ -151,6 +165,7 @@ def ports_page(
             "face": face,
             "color": color,
             "modes": MODES,
+            "neighbors": neighbors,
         },
     )
 
@@ -164,6 +179,7 @@ def _render_port(
     ports: list[Port] | None,
     view: VlanView | None = None,
     port_settings: PortSettings | None = None,
+    neighbors: NeighborView | None = None,
     *,
     error: str | None = None,
     notice: str | None = None,
@@ -191,6 +207,7 @@ def _render_port(
         status_code = 404 if ports is not None and port is None else 200
     if description is None:
         description = port.description if port else ""
+    devices = neighbors.for_port(name) if neighbors and port else None
     period = range_key(request.query_params.get("range"))
     charts = []
     if port:
@@ -230,6 +247,11 @@ def _render_port(
             "breakout_guess": _breakout_guess(port_settings, ports),
             "standard_mtu": STANDARD_MTU,
             "jumbo_mtu": JUMBO_MTU,
+            "neighbors": neighbors,
+            "devices": devices,
+            "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
+            if neighbors and devices
+            else {},
         },
         status_code=status_code,
     )
@@ -251,7 +273,7 @@ def render_port_page(
     notice: str | None = None,
 ) -> Response:
     """Read the switch fresh and show one port's page, with an optional message."""
-    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
     return _render_port(
         request,
         username,
@@ -261,6 +283,7 @@ def render_port_page(
         ports,
         view,
         port_settings,
+        neighbors,
         error=error,
         notice=notice,
     )
@@ -312,12 +335,23 @@ def port_change(
 ) -> Response:
     """Change one port. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, target, status, ports, view, port_settings, neighbors = _read_port_page(
+        request, name
+    )
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, port_settings, **kwargs
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            port_settings,
+            neighbors,
+            **kwargs,
         )
 
     if connection is None or target is None or port is None:
@@ -369,7 +403,7 @@ def port_change(
     log.info("port change on %s by %s: %s", connection.host, username, summary)
 
     # Read the port back so the page shows what the switch now reports.
-    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
     if action == "description":
         done = (
             f'{name} now has the description "{description}".'
@@ -387,6 +421,7 @@ def port_change(
         ports,
         view,
         port_settings,
+        neighbors,
         notice=f"Done: {done} Not saved yet: Save config keeps it over a restart of the switch.",
     )
 
@@ -405,7 +440,9 @@ def port_vlans_change(
 ) -> Response:
     """Set a port's mode and VLANs. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, target, status, ports, view, port_settings, neighbors = _read_port_page(
+        request, name
+    )
     port = next((p for p in ports or [] if p.name == name), None)
     current = view.ports.get(name) if view else None
     form = {
@@ -417,7 +454,16 @@ def port_vlans_change(
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, port_settings, **kwargs
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            port_settings,
+            neighbors,
+            **kwargs,
         )
 
     if connection is None or target is None or port is None or view is None:
@@ -479,7 +525,7 @@ def port_vlans_change(
         set_unsaved_changes(conn, True)
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
 
-    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
     return _render_port(
         request,
         username,
@@ -489,6 +535,7 @@ def port_vlans_change(
         ports,
         view,
         port_settings,
+        neighbors,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -506,12 +553,21 @@ def port_label(
 ) -> Response:
     """Set or remove a port's label. Kept in NXray only, so no confirm step and no switch call."""
     require_csrf(request, csrf)
-    connection, _, status, ports, view, port_settings = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, port_settings, **kwargs
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            port_settings,
+            neighbors,
+            **kwargs,
         )
 
     if port is None:
@@ -590,12 +646,12 @@ def port_settings_change(
         "storm_unicast": storm_unicast,
         "storm_action": storm_action,
     }
-    connection, target, status, ports, view, current = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, current, **kwargs
+            request, username, name, connection, status, ports, view, current, neighbors, **kwargs
         )
 
     if connection is None or target is None or port is None:
@@ -656,7 +712,7 @@ def port_settings_change(
         set_unsaved_changes(conn, True)
     log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
 
-    connection, _, status, ports, view, current = _read_port_page(request, name)
+    connection, _, status, ports, view, current, neighbors = _read_port_page(request, name)
     return _render_port(
         request,
         username,
@@ -666,6 +722,7 @@ def port_settings_change(
         ports,
         view,
         current,
+        neighbors,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -685,12 +742,12 @@ def port_breakout(
 ) -> Response:
     """Split a 100G port into four, or join four back. Asks to confirm first."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, current = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors = _read_port_page(request, name)
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, current, **kwargs
+            request, username, name, connection, status, ports, view, current, neighbors, **kwargs
         )
 
     if connection is None or target is None or port is None:
@@ -740,7 +797,7 @@ def port_breakout(
 
     # The port this page was for is gone now; show the one that replaced it.
     shown = f"{plan.port}/1" if plan.action == "split" else plan.port
-    connection, _, status, ports, view, current = _read_port_page(request, shown)
+    connection, _, status, ports, view, current, neighbors = _read_port_page(request, shown)
     return _render_port(
         request,
         username,
@@ -750,6 +807,7 @@ def port_breakout(
         ports,
         view,
         current,
+        neighbors,
         notice=(
             f"Done: {' '.join(plan.lines)} An NXray admin now presses Update the port list on "
             "the Switch page so NXray may change the new ports. Not saved yet: Save config "

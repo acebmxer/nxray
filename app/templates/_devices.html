@@ -1,0 +1,69 @@
+{# Tables shared by the Neighbors page and a port's own page. #}
+
+{% macro port_link(name) -%}
+{%- if name.startswith("Ethernet") -%}<a href="/ports/detail?name={{ name|urlencode }}">{{ name }}</a>{%- else -%}{{ name }}{%- endif -%}
+{%- endmacro %}
+
+{% macro port_list(names) -%}
+{%- for name in names -%}
+{{ port_link(name) }}{% if not loop.last %}{{ " and " if loop.revindex == 2 else ", " }}{% endif %}
+{%- else -%}no port{%- endfor -%}
+{%- endmacro %}
+
+{% macro neighbor_table(neighbors, show_port=True) %}
+<table class="table table-devices">
+  <thead>
+    <tr>
+      {% if show_port %}<th>Port</th>{% endif %}
+      <th>Heard over</th><th>Name</th><th>Its port</th><th>Model or system</th><th>Address</th><th>Can act as</th><th>VLAN</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for n in neighbors %}
+    <tr>
+      {% if show_port %}<td>{{ port_link(n.local_port) }}</td>{% endif %}
+      <td>{{ n.protocol }}</td>
+      <td>{{ n.name }}</td>
+      <td>{{ n.remote_port or "—" }}</td>
+      <td>{% if n.software and n.software != n.platform %}<span title="{{ n.software }}">{{ n.platform or "—" }}</span>{% else %}{{ n.platform or "—" }}{% endif %}</td>
+      <td>{{ n.address or "—" }}</td>
+      <td class="wrap">{{ n.capabilities or "—" }}</td>
+      <td>{{ n.vlan or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% macro mac_table(macs, ips, show_port=True) %}
+<table class="table table-devices">
+  <thead>
+    <tr>
+      <th>MAC address</th><th>Maker</th><th>VLAN</th>
+      {% if show_port %}<th>Port</th>{% endif %}
+      <th>IPv4 address</th><th>Learned</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in macs %}
+    <tr>
+      <td class="mono">{{ m.mac }}</td>
+      <td class="wrap">{% if m.maker %}{{ m.maker }}{% elif m.local %}<span class="dim">{{ m.maker_text }}</span>{% else %}<span class="dim">not in the IEEE list</span>{% endif %}</td>
+      <td>{{ m.vlan or "—" }}</td>
+      {% if show_port %}<td>{% if m.switch_own %}the switch itself{% else %}{{ port_link(m.port) }}{% endif %}</td>{% endif %}
+      <td>{{ ips.get(m.mac, [])|join(", ") or "—" }}</td>
+      <td>{{ m.kind }}{% if m.secure %} (port security){% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% macro protocol_notes(view) %}
+{% if not view.cdp_enabled %}
+<p class="note">CDP is off on the switch, so Cisco devices next to it cannot show up here either.</p>
+{% endif %}
+{% if not view.lldp_enabled %}
+<p class="note">LLDP is off on the switch, so only devices that speak CDP (Cisco's own protocol) can show up here. Most servers and other makers' switches speak LLDP; once LLDP is turned on, they appear here by themselves.</p>
+{% endif %}
+{% endmacro %}

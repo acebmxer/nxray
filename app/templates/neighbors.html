@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_link, port_list %}
+{% block title %}Neighbors — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<h1 class="page-title">Neighbors</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% elif view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+  {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Devices that announce themselves</h2>
+  <p class="lead">Switches, routers, servers and phones next to the switch that say who they are over CDP or LLDP. CDP is {{ "on" if view.cdp_enabled else "off" }} and LLDP is {{ "on" if view.lldp_enabled else "off" }} on the switch.</p>
+  {% if view.neighbors %}
+  {{ neighbor_table(view.neighbors) }}
+  {% else %}
+  <p>No device has announced itself.</p>
+  {% endif %}
+  {{ protocol_notes(view) }}
+</section>
+
+<section class="card">
+  <h2 class="card-title">MAC address table</h2>
+  <p class="lead">Every device address the switch has learned from traffic, and the port it came in on: this is how a device that announces nothing is found.{% if view.aging_text %} {{ view.aging_text }}{% endif %}</p>
+  <form method="get" action="/neighbors" class="row-form search-form">
+    <input id="q" name="q" aria-label="Search the MAC address table" type="text" value="{{ query }}" maxlength="{{ query_max }}" spellcheck="false" placeholder="MAC, maker, port or VLAN">
+    <button type="submit" class="btn btn-quiet">Search</button>
+    {% if query %}<a class="btn btn-quiet" href="/neighbors">Show all</a>{% endif %}
+  </form>
+  <p class="hint">Part of a MAC address in any form (0cea, 0c:ea:14), part of a maker's name, a port (Ethernet1/3 or 1/3) or a VLAN number.</p>
+  {% if macs %}
+  <p class="note">{% if query %}{{ macs|length }} of {{ view.macs|length }} entries match.{% else %}{{ view.macs|length }} entries.{% endif %}</p>
+  {{ mac_table(macs, ips) }}
+  {% elif query %}
+  <p>No entry matches "{{ query }}".</p>
+  {% else %}
+  <p>The switch has learned no MAC addresses.</p>
+  {% endif %}
+  {% if view.port_channels %}
+  <p class="note">The switch learns addresses on a port-channel as a whole, not on its ports:
+    {%- for pc in view.port_channels %} {{ pc.name }} is {{ port_list(pc.members) }}{{ "." if loop.last else ";" }}{% endfor %}</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">ARP table</h2>
+  <p class="lead">The IPv4 address behind a MAC address. The switch learns these only in networks where it has an address of its own (mgmt0, a VLAN interface or a routed port).</p>
+  {% if view.arps %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>IPv4 address</th><th>MAC address</th><th>Interface</th><th>Port</th><th>VRF</th><th>Age</th></tr>
+    </thead>
+    <tbody>
+      {% for a in view.arps %}
+      <tr>
+        <td>{{ a.ip }}</td>
+        <td class="mono">{{ a.mac or "not answered yet" }}</td>
+        <td>{{ a.interface }}</td>
+        <td>{{ port_link(a.port) if a.port else "—" }}</td>
+        <td>{{ a.vrf }}</td>
+        <td>{{ a.age }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>The ARP table is empty.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

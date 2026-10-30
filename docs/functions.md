@@ -40,7 +40,7 @@ prose columns; those are a reviewer's job.
 | Give NXray's account a new password, or make it again | `app/switch_repair.py`, `run_repair` |
 | Encrypt a secret for the database | `app/crypto.py` |
 | Protect a form against forgery | `app/dependencies.py`, `require_csrf`; token from `security.csrf_token` |
-| Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports) |
+| Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports), `app/neighbors.py` (neighbors and tables) |
 | Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
 | Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
 | Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`) |
@@ -48,6 +48,8 @@ prose columns; those are a reviewer's job.
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
 | Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
+| Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
+| Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
@@ -359,13 +361,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login`; for an account with two-factor, on to `/login/2fa` without a session | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
+| `neighbors_page` | `(request, username, q) -> Response` | `GET /neighbors?q=`: CDP and LLDP neighbors, the MAC address table (narrowed by the search) and ARP, read live; every role | router | v0.1.0 |
 | `port_breakout` | `(request, username, csrf, name, action, mapping, confirm) -> Response` | `POST /ports/breakout`: asks to confirm, then splits a 100G port into four or joins them, and shows the port that replaced it | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
-| `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs; 404 for an unknown name | router | v0.1.0 |
+| `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs, settings and connected devices; 404 for an unknown name | router | v0.1.0 |
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
-| `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names | router | v0.1.0 |
+| `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names; every mode reads the neighbors and MAC address table for the tooltips | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
@@ -505,10 +508,11 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `color_mode` | `(value) -> str` | A valid `?color=` name; `state` for anything else | `draw_face`, `routes/ports.ports_page` | v0.1.0 |
-| `draw_face` | `(ports, mode, labels=None, vlan_names=None) -> Face` | The front panel as inline SVG (each port a link with a tooltip) and a legend with a count per colour | `routes/ports.ports_page` | v0.1.0 |
+| `device_lines` | `(devices: PortDevices) -> list[str]` | The tooltip lines for what is plugged into a port: neighbors, its port-channel, then up to three learned addresses with their makers | `tooltip` | v0.1.0 |
+| `draw_face` | `(ports, mode, labels=None, vlan_names=None, neighbors=None) -> Face` | The front panel as inline SVG (each port a link with a tooltip, which with `neighbors` says what is plugged in) and a legend with a count per colour | `routes/ports.ports_page` | v0.1.0 |
 | `panel_layout` | `(ports) -> tuple[list[Cage], float, float]` | Where each port sits: pairs with the odd port on top, SFP cages in blocks of six pairs, then QSFP cages (40 Gb/s or more, or broken out); plus width and height | `draw_face` | v0.1.0 |
 | `port_colour` | `(port, mode, colours, vlan_names=None) -> tuple[str, str]` | A port's CSS classes and legend words in one colour mode | `draw_face` | v0.1.0 |
-| `tooltip` | `(port, label="", vlan_names=None) -> str` | What hovering over a port shows, one fact per line | `draw_face` | v0.1.0 |
+| `tooltip` | `(port, label="", vlan_names=None, devices=None) -> str` | What hovering over a port shows, one fact per line | `draw_face` | v0.1.0 |
 | `vlan_colours` | `(ports) -> dict[str, int]` | A colour number (0-7, repeating) per access VLAN in use, lowest first | `draw_face` | v0.1.0 |
 
 The colours are CSS classes (`f-up`, `f-t2`, `f-vlan s3`, ...) in
@@ -522,6 +526,46 @@ Content-Security-Policy holds.
 | `get_labels` | `(conn) -> dict[str, str]` | Every port's label, by port name | `routes/ports` | v0.1.0 |
 | `set_label` | `(conn, port, label, username) -> str` | Checks and stores a label (empty removes it); returns what was stored | `routes/ports.port_label` | v0.1.0 |
 | `validate_label` | `(text: str) -> str` | Trims a label; refuses over 64 characters or control characters (any other text is fine, the switch never sees it) | `set_label` | v0.1.0 |
+
+## `app/neighbors.py` — neighbors, the MAC address table and ARP
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `cdp_enabled` | `(body) -> bool` | Whether CDP is on for the whole switch, from `show cdp global` | `load_neighbors`, `parse_neighbor_view` | v0.1.0 |
+| `feature_enabled` | `(body, name: str) -> bool` | Whether `show feature` lists a feature as enabled | `load_neighbors`, `parse_neighbor_view` | v0.1.0 |
+| `filter_macs` | `(macs, query: str) -> list[MacEntry]` | The MAC table entries matching a search: a VLAN number, a port (any spelling), part of a MAC address (any form) or of a maker's name | `routes/neighbors.neighbors_page` | v0.1.0 |
+| `load_neighbors` | `(client) -> NeighborView` | The tables from one request of `NEIGHBOR_COMMANDS`, then the neighbor lists of whichever of CDP and LLDP is on | `routes/neighbors`, `try_load_neighbors` | v0.1.0 |
+| `long_port_name` | `(name: str) -> str` | `Eth1/3` -> `Ethernet1/3`, `Po43` -> `port-channel43` | every parser here | v0.1.0 |
+| `parse_aging_time` | `(body) -> int \| None` | Seconds a learned address is kept, from `show mac address-table aging-time` | `parse_neighbor_view` | v0.1.0 |
+| `parse_arp` | `(body) -> list[ArpEntry]` | Every VRF's ARP entries from `show ip arp detail vrf all` | `parse_neighbor_view` | v0.1.0 |
+| `parse_cdp_neighbors` | `(body) -> list[Neighbor]` | Neighbors from `show cdp neighbors detail` | `parse_neighbor_view` | v0.1.0 |
+| `parse_lldp_neighbors` | `(body) -> list[Neighbor]` | Neighbors from `show lldp neighbors detail`, capability letters as words, "not advertised" as nothing | `parse_neighbor_view` | v0.1.0 |
+| `parse_mac_table` | `(body) -> list[MacEntry]` | The MAC address table with each maker, by port then VLAN, the switch's own address last | `parse_neighbor_view` | v0.1.0 |
+| `parse_neighbor_view` | `(feature, cdp_global, mac, aging, arp, channel, cdp=None, lldp=None) -> NeighborView` | Everything the Neighbors page shows, from the bodies | `load_neighbors` | v0.1.0 |
+| `parse_port_channels` | `(body) -> list[PortChannel]` | Port-channels and their member ports from `show port-channel summary` | `parse_neighbor_view` | v0.1.0 |
+| `readable_duration` | `(value) -> str` | `PT1M41S` -> `1m 41s` | `parse_arp` | v0.1.0 |
+| `try_load_neighbors` | `(client) -> NeighborView \| None` | Like `load_neighbors`, None when the switch refuses a command, so the Ports and port pages keep the rest | `routes/ports` | v0.1.0 |
+
+`NeighborView.for_port(name)` gives a port's neighbors and the addresses
+learned on it; for a port in a port-channel those are the port-channel's,
+because the switch learns addresses on the bundle. `ips_of(mac)` looks a MAC
+address up in the ARP table. With the lldp feature off every `show lldp`
+command is an error, so the LLDP list is asked for only when it is on. The
+LLDP field names come from Cisco's NX-API reference; LLDP has been off on the
+switch NXray was built against.
+
+## `app/oui.py` — MAC addresses and their makers
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `format_mac` | `(text: str) -> str` | `0cea.1439.bb3a` -> `0c:ea:14:39:bb:3a`; other text as is | `neighbors.parse_mac_table`, `parse_arp` | v0.1.0 |
+| `is_local_mac` | `(text: str) -> bool` | A locally administered address (made up by a VM, a container or a phone), which has no maker | `mac_maker`, `neighbors.parse_mac_table` | v0.1.0 |
+| `mac_maker` | `(text: str) -> str` | The organisation the IEEE assigned the address block to (the smallest matching MA-S, MA-M or MA-L block), or "" | `neighbors.parse_mac_table` | v0.1.0 |
+| `normalize_mac` | `(text: str) -> str \| None` | The 12 hex digits of a MAC address written any common way, or None | everything here, `NeighborView.ips_of` | v0.1.0 |
+
+The list lives in `app/oui.tsv.gz` and is read once, on first use.
+`scripts/update_oui.py` downloads it from the IEEE; the image build runs it,
+and keeps the committed copy when the IEEE cannot be reached.
 
 ## `app/routes/history.py` — the History page
 

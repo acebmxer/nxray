@@ -49,6 +49,12 @@ _RECORDED = {
     "show interface brief": "show_interface_brief",
     "show interface status": "show_interface_status",
     "show interface transceiver": "show_interface_transceiver",
+    "show cdp global": "show_cdp_global",
+    "show cdp neighbors detail": "show_cdp_neighbors_detail",
+    "show mac address-table": "show_mac_address_table",
+    "show mac address-table aging-time": "show_mac_address_table_aging_time",
+    "show ip arp detail vrf all": "show_ip_arp_detail_vrf_all",
+    "show port-channel summary": "show_port_channel_summary",
 }
 
 _INTERFACE_COMMANDS = ("shutdown", "no shutdown", "no description")
@@ -148,6 +154,10 @@ class FakeSwitch:
     save_seconds: float = 0.0
     # Split 100G ports: "Ethernet1/50" -> "25g-4x".
     breakouts: dict[str, str] = field(default_factory=dict)
+    # The lldp feature, off as on cisco-25gb: every "show lldp" command is then
+    # "% Invalid command". On, "show lldp neighbors detail" answers from a body
+    # shaped after Cisco's NX-API reference (never recorded on cisco-25gb).
+    lldp: bool = False
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -506,7 +516,22 @@ class FakeSwitch:
             "TABLE_vlanbriefxbrief": {"ROW_vlanbriefxbrief": rows[0] if len(rows) == 1 else rows}
         }
 
+    def features(self) -> dict[str, Any]:
+        """``show feature`` as recorded, with lldp on or off as ``lldp`` says."""
+        body = load_fixture("show_feature")
+        for row in body["TABLE_cfcFeatureCtrlTable"]["ROW_cfcFeatureCtrlTable"]:
+            if row["cfcFeatureCtrlName2"] == "lldp":
+                row["cfcFeatureCtrlOpStatus2"] = "enabled" if self.lldp else "disabled"
+        return body
+
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd == "show feature":
+            return _ok(ident, self.features())
+        if cmd.startswith("show lldp"):
+            if not self.lldp:
+                return _error(ident, "% Invalid command\n")
+            if cmd == "show lldp neighbors detail":
+                return _ok(ident, load_fixture("show_lldp_neighbors_detail"))
         port_show = re.fullmatch(
             r"show interface (Ethernet\S+) (capabilities|flowcontrol|counters storm-control)", cmd
         )

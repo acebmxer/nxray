@@ -1,0 +1,7 @@
+{
+  "cdp_global_enabled": "enabled",
+  "refresh_time": "60",
+  "ttl": "180",
+  "v2_advertisement": "enabled",
+  "deviceid_format": "DeviceID TLV in System-Name(Default) Format"
+}

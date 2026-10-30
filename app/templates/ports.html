@@ -36,7 +36,7 @@
     {% if labels %}<li><span class="swatch swatch-mark"></span>Has a label</li>{% endif %}
   </ul>
   <p class="note">
-    Hover over a port for its details; click it to open its page.
+    Hover over a port for its details and what is plugged into it; click it to open its page.
     {% if color == "traffic" %}Traffic is the busier direction over the last 30 seconds, as a share of the link's speed.{% endif %}
     {% if color == "errors" %}Errors and discards count since the switch's counters were last cleared.{% endif %}
     {% if color == "vlan" %}Ports without a link are drawn faded. Colours repeat after eight VLANs; hover to be sure.{% endif %}

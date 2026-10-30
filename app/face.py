@@ -27,6 +27,7 @@ from urllib.parse import quote
 
 from markupsafe import Markup
 
+from app.neighbors import NeighborView, PortDevices
 from app.ports import Port, human_rate
 
 # How the ports can be coloured, and the words on the buttons for each.
@@ -192,7 +193,12 @@ def port_colour(
     return "f-empty", "Empty: nothing plugged in"
 
 
-def tooltip(port: Port, label: str = "", vlan_names: Mapping[int, str] | None = None) -> str:
+def tooltip(
+    port: Port,
+    label: str = "",
+    vlan_names: Mapping[int, str] | None = None,
+    devices: PortDevices | None = None,
+) -> str:
     """What hovering over a port shows, one fact per line."""
     lines = [f"{port.name} — {label}" if label else port.name]
     if port.up:
@@ -220,7 +226,37 @@ def tooltip(port: Port, label: str = "", vlan_names: Mapping[int, str] | None = 
         )
     if port.errors:
         lines.append(f"Errors and discards: {port.errors:,}")
+    if devices is not None:
+        lines.extend(device_lines(devices))
     return "\n".join(lines)
+
+
+# How many learned addresses a tooltip names before it only counts the rest.
+_TOOLTIP_DEVICES = 3
+
+
+def device_lines(devices: PortDevices) -> list[str]:
+    """The tooltip lines for what is plugged into a port: neighbors, then learned addresses."""
+    lines = []
+    for neighbor in devices.neighbors:
+        line = f"{neighbor.protocol} neighbor: {neighbor.name}"
+        if neighbor.remote_port:
+            line += f", its port {neighbor.remote_port}"
+        lines.append(line)
+    if devices.channel:
+        lines.append(f"Part of {devices.channel.name}")
+    seen: dict[str, str] = {}
+    for entry in devices.macs:
+        if not entry.switch_own and entry.mac not in seen:
+            seen[entry.mac] = entry.maker or ("locally administered" if entry.local else "")
+    if seen:
+        where = f" on {devices.channel.name}" if devices.channel else ""
+        lines.append(f"Devices learned{where}: {len(seen)}")
+        for mac, maker in list(seen.items())[:_TOOLTIP_DEVICES]:
+            lines.append(f"  {mac} ({maker})" if maker else f"  {mac}")
+        if len(seen) > _TOOLTIP_DEVICES:
+            lines.append(f"  and {len(seen) - _TOOLTIP_DEVICES} more")
+    return lines
 
 
 def draw_face(
@@ -228,8 +264,12 @@ def draw_face(
     mode: str,
     labels: Mapping[str, str] | None = None,
     vlan_names: Mapping[int, str] | None = None,
+    neighbors: NeighborView | None = None,
 ) -> Face:
-    """The front panel as SVG, plus a legend of the colours it uses with their counts."""
+    """The front panel as SVG, plus a legend of the colours it uses with their counts.
+
+    With ``neighbors``, each port's tooltip also says what is plugged into it.
+    """
     labels = labels or {}
     mode = color_mode(mode)
     colours = vlan_colours(ports)
@@ -256,11 +296,12 @@ def draw_face(
             key = (css.replace(" f-faded", ""), words)
             counts[key] = counts.get(key, 0) + 1
             label = labels.get(port.name, "")
+            devices = neighbors.for_port(port.name) if neighbors else None
             x = cage.x + index * (slice_width + 1)
             href = "/ports/detail?name=" + quote(port.name, safe="/")
             parts.append(
                 f'<a class="face-port" href="{html.escape(href)}">'
-                f"<title>{html.escape(tooltip(port, label, vlan_names))}</title>"
+                f"<title>{html.escape(tooltip(port, label, vlan_names, devices))}</title>"
                 f'<rect class="face-cell {css}" x="{x:.1f}" y="{cage.y:.1f}" '
                 f'width="{slice_width:.1f}" height="{cage.height:.1f}" rx="2"/>'
             )

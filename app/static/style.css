@@ -470,3 +470,13 @@ a { color: var(--accent); }
 .swatch.f-trunk { background: repeating-linear-gradient(45deg, #5b6f86 0 3px, #9fb3c8 3px 5px); }
 .swatch.swatch-mark { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--text); }
 .port-label { display: block; font-size: 0.85rem; color: var(--text-dim); }
+
+/* ---- neighbors and the MAC address table ---- */
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88rem; }
+.table-devices td { vertical-align: top; white-space: nowrap; }
+.table-devices td.wrap { white-space: normal; }
+.search-form { margin: 0 0 0.25rem; }
+.card-title + .table-devices, .lead + .table-devices { margin-top: 0.25rem; }
+.devices-part + .devices-part { margin-top: 1.25rem; }
+.devices-part h3 { font-size: 0.95rem; margin: 0 0 0.5rem; }

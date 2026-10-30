@@ -1,0 +1,44 @@
+{
+  "neigh_hdr": "neigh_hdr",
+  "TABLE_nbor_detail": {
+    "ROW_nbor_detail": [
+      {
+        "chassis_type": "Mac Address",
+        "chassis_id": "b859.9f00.0010",
+        "port_type": "Mac Address",
+        "port_id": "b859.9f00.0011",
+        "l_port_id": "Eth1/37",
+        "port_desc": "enp65s0f0np0",
+        "sys_name": "pve-node-1",
+        "sys_desc": "Debian GNU/Linux 13 (trixie) Linux 6.17.2-1-pve #1 SMP x86_64",
+        "ttl": 115,
+        "system_capability": "B, W, R, S",
+        "enabled_capability": "S",
+        "mgmt_addr_type": "IPV4",
+        "mgmt_addr": "192.0.2.21",
+        "mgmt_addr_ipv6_type": "IPV6",
+        "mgmt_addr_ipv6": "not advertised",
+        "vlan_id": "not advertised"
+      },
+      {
+        "chassis_type": "Mac Address",
+        "chassis_id": "0cea.1400.0020",
+        "port_type": "Interface Name",
+        "port_id": "Ethernet4/10",
+        "l_port_id": "Eth1/40",
+        "port_desc": "Ethernet4/10",
+        "sys_name": "core-sw",
+        "sys_desc": "Cisco Nexus Operating System (NX-OS) Software 7.0(3)I7(5)\nTAC support: http://www.cisco.com/tac\nCopyright (c) 2002-2018, Cisco Systems, Inc. All rights reserved.",
+        "ttl": 106,
+        "system_capability": "B, R",
+        "enabled_capability": "B, R",
+        "mgmt_addr_type": "IPV4",
+        "mgmt_addr": "192.0.2.2",
+        "mgmt_addr_ipv6_type": "IPV6",
+        "mgmt_addr_ipv6": "not advertised",
+        "vlan_id": "10"
+      }
+    ]
+  },
+  "neigh_count": 2
+}

@@ -1,0 +1,19 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "vrf-name-out": "all",
+      "cnt-total": 1,
+      "TABLE_adj": {
+        "ROW_adj": {
+          "intf-out": "mgmt0",
+          "ip-addr-out": "192.0.2.1",
+          "time-stamp": "PT1M41S",
+          "mac": "6022.3200.0005",
+          "phy-intf": "mgmt0",
+          "flags": "",
+          "adj-vrf-name": "management"
+        }
+      }
+    }
+  }
+}

@@ -221,6 +221,12 @@ published image instead of running your build:
     docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm nxray python -m app.hashpw
     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
+The build downloads the IEEE's list of MAC address makers, which the
+Neighbors page and a port's page use to name the maker of each device. If
+the build cannot reach the IEEE it says so and uses the copy in the
+repository instead. Docker keeps that step in its build cache, so a rebuild
+reuses the list from the last download; `--no-cache` downloads it again.
+
 ## Updating
 
 The sample compose file uses the `:latest` tag, which follows every release,

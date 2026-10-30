@@ -7,8 +7,13 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from app.neighbors import CDP_NEIGHBORS, NEIGHBOR_COMMANDS
 from tests.conftest import load_fixture
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
+
+PORT_COMMANDS = ["show interface", "show interface status", "show interface transceiver"]
+# Read after the ports, for what the front panel's tooltips say is plugged in.
+NEIGHBOR_READS = [list(NEIGHBOR_COMMANDS), [CDP_NEIGHBORS]]
 
 
 @pytest.fixture
@@ -67,9 +72,7 @@ def test_ports_page_lists_every_port_from_one_request(
     logged_in: TestClient, switch: FakeSwitch
 ) -> None:
     text = _text(logged_in.get("/ports").text)
-    assert switch.requests == [
-        ["show interface", "show interface status", "show interface transceiver"]
-    ]
+    assert switch.requests == [PORT_COMMANDS, *NEIGHBOR_READS]
     assert "All (54)" in text and "Up (0)" in text and "Down (54)" in text
     assert "Ethernet1/1 Down XCVR not inserted auto 1 none 0 b/s 0 b/s 0" in text
     assert "Ethernet1/54" in text
@@ -116,7 +119,9 @@ def test_unknown_port_is_a_404(logged_in: TestClient, switch: FakeSwitch) -> Non
         assert page.status_code == 404, name
         assert "has no port called" in page.text
     # Port names never reach the switch as part of a command.
-    assert all(cmd[0] == "show interface" for cmd in switch.requests)
+    sent = [cmd for request in switch.requests for cmd in request]
+    assert sent
+    assert not any("Ethernet9/99" in cmd or "reload" in cmd for cmd in sent)
 
 
 def test_unreachable_switch(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -142,9 +147,7 @@ def test_colour_modes_read_the_switch_once(
     logged_in: TestClient, switch: FakeSwitch, mode: str
 ) -> None:
     html = logged_in.get(f"/ports?color={mode}").text
-    assert switch.requests == [
-        ["show interface", "show interface status", "show interface transceiver"]
-    ]
+    assert switch.requests == [PORT_COMMANDS, *NEIGHBOR_READS]
     assert f'filter filter-on" href="/ports?show=all&amp;color={mode}"' in html
 
 
@@ -152,7 +155,8 @@ def test_vlan_mode_names_the_vlans_from_the_same_request(
     logged_in: TestClient, switch: FakeSwitch
 ) -> None:
     html = logged_in.get("/ports?color=vlan").text
-    assert len(switch.requests) == 1
+    assert switch.requests[1:] == NEIGHBOR_READS
+    assert switch.requests[0][:3] == PORT_COMMANDS
     assert "show vlan brief" in switch.requests[0]
     assert "VLAN 1 default" in _text(html)
     assert "f-vlan s0" in html

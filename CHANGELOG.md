@@ -11,6 +11,31 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Neighbors page.** A new **Neighbors** page, open to every role, lists
+  what the switch knows about the devices around it, read live: the devices
+  that announce themselves over CDP or LLDP (port, name, their port, model,
+  management address, what they can act as, VLAN); the MAC address table
+  (every device address the switch has learned, its VLAN, the port it came in
+  on, its IPv4 address when the ARP table has one, and how long an address is
+  kept without traffic), with a search box for part of a MAC address in any
+  form, a maker, a port or a VLAN; and the ARP table of every VRF. The page
+  says whether CDP and LLDP are on. With LLDP off, only CDP devices can
+  appear, and the page says so; LLDP neighbors appear by themselves once LLDP
+  is turned on.
+- **What is plugged into a port.** Each port's page has a **Connected
+  devices** card with the neighbors on that port and the addresses learned on
+  it, and the front panel's tooltips name the CDP or LLDP neighbor and up to
+  three learned addresses. For a port in a port-channel these are the
+  port-channel's addresses, because the switch learns them on the bundle; the
+  card says so and names the other ports in it. The Ports page and a port's
+  page ask the switch for these in two more requests; if the switch refuses
+  them, the rest of the page still shows.
+- **Device makers from the MAC address.** Every learned address shows the
+  company its block was assigned to, from the IEEE's public MA-L, MA-M and
+  MA-S lists (the smallest matching block wins), downloaded each time the
+  image is built. An address a VM, a container or a phone made up for itself
+  (locally administered) is labelled as such instead. When the build cannot
+  reach the IEEE, the copy in the repository is used.
 - **Port settings.** Each port's page has a **Port settings** card showing
   the port's layer (switched, or routed with its IPv4 address), speed,
   duplex, MTU, FEC, flow control and storm control, and **Change settings**

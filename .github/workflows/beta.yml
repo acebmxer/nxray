@@ -103,6 +103,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # New on every run, so the MAC maker list is downloaded again
+          # instead of coming from the build cache (see the Dockerfile).
+          build-args: |
+            OUI_REFRESH=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
