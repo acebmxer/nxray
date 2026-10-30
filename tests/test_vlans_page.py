@@ -303,7 +303,7 @@ def test_old_role_offers_turning_on_vlan_changes(
     logged_in: TestClient, ports_only: FakeSwitch
 ) -> None:
     text = _text(logged_in.get("/switch").text)
-    assert "On for ports" in text and "Turn on VLAN and port settings changes" in text
+    assert "On for ports" in text and "Turn on VLAN, port settings and feature changes" in text
     assert "There is no wait this time" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
     page = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
@@ -316,8 +316,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     response = _enable(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN and port settings changes are on: nxray may now also create, rename and delete VLANs"
-        in text
+        "VLAN, port settings and feature changes are on: nxray may now also create, rename and "
+        "delete VLANs" in text
     )
     assert "no wait" in text and "leaving the switch alone" not in text
     assert ADMIN_PASSWORD not in response.text
@@ -327,8 +327,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     ports_only.requests.clear()
     _post(logged_in, "/vlans/create", vlan_id="20")
     assert _config_requests(ports_only) == [["vlan 20"]]
-    assert "Turn on VLAN and port settings changes" not in logged_in.get("/switch").text
-    assert "read, plus port changes, VLANs and port settings" in _text(
+    assert "Turn on VLAN, port settings and feature changes" not in logged_in.get("/switch").text
+    assert "read, plus port changes, VLANs, port settings and features" in _text(
         logged_in.get("/switch").text
     )
 

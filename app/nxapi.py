@@ -17,7 +17,7 @@ Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
-``breakout_port``, ``join_port``, ``save_config``), each building
+``breakout_port``, ``join_port``, ``set_feature``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -100,6 +100,33 @@ MTU_MIN = 576
 MTU_MAX = 9216
 # How a 100G port is split: four 10G or four 25G ports.
 BREAKOUT_MAPS = ("10g-4x", "25g-4x")
+
+# What may follow "feature": the commands ``feature ?`` lists on an
+# N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
+# (``feature nv ?`` gives overlay). Left out: ``password`` (not a feature),
+# ``license`` alone, and ``ntp``, ``netflow``, ``pnp`` and
+# ``signature-verification``, which ``show feature`` does not list, so NXray
+# cannot show whether they are on.
+FEATURE_COMMANDS = frozenset(
+    {
+        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x",
+        "eigrp", "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp",
+        "imp", "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
+        "mpls segment-routing", "msdp", "nat", "nbm", "netconf", "ngmvpn", "ngoam",
+        "nv overlay", "nxapi", "nxsdk", "openflow", "ospf", "ospfv3", "pbr", "pim", "pim6",
+        "port-security", "private-vlan", "ptp", "restconf", "rip", "scheduler",
+        "scp-server", "sflow", "sftp-server", "sla responder", "sla sender",
+        "sla twamp-server", "ssh", "tacacs+", "telemetry", "telnet", "tunnel",
+        "tunnel-encryption", "udld", "vmtracker", "vn-segment-vlan-based", "vpc", "vrrp",
+        "vrrpv3", "vtp",
+    }
+)  # fmt: skip
+
+# Features NXray needs itself: it never sends their "no feature".
+NEEDED_FEATURES = frozenset({"nxapi", "ssh"})
+
+# Turning a feature on or off can take the switch a while.
+FEATURE_TIMEOUT = 120.0
 
 # Names NX-OS keeps for itself, plus the switch's own admin account.
 RESERVED_ACCOUNT_NAMES = frozenset(
@@ -626,6 +653,20 @@ class NxapiClient:
         module, port = breakout_numbers(name)
         command = f"no interface breakout module {module} port {port} map {mapping}"
         self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_feature(self, command: str, enabled: bool) -> None:
+        """``feature <command>`` or ``no feature <command>``, for one known feature.
+
+        ``command`` must be one of FEATURE_COMMANDS. NX-API and SSH, which
+        NXray itself uses, are never turned off from here.
+        """
+        if command not in FEATURE_COMMANDS:
+            raise ValueError(f"{command!r} is not a feature NXray turns on or off")
+        if not enabled and command in NEEDED_FEATURES:
+            raise ValueError(f"NXray does not turn off {command}: it needs it")
+        line = f"feature {command}" if enabled else f"no feature {command}"
+        timeout = max(self._target.timeout, FEATURE_TIMEOUT)
+        self._send([line], [line], timeout, allow_text=True)
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.

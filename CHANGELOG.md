@@ -11,6 +11,29 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Features page.** A new **Features** page lists every feature the switch
+  reports (130 on an N9K-C92160YC-X with NX-OS 9.3), grouped into routing,
+  gateway redundancy, multicast, layer 2, VXLAN and MPLS, management,
+  security, monitoring, programmability and other, each with a one-line
+  description and whether it is on. It shows the command you would type
+  (`ssh`, `hsrp`, `nv overlay`) rather than the switch's internal name. Every
+  role can look; an admin turns a feature on or off after a confirm page, and
+  the change waits for **Save config** like any other. NXray refuses to turn
+  off a feature it can see in use (LACP while an LACP port-channel exists,
+  naming it and its ports; VLAN interfaces while one exists), never turns
+  off NX-API or SSH, which it needs itself, and leaves alone the features
+  that have no `feature` command on the switch (services NX-OS runs itself,
+  and the NX-SDK app slots, shown as one line). Turning one off warns that
+  its settings are deleted. The Neighbors page's "LLDP is off" note now
+  points to the Features page.
+- **Feature changes on the Switch page.** NXray's `nxray-ports` role gets
+  rules 28 and 29 (`conf t ; feature *` and `conf t ; no feature *`, role
+  version 4). A new install turns everything on with **Turn on port, VLAN,
+  port settings and feature changes** (one wait, as before); an install
+  whose role is older gets a button named for what it lacks, such as **Turn
+  on feature changes**, with no wait. The Save config button on the Features
+  page answers on that page.
+
 - **Neighbors page.** A new **Neighbors** page, open to every role, lists
   what the switch knows about the devices around it, read live: the devices
   that announce themselves over CDP or LLDP (port, name, their port, model,
@@ -57,11 +80,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   new ports start with the switch's defaults.
 - **Port settings changes on the Switch page.** NXray's `nxray-ports` role
   gets rules 12 to 27 for those settings and for splitting ports (role
-  version 3). A new install turns everything on with **Turn on port, VLAN and
-  port settings changes** (one wait, as before); an install whose role is
-  older gets a **Turn on port settings changes** (or **Turn on VLAN and port
-  settings changes**) button with no wait. **Update the port list** adds the
-  ports a split or join made to the role, which names every port it covers;
+  version 3), turned on from the Switch page with the other changes (see
+  Feature changes on the Switch page for the button names). **Update the
+  port list** adds the ports a split or join made to the role, which names
+  every port it covers;
   until then the switch refuses NXray's changes to them and the page says
   where to go.
 - **Front panel picture on the Ports page.** A drawing of the switch's front
@@ -109,7 +131,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   previous sample (the switch's counters only ever grow until cleared), so the
   first sample after NXray starts stores none and a counter that went down
   stores none. The sampler leaves the switch alone while NXray waits for a new
-  role to apply (the pause after **Turn on port changes**), logs a failure
+  role to apply (the pause after **Turn on port, VLAN, port settings and feature changes**), logs a failure
   when it starts and when it ends rather than every minute, and deletes rows
   older than 30 days once an hour. Opening the pages reads only the database
   and never contacts the switch. About 7 MB a day is stored with a dozen
@@ -238,10 +260,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   names are checked before they reach the switch, which silently ignores
   names longer than 32 characters. Turning on port changes now also allows
   these VLAN changes: on a new install, one button turns on both (and the
-  port settings above), with a single wait of about 11 minutes, and the
-  Switch page says so. An install that turned port changes on before this
-  shows a Turn on VLAN and port settings changes button on the Switch page:
-  it asks for the admin login once more to add the rules to NXray's role,
+  port settings and feature changes above), with a single wait of about 11
+  minutes, and the Switch page says so. An install that turned port changes
+  on before this shows a Turn on VLAN, port settings and feature changes
+  button on the Switch page: it asks for the admin login once more to add the rules to NXray's role,
   with no wait this time. The unsaved-changes reminder now says NXray changed the
   switch, as it also covers VLAN changes.
 - **Port changes.** Each port's own page can now turn the port on or off and

@@ -109,9 +109,9 @@ new role, because signing in would make the wait start over.
 
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
-under **Port, VLAN and port settings changes**, tick the box and press
-**Turn on port, VLAN and port settings changes**. One press turns on all
-three, with a single wait.
+under **Port, VLAN, port settings and feature changes**, tick the box and
+press **Turn on port, VLAN, port settings and feature changes**. One press
+turns on all four, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -148,6 +148,8 @@ NXray then:
          rule 25 permit command conf t ; interface * ; no ip address *
          rule 26 permit command conf t ; interface breakout module * port * map *
          rule 27 permit command conf t ; no interface breakout module * port * map *
+         rule 28 permit command conf t ; feature *
+         rule 29 permit command conf t ; no feature *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -164,7 +166,8 @@ The role lets NXray's account turn front-panel ports on or off, set or
 remove their descriptions, set their mode (access or trunk) and VLANs, and
 set their speed, MTU, FEC, flow control, storm control and layer (switched,
 or routed with an IPv4 address); split a 100G port into four and join it
-again; create, name and delete VLANs; and save the configuration. The switch
+again; create, name and delete VLANs; turn switch features on and off; and
+save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
@@ -173,17 +176,17 @@ on a switch uses the same `nxray-ports` role.
 session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
-minutes, and every page says so. This happens once: after it, port, VLAN
-and port settings changes take effect straight away.
+minutes, and every page says so. This happens once: after it, port, VLAN,
+port settings and feature changes take effect straight away.
 
-**Installs that turned port changes on before VLANs or port settings
-existed.** Their role has rules 1 to 5, or 1 to 11. The Switch page then
-shows a **VLAN and port settings changes** or **Port settings changes** card:
-type the admin login, tick the box and press **Turn on VLAN and port settings
-changes** or **Turn on port settings changes**. NXray types the same lines as
-above (adding the missing rules) and saves the configuration. There is no
-wait this time: the switch applies new rules in a role the account already
-has at once.
+**Installs that turned port changes on before VLANs, port settings or
+features existed.** Their role has rules 1 to 5, 1 to 11, or 1 to 27. The
+Switch page then shows a card named for what is missing (**VLAN, port
+settings and feature changes**, **Port settings and feature changes** or
+**Feature changes**): type the admin login, tick the box and press its
+**Turn on** button. NXray types the same lines as above (adding the missing
+rules) and saves the configuration. There is no wait this time: the switch
+applies new rules in a role the account already has at once.
 
 **Update the port list.** The role names each front port it covers. A port
 split into four (Ethernet1/50 becomes Ethernet1/50/1 to Ethernet1/50/4), or
@@ -258,6 +261,29 @@ using it as native VLAN, or a trunk that names it in its list (a trunk
 carrying every VLAN does not count). Move those ports first; the page lists
 them. Deleting asks you to confirm.
 
+**Features.** The **Features** page lists every feature the switch reports
+(`show feature`), grouped (routing, layer 2, management, security and so
+on), each with what it does and whether it is on; every NXray role can look.
+An NXray admin turns one on or off (`feature lldp`, `no feature lldp`) after
+a confirm page; operators and viewers cannot. The page uses the command you
+would type, which is not always the switch's internal name (`ssh` for
+`sshServer`, `hsrp` for `hsrp_engine`, `nv overlay` for `nve`). NXray will
+not:
+
+- turn off NX-API or SSH, which it needs itself;
+- turn off a feature it can see in use: LACP while an LACP port-channel
+  exists (the page names it and its ports), or VLAN interfaces while one
+  exists. Remove that first;
+- change a feature that has no `feature` command on this switch (services
+  NX-OS runs itself, such as `icam`, or ones this model does not offer).
+  These are listed under their internal name; the 32 NX-SDK app slots are
+  one line under **Other**.
+
+Turning a feature off deletes all of its settings from the running
+configuration, and NXray's account cannot read the running configuration to
+list them, so the confirm page says so. Like other changes, a feature
+change is not saved until you press **Save config**.
+
 **Taking port changes away.** In an SSH session on the switch as admin:
 
     configure terminal
@@ -280,9 +306,11 @@ them. Deleting asks you to confirm.
 | could not reach the switch over SSH | Turning on port changes needs SSH from the NXray machine to the switch; check SSH is on and the port |
 | may not make this change yet | The switch has not applied the port-changes role, or it was removed. Leave NXray's pages closed for 10 minutes and try again, or turn port changes on again |
 | NXray kept the address | Change the switch address could not sign in at the new address with NXray's account; the message after it says why |
-| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port, VLAN and port settings changes** to make it again |
-| VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN and port settings changes** on the Switch page |
-| Port settings changes are off | Port changes were turned on before NXray could change port settings. Press **Turn on port settings changes** on the Switch page |
+| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port, VLAN, port settings and feature changes** to make it again |
+| VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN, port settings and feature changes** on the Switch page |
+| Port settings changes are off | Port changes were turned on before NXray could change port settings. Press **Turn on port settings and feature changes** on the Switch page |
+| Feature changes are off | Port changes were turned on before NXray could turn features on and off. Press **Turn on feature changes** on the Switch page |
+| Not turned off: ... still uses ... | The feature is in use (an LACP port-channel, a VLAN interface). Remove that first |
 | NXray's role on the switch does not name this port | The port came from a split or a join. Press **Update the port list** on the Switch page |
 
 ## The certificate and the SSH host key

@@ -20,7 +20,8 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
-from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes
+from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes, missing_changes
+from app.routes.features import render_features_page
 from app.routes.ports import render_port_page
 from app.routes.vlans import render_vlans_page
 from app.security import csrf_token
@@ -87,6 +88,7 @@ def _render(
             "csrf_token": csrf_token(request),
             "role_name": ROLE_NAME,
             "role_version": ROLE_VERSION,
+            "missing_changes": missing_changes(connection.role_version) if connection else "",
             "paused": paused_message(connection.paused_seconds())
             if connection and connection.paused_seconds()
             else None,
@@ -471,31 +473,35 @@ def switch_enable_changes(
         f"set the speed, MTU, FEC, flow control, storm control and layer (switched or "
         f"routed) of the {count} front ports, and split or join the 100G ports"
     )
+    features_words = "turn switch features on and off on the Features page"
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
-            f"Port, VLAN and port settings changes are on: {account} may now turn the "
-            f"{count} front ports on or off, edit their descriptions, set their VLANs and "
-            "their speed, MTU, FEC, flow control, storm control and layer (switched or "
-            "routed), split or join the 100G ports, and create, rename and delete VLANs. "
-            "The switch applies this once it has not heard from NXray for a while, so NXray "
-            f"now waits about {minutes} minutes before contacting it again."
+            f"Port, VLAN, port settings and feature changes are on: {account} may now turn "
+            f"the {count} front ports on or off, edit their descriptions, set their VLANs "
+            "and their speed, MTU, FEC, flow control, storm control and layer (switched or "
+            "routed), split or join the 100G ports, create, rename and delete VLANs, and "
+            f"{features_words}. The switch applies this once it has not heard from NXray "
+            f"for a while, so NXray now waits about {minutes} minutes before contacting it "
+            "again."
         )
     elif connection.role_version >= ROLE_VERSION:
         done = (
             f"The port list is updated: NXray's role now names the {count} front ports the "
             "switch has now. The switch applies this at once, so there is no wait."
         )
-    elif connection.role_version < 2:
-        done = (
-            f"VLAN and port settings changes are on: {account} may now also create, rename "
-            f"and delete VLANs, set the VLANs of the front ports, and {settings_words}. The "
-            "switch applies this at once, so there is no wait."
-        )
     else:
+        parts = []
+        if connection.role_version < 2:
+            parts.append("create, rename and delete VLANs, set the VLANs of the front ports")
+        if connection.role_version < 3:
+            parts.append(settings_words)
+        parts.append(features_words)
+        allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
+        kinds = missing_changes(connection.role_version)
         done = (
-            f"Port settings changes are on: {account} may now also {settings_words}. The "
-            "switch applies this at once, so there is no wait."
+            f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
+            "The switch applies this at once, so there is no wait."
         )
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
@@ -521,7 +527,7 @@ def switch_save(
     """Save config: copy running-config startup-config with NXray's own account.
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
-    or ``vlans``); the answer is shown there. Anything else means the
+    ``vlans`` or ``features``); the answer is shown there. Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
     require_csrf(request, csrf)
@@ -531,6 +537,8 @@ def switch_save(
             return render_port_page(request, username, port, error=error, notice=notice)
         if back == "vlans":
             return render_vlans_page(request, username, error=error, notice=notice)
+        if back == "features":
+            return render_features_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)
 
     connection, target, error = stored_switch(request)

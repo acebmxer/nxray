@@ -64,6 +64,6 @@
 <p class="note">CDP is off on the switch, so Cisco devices next to it cannot show up here either.</p>
 {% endif %}
 {% if not view.lldp_enabled %}
-<p class="note">LLDP is off on the switch, so only devices that speak CDP (Cisco's own protocol) can show up here. Most servers and other makers' switches speak LLDP; once LLDP is turned on, they appear here by themselves.</p>
+<p class="note">LLDP is off on the switch, so only devices that speak CDP (Cisco's own protocol) can show up here. Most servers and other makers' switches speak LLDP; once LLDP is turned on, they appear here by themselves. An NXray admin turns it on on the <a href="/features">Features</a> page.</p>
 {% endif %}
 {% endmacro %}

@@ -370,6 +370,13 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 /* ---- VLANs ---- */
 
 .table-vlans td { vertical-align: middle; }
+.table-features { table-layout: fixed; }
+.table-features th:nth-child(1) { width: 12rem; }
+.table-features th:nth-child(3) { width: 4.5rem; }
+.table-features th:nth-child(4) { width: 14rem; }
+.table-features td { vertical-align: middle; }
+.table-features td:nth-child(4) { white-space: normal; }
+.card-flush > .card-title { margin-top: 0.75rem; }
 .row-actions { display: flex; gap: 0.5rem; align-items: center; }
 .row-form { display: flex; gap: 0.4rem; align-items: center; margin: 0; }
 .row-form input[type="text"] { padding: 0.3rem 0.5rem; width: 14rem; }

@@ -32,6 +32,7 @@ from typing import Any
 
 import httpx
 
+from app.features import CATALOG
 from app.switch_ssh import SshAuthError, SshUnreachable
 from tests.conftest import load_fixture
 
@@ -107,6 +108,9 @@ _SWITCHPORT = (
     ),
 )
 
+# What follows "feature" -> the name show feature uses for it.
+_FEATURE_NAMES = {info.command: name for name, info in CATALOG.items() if info.command is not None}
+
 # VLANs NX-OS keeps for itself (show system vlan reserved).
 RESERVED_VLANS = range(3968, 4096)
 
@@ -158,6 +162,10 @@ class FakeSwitch:
     # "% Invalid command". On, "show lldp neighbors detail" answers from a body
     # shaped after Cisco's NX-API reference (never recorded on cisco-25gb).
     lldp: bool = False
+    # Other features turned on or off since the start: show name -> on. The
+    # rest answer as in the recording (show_feature_full: icam, lacp, nxapi
+    # and sshServer on).
+    feature_state: dict[str, bool] = field(default_factory=dict)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -320,6 +328,18 @@ class FakeSwitch:
             if number == 1:
                 return _error(ident, "Deletion of VLAN 1 is not allowed!!\n"), context
             self.vlans.pop(number, None)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"(no )?feature (.+)", cmd):
+            rule = "conf t ; no feature *" if match.group(1) else "conf t ; feature *"
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            name = _FEATURE_NAMES.get(match.group(2))
+            if name is None:
+                return _error(ident, f"% Invalid command at '^' marker: {cmd}\n"), context
+            if name == "lldp":
+                self.lldp = not match.group(1)
+            else:
+                self.feature_state[name] = not match.group(1)
             return _ok(ident, None), context
         if cmd == "copy running-config startup-config":
             if not (is_admin or self._role_allows(user, cmd, None)):
@@ -517,11 +537,14 @@ class FakeSwitch:
         }
 
     def features(self) -> dict[str, Any]:
-        """``show feature`` as recorded, with lldp on or off as ``lldp`` says."""
-        body = load_fixture("show_feature")
+        """``show feature`` as recorded, with lldp on or off as ``lldp`` says and the
+        others as ``feature_state`` says."""
+        body = load_fixture("show_feature_full")
         for row in body["TABLE_cfcFeatureCtrlTable"]["ROW_cfcFeatureCtrlTable"]:
-            if row["cfcFeatureCtrlName2"] == "lldp":
-                row["cfcFeatureCtrlOpStatus2"] = "enabled" if self.lldp else "disabled"
+            name = row["cfcFeatureCtrlName2"]
+            on = self.lldp if name == "lldp" else self.feature_state.get(name)
+            if on is not None:
+                row["cfcFeatureCtrlOpStatus2"] = "enabled" if on else "disabled"
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:

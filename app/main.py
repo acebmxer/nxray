@@ -25,6 +25,7 @@ from app.logging_conf import configure_logging
 from app.routes import (
     auth,
     dashboard,
+    features,
     health,
     history,
     neighbors,
@@ -130,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(neighbors.router)
+    app.include_router(features.router)
     app.include_router(users.router)
     app.include_router(settings_page.router)
     return app

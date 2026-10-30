@@ -50,6 +50,7 @@ prose columns; those are a reviewer's job.
 | Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
+| List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
@@ -162,8 +163,10 @@ layer=, remove_ip=, ip_address=, speed=, mtu=, fec=, flow_receive=,
 flow_send=, storm_levels=, storm_action=, old_storm_action=)` (one port's
 settings, only the ones given), `breakout_port(name, mapping)` and
 `join_port(name, mapping)` (split a 100G port into four, or join them;
-`10g-4x` or `25g-4x` only) and `save_config()`; each builds its commands
-from checked values.
+`10g-4x` or `25g-4x` only), `set_feature(command, enabled)` (`feature X` or
+`no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
+`no feature ssh`) and `save_config()`; each builds its commands from checked
+values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -222,7 +225,7 @@ port's own page shows.
 | `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
-| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/switch_page.switch_save` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
 changes are on and how long NXray still waits before calling the switch;
@@ -279,14 +282,31 @@ NX-API certificate is. Tests pass a pretend opener through
 | `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
+| `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`port settings and feature changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
-`ROLE_RULES` (ports), `VLAN_RULES` and `SETTINGS_RULES` are the role's only
-rules; `ROLE_NAME` is `nxray-ports`, shared by every NXray install on a
-switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and VLANs, 3
-also port settings). `EnableResult.had_role`
+`ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES` and `FEATURE_RULES` are
+the role's only rules; `ROLE_NAME` is `nxray-ports`, shared by every NXray
+install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
+VLANs, 3 also port settings, 4 also features). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 there is no wait.
+
+## `app/features.py` — switch features
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `feature_states` | `(body) -> dict[str, bool]` | Every feature name in `show feature` and whether any instance of it is on | `parse_features` | v0.1.0 |
+| `lacp_channels` | `(channel_body) -> list[str]` | Port-channels running LACP, with their ports, from `show port-channel summary` | `parse_features` | v0.1.0 |
+| `load_features` | `(client) -> FeatureView` | The Features page, from one request of `FEATURE_COMMANDS_TO_READ` | `routes/features` | v0.1.0 |
+| `parse_features` | `(feature_body, channel_body, brief_body) -> FeatureView` | Every feature with its command, group, description, state and what uses it; the NX-SDK app slots as one line | `load_features` | v0.1.0 |
+| `vlan_interfaces` | `(brief_body) -> list[str]` | VLAN interfaces (`Vlan10`) in `show interface brief` | `parse_features` | v0.1.0 |
+
+`CATALOG` maps the name `show feature` uses (`sshServer`) to the command
+(`ssh`), a group and a description. `Feature.refusal(turn_on)` says why NXray
+will not make a change: no feature command on this switch, NX-API or SSH
+(`KEEP_ON`), or something still using it (`used_by`: LACP port-channels, VLAN
+interfaces). `ON_WARNINGS` and `OFF_WARNING` go on the confirm page.
 
 ## `app/vlans.py` — VLANs
 
@@ -348,8 +368,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `account_2fa_setup` | `(request, username, csrf) -> Response` | `POST /account/2fa/setup`: a new key and its QR code; nothing changes until confirmed | router | v0.1.0 |
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
-| `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `routes/vlans` | v0.1.0 |
+| `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `routes/vlans`, `routes/features` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
+| `feature_set` | `(request, username, csrf, name, state, confirm) -> Response` | `POST /features/set`: asks to confirm, then turns one feature on or off; admin only; refuses what `Feature.refusal` names | router | v0.1.0 |
+| `features_page` | `(request, username) -> Response` | `GET /features`: every switch feature by group with its state, read live; every role looks, admins change | router | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
 | `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
@@ -370,13 +392,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
 | `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names; every mode reads the neighbors and MAC address table for the tooltips | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
+| `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
-| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN and port settings changes, Turn on (VLAN and) port settings changes and Update the port list buttons | router | v0.1.0 |
+| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN, port settings and feature changes button, the Turn on button for whatever an older role lacks (for example Turn on feature changes), and Update the port list | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
-| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, else Switch) | router | v0.1.0 |
+| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 | `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |

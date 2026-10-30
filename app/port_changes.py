@@ -5,7 +5,8 @@ turning a port on or off, setting or removing its description, setting its
 mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
 control, storm control, switched or routed with an IPv4 address);
 switch-wide, creating, naming and deleting VLANs, splitting a 100G port into
-four and joining it again; and saving the configuration. Everything else
+four and joining it again, turning switch features on and off; and saving
+the configuration. Everything else
 (mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
 stays refused by the switch itself, not just by NXray.
 
@@ -27,7 +28,8 @@ before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
-the VLAN rules, 3 the port settings rules. NXray stores the version it gave its account, so the
+the VLAN rules, 3 the port settings rules, 4 the feature rules. NXray
+stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
 
@@ -120,7 +122,34 @@ SETTINGS_RULES = (
     "rule 27 permit command conf t ; no interface breakout module * port * map *",
 )
 
-ROLE_VERSION = 3
+# Feature rules, added in ROLE_VERSION 4: "feature <name>" and "no feature
+# <name>", typed in configuration mode. Proven on cisco-25gb (2026-10-30)
+# with a throwaway account holding only these two rules: it turned the
+# scheduler feature on and off over NX-API and was refused everything else.
+# NXray itself never turns off NX-API or SSH (NxapiClient.set_feature).
+FEATURE_RULES = (
+    "rule 28 permit command conf t ; feature *",
+    "rule 29 permit command conf t ; no feature *",
+)
+
+ROLE_VERSION = 4
+
+# What each role version added, for the Switch page's button names.
+_ADDED_BY_VERSION = {2: "VLAN", 3: "port settings", 4: "feature"}
+
+
+def missing_changes(role_version: int) -> str:
+    """The kinds of change a role of ``role_version`` lacks, in words.
+
+    ``missing_changes(2)`` is "port settings and feature changes"; "" when
+    nothing is missing.
+    """
+    names = [name for version, name in _ADDED_BY_VERSION.items() if version > role_version]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f"{names[0]} changes"
+    return f"{', '.join(names[:-1])} and {names[-1]} changes"
 
 
 @dataclass(frozen=True)
@@ -157,10 +186,11 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: front ports, their settings, VLANs, save config",
+        "description NXray: front ports, their settings, VLANs, features, save config",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
+        *FEATURE_RULES,
         "interface policy deny",
         *permits,
         "exit",
