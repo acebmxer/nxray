@@ -85,6 +85,9 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 
 ## Roadmap
 
+The goal is for NXray to do everything the switch offers. Anything found
+along the way that no stage below covers is added to the stage it fits best.
+
 1. **Groundwork**: install, sign in, empty dashboard. *(built)*
 2. **Switch setup**: a setup page that connects to the switch and creates
    NXray's own read-only account on it; clear messages when the switch can't
@@ -121,14 +124,12 @@ default: *(built)*.
 15. **Layer 3**: VLAN interfaces, routed ports, VRFs, static routes, routing
     protocols. *(planned)*
 16. **Spanning tree.** *(planned)*
-17. **Switch admin**: hostname, clock and NTP, DNS, logging, SNMP, banner.
-    *(planned)*
-18. **Security and config tools**: ACLs, port security, config diff, backup
-    and rollback. *(planned)*
+17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
+    the switch's own log, SNMP, banner. *(planned)*
+18. **Security and config tools**: ACLs, port security, an activity log of
+    who changed what in NXray, config diff, backup and rollback. *(planned)*
 19. **Alerts** by e-mail and webhook. *(planned)*
-20. **Activity log** and a viewer for the switch's own log. *(planned)*
-21. **Several switches** in one NXray. *(planned)*
-22. **Everything else** the switch offers over NX-API. *(planned)*
+20. **Several switches** in one NXray. *(planned)*
 
 ## Contributing
 
