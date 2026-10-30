@@ -159,7 +159,7 @@ def test_lacp_off_allows_static_only(logged_in: TestClient, enabled: FakeSwitch)
 # ---- turning the changes on ---------------------------------------------------------------
 
 
-def test_role_version_5_offers_port_channel_changes_after_one_wait(
+def test_role_version_5_offers_port_channel_changes_without_a_wait(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 5")
@@ -171,10 +171,9 @@ def test_role_version_5_offers_port_channel_changes_after_one_wait(
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
     assert "Port-channel changes are on: nxray may now also make, change and delete" in text
-    assert "NXray now waits about 20 minutes" in text
+    assert "there is no wait" in text
     assert "rule 47 permit command conf t ; lacp system-priority *" in enabled.ssh_lines
     assert CHANNEL_PERMIT in enabled.ssh_lines
-    _db(settings, f"UPDATE switch_connection SET paused_until = {time.time() - 1}")
     assert "Make port-channel" in logged_in.get("/port-channels").text
 
 

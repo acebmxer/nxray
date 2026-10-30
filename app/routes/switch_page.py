@@ -492,10 +492,8 @@ def switch_enable_changes(
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, and {channel_words}. "
-            "The switch applies this once it has not heard from NXray for a while, and naming "
-            "the port-channels makes its NX-API stop answering every account for a while, so "
-            f"NXray now waits about {minutes} minutes before contacting it again. Other NXray "
-            "installs on this switch cannot reach it meanwhile; it recovers by itself."
+            "The switch applies this once it has not heard from NXray for a while, so NXray "
+            f"now waits about {minutes} minutes before contacting it again."
         )
     elif connection.role_version >= ROLE_VERSION:
         done = (
@@ -515,16 +513,10 @@ def switch_enable_changes(
         parts.append(channel_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
-        done = f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
-        if result.pause_seconds:
-            done += (
-                "Naming the port-channels in NXray's role makes the switch's NX-API stop "
-                "answering every account for a while, so NXray now waits about "
-                f"{result.pause_seconds // 60} minutes before contacting it again. Other NXray "
-                "installs on this switch cannot reach it meanwhile; it recovers by itself."
-            )
-        else:
-            done += "The switch applies this at once, so there is no wait."
+        done = (
+            f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
+            "The switch applies this at once, so there is no wait."
+        )
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
     return _render(

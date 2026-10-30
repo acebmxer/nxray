@@ -105,7 +105,7 @@ def _sign_in_as(client: TestClient, name: str, role: str) -> TestClient:
 # ---- the Switch page names the new changes -------------------------------------
 
 
-def test_role_version_4_offers_neighbor_changes_with_one_wait(
+def test_role_version_4_offers_neighbor_changes_without_a_wait(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 4")
@@ -127,7 +127,7 @@ def test_role_version_4_offers_neighbor_changes_with_one_wait(
         "Neighbor and port-channel changes are on: nxray may now also turn CDP and LLDP on or off"
         in text
     )
-    assert "NXray now waits about 20 minutes" in text
+    assert "there is no wait" in text
     assert "rule 40 permit command clear mac address-table dynamic *" in enabled.ssh_lines
 
 

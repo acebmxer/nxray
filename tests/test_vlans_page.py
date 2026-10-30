@@ -305,14 +305,14 @@ def test_old_role_offers_turning_on_vlan_changes(
     text = _text(logged_in.get("/switch").text)
     assert "On for ports" in text
     assert "Turn on VLAN, port settings, feature, neighbor and port-channel changes" in text
-    assert "alone for about 20 minutes" in text
+    assert "There is no wait this time" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
     page = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
     assert "VLAN changes are off" in page and "Change VLANs" not in page
 
 
-def test_turning_on_vlan_changes_waits_once(
-    logged_in: TestClient, ports_only: FakeSwitch, settings: Settings
+def test_turning_on_vlan_changes_needs_no_wait(
+    logged_in: TestClient, ports_only: FakeSwitch
 ) -> None:
     response = _enable(logged_in)
     text = _text(response.text)
@@ -320,10 +320,9 @@ def test_turning_on_vlan_changes_waits_once(
         "VLAN, port settings, feature, neighbor and port-channel changes are on: nxray may now "
         "also create, rename and delete VLANs" in text
     )
-    assert "NXray now waits about 20 minutes" in text
+    assert "no wait" in text and "leaving the switch alone" not in text
     assert ADMIN_PASSWORD not in response.text
     assert ports_only.saved
-    _end_pause(settings)
     # The pages read the switch straight away, and VLAN changes work.
     assert "Create VLAN" in logged_in.get("/vlans").text
     ports_only.requests.clear()

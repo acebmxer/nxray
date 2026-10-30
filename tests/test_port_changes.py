@@ -13,7 +13,6 @@ from app.nxapi import (
     validate_port_name,
 )
 from app.port_changes import (
-    CHANNEL_FREEZE_SECONDS,
     ROLE_NAME,
     ROLE_RULES,
     account_roles,
@@ -193,7 +192,7 @@ def test_without_the_role_the_switch_refuses_port_changes(switch: FakeSwitch) ->
 
 def test_enable_creates_the_role_gives_it_and_saves(switch: FakeSwitch) -> None:
     result = _enable(switch)
-    assert (result.pause_seconds, result.port_count, result.config_saved) == (1200, 54, True)
+    assert (result.pause_seconds, result.port_count, result.config_saved) == (660, 54, True)
     assert switch.saved
     assert ROLE_NAME in switch.roles_of("nxray")
     role = switch.roles[ROLE_NAME]
@@ -218,7 +217,7 @@ def test_enable_works_while_nxapi_is_frozen(switch: FakeSwitch) -> None:
     result = _enable(switch)
     assert switch.nxapi_frozen
     assert result.config_saved and switch.saved
-    assert result.pause_seconds == CHANNEL_FREEZE_SECONDS
+    assert result.pause_seconds == 660
     assert ROLE_NAME in switch.roles_of("nxray")
 
 

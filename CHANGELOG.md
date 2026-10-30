@@ -33,12 +33,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   list, which also lets its port rules act on port-channels (role version
   6). A new install turns everything on with **Turn on port, VLAN, port
   settings, feature, neighbor and port-channel changes**; an older role gets
-  a button such as **Turn on port-channel changes**. Either way NXray then
-  leaves the switch alone for about 20 minutes, once: adding the
-  port-channels to the role makes the switch's NX-API stop answering every
-  account for 5 to 15 minutes on NX-OS 9.3(16), so NXray checks the role and
-  saves over SSH, and other NXray installs on the switch cannot reach it
-  meanwhile. These rules were tried on an N9K-C92160YC-X with
+  a button such as **Turn on port-channel changes**, with no wait. Adding the
+  port-channels to the role is checked and saved over SSH rather than NX-API,
+  which once stopped answering for about 15 minutes right after such a
+  change on NX-OS 9.3(16). These rules were tried on an N9K-C92160YC-X with
   NX-OS 9.3(16) with a throwaway account on two unused ports, except `lacp
   system-priority`, which touches every port-channel on the switch.
 - **Neighbor changes.** Operators and admins can now change CDP, LLDP and

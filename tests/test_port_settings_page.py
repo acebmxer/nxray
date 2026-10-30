@@ -104,14 +104,14 @@ def test_turning_on_types_the_settings_rules(
     assert "conf t ; interface breakout module * port * map *" in role.entities
 
 
-def test_old_role_offers_port_settings_with_one_wait(
+def test_old_role_offers_port_settings_without_a_wait(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 2")
     page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on port settings, feature, neighbor and port-channel changes" in page
-        and "alone for about 20 minutes" in page
+        and "There is no wait this time" in page
     )
     port = _text(_page(logged_in))
     assert "Port settings changes are off" in port and "Change settings" not in port
@@ -121,7 +121,7 @@ def test_old_role_offers_port_settings_with_one_wait(
         "Port settings, feature, neighbor and port-channel changes are on: nxray may now also "
         "set the speed, MTU" in text
     )
-    assert "NXray now waits about 20 minutes" in text
+    assert "there is no wait" in text
     conn = sqlite3.connect(settings.db_path)
     (version,) = conn.execute("SELECT role_version FROM switch_connection").fetchone()
     conn.close()

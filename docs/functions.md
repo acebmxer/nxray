@@ -286,7 +286,7 @@ only inside `run_repair`.
 | --- | --- | --- | --- | --- |
 | `open_paramiko_shell` | `(host, port, username, password, timeout) -> ParamikoShell` | Signs in over SSH with a password only (no local keys or agent) and opens the NX-OS command line | `run_config` (the default opener) | v0.1.0 |
 | `refused` | `(output: str) -> str \| None` | The switch's complaint in a command's output, or None | `run_config` | v0.1.0 |
-| `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving while NX-API is frozen) | v0.1.0 |
+| `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving over SSH) | v0.1.0 |
 | `run_config` | `(*, host, port, username, password, lines, timeout, opener=None, then=()) -> list[str]` | Types checked lines between `configure terminal` and `end`, stopping at the first refusal, then the fixed `then` commands in the same session, returning their output | `port_changes.enable_port_changes` | v0.1.0 |
 
 Errors are `SshUnreachable`, `SshAuthError` and `SshCommandError`, all
@@ -299,7 +299,7 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 6) the check and save go over the same SSH session and the wait is at least `CHANNEL_FREEZE_SECONDS` | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 6) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
@@ -313,10 +313,7 @@ install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
 VLANs, 3 also port settings, 4 also features, 5 also CDP and LLDP per port and
 the MAC address table, 6 also port-channels and LACP). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
-the switch applies them at once. Adding the port-channels to the role's port
-list makes NX-API stop answering every account for 5 to 15 minutes on
-NX-OS 9.3(16), so turning on from a role older than version 6 waits
-`CHANNEL_FREEZE_SECONDS` (20 minutes).
+the switch applies them at once and there is no wait.
 
 ## `app/features.py` — switch features
 

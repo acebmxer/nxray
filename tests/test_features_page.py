@@ -275,14 +275,14 @@ def test_save_config_from_the_features_page_stays_there(
 # ---- the Switch page --------------------------------------------------------
 
 
-def test_old_role_offers_feature_changes_with_one_wait(
+def test_old_role_offers_feature_changes_without_a_wait(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 3")
     page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on feature, neighbor and port-channel changes" in page
-        and "alone for about 20 minutes" in page
+        and "There is no wait this time" in page
     )
     assert "Off: this version of NXray can also turn switch features on and off" in page
     assert "read, plus port changes, VLANs and port settings" in page
@@ -292,10 +292,9 @@ def test_old_role_offers_feature_changes_with_one_wait(
         "Feature, neighbor and port-channel changes are on: nxray may now also turn switch "
         "features on and off on the Features page, turn CDP and LLDP on or off" in text
     )
-    assert "NXray now waits about 20 minutes before contacting it again" in text
+    assert "The switch applies this at once, so there is no wait." in text
     assert "rule 28 permit command conf t ; feature *" in enabled.ssh_lines
     assert "rule 29 permit command conf t ; no feature *" in enabled.ssh_lines
-    _db(settings, f"UPDATE switch_connection SET paused_until = {time.time() - 1}")
     page = _text(logged_in.get("/switch").text)
     assert (
         "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC "

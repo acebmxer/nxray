@@ -200,16 +200,15 @@ on a switch uses the same `nxray-ports` role.
 
 **The wait.** The switch keeps an account's permissions in its NX-API
 session and only reloads them once that session has been idle for NX-API's
-timeout (10 minutes unless changed). Adding the port-channels to the role's
-port list (`permit interface port-channel1-4096`) also makes NX-API stop
-answering every account, admin included, for 5 to 15 minutes on NX-OS
-9.3(16); it recovers by itself, and SSH and the switch's traffic are not
-affected. So NXray checks the role and saves the configuration in the same SSH
-session, then does not contact the switch for about 20 minutes, and every
-page says so. Other NXray installs on the same switch show "could not reach
-the switch" meanwhile. This happens once: after it, port, VLAN, port
-settings, feature, neighbor and port-channel changes take effect straight
-away.
+timeout (10 minutes unless changed). So after turning port changes on,
+NXray does not contact the switch for that long plus a minute, about 11
+minutes, and every page says so. This happens once: after it, port, VLAN,
+port settings, feature, neighbor and port-channel changes take effect
+straight away. When the role gains the port-channels, NXray checks it and
+saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
+with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
+minutes right after such a change (SSH kept working), though a later change
+went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor or port-channel changes existed.** Their role has rules 1
@@ -219,9 +218,8 @@ port-channel changes**, **Port settings, feature, neighbor and port-channel
 changes**, **Feature, neighbor and port-channel changes**, **Neighbor and
 port-channel changes** or **Port-channel changes**): type the admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
-rules) and saves the configuration. The switch applies new rules in a role
-the account already has at once, but these roles also gain the
-port-channels, so the same 20-minute wait follows, once.
+rules) and saves the configuration. There is no wait this time: the switch
+applies new rules in a role the account already has at once.
 
 **Update the port list.** The role names each front port it covers. A port
 split into four (Ethernet1/50 becomes Ethernet1/50/1 to Ethernet1/50/4), or

@@ -123,8 +123,7 @@ def test_turning_on_gives_the_role_saves_and_waits(
         "Port, VLAN, port settings, feature, neighbor and port-channel changes are on: nxray may "
         "now turn the 54 front ports on or off" in text
     )
-    assert "waits about 20 minutes" in text
-    assert "Other NXray installs on this switch cannot reach it meanwhile" in text
+    assert "waits about 11 minutes" in text
     assert "configuration was saved" in text
     assert ROLE_NAME in switch.roles_of("nxray")
     assert switch.saved
@@ -133,7 +132,7 @@ def test_turning_on_gives_the_role_saves_and_waits(
     # While waiting, no page contacts the switch with NXray's account.
     switch.requests.clear()
     for path in ("/", "/ports", "/ports/detail?name=Ethernet1/3"):
-        assert "leaving the switch alone for about 20 more minutes" in logged_in.get(path).text
+        assert "leaving the switch alone for about 11 more minutes" in logged_in.get(path).text
     tested = logged_in.post("/switch/test", data={"csrf": _csrf(logged_in)}).text
     assert "leaving the switch alone" in tested
     assert switch.requests == []

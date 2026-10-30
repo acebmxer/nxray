@@ -62,30 +62,15 @@
     <label for="ssh_port">SSH port</label>
     <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="22" required>
 
-    {% if wait == "freeze" %}
+    {% if wait %}
     <p class="warning">
       Afterwards NXray runs <code>copy running-config startup-config</code>, which
       also saves any other unsaved changes on the switch. Then it leaves the switch
-      alone for about 20 minutes: naming the port-channels in NXray's role makes
-      the switch's NX-API stop answering every account for a while, so the pages
-      show a waiting message until then, and other NXray installs on this switch
-      cannot reach it meanwhile. It recovers by itself; this happens once.
-    </p>
-    <label class="check">
-      <input type="checkbox" name="confirm_save" value="yes" required>
-      I understand: save the switch configuration, and wait before using NXray.
-    </label>
-    {% elif wait %}
-    <p class="warning">
-      Afterwards NXray runs <code>copy running-config startup-config</code>, which
-      also saves any other unsaved changes on the switch. Then it leaves the switch
-      alone for about 20 minutes: the switch only applies the new role to an
-      account it has not heard from for a while, and naming the port-channels in
-      the role makes its NX-API stop answering every account for a while, so the
-      pages show a waiting message until then and other NXray installs on this
-      switch cannot reach it meanwhile. This wait happens once: after it, port,
-      VLAN, port settings, feature, neighbor and port-channel changes take effect
-      straight away, with no further waits.
+      alone for about 11 minutes: the switch only applies the new role to an
+      account it has not heard from for a while, so the pages show a waiting
+      message until then. This wait happens once: after it, port, VLAN, port
+      settings, feature, neighbor and port-channel changes take effect straight
+      away, with no further waits.
     </p>
     <label class="check">
       <input type="checkbox" name="confirm_save" value="yes" required>
@@ -172,7 +157,7 @@
     once more with the admin login below and adds the rules to the role. The
     admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on " ~ missing_changes, "freeze") }}
+  {{ admin_form("Turn on " ~ missing_changes, false) }}
 </section>
 {% else %}
 <section class="card">

@@ -32,13 +32,12 @@ once, so an account that already had the role (port changes turned on
 before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
-Adding port-channels to a role's port list (``CHANNEL_PERMIT``, and removing
-them again) is different: on that switch NX-API then stopped answering every
-account, admin included, for 5 to 15 minutes, and recovered by itself; SSH
-kept working. So when the role gains that line, NXray checks the role and
-saves the configuration in the same SSH session instead of over NX-API, and
-stops calling the switch for ``CHANNEL_FREEZE_SECONDS``. Other NXray installs
-on the switch cannot reach it meanwhile.
+When the role gains the port-channels (``CHANNEL_PERMIT``), NXray checks the
+role and saves the configuration over SSH instead of over NX-API: on that
+switch NX-API once stopped answering every account for about 15 minutes
+right after such a change, while SSH kept working. The cause was not
+confirmed (a later change went through with NX-API answering at once), so
+NXray adds no wait for it.
 
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
@@ -87,9 +86,6 @@ SSH_TIMEOUT = 30.0
 PAUSE_MARGIN_SECONDS = 60
 DEFAULT_NXAPI_TIMEOUT_MINUTES = 10
 
-# How long NX-API may stay frozen after the role gains CHANNEL_PERMIT: the
-# longest freeze seen on cisco-25gb was about 15 minutes.
-CHANNEL_FREEZE_SECONDS = 20 * 60
 
 # The role's command rules. "conf t ; interface * ; <cmd>" is how NX-OS
 # names a command typed inside an interface's configuration; a rule without
@@ -305,8 +301,7 @@ def _check_role_output(roles_output: str, account_name: str) -> None:
 def _saved_over_ssh(
     ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int
 ) -> EnableResult:
-    """Save the configuration over SSH while NX-API is frozen, and the result."""
-    wait = max(wait, CHANNEL_FREEZE_SECONDS)
+    """Save the configuration over SSH, and the result."""
     try:
         (output,) = run_commands(lines=(SAVE_COMMAND,), **ssh)
     except SshError as exc:
@@ -337,8 +332,8 @@ def enable_port_changes(
     """Create the role over SSH, give it to NXray's account, check it, save the config.
 
     ``role_version`` is the version NXray gave its account before (0 for
-    none). Below 6 the role gains ``CHANNEL_PERMIT``, which freezes NX-API
-    for a while, so the check and the save go over the same SSH session.
+    none). Below 6 the role gains ``CHANNEL_PERMIT``, so the check and the
+    save go over SSH, which does not depend on NX-API answering.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -365,8 +360,8 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         lines = role_lines(ports, account_name)
-        freezes = role_version < 6
-        then = (f"show user-account {account_name}",) if freezes else ()
+        over_ssh = role_version < 6
+        then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:
             outputs = run_config(
@@ -404,7 +399,7 @@ def enable_port_changes(
         )
         # Rules added to a role the account already has apply at once.
         wait = 0 if had_role else pause_seconds(nxapi)
-        if freezes:
+        if over_ssh:
             _check_role_output(outputs[0], account_name)
             ssh = {
                 "host": host,
