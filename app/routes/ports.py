@@ -19,6 +19,12 @@ from app.dependencies import (
 )
 from app.face import MODES, color_mode, draw_face
 from app.history import RANGE_LABELS, port_charts, range_key
+from app.neighbor_changes import (
+    PortDiscovery,
+    describe_port_discovery,
+    load_port_discovery,
+    plan_port_discovery,
+)
 from app.neighbors import NeighborView, try_load_neighbors
 from app.nxapi import (
     NxapiClient,
@@ -96,32 +102,40 @@ def _read_port_page(
     VlanView | None,
     PortSettings | None,
     NeighborView | None,
+    PortDiscovery | None,
 ]:
     """Like _read_ports, plus the VLANs, for a port's own page.
 
-    With ``name``, also that port's settings, read in a second request once
-    the first shows the port exists (a show command naming a missing port
-    would fail the whole request). Settings are None when they could not be
-    read, and so are the neighbors.
+    With ``name``, also that port's settings and what it does with CDP and
+    LLDP, read in later requests once the first shows the port exists (a
+    show command naming a missing port would fail the whole request). Each
+    of settings, neighbors and discovery is None when it could not be read.
     """
     connection, target, error = stored_switch(request)
     if target is None:
         status = ConnectionStatus(False, error) if error else None
-        return connection, None, status, None, None, None, None
+        return connection, None, status, None, None, None, None, None
 
     def reader(
         client: NxapiClient,
-    ) -> tuple[list[Port], VlanView, PortSettings | None, NeighborView | None]:
+    ) -> tuple[
+        list[Port], VlanView, PortSettings | None, NeighborView | None, PortDiscovery | None
+    ]:
         ports, view = load_ports_with_vlans(client)
         port = next((p for p in ports if p.name == name), None)
         settings = None
+        discovery = None
         if port is not None:
             settings = try_load_port_settings(client, port, view.ports.get(port.name))
-        return ports, view, settings, try_load_neighbors(client)
+        neighbors = try_load_neighbors(client)
+        if port is not None:
+            lldp_on = neighbors.lldp_enabled if neighbors else False
+            discovery = load_port_discovery(client, port.name, lldp_on)
+        return ports, view, settings, neighbors, discovery
 
     status, found = read_switch(target, reader, transport=request.app.state.nxapi_transport)
-    ports, view, settings, neighbors = found if found else (None, None, None, None)
-    return connection, target, status, ports, view, settings, neighbors
+    ports, view, settings, neighbors, discovery = found if found else (None,) * 5
+    return connection, target, status, ports, view, settings, neighbors, discovery
 
 
 def _labels(request: Request) -> dict[str, str]:
@@ -140,7 +154,7 @@ def ports_page(
     vlan_names: dict[int, str] = {}
     if color == "vlan":
         # Only this mode needs the VLAN names, so only it asks the switch for them.
-        connection, _, status, ports, view, _, neighbors = _read_port_page(request)
+        connection, _, status, ports, view, _, neighbors, _ = _read_port_page(request)
         vlan_names = {vlan.id: vlan.name for vlan in view.vlans} if view else {}
     else:
         connection, _, status, ports, neighbors = _read_ports(request)
@@ -180,6 +194,7 @@ def _render_port(
     view: VlanView | None = None,
     port_settings: PortSettings | None = None,
     neighbors: NeighborView | None = None,
+    discovery: PortDiscovery | None = None,
     *,
     error: str | None = None,
     notice: str | None = None,
@@ -248,6 +263,7 @@ def _render_port(
             "standard_mtu": STANDARD_MTU,
             "jumbo_mtu": JUMBO_MTU,
             "neighbors": neighbors,
+            "discovery": discovery,
             "devices": devices,
             "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
             if neighbors and devices
@@ -273,7 +289,9 @@ def render_port_page(
     notice: str | None = None,
 ) -> Response:
     """Read the switch fresh and show one port's page, with an optional message."""
-    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
+        request, name
+    )
     return _render_port(
         request,
         username,
@@ -284,6 +302,7 @@ def render_port_page(
         view,
         port_settings,
         neighbors,
+        discovery,
         error=error,
         notice=notice,
     )
@@ -335,7 +354,7 @@ def port_change(
 ) -> Response:
     """Change one port. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings, neighbors = _read_port_page(
+    connection, target, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
         request, name
     )
     port = next((p for p in ports or [] if p.name == name), None)
@@ -351,6 +370,7 @@ def port_change(
             view,
             port_settings,
             neighbors,
+            discovery,
             **kwargs,
         )
 
@@ -403,7 +423,9 @@ def port_change(
     log.info("port change on %s by %s: %s", connection.host, username, summary)
 
     # Read the port back so the page shows what the switch now reports.
-    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
+        request, name
+    )
     if action == "description":
         done = (
             f'{name} now has the description "{description}".'
@@ -422,6 +444,7 @@ def port_change(
         view,
         port_settings,
         neighbors,
+        discovery,
         notice=f"Done: {done} Not saved yet: Save config keeps it over a restart of the switch.",
     )
 
@@ -440,7 +463,7 @@ def port_vlans_change(
 ) -> Response:
     """Set a port's mode and VLANs. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings, neighbors = _read_port_page(
+    connection, target, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
         request, name
     )
     port = next((p for p in ports or [] if p.name == name), None)
@@ -463,6 +486,7 @@ def port_vlans_change(
             view,
             port_settings,
             neighbors,
+            discovery,
             **kwargs,
         )
 
@@ -525,7 +549,9 @@ def port_vlans_change(
         set_unsaved_changes(conn, True)
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
 
-    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
+        request, name
+    )
     return _render_port(
         request,
         username,
@@ -536,6 +562,7 @@ def port_vlans_change(
         view,
         port_settings,
         neighbors,
+        discovery,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -553,7 +580,9 @@ def port_label(
 ) -> Response:
     """Set or remove a port's label. Kept in NXray only, so no confirm step and no switch call."""
     require_csrf(request, csrf)
-    connection, _, status, ports, view, port_settings, neighbors = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
+        request, name
+    )
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
@@ -567,6 +596,7 @@ def port_label(
             view,
             port_settings,
             neighbors,
+            discovery,
             **kwargs,
         )
 
@@ -646,12 +676,24 @@ def port_settings_change(
         "storm_unicast": storm_unicast,
         "storm_action": storm_action,
     }
-    connection, target, status, ports, view, current, neighbors = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, name
+    )
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, current, neighbors, **kwargs
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            current,
+            neighbors,
+            discovery,
+            **kwargs,
         )
 
     if connection is None or target is None or port is None:
@@ -712,7 +754,9 @@ def port_settings_change(
         set_unsaved_changes(conn, True)
     log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
 
-    connection, _, status, ports, view, current, neighbors = _read_port_page(request, name)
+    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, name
+    )
     return _render_port(
         request,
         username,
@@ -723,6 +767,7 @@ def port_settings_change(
         view,
         current,
         neighbors,
+        discovery,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -742,12 +787,24 @@ def port_breakout(
 ) -> Response:
     """Split a 100G port into four, or join four back. Asks to confirm first."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, current, neighbors = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, name
+    )
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
         return _render_port(
-            request, username, name, connection, status, ports, view, current, neighbors, **kwargs
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            current,
+            neighbors,
+            discovery,
+            **kwargs,
         )
 
     if connection is None or target is None or port is None:
@@ -797,7 +854,9 @@ def port_breakout(
 
     # The port this page was for is gone now; show the one that replaced it.
     shown = f"{plan.port}/1" if plan.action == "split" else plan.port
-    connection, _, status, ports, view, current, neighbors = _read_port_page(request, shown)
+    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, shown
+    )
     return _render_port(
         request,
         username,
@@ -808,9 +867,132 @@ def port_breakout(
         view,
         current,
         neighbors,
+        discovery,
         notice=(
             f"Done: {' '.join(plan.lines)} An NXray admin now presses Update the port list on "
             "the Switch page so NXray may change the new ports. Not saved yet: Save config "
             "keeps it over a restart of the switch."
+        ),
+    )
+
+
+# ---- CDP and LLDP on a port --------------------------------------------------
+
+
+@router.post("/ports/discovery", response_class=HTMLResponse)
+def port_discovery_change(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    cdp: str = Form(""),
+    lldp_transmit: str = Form(""),
+    lldp_receive: str = Form(""),
+    lldp_shown: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Turn CDP and LLDP sending and listening on or off on a port. Asks first.
+
+    The form is tick boxes: a box that is not sent means off.
+    """
+    require_csrf(request, csrf)
+    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, name
+    )
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return _render_port(
+            request,
+            username,
+            name,
+            connection,
+            status,
+            ports,
+            view,
+            current,
+            neighbors,
+            discovery,
+            **kwargs,
+        )
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.neighbor_changes_enabled:
+        return again(
+            error="Neighbor changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if discovery is None:
+        return again(error=f"The switch did not report CDP on {name}.", status_code=400)
+    change = plan_port_discovery(
+        discovery,
+        cdp=cdp == "on",
+        lldp_transmit=lldp_transmit == "on",
+        lldp_receive=lldp_receive == "on",
+        lldp_shown=lldp_shown == "yes",
+    )
+    if change.empty:
+        return again(notice="Nothing to change: the port already does this.")
+    lines, warnings = describe_port_discovery(name, change)
+    if confirm != "yes":
+        fields = {"name": port.name, "lldp_shown": lldp_shown}
+        # Only the ticked boxes are sent, as the browser sends them.
+        for key, value in (
+            ("cdp", cdp),
+            ("lldp_transmit", lldp_transmit),
+            ("lldp_receive", lldp_receive),
+        ):
+            if value == "on":
+                fields[key] = "on"
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
+                "back_label": port.name,
+                "lines": lines,
+                "warnings": warnings,
+                "action": "/ports/discovery",
+                "fields": fields,
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.set_port_discovery(
+                name,
+                cdp=change.cdp,
+                lldp_transmit=change.lldp_transmit,
+                lldp_receive=change.lldp_receive,
+            )
+    except NxapiError as exc:
+        log.warning("CDP/LLDP change on %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, True)
+    log.info("CDP/LLDP change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
+
+    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
+        request, name
+    )
+    return _render_port(
+        request,
+        username,
+        name,
+        connection,
+        status,
+        ports,
+        view,
+        current,
+        neighbors,
+        discovery,
+        notice=(
+            f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
+            "the switch."
         ),
     )

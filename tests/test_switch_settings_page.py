@@ -276,7 +276,10 @@ def test_removed_account_is_made_again_and_keeps_port_changes(
     assert row["changes_enabled_at"] is not None and row["role_version"] == ROLE_VERSION
     assert row["paused_until"] <= time.time()  # no new wait for a fresh account
     page = _text(logged_in.get("/switch").text)
-    assert "read, plus port changes, VLANs, port settings and features" in page
+    assert (
+        "read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC "
+        "address table" in page
+    )
     assert "leaving the switch alone" not in page
 
 
@@ -311,7 +314,10 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     assert f"Port changes are now off: the {ROLE_NAME} role is no longer on the switch" in text
     row = _row(settings)
     assert row["changes_enabled_at"] is None and row["role_version"] == 0
-    assert "Turn on port, VLAN, port settings and feature changes" in logged_in.get("/switch").text
+    assert (
+        "Turn on port, VLAN, port settings, feature and neighbor changes"
+        in logged_in.get("/switch").text
+    )
 
 
 def test_unreadable_login_after_a_key_change_is_repaired(

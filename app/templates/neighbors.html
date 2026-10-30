@@ -23,6 +23,22 @@
   {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
 </div>
 {% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="neighbors">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
 <section class="card">
   <h2 class="card-title">Devices that announce themselves</h2>
   <p class="lead">Switches, routers, servers and phones next to the switch that say who they are over CDP or LLDP. CDP is {{ "on" if view.cdp_enabled else "off" }} and LLDP is {{ "on" if view.lldp_enabled else "off" }} on the switch.</p>
@@ -56,6 +72,102 @@
     {%- for pc in view.port_channels %} {{ pc.name }} is {{ port_list(pc.members) }}{{ "." if loop.last else ";" }}{% endfor %}</p>
   {% endif %}
 </section>
+
+<section class="card">
+  <h2 class="card-title">Static addresses</h2>
+  <p class="lead">Addresses fixed by hand: the switch always sends their traffic to one port, or drops it, and never forgets them.</p>
+  {% if statics %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>MAC address</th><th>Maker</th><th>VLAN</th><th>Traffic goes to</th>{% if can_change %}<th></th>{% endif %}</tr>
+    </thead>
+    <tbody>
+      {% for m, target in statics %}
+      <tr>
+        <td class="mono">{{ m.mac }}</td>
+        <td class="wrap">{{ m.maker_text or "—" }}</td>
+        <td>{{ m.vlan or "—" }}</td>
+        <td>{% if target == drop %}dropped{% else %}{{ port_link(m.port) }}{% endif %}</td>
+        {% if can_change %}
+        <td>{% if target %}
+          <form method="post" action="/neighbors/static/remove" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="mac" value="{{ m.mac }}">
+            <input type="hidden" name="vlan" value="{{ m.vlan }}">
+            <button type="submit" class="btn btn-quiet">Remove</button>
+          </form>
+        {% else %}<span class="dim">set on the switch</span>{% endif %}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>There are no static addresses.</p>
+  {% endif %}
+  {% if can_change %}
+  <form method="post" action="/neighbors/static" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="static_mac">MAC address</label>
+    <input id="static_mac" name="mac" type="text" value="{{ form.mac or '' }}" spellcheck="false" placeholder="00:11:22:33:44:55">
+    <label for="static_vlan">VLAN</label>
+    <select id="static_vlan" name="vlan">
+      {% for vlan in vlans.vlans %}
+      <option value="{{ vlan.id }}" {% if form.vlan == vlan.id|string %}selected{% endif %}>{{ vlan.id }} {{ vlan.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="static_where">Traffic goes to</label>
+    <select id="static_where" name="where">
+      {% for name in front_ports %}
+      <option value="{{ name }}" {% if form.where == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+      <option value="{{ drop }}" {% if form.where == drop %}selected{% endif %}>Drop it (block this address)</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Add static address</button>
+  </form>
+  <p class="note">Each change asks you to confirm first.</p>
+  {% endif %}
+</section>
+
+{% if can_change %}
+<section class="card">
+  <h2 class="card-title">Change the MAC address table</h2>
+  <form method="post" action="/neighbors/aging" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="aging">Forget a learned address after this many seconds without traffic</label>
+    <input id="aging" name="aging" type="text" inputmode="numeric" value="{{ form.aging if form.aging is defined else (view.aging_seconds if view.aging_seconds is not none else '') }}">
+    <p class="hint">{{ aging_min }} to {{ aging_max }}, in steps of 5; the switch's default is 1800 (30 minutes). 0 never forgets them.</p>
+    <button type="submit" class="btn btn-primary">Change aging time</button>
+  </form>
+
+  <form method="post" action="/neighbors/clear" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <fieldset class="choice">
+      <legend>Clear learned addresses</legend>
+      <label class="check"><input type="radio" name="scope" value="all" {% if form.scope not in ("port", "vlan", "address") %}checked{% endif %}> All of them</label>
+      <label class="check"><input type="radio" name="scope" value="port" {% if form.scope == "port" %}checked{% endif %}> Those on one port</label>
+      <label class="check"><input type="radio" name="scope" value="vlan" {% if form.scope == "vlan" %}checked{% endif %}> Those in one VLAN</label>
+      <label class="check"><input type="radio" name="scope" value="address" {% if form.scope == "address" %}checked{% endif %}> One address</label>
+    </fieldset>
+    <label for="clear_port">Port (for one port)</label>
+    <select id="clear_port" name="port">
+      {% for name in front_ports %}
+      <option value="{{ name }}" {% if form.port == name %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <label for="clear_vlan">VLAN (for one VLAN; for one address, optional)</label>
+    <input id="clear_vlan" name="vlan" type="text" inputmode="numeric" value="{{ form.vlan or '' }}">
+    <label for="clear_mac">MAC address (for one address)</label>
+    <input id="clear_mac" name="mac" type="text" value="{{ form.mac or '' }}" spellcheck="false" placeholder="00:11:22:33:44:55">
+    <button type="submit" class="btn btn-quiet">Clear learned addresses</button>
+  </form>
+  <p class="note">The switch learns connected devices again from their next traffic. Static addresses are never cleared. Each change asks you to confirm first.</p>
+</section>
+{% elif role in ("admin", "operator") and connection.changes_enabled and not connection.neighbor_changes_enabled %}
+<section class="card">
+  <p class="lead">Neighbor changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to set the aging time, add and remove static addresses, clear learned addresses, and turn CDP and LLDP on or off per port.</p>
+</section>
+{% endif %}
 
 <section class="card">
   <h2 class="card-title">ARP table</h2>

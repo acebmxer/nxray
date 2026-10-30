@@ -280,19 +280,23 @@ def test_old_role_offers_feature_changes_without_a_wait(
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 3")
     page = _text(logged_in.get("/switch").text)
-    assert "Turn on feature changes" in page and "There is no wait this time" in page
+    assert "Turn on feature and neighbor changes" in page and "There is no wait this time" in page
     assert "Off: this version of NXray can also turn switch features on and off" in page
     assert "read, plus port changes, VLANs and port settings" in page
 
     text = _text(_enable(logged_in).text)
     assert (
-        "Feature changes are on: nxray may now also turn switch features on and off on the "
-        "Features page. The switch applies this at once, so there is no wait." in text
+        "Feature and neighbor changes are on: nxray may now also turn switch features on and "
+        "off on the Features page, and turn CDP and LLDP on or off" in text
     )
+    assert "The switch applies this at once, so there is no wait." in text
     assert "rule 28 permit command conf t ; feature *" in enabled.ssh_lines
     assert "rule 29 permit command conf t ; no feature *" in enabled.ssh_lines
     page = _text(logged_in.get("/switch").text)
-    assert "read, plus port changes, VLANs, port settings and features" in page
+    assert (
+        "read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC "
+        "address table" in page
+    )
     assert "Update the port list" in page
     assert _set(logged_in, "lldp", "on", confirm=True).status_code == 200
     assert enabled.lldp

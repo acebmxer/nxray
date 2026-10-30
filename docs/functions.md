@@ -50,6 +50,7 @@ prose columns; those are a reviewer's job.
 | Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
+| Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
@@ -142,7 +143,9 @@ raises, all handled in `main.create_app`.
 | `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
 | `parse_vlan_list` | `(text: str) -> list[int]` | A typed VLAN list (`10,20-30`, `all`, `none`) as numbers; refuses anything else | `vlans` | v0.1.0 |
 | `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `give_role`, `delete_user`, `switch_setup.run_setup`, `switch_repair.run_repair`, `port_changes.role_lines` | v0.1.0 |
+| `validate_device_mac` | `(text: str) -> str` | One device's MAC address in any common form, written as the switch writes it (`0200.0000.0001`); refuses multicast, broadcast and all-zero | `NxapiClient.add_static_mac`, `remove_static_mac`, `clear_learned_macs`, `neighbor_changes` | v0.1.0 |
 | `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
+| `validate_mac_aging` | `(value: int \| str) -> int` | A MAC address aging time: 0 (never forget) or 120 to 918000 seconds in steps of 5, as the switch takes it | `NxapiClient.set_mac_aging`, `neighbor_changes.plan_mac_aging` | v0.1.0 |
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
@@ -165,8 +168,13 @@ settings, only the ones given), `breakout_port(name, mapping)` and
 `join_port(name, mapping)` (split a 100G port into four, or join them;
 `10g-4x` or `25g-4x` only), `set_feature(command, enabled)` (`feature X` or
 `no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
-`no feature ssh`) and `save_config()`; each builds its commands from checked
-values.
+`no feature ssh`), `set_port_discovery(name, cdp=, lldp_transmit=,
+lldp_receive=)` (CDP and LLDP on one port, only the ones given),
+`set_mac_aging(seconds)`, `add_static_mac(mac, vlan, port)` and
+`remove_static_mac(mac, vlan, port)` (on a front port, or `drop` when `port`
+is None), `clear_learned_macs(port=, vlan=, mac=)` (everything, one port, one
+VLAN or one address; not a configuration change) and `save_config()`; each
+builds its commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -225,12 +233,14 @@ port's own page shows.
 | `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
-| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/switch_page.switch_save` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
 changes are on and how long NXray still waits before calling the switch;
 `vlan_changes_enabled` says whether the role includes the VLAN rules
-(`role_version` 2 or later).
+(`role_version` 2 or later), `settings_changes_enabled`,
+`feature_changes_enabled` and `neighbor_changes_enabled` the later rule sets
+(3, 4 and 5).
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -282,13 +292,14 @@ NX-API certificate is. Tests pass a pretend opener through
 | `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`port settings and feature changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
+| `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`feature and neighbor changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
-`ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES` and `FEATURE_RULES` are
-the role's only rules; `ROLE_NAME` is `nxray-ports`, shared by every NXray
-install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
-VLANs, 3 also port settings, 4 also features). `EnableResult.had_role`
+`ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES` and
+`NEIGHBOR_RULES` are the role's only rules; `ROLE_NAME` is `nxray-ports`,
+shared by every NXray install on a switch. `ROLE_VERSION` counts the rule sets
+(1 ports, 2 ports and VLANs, 3 also port settings, 4 also features, 5 also CDP
+and LLDP per port and the MAC address table). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 there is no wait.
 
@@ -368,7 +379,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `account_2fa_setup` | `(request, username, csrf) -> Response` | `POST /account/2fa/setup`: a new key and its QR code; nothing changes until confirmed | router | v0.1.0 |
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
-| `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `routes/vlans`, `routes/features` | v0.1.0 |
+| `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `port_discovery_change`, `routes/vlans`, `routes/features`, `routes/neighbors` | v0.1.0 |
 | `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change` | v0.1.0 |
 | `feature_set` | `(request, username, csrf, name, state, confirm) -> Response` | `POST /features/set`: asks to confirm, then turns one feature on or off; admin only; refuses what `Feature.refusal` names | router | v0.1.0 |
 | `features_page` | `(request, username) -> Response` | `GET /features`: every switch feature by group with its state, read live; every role looks, admins change | router | v0.1.0 |
@@ -383,23 +394,27 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `login_form` | `(request, next: str = "/") -> Response` | `GET /login` | router | v0.1.0 |
 | `login_submit` | `(request, username, password, next) -> Response` | `POST /login`; for an account with two-factor, on to `/login/2fa` without a session | router | v0.1.0 |
 | `logout` | `(request) -> Response` | `POST /logout` | router | v0.1.0 |
-| `neighbors_page` | `(request, username, q) -> Response` | `GET /neighbors?q=`: CDP and LLDP neighbors, the MAC address table (narrowed by the search) and ARP, read live; every role | router | v0.1.0 |
+| `learned_macs_clear` | `(request, username, csrf, scope, port, vlan, mac, back, confirm) -> Response` | `POST /neighbors/clear`: asks to confirm, then clears learned addresses (all, one port, one VLAN or one address); `back=port` answers on that port's page | router | v0.1.0 |
+| `mac_aging_change` | `(request, username, csrf, aging, confirm) -> Response` | `POST /neighbors/aging`: asks to confirm, then sets how long learned addresses are kept | router | v0.1.0 |
+| `neighbors_page` | `(request, username, q) -> Response` | `GET /neighbors?q=`: CDP and LLDP neighbors, the MAC address table (narrowed by the search), static addresses and ARP, read live; every role; operators and admins also get the MAC table's change forms | router | v0.1.0 |
 | `port_breakout` | `(request, username, csrf, name, action, mapping, confirm) -> Response` | `POST /ports/breakout`: asks to confirm, then splits a 100G port into four or joins them, and shows the port that replaced it | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
+| `port_discovery_change` | `(request, username, csrf, name, cdp, lldp_transmit, lldp_receive, lldp_shown, confirm) -> Response` | `POST /ports/discovery`: asks to confirm, then turns CDP and LLDP sending and listening on or off on one port; an unticked box means off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs, settings and connected devices; 404 for an unknown name | router | v0.1.0 |
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
 | `ports_page` | `(request, username, show, color) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan`: the front panel and the table; only `vlan` also reads the VLAN names; every mode reads the neighbors and MAC address table for the tooltips | router | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
+| `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
-| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN, port settings and feature changes button, the Turn on button for whatever an older role lacks (for example Turn on feature changes), and Update the port list | router | v0.1.0 |
+| `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN, port settings, feature and neighbor changes button, the Turn on button for whatever an older role lacks (for example Turn on neighbor changes), and Update the port list | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
-| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, else Switch) | router | v0.1.0 |
+| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, Neighbors, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 | `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
@@ -408,6 +423,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `users_page` | `(request, username) -> Response` | `GET /users`, every account, admin only | router | v0.1.0 |
 | `users_password` | `(request, username, csrf, user_id, new_password, confirm_password) -> Response` | `POST /users/password`: an admin sets an account's password and signs it out | router | v0.1.0 |
 | `users_role` | `(request, username, csrf, user_id, role) -> Response` | `POST /users/role`; not your own, never the last active admin | router | v0.1.0 |
+| `static_mac_add` | `(request, username, csrf, mac, vlan, where, confirm) -> Response` | `POST /neighbors/static`: asks to confirm, then adds a static MAC address on a front port or dropped | router | v0.1.0 |
+| `static_mac_remove` | `(request, username, csrf, mac, vlan, confirm) -> Response` | `POST /neighbors/static/remove`: asks to confirm, then removes a static entry the table shows | router | v0.1.0 |
 | `vlan_create` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/create`; refuses a VLAN that exists | router | v0.1.0 |
 | `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1 and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
 | `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
@@ -576,6 +593,29 @@ address up in the ARP table. With the lldp feature off every `show lldp`
 command is an error, so the LLDP list is asked for only when it is on. The
 LLDP field names come from Cisco's NX-API reference; LLDP has been off on the
 switch NXray was built against.
+
+## `app/neighbor_changes.py` — CDP and LLDP per port, and the MAC address table
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `aging_words` | `(seconds: int) -> str` | `1800` -> `1800 seconds (30 minutes)`, `0` -> never | `plan_mac_aging` | v0.1.0 |
+| `describe_port_discovery` | `(port, change) -> tuple[list[str], list[str]]` | A port's CDP and LLDP change in words, plus a warning for each thing turned off | `routes/ports.port_discovery_change` | v0.1.0 |
+| `load_port_discovery` | `(client, port, lldp_on) -> PortDiscovery \| None` | What one port does with CDP (and LLDP, while it is on), from one request; None when refused | `routes/ports` | v0.1.0 |
+| `parse_cdp_interface` | `(body) -> bool \| None` | Whether CDP is on for the port in `show cdp interface <port>` | `load_port_discovery` | v0.1.0 |
+| `parse_lldp_interface` | `(body) -> tuple[bool \| None, bool \| None]` | Sending and listening from `show lldp interface <port>`, wherever `tx_enabled` and `rx_enabled` sit | `load_port_discovery` | v0.1.0 |
+| `plan_clear` | `(view, *, scope, ports, port="", vlan="", mac="") -> tuple[ClearRequest, list[str], list[str]]` | Clearing learned addresses (all, one port, one VLAN, one address), checked, with how many go and the relearn warning | `routes/neighbors.learned_macs_clear` | v0.1.0 |
+| `plan_mac_aging` | `(view, text) -> tuple[int, list[str], list[str]]` | A new aging time, checked, in words; refuses the one in use | `routes/neighbors.mac_aging_change` | v0.1.0 |
+| `plan_port_discovery` | `(current, *, cdp, lldp_transmit, lldp_receive, lldp_shown) -> DiscoveryChange` | The CDP and LLDP settings that differ from the port's; LLDP only when the page showed it | `routes/ports.port_discovery_change` | v0.1.0 |
+| `plan_static_mac` | `(view, *, mac, vlan, where, vlan_ids, ports) -> tuple[StaticMac, list[str], list[str]]` | A new static entry checked against the switch's VLANs and front ports (or `drop`), with a warning when the address was learned elsewhere | `routes/neighbors.static_mac_add` | v0.1.0 |
+| `plan_static_removal` | `(view, *, mac, vlan) -> tuple[StaticMac, list[str], list[str]]` | Removing a static entry the table shows, with the port or drop it was made with | `routes/neighbors.static_mac_remove` | v0.1.0 |
+| `static_entries` | `(view) -> list[MacEntry]` | The static entries someone added, not the switch's own address | `routes/neighbors`, `plan_static_mac` | v0.1.0 |
+| `static_target` | `(entry) -> str \| None` | Where a static entry sends traffic as NXray names it (a front port or `drop`); None for one NXray does not remove | `routes/neighbors`, `plan_static_removal` | v0.1.0 |
+
+`PortDiscovery` holds a port's CDP and LLDP state; its LLDP values are None
+while LLDP is off on the switch, when they can be neither read nor set. The
+LLDP field names come from Cisco's guides; LLDP has been off on the switch
+NXray was built against. Clearing learned addresses is not a configuration
+change, so it leaves nothing to save.
 
 ## `app/oui.py` — MAC addresses and their makers
 

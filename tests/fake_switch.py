@@ -19,6 +19,10 @@ interface switchport`` answer with what the commands set. Port settings
 (speed, MTU, FEC, flow control, storm control, routed with an address) live
 there too, and a split 100G port in ``breakouts`` (port -> map), so the show
 commands list its four ports instead.
+
+The MAC address table starts as recorded and lives in ``mac_rows`` once
+anything changes it (static entries, clearing), with the aging time in
+``mac_aging``; CDP and LLDP per port are in ``port_state`` too.
 """
 
 from __future__ import annotations
@@ -52,8 +56,6 @@ _RECORDED = {
     "show interface transceiver": "show_interface_transceiver",
     "show cdp global": "show_cdp_global",
     "show cdp neighbors detail": "show_cdp_neighbors_detail",
-    "show mac address-table": "show_mac_address_table",
-    "show mac address-table aging-time": "show_mac_address_table_aging_time",
     "show ip arp detail vrf all": "show_ip_arp_detail_vrf_all",
     "show port-channel summary": "show_port_channel_summary",
 }
@@ -95,6 +97,25 @@ _SETTINGS = (
 _STATUS_SPEED = {"auto": "auto", "1000": "1000", "100": "100"}
 
 _BREAKOUT = re.compile(r"(no )?interface breakout module (\d+) port (\d+) map (10g-4x|25g-4x)")
+
+# CDP and LLDP per port: the command, its port_state key and the value it sets.
+_DISCOVERY = {
+    "cdp enable": ("cdp", True),
+    "no cdp enable": ("cdp", False),
+    "lldp transmit": ("lldp_transmit", True),
+    "no lldp transmit": ("lldp_transmit", False),
+    "lldp receive": ("lldp_receive", True),
+    "no lldp receive": ("lldp_receive", False),
+}
+
+_STATIC_MAC = re.compile(
+    r"(no )?mac address-table static ([0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}) vlan (\d+) "
+    r"(?:interface (Ethernet\S+)|drop)"
+)
+_CLEAR_MAC = re.compile(
+    r"clear mac address-table dynamic"
+    r"(?: interface (Ethernet\S+)| address ([0-9a-f.]+)(?: vlan (\d+))?| vlan (\d+))?"
+)
 
 # Interface commands with a value, and the rule entity that permits each.
 _SWITCHPORT = (
@@ -166,6 +187,9 @@ class FakeSwitch:
     # rest answer as in the recording (show_feature_full: icam, lacp, nxapi
     # and sshServer on).
     feature_state: dict[str, bool] = field(default_factory=dict)
+    # The MAC address table's rows once something changed it; None: as recorded.
+    mac_rows: list[dict[str, Any]] | None = None
+    mac_aging: int = 1800
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -308,6 +332,40 @@ class FakeSwitch:
                         "1-4094" if value == "all" else value
                     )
                     return _ok(ident, None), context
+        if interface is not None and cmd in _DISCOVERY:
+            if not (
+                is_admin or self._role_allows(user, f"conf t ; interface * ; {cmd}", interface)
+            ):
+                return denied, context
+            if cmd.removeprefix("no ").startswith("lldp") and not self.lldp:
+                # As NX-OS answers a command of a feature that is off.
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            key, value = _DISCOVERY[cmd]
+            self.port_state.setdefault(interface, {})[key] = value
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"mac address-table aging-time (\d+)", cmd):
+            rule = "conf t ; mac address-table aging-time *"
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            self.mac_aging = int(match.group(1))
+            return _ok(ident, None), context
+        if match := _STATIC_MAC.fullmatch(cmd):
+            undo, mac, vlan_text, port = match.groups()
+            rule = (
+                "conf t ; no mac address-table static *"
+                if undo
+                else "conf t ; mac address-table static *"
+            )
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            return self._static_mac(ident, bool(undo), mac, vlan_text, port), context
+        if match := _CLEAR_MAC.fullmatch(cmd):
+            rule = "clear mac address-table dynamic" + (" *" if cmd.count(" ") > 3 else "")
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            port, mac, mac_vlan, vlan = match.groups()
+            self._clear_macs(port, mac, mac_vlan or vlan)
+            return _ok(ident, None), context
         if match := re.fullmatch(r"vlan (\d+)", cmd):
             number = int(match.group(1))
             if not (is_admin or self._role_allows(user, "vlan", None)):
@@ -409,6 +467,88 @@ class FakeSwitch:
         elif key is not None:
             state[key] = match.group(1)
         return _ok(ident, None)
+
+    def macs(self) -> list[dict[str, Any]]:
+        """The MAC address table's rows, starting from the recorded ones."""
+        if self.mac_rows is None:
+            self.mac_rows = list(
+                load_fixture("show_mac_address_table")["TABLE_mac_address"]["ROW_mac_address"]
+            )
+        return self.mac_rows
+
+    def _static_mac(
+        self, ident: int, undo: bool, mac: str, vlan_text: str, port: str | None
+    ) -> dict[str, Any]:
+        vlan = int(vlan_text)
+        if vlan not in self.vlans:
+            return _error(ident, f"ERROR: vlan {vlan} not configured\n")
+        rows = self.macs()
+        found = [
+            row
+            for row in rows
+            if row["disp_mac_addr"] == mac
+            and row["disp_vlan"] == str(vlan)
+            and row["disp_type"] == "static"
+        ]
+        if undo:
+            if not found:
+                return _error(ident, "ERROR: Entry does not exist\n")
+            rows.remove(found[0])
+            return _ok(ident, None)
+        if port is not None and port not in self.port_names():
+            return _error(ident, "% Invalid interface\n")
+        # A static entry replaces what was learned for the address in that VLAN.
+        self.mac_rows = [
+            row
+            for row in rows
+            if not (row["disp_mac_addr"] == mac and row["disp_vlan"] == str(vlan))
+        ]
+        self.mac_rows.append(
+            {
+                "disp_mac_addr": mac,
+                "disp_type": "static",
+                "disp_vlan": str(vlan),
+                "disp_age": "-",
+                "disp_is_secure": "F",
+                "disp_is_ntfy": "F",
+                # How a dropped entry shows is a guess: never seen on cisco-25gb.
+                "disp_port": port.replace("Ethernet", "Eth") if port else "Drop",
+            }
+        )
+        return _ok(ident, None)
+
+    def _clear_macs(self, port: str | None, mac: str | None, vlan: str | None) -> None:
+        short = port.replace("Ethernet", "Eth") if port else None
+
+        def cleared(row: dict[str, Any]) -> bool:
+            if row["disp_type"] != "dynamic":
+                return False
+            if short is not None and row["disp_port"] != short:
+                return False
+            if mac is not None and row["disp_mac_addr"] != mac:
+                return False
+            return vlan is None or row["disp_vlan"] == vlan
+
+        self.mac_rows = [row for row in self.macs() if not cleared(row)]
+
+    def discovery(self, name: str, protocol: str) -> dict[str, Any]:
+        """``show cdp interface <port>`` (as recorded) or ``show lldp interface <port>``
+        (shaped after Cisco's guides, never seen on cisco-25gb)."""
+        state = self.port_state.get(name, {})
+        if protocol == "cdp":
+            row = dict(load_fixture("show_cdp_interface")["TABLE_cdp_all"]["ROW_cdp_all"])
+            row["intf_id"] = name
+            row["cdp_intf_enabled"] = "enabled" if state.get("cdp", True) else "disabled"
+            return {"TABLE_cdp_all": {"ROW_cdp_all": row}}
+        return {
+            "TABLE_interface": {
+                "ROW_interface": {
+                    "interface": name,
+                    "tx_enabled": "TRUE" if state.get("lldp_transmit", True) else "FALSE",
+                    "rx_enabled": "TRUE" if state.get("lldp_receive", True) else "FALSE",
+                }
+            }
+        }
 
     def port_names(self) -> list[str]:
         """Every Ethernet port, with split ports listed as their four parts."""
@@ -555,6 +695,17 @@ class FakeSwitch:
                 return _error(ident, "% Invalid command\n")
             if cmd == "show lldp neighbors detail":
                 return _ok(ident, load_fixture("show_lldp_neighbors_detail"))
+        if match := re.fullmatch(r"show (cdp|lldp) interface (Ethernet\S+)", cmd):
+            protocol, name = match.groups()
+            if name not in self.port_names():
+                return _error(ident, "% Invalid interface format\n")
+            return _ok(ident, self.discovery(name, protocol))
+        if cmd == "show mac address-table":
+            rows = self.macs()
+            body = {"TABLE_mac_address": {"ROW_mac_address": rows[0] if len(rows) == 1 else rows}}
+            return _ok(ident, body if rows else {})
+        if cmd == "show mac address-table aging-time":
+            return _ok(ident, {"age_str": "Aging Time\n----------\n", "age": str(self.mac_aging)})
         port_show = re.fullmatch(
             r"show interface (Ethernet\S+) (capabilities|flowcontrol|counters storm-control)", cmd
         )

@@ -13,8 +13,13 @@
   <p class="warning">{{ warning }}</p>
   {% endfor %}
   <p class="note">
+    {% if not_config is defined and not_config %}
+    This takes effect on the switch at once. It changes no configuration, so
+    there is nothing to save afterwards.
+    {% else %}
     The change takes effect on the switch at once. It is not saved: a restart of
     the switch undoes it until you press Save config.
+    {% endif %}
   </p>
 
   <div class="button-row">

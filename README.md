@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-839%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-918%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,13 +13,13 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 13 of the [roadmap](#roadmap) are built,
-except the changes part of stage 12, which is next; stages 14 to 22 (the
-advanced switch features) are planned. Today you can install NXray, sign in, connect it to a switch,
+**Status:** early. Stages 1 to 13 of the [roadmap](#roadmap) are built;
+stages 14 to 22 (the advanced switch features) are planned. Today you can install NXray, sign in, connect it to a switch,
 see the switch's health on the dashboard, look at every port on a picture of
 the front panel coloured by state, traffic, errors or VLAN, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
-each device's maker, ARP), label ports, turn
+each device's maker, ARP), turn CDP and LLDP on or off per port, set the MAC
+address aging time, add static MAC addresses, clear learned ones, label ports, turn
 ports on or off, edit their descriptions, create, rename and delete VLANs, set the
 VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, turn switch features
@@ -114,7 +114,7 @@ default: *(built)*.
 12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,
     which device is on a port, with each device's maker. *(built)* Changes:
     CDP and LLDP on or off per port, the MAC aging time, static MAC
-    addresses, clearing learned addresses. *(planned, next)*
+    addresses, clearing learned addresses. *(built)*
 13. **Features**: turn switch features on and off. *(built)*
 14. **Link aggregation**: port-channels and LACP. *(planned)*
 15. **Layer 3**: VLAN interfaces, routed ports, VRFs, static routes, routing

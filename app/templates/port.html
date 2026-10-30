@@ -125,7 +125,47 @@
     <p>The switch has learned no MAC addresses on this port.</p>
     {% endif %}
     <p class="note">From the switch's MAC address table: every device whose traffic came in on this port. <a href="/neighbors">See the whole table</a>.</p>
+    {% if can_change and connection.neighbor_changes_enabled %}
+    <form method="post" action="/neighbors/clear" class="inline-actions">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="scope" value="port">
+      <input type="hidden" name="port" value="{{ port.name }}">
+      <input type="hidden" name="back" value="port">
+      <button type="submit" class="btn btn-quiet">Clear the addresses learned on this port</button>
+    </form>
+    <p class="note">The switch forgets them and learns them again from the next traffic. It asks you to confirm first. Static addresses are set on the <a href="/neighbors">Neighbors page</a>.</p>
+    {% endif %}
   </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">CDP and LLDP</h2>
+  {% if discovery is none %}
+  <p class="lead">The switch did not report whether this port speaks CDP and LLDP.</p>
+  {% else %}
+  <p class="lead">The two ways devices tell each other who they are. CDP is Cisco's own; LLDP is the standard one most servers and other makers' switches speak.</p>
+  <dl class="facts">
+    <dt>CDP</dt><dd>{{ "on" if discovery.cdp else "off" }}{% if neighbors and not neighbors.cdp_enabled %} <span class="reason">CDP is off for the whole switch</span>{% endif %}</dd>
+    <dt>LLDP</dt>
+    <dd>{% if discovery.lldp_known %}sending {{ "on" if discovery.lldp_transmit else "off" }}, listening {{ "on" if discovery.lldp_receive else "off" }}{% elif neighbors and neighbors.lldp_enabled %}on for the switch; the switch did not say what this port does{% else %}off for the whole switch{% endif %}</dd>
+  </dl>
+  {% if can_change and connection.neighbor_changes_enabled %}
+  <form method="post" action="/ports/discovery" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ port.name }}">
+    <label class="check"><input type="checkbox" name="cdp" value="on" {% if discovery.cdp %}checked{% endif %}> CDP: send and listen</label>
+    {% if discovery.lldp_known %}
+    <input type="hidden" name="lldp_shown" value="yes">
+    <label class="check"><input type="checkbox" name="lldp_transmit" value="on" {% if discovery.lldp_transmit %}checked{% endif %}> LLDP: send (the device on this port hears this switch)</label>
+    <label class="check"><input type="checkbox" name="lldp_receive" value="on" {% if discovery.lldp_receive %}checked{% endif %}> LLDP: listen (this switch hears the device)</label>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">Change CDP and LLDP</button>
+  </form>
+  <p class="note">The change asks you to confirm first.{% if not discovery.lldp_known and not (neighbors and neighbors.lldp_enabled) %} LLDP can be set per port once it is on for the whole switch; {% if role == "admin" %}turn it on on the <a href="/features">Features page</a>{% else %}an NXray admin turns it on on the Features page{% endif %}.{% endif %}</p>
+  {% elif can_change and connection.changes_enabled %}
+  <p class="lead">Neighbor changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn CDP and LLDP on or off on this port and change the MAC address table.</p>
+  {% endif %}
   {% endif %}
 </section>
 

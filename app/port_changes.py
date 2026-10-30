@@ -3,10 +3,12 @@
 The role allows exactly these: on the front-panel Ethernet ports only,
 turning a port on or off, setting or removing its description, setting its
 mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
-control, storm control, switched or routed with an IPv4 address);
-switch-wide, creating, naming and deleting VLANs, splitting a 100G port into
-four and joining it again, turning switch features on and off; and saving
-the configuration. Everything else
+control, storm control, switched or routed with an IPv4 address), and
+turning CDP and LLDP on or off on them; switch-wide, creating, naming and
+deleting VLANs, splitting a 100G port into four and joining it again,
+turning switch features on and off, setting how long learned MAC addresses
+are kept, adding and removing static MAC addresses, and clearing learned
+ones; and saving the configuration. Everything else
 (mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
 stays refused by the switch itself, not just by NXray.
 
@@ -28,7 +30,8 @@ before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
-the VLAN rules, 3 the port settings rules, 4 the feature rules. NXray
+the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
+neighbor rules (CDP, LLDP and the MAC address table). NXray
 stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
@@ -132,16 +135,38 @@ FEATURE_RULES = (
     "rule 29 permit command conf t ; no feature *",
 )
 
-ROLE_VERSION = 4
+# Neighbor rules, added in ROLE_VERSION 5: CDP and LLDP per port, the MAC
+# address aging time, static MAC addresses and clearing learned ones. Proven on
+# cisco-25gb (2026-10-30) with a throwaway account holding the CDP, MAC table
+# and clearing rules: each worked over NX-API on the one port its role named.
+# The static entry's port is checked by NXray (NxapiClient.add_static_mac takes
+# front ports only). The LLDP lines need the lldp feature on and were not
+# tried on the switch. Clearing is not a configuration command, so its rule has
+# no "conf t"; the bare form clears every learned address.
+NEIGHBOR_RULES = (
+    "rule 30 permit command conf t ; interface * ; cdp enable",
+    "rule 31 permit command conf t ; interface * ; no cdp enable",
+    "rule 32 permit command conf t ; interface * ; lldp transmit",
+    "rule 33 permit command conf t ; interface * ; no lldp transmit",
+    "rule 34 permit command conf t ; interface * ; lldp receive",
+    "rule 35 permit command conf t ; interface * ; no lldp receive",
+    "rule 36 permit command conf t ; mac address-table aging-time *",
+    "rule 37 permit command conf t ; mac address-table static *",
+    "rule 38 permit command conf t ; no mac address-table static *",
+    "rule 39 permit command clear mac address-table dynamic",
+    "rule 40 permit command clear mac address-table dynamic *",
+)
+
+ROLE_VERSION = 5
 
 # What each role version added, for the Switch page's button names.
-_ADDED_BY_VERSION = {2: "VLAN", 3: "port settings", 4: "feature"}
+_ADDED_BY_VERSION = {2: "VLAN", 3: "port settings", 4: "feature", 5: "neighbor"}
 
 
 def missing_changes(role_version: int) -> str:
     """The kinds of change a role of ``role_version`` lacks, in words.
 
-    ``missing_changes(2)`` is "port settings and feature changes"; "" when
+    ``missing_changes(3)`` is "feature and neighbor changes"; "" when
     nothing is missing.
     """
     names = [name for version, name in _ADDED_BY_VERSION.items() if version > role_version]
@@ -186,11 +211,12 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: front ports, their settings, VLANs, features, save config",
+        "description NXray: front ports, settings, VLANs, features, MAC table, save config",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
         *FEATURE_RULES,
+        *NEIGHBOR_RULES,
         "interface policy deny",
         *permits,
         "exit",

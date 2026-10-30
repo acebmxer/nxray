@@ -56,6 +56,12 @@ class SwitchConnection:
         """True once that role includes the feature rules (role version 4 or later)."""
         return self.changes_enabled and self.role_version >= 4
 
+    @property
+    def neighbor_changes_enabled(self) -> bool:
+        """True once that role includes the neighbor rules: CDP and LLDP per port and
+        the MAC address table (role version 5 or later)."""
+        return self.changes_enabled and self.role_version >= 5
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

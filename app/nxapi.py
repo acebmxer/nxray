@@ -17,7 +17,9 @@ Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
-``breakout_port``, ``join_port``, ``set_feature``, ``save_config``), each building
+``breakout_port``, ``join_port``, ``set_feature``, ``set_port_discovery``,
+``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
+``clear_learned_macs``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -33,6 +35,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from app.oui import normalize_mac
 
 # A hostname (RFC 1123 labels) or an IPv4/IPv6 literal. Anything else, such
 # as a value with a path, scheme or credentials in it, is refused so the
@@ -121,6 +125,14 @@ FEATURE_COMMANDS = frozenset(
         "vrrpv3", "vtp",
     }
 )  # fmt: skip
+
+# How long the switch keeps a learned MAC address without traffic, in
+# seconds: 0 keeps them for good, otherwise 120 to 918000 in steps of 5 (the
+# switch rounds anything else down to a multiple of 5 and only says so in a
+# note; found by trying it on the switch).
+MAC_AGING_MIN = 120
+MAC_AGING_MAX = 918000
+MAC_AGING_STEP = 5
 
 # Features NXray needs itself: it never sends their "no feature".
 NEEDED_FEATURES = frozenset({"nxapi", "ssh"})
@@ -329,6 +341,44 @@ def validate_storm_level(value: str | float) -> str:
             "a storm-control level is a percentage from 0 to 100, with up to two decimals"
         )
     return f"{float(text):.2f}"
+
+
+def validate_mac_aging(value: int | str) -> int:
+    """The MAC address aging time in seconds, or raise ValueError.
+
+    0 (never forget) or 120 to 918000 in steps of 5, as the switch takes it.
+    """
+    text = str(value).strip()
+    seconds = int(text) if text.isascii() and text.isdigit() else -1
+    if seconds == 0:
+        return 0
+    if not MAC_AGING_MIN <= seconds <= MAC_AGING_MAX:
+        raise ValueError(
+            f"the aging time is 0 (never forget) or {MAC_AGING_MIN} to {MAC_AGING_MAX} seconds"
+        )
+    if seconds % MAC_AGING_STEP:
+        raise ValueError(
+            f"the switch takes the aging time in steps of {MAC_AGING_STEP} seconds, such as "
+            f"{seconds - seconds % MAC_AGING_STEP}"
+        )
+    return seconds
+
+
+def validate_device_mac(text: str) -> str:
+    """One device's MAC address in the switch's own form (``0200.0000.0001``), or raise ValueError.
+
+    Accepts any common way of writing one. A group (multicast or broadcast)
+    address and the all-zero address belong to no device and are refused:
+    static entries and clearing one address are for a device.
+    """
+    digits = normalize_mac(text)
+    if digits is None:
+        raise ValueError(f"{text.strip()!r} is not a MAC address such as 00:11:22:33:44:55")
+    if int(digits[:2], 16) & 0x01:
+        raise ValueError("that is a multicast address, not one device's address")
+    if digits == "0" * 12:
+        raise ValueError("00:00:00:00:00:00 is not a device's address")
+    return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
 
 
 def breakout_numbers(name: str) -> tuple[int, int]:
@@ -667,6 +717,80 @@ class NxapiClient:
         line = f"feature {command}" if enabled else f"no feature {command}"
         timeout = max(self._target.timeout, FEATURE_TIMEOUT)
         self._send([line], [line], timeout, allow_text=True)
+
+    def set_port_discovery(
+        self,
+        name: str,
+        *,
+        cdp: bool | None = None,
+        lldp_transmit: bool | None = None,
+        lldp_receive: bool | None = None,
+    ) -> None:
+        """Turn CDP, LLDP sending and LLDP listening on or off on one port, in one request.
+
+        Only the values given are sent. The switch refuses the LLDP lines while
+        the lldp feature is off.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        for value, line in (
+            (cdp, "cdp enable"),
+            (lldp_transmit, "lldp transmit"),
+            (lldp_receive, "lldp receive"),
+        ):
+            if value is not None:
+                commands.append(line if value else f"no {line}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_mac_aging(self, seconds: int) -> None:
+        """``mac address-table aging-time <seconds>``; 0 keeps learned addresses for good."""
+        command = f"mac address-table aging-time {validate_mac_aging(seconds)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def add_static_mac(self, mac: str, vlan: int, port: str | None) -> None:
+        """A static MAC address entry: always on ``port``, or dropped when ``port`` is None.
+
+        ``mac address-table static <mac> vlan <n> interface <port>`` or ``... drop``.
+        """
+        command = self._static_mac_line(mac, vlan, port)
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def remove_static_mac(self, mac: str, vlan: int, port: str | None) -> None:
+        """Remove a static entry: the ``no`` form of the line that made it."""
+        command = "no " + self._static_mac_line(mac, vlan, port)
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    @staticmethod
+    def _static_mac_line(mac: str, vlan: int, port: str | None) -> str:
+        where = "drop" if port is None else f"interface {validate_port_name(port)}"
+        return (
+            f"mac address-table static {validate_device_mac(mac)} "
+            f"vlan {validate_vlan_id(vlan)} {where}"
+        )
+
+    def clear_learned_macs(
+        self, *, port: str | None = None, vlan: int | None = None, mac: str | None = None
+    ) -> None:
+        """``clear mac address-table dynamic``: forget learned addresses.
+
+        Everything when nothing is given; else those on one port, in one VLAN,
+        or one address (optionally only in one VLAN), the forms the switch
+        takes. Static entries stay. Not a configuration change, so there is
+        nothing to save afterwards.
+        """
+        command = "clear mac address-table dynamic"
+        if port is not None:
+            if vlan is not None or mac is not None:
+                raise ValueError("a port cannot be combined with a VLAN or an address")
+            command += f" interface {validate_port_name(port)}"
+        else:
+            if mac is not None:
+                command += f" address {validate_device_mac(mac)}"
+            if vlan is not None:
+                command += f" vlan {validate_vlan_id(vlan)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.

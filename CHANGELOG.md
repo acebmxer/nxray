@@ -11,6 +11,38 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Neighbor changes.** Operators and admins can now change CDP, LLDP and
+  the MAC address table. On a port's page, a **CDP and LLDP** card shows whether the port
+  speaks CDP and, while LLDP is on for the switch, whether it sends and
+  listens for LLDP, each with its own tick box; only what changes is sent,
+  after a confirm page that warns a device stops showing as a neighbor once
+  its hold time runs out. With LLDP off for the switch, the LLDP boxes are
+  left out and the card says to turn LLDP on on the Features page. The
+  port's **Connected devices** card gets a button that clears the addresses
+  learned on that port. The Neighbors page gets a **Static addresses** card
+  listing the entries fixed by hand, each with **Remove**, and a form that
+  adds one: a MAC address in any common form, a VLAN that exists on the
+  switch, and the front port its traffic always goes to, or dropped to block
+  the address. Multicast, broadcast and all-zero addresses are refused, and
+  the confirm page warns when the address was learned on another port. A
+  **Change the MAC address table** card sets how long learned addresses are
+  kept (120 to 918000 seconds in steps of 5, or 0 for never; the switch
+  quietly rounds other values down, so NXray refuses them) and clears
+  learned addresses: all of them, one port's, one VLAN's, or one address.
+  Clearing changes no configuration, so it leaves nothing to save; the other
+  changes wait for **Save config**, which the Neighbors page now has too.
+  NXray's `nxray-ports` role gets rules 30 to 40 (`cdp enable`, `lldp
+  transmit`, `lldp receive` and their `no` forms on the front ports, `mac
+  address-table aging-time *`, `mac address-table static *` and its `no`
+  form, `clear mac address-table dynamic`; role version 5). A new install
+  turns everything on with **Turn on port, VLAN, port settings, feature and
+  neighbor changes** (one wait, as before); an install whose role is older
+  gets a button named for what it lacks, such as **Turn on neighbor
+  changes**, with no wait. The CDP, aging-time, static-address and clearing
+  rules were tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway
+  account on an unused port; the LLDP lines need LLDP on and have not been
+  tried on a switch yet, nor has the shape of `show lldp interface`, which
+  NXray reads from the field names in Cisco's guides.
 - **Features page.** A new **Features** page lists every feature the switch
   reports (130 on an N9K-C92160YC-X with NX-OS 9.3), grouped into routing,
   gateway redundancy, multicast, layer 2, VXLAN and MPLS, management,
@@ -28,10 +60,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   points to the Features page.
 - **Feature changes on the Switch page.** NXray's `nxray-ports` role gets
   rules 28 and 29 (`conf t ; feature *` and `conf t ; no feature *`, role
-  version 4). A new install turns everything on with **Turn on port, VLAN,
-  port settings and feature changes** (one wait, as before); an install
-  whose role is older gets a button named for what it lacks, such as **Turn
-  on feature changes**, with no wait. The Save config button on the Features
+  version 4). A new install turns everything on with one button (one wait,
+  as before; now **Turn on port, VLAN, port settings, feature and neighbor
+  changes**, see neighbor changes above); an install whose role is older
+  gets a button named for what it lacks, with no wait. The Save config button on the Features
   page answers on that page.
 
 - **Neighbors page.** A new **Neighbors** page, open to every role, lists
@@ -131,7 +163,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   previous sample (the switch's counters only ever grow until cleared), so the
   first sample after NXray starts stores none and a counter that went down
   stores none. The sampler leaves the switch alone while NXray waits for a new
-  role to apply (the pause after **Turn on port, VLAN, port settings and feature changes**), logs a failure
+  role to apply (the pause after **Turn on port, VLAN, port settings, feature and neighbor changes**), logs a failure
   when it starts and when it ends rather than every minute, and deletes rows
   older than 30 days once an hour. Opening the pages reads only the database
   and never contacts the switch. About 7 MB a day is stored with a dozen
@@ -260,10 +292,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   names are checked before they reach the switch, which silently ignores
   names longer than 32 characters. Turning on port changes now also allows
   these VLAN changes: on a new install, one button turns on both (and the
-  port settings and feature changes above), with a single wait of about 11
-  minutes, and the Switch page says so. An install that turned port changes
-  on before this shows a Turn on VLAN, port settings and feature changes
-  button on the Switch page: it asks for the admin login once more to add the rules to NXray's role,
+  port settings, feature and neighbor changes above), with a single wait of
+  about 11 minutes, and the Switch page says so. An install that turned port
+  changes on before this shows a Turn on VLAN, port settings, feature and
+  neighbor changes button on the Switch page: it asks for the admin login once more to add the rules to NXray's role,
   with no wait this time. The unsaved-changes reminder now says NXray changed the
   switch, as it also covers VLAN changes.
 - **Port changes.** Each port's own page can now turn the port on or off and
