@@ -20,7 +20,7 @@
   <dl class="facts">
     <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
     <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
-    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.neighbor_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC address table{% elif connection.feature_changes_enabled %}read, plus port changes, VLANs, port settings and features{% elif connection.settings_changes_enabled %}read, plus port changes, VLANs and port settings{% elif connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.channel_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table and port-channels{% elif connection.neighbor_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC address table{% elif connection.feature_changes_enabled %}read, plus port changes, VLANs, port settings and features{% elif connection.settings_changes_enabled %}read, plus port changes, VLANs and port settings{% elif connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
     <dt>Config saved</dt>
     <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
     <dt>Last test</dt>
@@ -62,15 +62,30 @@
     <label for="ssh_port">SSH port</label>
     <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="22" required>
 
-    {% if wait %}
+    {% if wait == "freeze" %}
     <p class="warning">
       Afterwards NXray runs <code>copy running-config startup-config</code>, which
       also saves any other unsaved changes on the switch. Then it leaves the switch
-      alone for about 11 minutes: the switch only applies the new role to an
-      account it has not heard from for a while, so the pages show a waiting
-      message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature and neighbor changes take effect straight away, with no
-      further waits.
+      alone for about 20 minutes: naming the port-channels in NXray's role makes
+      the switch's NX-API stop answering every account for a while, so the pages
+      show a waiting message until then, and other NXray installs on this switch
+      cannot reach it meanwhile. It recovers by itself; this happens once.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration, and wait before using NXray.
+    </label>
+    {% elif wait %}
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch. Then it leaves the switch
+      alone for about 20 minutes: the switch only applies the new role to an
+      account it has not heard from for a while, and naming the port-channels in
+      the role makes its NX-API stop answering every account for a while, so the
+      pages show a waiting message until then and other NXray installs on this
+      switch cannot reach it meanwhile. This wait happens once: after it, port,
+      VLAN, port settings, feature, neighbor and port-channel changes take effect
+      straight away, with no further waits.
     </p>
     <label class="check">
       <input type="checkbox" name="confirm_save" value="yes" required>
@@ -93,7 +108,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature and neighbor changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor and port-channel changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -105,8 +120,9 @@
     VLANs page);{% if connection.feature_changes_enabled %} turn switch features
     on and off (on the Features page);{% endif %}{% if connection.neighbor_changes_enabled %}
     set how long learned MAC addresses are kept, add and remove static MAC
-    addresses and clear learned ones (on the Neighbors page);{% endif %} and save
-    the configuration.
+    addresses and clear learned ones (on the Neighbors page);{% endif %}{% if connection.channel_changes_enabled %}
+    make, change and delete port-channels and set their LACP options (on the
+    Port-channels page);{% endif %} and save the configuration.
     The switch refuses it everything else.
   </p>
   {% elif connection.vlan_changes_enabled %}
@@ -146,15 +162,17 @@
     the front ports' speed, MTU, FEC, flow control, storm control and layer
     (switched or routed, with an IPv4 address), split a 100G port into four
     or join it again, {% endif %}{% if not connection.feature_changes_enabled %}turn
-    switch features on and off (on the Features page), {% endif %}{% if not connection.feature_changes_enabled %}and {% endif %}turn
+    switch features on and off (on the Features page), {% endif %}{% if not connection.neighbor_changes_enabled %}turn
     CDP and LLDP on or off on the front ports, set how long learned MAC
     addresses are kept, add and remove static MAC addresses and clear learned
-    ones (on the Neighbors page). NXray's role on the switch ({{ role_name }}) was made
+    ones (on the Neighbors page), {% endif %}and make, change and delete
+    port-channels and set their LACP options (on the Port-channels page).
+    NXray's role on the switch ({{ role_name }}) was made
     before that and does not allow it yet. NXray signs in to the switch over SSH
     once more with the admin login below and adds the rules to the role. The
     admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on " ~ missing_changes, false) }}
+  {{ admin_form("Turn on " ~ missing_changes, "freeze") }}
 </section>
 {% else %}
 <section class="card">
@@ -173,23 +191,26 @@
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature and neighbor changes on gives it a role ({{ role_name }}) that allows
-    exactly this: on the front ports only, turning a port on or off, editing
-    its description, setting its mode (access or trunk) and VLANs, setting its
-    speed, MTU, FEC, flow control, storm control and layer (switched or routed,
-    with an IPv4 address), and turning CDP and LLDP on or off; splitting a 100G
-    port into four and joining it again; creating, renaming and deleting VLANs;
-    turning switch features on and off; setting how long learned MAC addresses
-    are kept, adding and removing static MAC addresses and clearing learned
-    ones; and saving the configuration. The switch keeps refusing everything else, including
-    mgmt0, other switch-wide settings and accounts.
+    feature, neighbor and port-channel changes on gives it a role ({{ role_name }})
+    that allows exactly this: on the front ports and port-channels only,
+    turning a port on or off, editing its description, setting its mode
+    (access or trunk) and VLANs, setting its speed, MTU, FEC, flow control,
+    storm control and layer (switched or routed, with an IPv4 address),
+    turning CDP and LLDP on or off, putting a port into a port-channel and
+    taking it out, its LACP rate and priority, and a port-channel's LACP
+    minimum links and deleting it; splitting a 100G port into four and joining
+    it again; creating, renaming and deleting VLANs; turning switch features on
+    and off; setting how long learned MAC addresses are kept, adding and
+    removing static MAC addresses and clearing learned ones; the switch's LACP
+    priority; and saving the configuration. The switch keeps refusing
+    everything else, including mgmt0, other switch-wide settings and accounts.
   </p>
   <p class="lead">
     NX-API cannot create this kind of role, so NXray signs in to the switch over
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature and neighbor changes", true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor and port-channel changes", true) }}
 </section>
 {% endif %}
 

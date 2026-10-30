@@ -109,9 +109,10 @@ new role, because signing in would make the wait start over.
 
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
-under **Port, VLAN, port settings, feature and neighbor changes**, tick the
-box and press **Turn on port, VLAN, port settings, feature and neighbor
-changes**. One press turns on all five, with a single wait.
+under **Port, VLAN, port settings, feature, neighbor and port-channel
+changes**, tick the box and press **Turn on port, VLAN, port settings,
+feature, neighbor and port-channel changes**. One press turns on all six,
+with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -161,9 +162,17 @@ NXray then:
          rule 38 permit command conf t ; no mac address-table static *
          rule 39 permit command clear mac address-table dynamic
          rule 40 permit command clear mac address-table dynamic *
+         rule 41 permit command conf t ; interface * ; channel-group *
+         rule 42 permit command conf t ; interface * ; no channel-group
+         rule 43 permit command conf t ; interface * ; lacp rate *
+         rule 44 permit command conf t ; interface * ; lacp port-priority *
+         rule 45 permit command conf t ; interface * ; lacp min-links *
+         rule 46 permit command conf t ; no interface port-channel *
+         rule 47 permit command conf t ; lacp system-priority *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
+           permit interface port-channel1-4096
        username <name> role nxray-ports
        end
 
@@ -180,28 +189,39 @@ or routed with an IPv4 address), and turn CDP and LLDP sending and
 listening on or off on them; split a 100G port into four and join it again;
 create, name and delete VLANs; turn switch features on and off; set how
 long the switch keeps learned MAC addresses, add and remove static MAC
-addresses (on a front port, or dropped) and clear learned ones; and save
-the configuration. The switch
+addresses (on a front port, or dropped) and clear learned ones; put front
+ports into port-channels and take them out, with their LACP rate and port
+priority; on the port-channels, the same port settings, their LACP minimum
+links, and deleting them; set the switch's LACP priority; and save the
+configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
 
 **The wait.** The switch keeps an account's permissions in its NX-API
 session and only reloads them once that session has been idle for NX-API's
-timeout (10 minutes unless changed). So after turning port changes on,
-NXray does not contact the switch for that long plus a minute, about 11
-minutes, and every page says so. This happens once: after it, port, VLAN,
-port settings, feature and neighbor changes take effect straight away.
+timeout (10 minutes unless changed). Adding the port-channels to the role's
+port list (`permit interface port-channel1-4096`) also makes NX-API stop
+answering every account, admin included, for 5 to 15 minutes on NX-OS
+9.3(16); it recovers by itself, and SSH and the switch's traffic are not
+affected. So NXray checks the role and saves the configuration in the same SSH
+session, then does not contact the switch for about 20 minutes, and every
+page says so. Other NXray installs on the same switch show "could not reach
+the switch" meanwhile. This happens once: after it, port, VLAN, port
+settings, feature, neighbor and port-channel changes take effect straight
+away.
 
 **Installs that turned port changes on before VLANs, port settings,
-features or neighbor changes existed.** Their role has rules 1 to 5, 1 to
-11, 1 to 27, or 1 to 29. The Switch page then shows a card named for what is
-missing (**VLAN, port settings, feature and neighbor changes**, **Port
-settings, feature and neighbor changes**, **Feature and neighbor changes**
-or **Neighbor changes**): type the admin login, tick the box and press its
-**Turn on** button. NXray types the same lines as above (adding the missing
-rules) and saves the configuration. There is no wait this time: the switch
-applies new rules in a role the account already has at once.
+features, neighbor or port-channel changes existed.** Their role has rules 1
+to 5, 1 to 11, 1 to 27, 1 to 29 or 1 to 40. The Switch page then shows a card
+named for what is missing (**VLAN, port settings, feature, neighbor and
+port-channel changes**, **Port settings, feature, neighbor and port-channel
+changes**, **Feature, neighbor and port-channel changes**, **Neighbor and
+port-channel changes** or **Port-channel changes**): type the admin login,
+tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
+rules) and saves the configuration. The switch applies new rules in a role
+the account already has at once, but these roles also gain the
+port-channels, so the same 20-minute wait follows, once.
 
 **Update the port list.** The role names each front port it covers. A port
 split into four (Ethernet1/50 becomes Ethernet1/50/1 to Ethernet1/50/4), or
@@ -334,6 +354,44 @@ admins:
   a button for its own addresses. Clearing changes no configuration, so
   there is nothing to save; the other changes wait for **Save config**.
 
+**Port-channels.** The **Port-channels** page lists every port-channel with
+its ports, each port's state and how it joined (LACP active, LACP passive,
+or static), and while LACP is on each port's LACP rate and port priority,
+the device at the other end (its address and maker) and the switch's own
+LACP priority. The Ports page and a port's page link a port to its
+port-channel. Operators and admins can, each after a confirm page:
+
+- **Make a port-channel** from front ports that are in none: a number from
+  1 to 4096, the ports, how they join, optionally the fast LACP rate (a
+  message every second instead of every 30) and a description. NXray sends
+  `lacp rate fast` (when asked) and `channel-group <n> mode active|passive`,
+  or `channel-group <n>` for static, on each port; the switch makes the
+  port-channel from the first one. The ports must have the same settings
+  (mode, VLANs, speed, MTU, flow control), or the switch refuses them, and a
+  port that is up drops its link for a moment. LACP active and passive need
+  LACP on (the **Features** page).
+- **Add a port** to a port-channel, joining the way its ports did, and
+  **Take out** a port (`no channel-group`); the port keeps its own settings.
+- **Delete** a port-channel (`no interface port-channel<n>`). NXray refuses
+  while it still has ports and names them: take them out first.
+- **Change settings**: the description and, for LACP, how many ports must be
+  up for the port-channel to stay up (`lacp min-links`, 1 to 32). The switch
+  does not show NXray the current minimum, so the box starts empty; empty
+  keeps it.
+- **LACP settings of one port**: its rate and port priority (1 to 65535,
+  lower is used first). The switch changes the rate of a port in a
+  port-channel only while that port is off, so NXray says so; turn the port
+  off on its page first.
+- **Change LACP priority**: the switch's own LACP priority (1 to 65535,
+  default 32768), for every port-channel at once; the confirm page warns
+  that every LACP port-channel agrees on its ports again with the device at
+  the other end, and its traffic can stop for a moment.
+
+The rules for joining, leaving, the rate, the port priority, the minimum and
+deleting were tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway
+account on two unused ports; `lacp system-priority` was not, because it
+touches every port-channel on the switch.
+
 **Taking port changes away.** In an SSH session on the switch as admin:
 
     configure terminal
@@ -356,11 +414,14 @@ admins:
 | could not reach the switch over SSH | Turning on port changes needs SSH from the NXray machine to the switch; check SSH is on and the port |
 | may not make this change yet | The switch has not applied the port-changes role, or it was removed. Leave NXray's pages closed for 10 minutes and try again, or turn port changes on again |
 | NXray kept the address | Change the switch address could not sign in at the new address with NXray's account; the message after it says why |
-| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port, VLAN, port settings, feature and neighbor changes** to make it again |
-| VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN, port settings, feature and neighbor changes** on the Switch page |
-| Port settings changes are off | Port changes were turned on before NXray could change port settings. Press **Turn on port settings, feature and neighbor changes** on the Switch page |
-| Feature changes are off | Port changes were turned on before NXray could turn features on and off. Press **Turn on feature and neighbor changes** on the Switch page |
-| Neighbor changes are off | Port changes were turned on before NXray could change CDP, LLDP and the MAC address table. Press **Turn on neighbor changes** on the Switch page |
+| Port changes are now off: the nxray-ports role is no longer on the switch | Run setup again found the role gone. Press **Turn on port, VLAN, port settings, feature, neighbor and port-channel changes** to make it again |
+| VLAN changes are off | Port changes were turned on before NXray could change VLANs. Press **Turn on VLAN, port settings, feature, neighbor and port-channel changes** on the Switch page |
+| Port settings changes are off | Port changes were turned on before NXray could change port settings. Press **Turn on port settings, feature, neighbor and port-channel changes** on the Switch page |
+| Feature changes are off | Port changes were turned on before NXray could turn features on and off. Press **Turn on feature, neighbor and port-channel changes** on the Switch page |
+| Neighbor changes are off | Port changes were turned on before NXray could change CDP, LLDP and the MAC address table. Press **Turn on neighbor and port-channel changes** on the Switch page |
+| Port-channel changes are off | Port changes were turned on before NXray could change port-channels. Press **Turn on port-channel changes** on the Switch page |
+| changes the LACP rate of a port in a port-channel only while the port is off | Turn the port off on its page, change the rate, turn it on again |
+| still has ...; take them out first | NXray deletes only an empty port-channel. Take its ports out first |
 | Not turned off: ... still uses ... | The feature is in use (an LACP port-channel, a VLAN interface). Remove that first |
 | NXray's role on the switch does not name this port | The port came from a split or a join. Press **Update the port list** on the Switch page |
 

@@ -1,7 +1,9 @@
 {# Tables shared by the Neighbors page and a port's own page. #}
 
 {% macro port_link(name) -%}
-{%- if name.startswith("Ethernet") -%}<a href="/ports/detail?name={{ name|urlencode }}">{{ name }}</a>{%- else -%}{{ name }}{%- endif -%}
+{%- if name.startswith("Ethernet") -%}<a href="/ports/detail?name={{ name|urlencode }}">{{ name }}</a>
+{%- elif name.startswith("port-channel") and name[12:].isdigit() -%}<a href="/port-channels#{{ name }}">{{ name }}</a>
+{%- else -%}{{ name }}{%- endif -%}
 {%- endmacro %}
 
 {% macro port_list(names) -%}

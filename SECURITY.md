@@ -29,16 +29,22 @@ the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
 on or off, set or remove its description, set its mode (access or trunk)
 and VLANs, and set its speed, MTU, FEC, flow control, storm control and layer
 (switched, or routed with an IPv4 address), and turn CDP and LLDP on or off
-on them; it may split a 100G port into four and join it again; it may
+on them; it may put them into port-channels and take them out (`channel-group
+*`, `no channel-group`) and set their LACP rate and priority, and on every
+port-channel it may do the same port settings and set its LACP minimum links
+or delete it (`no interface port-channel *`); it may split a 100G port into
+four and join it again; it may
 create, name and delete VLANs; it may turn any switch feature on or off
 (`feature *`, `no feature *`); it may set the MAC address aging time, add
 and remove static MAC addresses and clear learned ones (`mac address-table
 aging-time *`, `mac address-table static *`, `clear mac address-table
-dynamic`); and it may run `copy running-config startup-config`. The switch refuses it anything else,
+dynamic`); it may set the switch's LACP priority (`lacp system-priority *`);
+and it may run `copy running-config startup-config`. The switch refuses it anything else,
 including mgmt0. Anyone who takes over NXray can do whatever that account
 can, so with port changes on that includes turning ports off, moving them
 to other VLANs, sending a device's traffic to the wrong port or dropping it
-with a static MAC address, and turning features on or off: turning off a feature
+with a static MAC address, pulling ports out of a port-channel or deleting it,
+and turning features on or off: turning off a feature
 deletes its settings (LACP takes its port-channels with it), and turning on
 `telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off
 NX-API, SSH or a feature they can see in use, but the switch itself does

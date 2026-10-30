@@ -62,6 +62,12 @@ class SwitchConnection:
         the MAC address table (role version 5 or later)."""
         return self.changes_enabled and self.role_version >= 5
 
+    @property
+    def channel_changes_enabled(self) -> bool:
+        """True once that role includes the port-channel rules and names the
+        port-channels (role version 6 or later)."""
+        return self.changes_enabled and self.role_version >= 6
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

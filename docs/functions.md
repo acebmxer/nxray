@@ -51,6 +51,7 @@ prose columns; those are a reviewer's job.
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
+| Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
@@ -142,11 +143,14 @@ raises, all handled in `main.create_app`.
 | `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
 | `parse_response` | `(payload, commands, labels=None, allow_text=False) -> list[dict]` | One body per command, in request order; raises on errors; `labels` keep passwords out of messages | `NxapiClient._send` | v0.1.0 |
 | `parse_vlan_list` | `(text: str) -> list[int]` | A typed VLAN list (`10,20-30`, `all`, `none`) as numbers; refuses anything else | `vlans` | v0.1.0 |
+| `validate_channel_number` | `(value: int \| str) -> int` | A port-channel number 1-4096, else `ValueError` | port-channel client methods, `port_channels` | v0.1.0 |
 | `validate_account_name` | `(name: str) -> str` | Refuses a switch account name NXray would not use (format, reserved names) | `NxapiClient.create_user`, `give_role`, `delete_user`, `switch_setup.run_setup`, `switch_repair.run_repair`, `port_changes.role_lines` | v0.1.0 |
 | `validate_device_mac` | `(text: str) -> str` | One device's MAC address in any common form, written as the switch writes it (`0200.0000.0001`); refuses multicast, broadcast and all-zero | `NxapiClient.add_static_mac`, `remove_static_mac`, `clear_learned_macs`, `neighbor_changes` | v0.1.0 |
 | `validate_description` | `(text: str) -> str` | A port description as the switch stores it; refuses non-ASCII, `?`, `;`, over 254 characters | `NxapiClient.configure_port`, `routes/ports.port_change` | v0.1.0 |
 | `validate_mac_aging` | `(value: int \| str) -> int` | A MAC address aging time: 0 (never forget) or 120 to 918000 seconds in steps of 5, as the switch takes it | `NxapiClient.set_mac_aging`, `neighbor_changes.plan_mac_aging` | v0.1.0 |
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
+| `validate_lacp_priority` | `(value: int \| str) -> int` | An LACP priority (the switch's or a port's) 1-65535, else `ValueError` | `NxapiClient.set_port_lacp`, `set_lacp_system_priority`, `port_channels` | v0.1.0 |
+| `validate_min_links` | `(value: int \| str) -> int` | A port-channel's LACP minimum links 1-32, else `ValueError` | `NxapiClient.configure_port_channel`, `port_channels.plan_channel_settings` | v0.1.0 |
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
@@ -173,8 +177,13 @@ lldp_receive=)` (CDP and LLDP on one port, only the ones given),
 `set_mac_aging(seconds)`, `add_static_mac(mac, vlan, port)` and
 `remove_static_mac(mac, vlan, port)` (on a front port, or `drop` when `port`
 is None), `clear_learned_macs(port=, vlan=, mac=)` (everything, one port, one
-VLAN or one address; not a configuration change) and `save_config()`; each
-builds its commands from checked values.
+VLAN or one address; not a configuration change), `join_port_channel(number,
+ports, mode, fast_rate=, description=)` (ports into a port-channel, which the
+switch creates when needed; `active`, `passive` or `on`), `leave_port_channel(port)`,
+`delete_port_channel(number)`, `configure_port_channel(number, description=,
+min_links=)`, `set_port_lacp(port, rate=, priority=)`,
+`set_lacp_system_priority(priority)` and `save_config()`; each builds its
+commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -233,14 +242,14 @@ port's own page shows.
 | `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
-| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/switch_page.switch_save` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
 changes are on and how long NXray still waits before calling the switch;
 `vlan_changes_enabled` says whether the role includes the VLAN rules
 (`role_version` 2 or later), `settings_changes_enabled`,
-`feature_changes_enabled` and `neighbor_changes_enabled` the later rule sets
-(3, 4 and 5).
+`feature_changes_enabled`, `neighbor_changes_enabled` and
+`channel_changes_enabled` the later rule sets (3, 4, 5 and 6).
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -277,7 +286,8 @@ only inside `run_repair`.
 | --- | --- | --- | --- | --- |
 | `open_paramiko_shell` | `(host, port, username, password, timeout) -> ParamikoShell` | Signs in over SSH with a password only (no local keys or agent) and opens the NX-OS command line | `run_config` (the default opener) | v0.1.0 |
 | `refused` | `(output: str) -> str \| None` | The switch's complaint in a command's output, or None | `run_config` | v0.1.0 |
-| `run_config` | `(*, host, port, username, password, lines, timeout, opener=None) -> None` | Types checked lines between `configure terminal` and `end`; stops at the first refusal | `port_changes.enable_port_changes` | v0.1.0 |
+| `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving while NX-API is frozen) | v0.1.0 |
+| `run_config` | `(*, host, port, username, password, lines, timeout, opener=None, then=()) -> list[str]` | Types checked lines between `configure terminal` and `end`, stopping at the first refusal, then the fixed `then` commands in the same session, returning their output | `port_changes.enable_port_changes` | v0.1.0 |
 
 Errors are `SshUnreachable`, `SshAuthError` and `SshCommandError`, all
 subclasses of `SshError`. The switch's host key is accepted unchecked, as its
@@ -289,19 +299,24 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 6) the check and save go over the same SSH session and the wait is at least `CHANNEL_FREEZE_SECONDS` | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`feature and neighbor changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
+| `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
-`ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES` and
-`NEIGHBOR_RULES` are the role's only rules; `ROLE_NAME` is `nxray-ports`,
-shared by every NXray install on a switch. `ROLE_VERSION` counts the rule sets
-(1 ports, 2 ports and VLANs, 3 also port settings, 4 also features, 5 also CDP
-and LLDP per port and the MAC address table). `EnableResult.had_role`
+`ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES`,
+`NEIGHBOR_RULES` and `CHANNEL_RULES` are the role's only rules, and its port
+list names the front ports one by one plus every port-channel
+(`CHANNEL_PERMIT`); `ROLE_NAME` is `nxray-ports`, shared by every NXray
+install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
+VLANs, 3 also port settings, 4 also features, 5 also CDP and LLDP per port and
+the MAC address table, 6 also port-channels and LACP). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
-there is no wait.
+the switch applies them at once. Adding the port-channels to the role's port
+list makes NX-API stop answering every account for 5 to 15 minutes on
+NX-OS 9.3(16), so turning on from a role older than version 6 waits
+`CHANNEL_FREEZE_SECONDS` (20 minutes).
 
 ## `app/features.py` — switch features
 
@@ -397,6 +412,15 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `learned_macs_clear` | `(request, username, csrf, scope, port, vlan, mac, back, confirm) -> Response` | `POST /neighbors/clear`: asks to confirm, then clears learned addresses (all, one port, one VLAN or one address); `back=port` answers on that port's page | router | v0.1.0 |
 | `mac_aging_change` | `(request, username, csrf, aging, confirm) -> Response` | `POST /neighbors/aging`: asks to confirm, then sets how long learned addresses are kept | router | v0.1.0 |
 | `neighbors_page` | `(request, username, q) -> Response` | `GET /neighbors?q=`: CDP and LLDP neighbors, the MAC address table (narrowed by the search), static addresses and ARP, read live; every role; operators and admins also get the MAC table's change forms | router | v0.1.0 |
+| `channel_add` | `(request, username, csrf, number, port, mode, fast_rate, confirm) -> Response` | `POST /port-channels/add`: asks to confirm, then puts a free port into a port-channel, joining the way its ports did | router | v0.1.0 |
+| `channel_create` | `(request, username, csrf, number, ports, mode, fast_rate, description, confirm) -> Response` | `POST /port-channels/create`: asks to confirm, then makes a port-channel from free ports | router | v0.1.0 |
+| `channel_delete` | `(request, username, csrf, number, confirm) -> Response` | `POST /port-channels/delete`: refuses a port-channel that still has ports (naming them), else asks to confirm and deletes it | router | v0.1.0 |
+| `channel_remove` | `(request, username, csrf, port, confirm) -> Response` | `POST /port-channels/remove`: asks to confirm, then takes a port out of its port-channel | router | v0.1.0 |
+| `channel_settings` | `(request, username, csrf, number, description, min_links, confirm) -> Response` | `POST /port-channels/settings`: asks to confirm, then sets a port-channel's description and LACP minimum links | router | v0.1.0 |
+| `port_channels_page` | `(request, username) -> Response` | `GET /port-channels`: every port-channel with its ports, how they joined, their LACP rate and priority and the device at the other end, read live; operators and admins change them | router | v0.1.0 |
+| `port_lacp` | `(request, username, csrf, port, rate, priority, confirm) -> Response` | `POST /port-channels/port-lacp`: asks to confirm, then sets one member's LACP rate and port priority; a rate change only while the port is off | router | v0.1.0 |
+| `render_port_channels_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Port-channels page with a message | `switch_save` | v0.1.0 |
+| `system_priority` | `(request, username, csrf, priority, confirm) -> Response` | `POST /port-channels/system-priority`: asks to confirm, then sets the switch's LACP priority | router | v0.1.0 |
 | `port_breakout` | `(request, username, csrf, name, action, mapping, confirm) -> Response` | `POST /ports/breakout`: asks to confirm, then splits a 100G port into four or joins them, and shows the port that replaced it | router | v0.1.0 |
 | `port_change` | `(request, username, csrf, name, action, description, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off | router | v0.1.0 |
 | `port_discovery_change` | `(request, username, csrf, name, cdp, lldp_transmit, lldp_receive, lldp_shown, confirm) -> Response` | `POST /ports/discovery`: asks to confirm, then turns CDP and LLDP sending and listening on or off on one port; an unticked box means off | router | v0.1.0 |
@@ -616,6 +640,30 @@ while LLDP is off on the switch, when they can be neither read nor set. The
 LLDP field names come from Cisco's guides; LLDP has been off on the switch
 NXray was built against. Clearing learned addresses is not a configuration
 change, so it leaves nothing to save.
+
+## `app/port_channels.py` — port-channels and LACP
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `load_channels` | `(client) -> ChannelView` | Every port-channel with its ports and how they joined, the front ports, and while LACP is on each port's LACP rate, priority and partner and the switch's LACP priority; two requests at most | `routes/port_channels` | v0.1.0 |
+| `parse_brief` | `(brief_body) -> tuple[list[str], frozenset[str], frozenset[str], set[str]]` | Front ports in panel order, those turned off, those up, and routed port-channels, from `show interface brief` | `load_channels` | v0.1.0 |
+| `parse_channels` | `(summary_body, modes, descriptions, routed, lacp_ports=None, partners=None) -> list[Channel]` | The port-channels in `show port-channel summary`, with each member's state letter and what the other commands add | `load_channels` | v0.1.0 |
+| `parse_descriptions` | `(description_body) -> dict[str, str]` | Interface -> description from `show interface description` | `load_channels` | v0.1.0 |
+| `parse_lacp_ports` | `(lacp_interface_body) -> dict[str, tuple[str, int \| None]]` | Port -> (LACP rate, port priority) from `show lacp interface`; "Short" is fast | `load_channels` | v0.1.0 |
+| `parse_modes` | `(database_body) -> dict[str, str]` | Port -> how it joined (`active`, `passive`, `on`) from `show port-channel database` | `load_channels` | v0.1.0 |
+| `parse_partners` | `(lacp_neighbor_body) -> dict[str, Partner]` | Port -> the device at its other end (address, priority, port, flags) from `show lacp neighbor` | `load_channels` | v0.1.0 |
+| `plan_add` | `(view, *, number, port, mode, fast_rate) -> tuple[Join, list[str], list[str]]` | One free port joining an existing port-channel the way its ports did | `routes/port_channels.channel_add` | v0.1.0 |
+| `plan_channel_settings` | `(view, *, number, description, min_links) -> tuple[ChannelSettings, list[str], list[str]]` | A port-channel's description and LACP minimum links (empty keeps it); warns when the minimum takes it down | `routes/port_channels.channel_settings` | v0.1.0 |
+| `plan_create` | `(view, *, number, ports, mode, fast_rate, description) -> tuple[Join, list[str], list[str]]` | A new port-channel from free front ports: a free number, LACP only while LACP is on, with the matching-settings and link-drop warnings | `routes/port_channels.channel_create` | v0.1.0 |
+| `plan_delete` | `(view, *, number) -> tuple[int, list[str], list[str]]` | Deleting a port-channel; refuses one that still has ports, naming them | `routes/port_channels.channel_delete` | v0.1.0 |
+| `plan_port_lacp` | `(view, *, port, rate, priority) -> tuple[PortLacp, list[str], list[str]]` | A member's LACP rate and port priority, only what differs; a rate change only while the port is off | `routes/port_channels.port_lacp` | v0.1.0 |
+| `plan_remove` | `(view, *, port) -> tuple[str, list[str], list[str]]` | Taking a port out of its port-channel, warning when it carries traffic or is the last one | `routes/port_channels.channel_remove` | v0.1.0 |
+| `plan_system_priority` | `(view, text) -> tuple[int, list[str], list[str]]` | The switch's LACP priority, warning that every LACP port-channel agrees on its ports again | `routes/port_channels.system_priority` | v0.1.0 |
+
+A port-channel's LACP minimum links appears only in `show running-config`,
+which NXray's role may not read, so its form has no current value.
+NXray refuses to delete a port-channel that still has ports; the switch itself
+would take them out silently.
 
 ## `app/oui.py` — MAC addresses and their makers
 

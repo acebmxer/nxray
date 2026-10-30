@@ -168,12 +168,15 @@ def run_config(
     lines: list[str],
     timeout: float,
     opener: ShellOpener | None = None,
-) -> None:
+    then: tuple[str, ...] = (),
+) -> list[str]:
     """Sign in over SSH and type ``lines`` in configuration mode, stopping at a refusal.
 
     The lines are built by the caller from checked values; this function adds
     ``configure terminal`` before them and ``end`` after, and raises
-    SshCommandError naming the first line the switch refused.
+    SshCommandError naming the first line the switch refused. The fixed
+    ``then`` commands are typed after ``end``, in the same session; their
+    output is returned for the caller to check.
     """
     shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
     try:
@@ -183,5 +186,27 @@ def run_config(
                 shell.run("end")
                 raise SshCommandError(f"{line!r}: {complaint}")
         shell.run("end")
+        return [shell.run(line) for line in then]
+    finally:
+        shell.close()
+
+
+def run_commands(
+    *,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    lines: tuple[str, ...],
+    timeout: float,
+    opener: ShellOpener | None = None,
+) -> list[str]:
+    """Sign in over SSH and type fixed commands outside configuration mode.
+
+    Returns each command's output for the caller to check.
+    """
+    shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
+    try:
+        return [shell.run(line) for line in lines]
     finally:
         shell.close()

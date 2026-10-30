@@ -26,7 +26,13 @@
     <form method="post" action="{{ action }}" class="inline">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       {% for key, value in fields.items() %}
+      {% if value is string %}
       <input type="hidden" name="{{ key }}" value="{{ value }}">
+      {% else %}
+      {% for item in value %}
+      <input type="hidden" name="{{ key }}" value="{{ item }}">
+      {% endfor %}
+      {% endif %}
       {% endfor %}
       <input type="hidden" name="confirm" value="yes">
       <button type="submit" class="btn btn-primary">Yes, make the change</button>

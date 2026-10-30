@@ -19,7 +19,9 @@ commands NXray needs have their own methods (``create_user``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
 ``breakout_port``, ``join_port``, ``set_feature``, ``set_port_discovery``,
 ``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
-``clear_learned_macs``, ``save_config``), each building
+``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
+``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
+``set_lacp_system_priority``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -133,6 +135,21 @@ FEATURE_COMMANDS = frozenset(
 MAC_AGING_MIN = 120
 MAC_AGING_MAX = 918000
 MAC_AGING_STEP = 5
+
+# Port-channels, as the switch numbers them (``interface port-channel ?``).
+CHANNEL_MIN = 1
+CHANNEL_MAX = 4096
+# How a port joins a port-channel: LACP active (it starts the negotiation),
+# LACP passive (it answers one) or static "on" (no LACP at all).
+CHANNEL_MODES = ("active", "passive", "on")
+# How often a port sends LACP messages: every 30 seconds or every second.
+LACP_RATES = ("normal", "fast")
+# The ranges ``lacp system-priority ?``, ``lacp port-priority ?`` and
+# ``lacp min-links ?`` give on an N9K-C92160YC-X with NX-OS 9.3(16).
+LACP_PRIORITY_MIN = 1
+LACP_PRIORITY_MAX = 65535
+MIN_LINKS_MIN = 1
+MIN_LINKS_MAX = 32
 
 # Features NXray needs itself: it never sends their "no feature".
 NEEDED_FEATURES = frozenset({"nxapi", "ssh"})
@@ -379,6 +396,36 @@ def validate_device_mac(text: str) -> str:
     if digits == "0" * 12:
         raise ValueError("00:00:00:00:00:00 is not a device's address")
     return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
+
+
+def validate_channel_number(value: int | str) -> int:
+    """A port-channel's number as an int, or raise ValueError if it is not 1-4096."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not CHANNEL_MIN <= int(text) <= CHANNEL_MAX:
+        raise ValueError(f"a port-channel is a number from {CHANNEL_MIN} to {CHANNEL_MAX}")
+    return int(text)
+
+
+def validate_lacp_priority(value: int | str) -> int:
+    """An LACP priority (the switch's or a port's), or raise ValueError if not 1-65535."""
+    text = str(value).strip()
+    if (
+        not text.isascii()
+        or not text.isdigit()
+        or not LACP_PRIORITY_MIN <= int(text) <= LACP_PRIORITY_MAX
+    ):
+        raise ValueError(
+            f"an LACP priority is a number from {LACP_PRIORITY_MIN} to {LACP_PRIORITY_MAX}"
+        )
+    return int(text)
+
+
+def validate_min_links(value: int | str) -> int:
+    """How many ports must be up for a port-channel to be up, or raise ValueError if not 1-32."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not MIN_LINKS_MIN <= int(text) <= MIN_LINKS_MAX:
+        raise ValueError(f"the minimum is a number from {MIN_LINKS_MIN} to {MIN_LINKS_MAX}")
+    return int(text)
 
 
 def breakout_numbers(name: str) -> tuple[int, int]:
@@ -790,6 +837,100 @@ class NxapiClient:
                 command += f" address {validate_device_mac(mac)}"
             if vlan is not None:
                 command += f" vlan {validate_vlan_id(vlan)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def join_port_channel(
+        self,
+        number: int,
+        ports: list[str],
+        mode: str,
+        *,
+        fast_rate: bool = False,
+        description: str | None = None,
+    ) -> None:
+        """Put ports into a port-channel, in one request; the switch creates it if needed.
+
+        Per port: ``interface <port>``, ``lacp rate fast`` when asked (the
+        switch takes it only before the port is in a channel), then
+        ``channel-group <n> mode active|passive``, or ``channel-group <n>``
+        for static "on". ``description`` then names the port-channel itself.
+        """
+        channel = validate_channel_number(number)
+        if mode not in CHANNEL_MODES:
+            raise ValueError(f"mode {mode!r} is not active, passive or on")
+        if fast_rate and mode == "on":
+            raise ValueError("a static port-channel sends no LACP, so it has no LACP rate")
+        if not ports:
+            raise ValueError("no ports given")
+        commands: list[str] = []
+        for port in ports:
+            commands.append(f"interface {validate_port_name(port)}")
+            if fast_rate:
+                commands.append("lacp rate fast")
+            commands.append(
+                f"channel-group {channel}"
+                if mode == "on"
+                else f"channel-group {channel} mode {mode}"
+            )
+        if description is not None:
+            text = validate_description(description)
+            if text:
+                commands += [f"interface port-channel{channel}", f"description {text}"]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def leave_port_channel(self, port: str) -> None:
+        """Take a port out of its port-channel: ``no channel-group``. Its own settings stay."""
+        commands = [f"interface {validate_port_name(port)}", "no channel-group"]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_port_channel(self, number: int) -> None:
+        """``no interface port-channel<n>``.
+
+        The switch also takes the ports out of the channel when it still has
+        some; NXray refuses that before it gets here (app/port_channels.py).
+        """
+        command = f"no interface port-channel{validate_channel_number(number)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port_channel(
+        self, number: int, *, description: str | None = None, min_links: int | None = None
+    ) -> None:
+        """Set a port-channel's description and/or LACP minimum links, in one request.
+
+        ``description=""`` removes the description.
+        """
+        commands = [f"interface port-channel{validate_channel_number(number)}"]
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if min_links is not None:
+            commands.append(f"lacp min-links {validate_min_links(min_links)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_port_lacp(
+        self, port: str, *, rate: str | None = None, priority: int | None = None
+    ) -> None:
+        """Set a port's LACP rate (normal or fast) and/or LACP port priority, in one request.
+
+        The switch refuses a rate change on a port that is in a port-channel
+        and not turned off.
+        """
+        commands = [f"interface {validate_port_name(port)}"]
+        if rate is not None:
+            if rate not in LACP_RATES:
+                raise ValueError(f"LACP rate {rate!r} is not normal or fast")
+            commands.append(f"lacp rate {rate}")
+        if priority is not None:
+            commands.append(f"lacp port-priority {validate_lacp_priority(priority)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_lacp_system_priority(self, priority: int) -> None:
+        """``lacp system-priority <n>``: the switch's LACP priority, for every port-channel."""
+        command = f"lacp system-priority {validate_lacp_priority(priority)}"
         self._send([command], [command], self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:

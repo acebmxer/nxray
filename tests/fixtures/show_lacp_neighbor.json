@@ -1,0 +1,31 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": {
+      "interface": "port-channel43",
+      "TABLE_member": {
+        "ROW_member": [
+          {
+            "port": "Ethernet1/43",
+            "partner-system-id": "65535,b8-59-9f-00-00-0e",
+            "partner-port-num": "0x2",
+            "partner-age": "153112",
+            "partner-flags": "FA",
+            "partner-port-priority": "255",
+            "partner-oper-key": "0x15",
+            "partner-port-state": "0x3f"
+          },
+          {
+            "port": "Ethernet1/44",
+            "partner-system-id": "65535,b8-59-9f-00-00-0e",
+            "partner-port-num": "0x1",
+            "partner-age": "153112",
+            "partner-flags": "FA",
+            "partner-port-priority": "255",
+            "partner-oper-key": "0x15",
+            "partner-port-state": "0x3f"
+          }
+        ]
+      }
+    }
+  }
+}

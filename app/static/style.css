@@ -381,6 +381,7 @@ meter { width: 8rem; vertical-align: middle; margin-right: 0.4rem; }
 .row-form { display: flex; gap: 0.4rem; align-items: center; margin: 0; }
 .row-form input[type="text"] { padding: 0.3rem 0.5rem; width: 14rem; }
 .form-after { margin-top: 1rem; }
+.form-grid { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-start; }
 .choice { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .choice legend { font-size: 0.85rem; font-weight: 600; color: var(--text-dim); margin-bottom: 0.3rem; }
 .choice label.check { display: flex; gap: 0.5rem; align-items: center; margin-top: 0; font-size: 0.92rem; color: var(--text); }

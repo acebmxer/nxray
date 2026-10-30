@@ -304,38 +304,38 @@ def test_old_role_offers_turning_on_vlan_changes(
 ) -> None:
     text = _text(logged_in.get("/switch").text)
     assert "On for ports" in text
-    assert "Turn on VLAN, port settings, feature and neighbor changes" in text
-    assert "There is no wait this time" in text
+    assert "Turn on VLAN, port settings, feature, neighbor and port-channel changes" in text
+    assert "alone for about 20 minutes" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
     page = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
     assert "VLAN changes are off" in page and "Change VLANs" not in page
 
 
-def test_turning_on_vlan_changes_needs_no_wait(
-    logged_in: TestClient, ports_only: FakeSwitch
+def test_turning_on_vlan_changes_waits_once(
+    logged_in: TestClient, ports_only: FakeSwitch, settings: Settings
 ) -> None:
     response = _enable(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN, port settings, feature and neighbor changes are on: nxray may now also create, "
-        "rename and "
-        "delete VLANs" in text
+        "VLAN, port settings, feature, neighbor and port-channel changes are on: nxray may now "
+        "also create, rename and delete VLANs" in text
     )
-    assert "no wait" in text and "leaving the switch alone" not in text
+    assert "NXray now waits about 20 minutes" in text
     assert ADMIN_PASSWORD not in response.text
     assert ports_only.saved
+    _end_pause(settings)
     # The pages read the switch straight away, and VLAN changes work.
     assert "Create VLAN" in logged_in.get("/vlans").text
     ports_only.requests.clear()
     _post(logged_in, "/vlans/create", vlan_id="20")
     assert _config_requests(ports_only) == [["vlan 20"]]
     assert (
-        "Turn on VLAN, port settings, feature and neighbor changes"
+        "Turn on VLAN, port settings, feature, neighbor and port-channel changes"
         not in logged_in.get("/switch").text
     )
     assert (
-        "read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC "
-        "address table" in _text(logged_in.get("/switch").text)
+        "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC "
+        "address table and port-channels" in _text(logged_in.get("/switch").text)
     )
 
 

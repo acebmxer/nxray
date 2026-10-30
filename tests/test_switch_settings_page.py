@@ -277,8 +277,8 @@ def test_removed_account_is_made_again_and_keeps_port_changes(
     assert row["paused_until"] <= time.time()  # no new wait for a fresh account
     page = _text(logged_in.get("/switch").text)
     assert (
-        "read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC "
-        "address table" in page
+        "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC "
+        "address table and port-channels" in page
     )
     assert "leaving the switch alone" not in page
 
@@ -315,7 +315,7 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     row = _row(settings)
     assert row["changes_enabled_at"] is None and row["role_version"] == 0
     assert (
-        "Turn on port, VLAN, port settings, feature and neighbor changes"
+        "Turn on port, VLAN, port settings, feature, neighbor and port-channel changes"
         in logged_in.get("/switch").text
     )
 

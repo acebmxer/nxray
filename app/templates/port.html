@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_chart.html" import chart, range_links %}
-{% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_list %}
+{% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_link, port_list %}
 {% block title %}{{ name }} — NXray{% endblock %}
 
 {% block content %}
@@ -117,7 +117,7 @@
     <h3>Addresses learned on this port</h3>
     {% if devices.channel %}
     {% set others = devices.channel.members|reject("equalto", name)|list %}
-    <p class="note">{{ name }} is part of {{ devices.channel.name }}{% if others %}, with {{ port_list(others) }}{% endif %}. The switch learns addresses on the port-channel as a whole, so these are the devices behind all of its ports.</p>
+    <p class="note">{{ name }} is part of {{ port_link(devices.channel.name) }}{% if others %}, with {{ port_list(others) }}{% endif %}. The switch learns addresses on the port-channel as a whole, so these are the devices behind all of its ports.</p>
     {% endif %}
     {% if devices.macs %}
     {{ mac_table(devices.macs, device_ips, show_port=False) }}

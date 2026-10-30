@@ -3,12 +3,15 @@
 The role allows exactly these: on the front-panel Ethernet ports only,
 turning a port on or off, setting or removing its description, setting its
 mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
-control, storm control, switched or routed with an IPv4 address), and
-turning CDP and LLDP on or off on them; switch-wide, creating, naming and
-deleting VLANs, splitting a 100G port into four and joining it again,
-turning switch features on and off, setting how long learned MAC addresses
-are kept, adding and removing static MAC addresses, and clearing learned
-ones; and saving the configuration. Everything else
+control, storm control, switched or routed with an IPv4 address),
+turning CDP and LLDP on or off on them, and putting them into port-channels
+and taking them out again, with their LACP rate and priority; on the
+port-channels, the same settings plus their description and LACP minimum
+links, and deleting them; switch-wide, creating, naming and deleting VLANs,
+splitting a 100G port into four and joining it again, turning switch
+features on and off, setting how long learned MAC addresses are kept,
+adding and removing static MAC addresses, clearing learned ones, and the
+switch's LACP priority; and saving the configuration. Everything else
 (mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
 stays refused by the switch itself, not just by NXray.
 
@@ -29,9 +32,18 @@ once, so an account that already had the role (port changes turned on
 before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
+Adding port-channels to a role's port list (``CHANNEL_PERMIT``, and removing
+them again) is different: on that switch NX-API then stopped answering every
+account, admin included, for 5 to 15 minutes, and recovered by itself; SSH
+kept working. So when the role gains that line, NXray checks the role and
+saves the configuration in the same SSH session instead of over NX-API, and
+stops calling the switch for ``CHANNEL_FREEZE_SECONDS``. Other NXray installs
+on the switch cannot reach it meanwhile.
+
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
-neighbor rules (CDP, LLDP and the MAC address table). NXray
+neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
+rules and the port-channels in the role's port list. NXray
 stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
@@ -39,6 +51,7 @@ Switch page can offer the update when the code knows newer rules.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -59,6 +72,7 @@ from app.switch_ssh import (
     SshAuthError,
     SshCommandError,
     SshError,
+    run_commands,
     run_config,
 )
 
@@ -72,6 +86,10 @@ SSH_TIMEOUT = 30.0
 # Added to NX-API's idle timeout before NXray calls the switch again.
 PAUSE_MARGIN_SECONDS = 60
 DEFAULT_NXAPI_TIMEOUT_MINUTES = 10
+
+# How long NX-API may stay frozen after the role gains CHANNEL_PERMIT: the
+# longest freeze seen on cisco-25gb was about 15 minutes.
+CHANNEL_FREEZE_SECONDS = 20 * 60
 
 # The role's command rules. "conf t ; interface * ; <cmd>" is how NX-OS
 # names a command typed inside an interface's configuration; a rule without
@@ -157,16 +175,43 @@ NEIGHBOR_RULES = (
     "rule 40 permit command clear mac address-table dynamic *",
 )
 
-ROLE_VERSION = 5
+# Port-channel rules, added in ROLE_VERSION 6, with every port-channel added
+# to the role's port list (CHANNEL_PERMIT). Proven on cisco-25gb (2026-10-30)
+# with a throwaway account on two unused ports: "channel-group" on a port
+# creates the port-channel even without CHANNEL_PERMIT, but its description,
+# minimum links and "no interface port-channel" are "Interface permission
+# denied" until the role names port-channels, and that line is taken only
+# inside "interface policy deny" (stored as one line). Naming port-channels
+# also lets rules 1-27 act on them, as on the front ports. The switch-wide
+# "lacp system-priority" line was not tried on the switch: it makes every
+# LACP port-channel negotiate again.
+CHANNEL_RULES = (
+    "rule 41 permit command conf t ; interface * ; channel-group *",
+    "rule 42 permit command conf t ; interface * ; no channel-group",
+    "rule 43 permit command conf t ; interface * ; lacp rate *",
+    "rule 44 permit command conf t ; interface * ; lacp port-priority *",
+    "rule 45 permit command conf t ; interface * ; lacp min-links *",
+    "rule 46 permit command conf t ; no interface port-channel *",
+    "rule 47 permit command conf t ; lacp system-priority *",
+)
+CHANNEL_PERMIT = "permit interface port-channel1-4096"
+
+ROLE_VERSION = 6
 
 # What each role version added, for the Switch page's button names.
-_ADDED_BY_VERSION = {2: "VLAN", 3: "port settings", 4: "feature", 5: "neighbor"}
+_ADDED_BY_VERSION = {
+    2: "VLAN",
+    3: "port settings",
+    4: "feature",
+    5: "neighbor",
+    6: "port-channel",
+}
 
 
 def missing_changes(role_version: int) -> str:
     """The kinds of change a role of ``role_version`` lacks, in words.
 
-    ``missing_changes(3)`` is "feature and neighbor changes"; "" when
+    ``missing_changes(4)`` is "neighbor and port-channel changes"; "" when
     nothing is missing.
     """
     names = [name for version, name in _ADDED_BY_VERSION.items() if version > role_version]
@@ -211,14 +256,16 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: front ports, settings, VLANs, features, MAC table, save config",
+        "description NXray: ports, port-channels, VLANs, features, MAC table, save config",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
         *FEATURE_RULES,
         *NEIGHBOR_RULES,
+        *CHANNEL_RULES,
         "interface policy deny",
         *permits,
+        CHANNEL_PERMIT,
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -243,6 +290,34 @@ def pause_seconds(nxapi_body: dict) -> int:
     return max(minutes, 1) * 60 + PAUSE_MARGIN_SECONDS
 
 
+SAVE_COMMAND = "copy running-config startup-config"
+
+
+def _check_role_output(roles_output: str, account_name: str) -> None:
+    """Stop unless ``show user-account <name>`` (typed over SSH) lists the role."""
+    if not re.search(rf"(?<![\w-]){re.escape(ROLE_NAME)}(?![\w-])", roles_output):
+        raise SetupError(
+            f"The switch accepted the commands, but {account_name} does not have the "
+            f"{ROLE_NAME} role. Nothing was saved."
+        )
+
+
+def _saved_over_ssh(
+    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int
+) -> EnableResult:
+    """Save the configuration over SSH while NX-API is frozen, and the result."""
+    wait = max(wait, CHANNEL_FREEZE_SECONDS)
+    try:
+        (output,) = run_commands(lines=(SAVE_COMMAND,), **ssh)
+    except SshError as exc:
+        output = _scrub(str(exc), admin_password)
+    if "Copy complete" not in output:
+        log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
+        return EnableResult(wait, port_count, False, output or "no answer", had_role)
+    log.info("saved the switch configuration over SSH")
+    return EnableResult(wait, port_count, True, None, had_role)
+
+
 def _scrub(text: str, secret: str) -> str:
     return text.replace(secret, "***") if secret else text
 
@@ -255,11 +330,15 @@ def enable_port_changes(
     admin_user: str,
     admin_password: str,
     account_name: str,
+    role_version: int = 0,
     transport: httpx.BaseTransport | None = None,
     ssh_opener: ShellOpener | None = None,
 ) -> EnableResult:
     """Create the role over SSH, give it to NXray's account, check it, save the config.
 
+    ``role_version`` is the version NXray gave its account before (0 for
+    none). Below 6 the role gains ``CHANNEL_PERMIT``, which freezes NX-API
+    for a while, so the check and the save go over the same SSH session.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -286,9 +365,11 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         lines = role_lines(ports, account_name)
+        freezes = role_version < 6
+        then = (f"show user-account {account_name}",) if freezes else ()
 
         try:
-            run_config(
+            outputs = run_config(
                 host=host,
                 port=ssh_port,
                 username=admin_user,
@@ -296,6 +377,7 @@ def enable_port_changes(
                 lines=lines,
                 timeout=SSH_TIMEOUT,
                 opener=ssh_opener,
+                then=then,
             )
         except SshAuthError as exc:
             raise SetupError("The switch refused the admin username or password over SSH.") from exc
@@ -322,6 +404,17 @@ def enable_port_changes(
         )
         # Rules added to a role the account already has apply at once.
         wait = 0 if had_role else pause_seconds(nxapi)
+        if freezes:
+            _check_role_output(outputs[0], account_name)
+            ssh = {
+                "host": host,
+                "port": ssh_port,
+                "username": admin_user,
+                "password": admin_password,
+                "timeout": SSH_TIMEOUT,
+                "opener": ssh_opener,
+            }
+            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait)
 
         try:
             (users,) = client.show("show user-account")

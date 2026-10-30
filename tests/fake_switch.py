@@ -23,6 +23,14 @@ commands list its four ports instead.
 The MAC address table starts as recorded and lives in ``mac_rows`` once
 anything changes it (static entries, clearing), with the aging time in
 ``mac_aging``; CDP and LLDP per port are in ``port_state`` too.
+
+Port-channels live in ``channels`` (number -> member port -> mode), starting
+as recorded (port-channel43 of Ethernet1/43-44, LACP active); a member's LACP
+rate and priority in ``port_state``, the switch's LACP priority in
+``lacp_priority``. As on cisco-25gb, "channel-group" creates a missing
+port-channel, a role reaches a port-channel's own settings only when its port
+list names port-channels, and a member's LACP rate changes only while the
+port is turned off.
 """
 
 from __future__ import annotations
@@ -57,7 +65,6 @@ _RECORDED = {
     "show cdp global": "show_cdp_global",
     "show cdp neighbors detail": "show_cdp_neighbors_detail",
     "show ip arp detail vrf all": "show_ip_arp_detail_vrf_all",
-    "show port-channel summary": "show_port_channel_summary",
 }
 
 _INTERFACE_COMMANDS = ("shutdown", "no shutdown", "no description")
@@ -145,6 +152,20 @@ class Role:
     interface_policy_deny: bool = False
     interfaces: set[str] = field(default_factory=set)  # lower-cased port names
 
+    def names(self, interface: str) -> bool:
+        """Whether the port list covers ``interface`` (a range for port-channels)."""
+        lowered = interface.lower()
+        if lowered in self.interfaces:
+            return True
+        number = lowered.removeprefix("port-channel")
+        if number == lowered or not number.isdigit():
+            return False
+        for entry in self.interfaces:
+            match = re.fullmatch(r"port-channel(\d+)-(\d+)", entry)
+            if match and int(match.group(1)) <= int(number) <= int(match.group(2)):
+                return True
+        return False
+
 
 @dataclass
 class FakeSwitch:
@@ -164,6 +185,11 @@ class FakeSwitch:
     save_text: str | None = None
     requests: list[list[str]] = field(default_factory=list)
     ssh_lines: list[str] = field(default_factory=list)
+    # As on cisco-25gb: once a role's port list gains port-channels, NX-API
+    # stops answering every account for a while (SSH keeps working). Off unless
+    # a test asks, since the freeze ends on its own on the switch.
+    freeze_on_channel_permit: bool = False
+    nxapi_frozen: bool = False
     # Show commands answered from these bodies instead of the recorded ones.
     bodies: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Port settings changed through NX-API: name -> {"desc": str, "admin_up": bool,
@@ -190,6 +216,11 @@ class FakeSwitch:
     # The MAC address table's rows once something changed it; None: as recorded.
     mac_rows: list[dict[str, Any]] | None = None
     mac_aging: int = 1800
+    # Port-channels: number -> {member port: "active" | "passive" | "on"}.
+    channels: dict[int, dict[str, str]] = field(
+        default_factory=lambda: {43: {"Ethernet1/43": "active", "Ethernet1/44": "active"}}
+    )
+    lacp_priority: int = 32768
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -201,6 +232,8 @@ class FakeSwitch:
     def handle(self, request: httpx.Request) -> httpx.Response:
         if not self.reachable:
             raise httpx.ConnectError("connection refused", request=request)
+        if self.nxapi_frozen:
+            raise httpx.ReadTimeout("timed out", request=request)
         user = self._authenticate(request)
         if user is None:
             return httpx.Response(401, text="Unauthorized")
@@ -235,7 +268,7 @@ class FakeSwitch:
             if role is None:
                 continue
             if interface is not None and role.interface_policy_deny:
-                if interface.lower() not in role.interfaces:
+                if not role.names(interface):
                     continue
             if entity in ("interface", "vlan"):
                 if any(e.startswith(f"conf t ; {entity} * ; ") for e in role.entities):
@@ -273,6 +306,32 @@ class FakeSwitch:
                     return _error(ident, "% Interface permission denied\n"), None
                 return denied, None
             return _ok(ident, None), ("interface", name)
+        if match := re.fullmatch(r"(no )?interface port-channel(\d+)", cmd):
+            undo, number = match.group(1), int(match.group(2))
+            name = f"port-channel{number}"
+            rule = "conf t ; no interface port-channel *" if undo else "interface"
+            if not (is_admin or self._role_allows(user, rule, name)):
+                if self._role_allows(user, "interface", None):
+                    return _error(ident, "% Interface permission denied\n"), None
+                return denied, None
+            if undo:
+                if number not in self.channels:
+                    return _ok(ident, {"msg": f"{name}: port-channel not present\n"}), context
+                # As on cisco-25gb: the ports leave the channel with it.
+                del self.channels[number]
+                self.port_state.pop(name, None)
+                return _ok(ident, None), context
+            self.channels.setdefault(number, {})
+            return _ok(ident, None), ("interface", name)
+        if match := re.fullmatch(r"lacp system-priority (\d+)", cmd):
+            if not (is_admin or self._role_allows(user, "conf t ; lacp system-priority *", None)):
+                return denied, context
+            self.lacp_priority = int(match.group(1))
+            return _ok(ident, None), context
+        if interface is not None and (
+            reply := self._channel_command(user, is_admin, cmd, ident, interface)
+        ):
+            return reply, context
         if match := _BREAKOUT.fullmatch(cmd):
             undo, module, port, mapping = match.groups()
             rule = (
@@ -467,6 +526,162 @@ class FakeSwitch:
         elif key is not None:
             state[key] = match.group(1)
         return _ok(ident, None)
+
+    def _channel_command(
+        self, user: str, is_admin: bool, cmd: str, ident: int, interface: str
+    ) -> dict[str, Any] | None:
+        """The port-channel and LACP commands inside an interface; None for any other."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        checks = (
+            (
+                re.fullmatch(r"channel-group (\d+)(?: mode (active|passive|on))?", cmd),
+                "channel-group *",
+            ),
+            (re.fullmatch(r"no channel-group", cmd), "no channel-group"),
+            (re.fullmatch(r"lacp rate (normal|fast)", cmd), "lacp rate *"),
+            (re.fullmatch(r"lacp port-priority (\d+)", cmd), "lacp port-priority *"),
+            (re.fullmatch(r"lacp min-links (\d+)", cmd), "lacp min-links *"),
+        )
+        for match, entity in checks:
+            if match is None:
+                continue
+            if not (
+                is_admin or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)
+            ):
+                return denied
+            state = self.port_state.setdefault(interface, {})
+            current = self.channel_of(interface)
+            if entity == "channel-group *":
+                number, mode = int(match.group(1)), match.group(2) or "on"
+                if mode != "on" and not self.lacp_on():
+                    return _error(ident, "% LACP is not enabled\n")
+                if current is not None and current != number:
+                    return _error(ident, f"{interface} is already in port-channel{current}\n")
+                members = self.channels.setdefault(number, {})
+                if any(other != mode for port, other in members.items() if port != interface):
+                    return _error(
+                        ident,
+                        "Port-channel mode cannot be changed in a non-empty port-channel, and "
+                        "port mode must match with port-channel mode\n",
+                    )
+                members[interface] = mode
+            elif entity == "no channel-group":
+                if current is not None:
+                    del self.channels[current][interface]
+            elif entity == "lacp rate *":
+                if current is not None and state.get("admin_up", True):
+                    return _error(
+                        ident, "Cannot set lacp rate. Port is not admin down in port-channel\n"
+                    )
+                state["lacp_rate"] = match.group(1)
+            elif entity == "lacp port-priority *":
+                state["lacp_priority"] = int(match.group(1))
+            else:
+                state["min_links"] = int(match.group(1))
+            return _ok(ident, None)
+        return None
+
+    def lacp_on(self) -> bool:
+        return self.feature_state.get("lacp", True)
+
+    def channel_of(self, port: str) -> int | None:
+        return next((n for n, members in self.channels.items() if port in members), None)
+
+    def channel_summary(self) -> dict[str, Any]:
+        """``show port-channel summary`` for ``channels``: port-channel43's two ports as
+        recorded (up), any other port down (nothing is plugged in)."""
+        recorded = {
+            m["port"]: m["port-status"]
+            for m in load_fixture("show_port_channel_summary")["TABLE_channel"]["ROW_channel"][
+                "TABLE_member"
+            ]["ROW_member"]
+        }
+        found = []
+        for number, members in sorted(self.channels.items()):
+            rows = [
+                {"port": port, "port-status": recorded.get(port, "D") if number == 43 else "D"}
+                for port in sorted(members, key=_port_key)
+            ]
+            row: dict[str, Any] = {
+                "group": str(number),
+                "port-channel": f"port-channel{number}",
+                "layer": "S",
+                "status": "U" if any(r["port-status"] == "P" for r in rows) else "D",
+                "type": "Eth",
+                "prtcl": "LACP" if any(m != "on" for m in members.values()) else "NONE",
+            }
+            if rows:
+                row["TABLE_member"] = {"ROW_member": rows[0] if len(rows) == 1 else rows}
+            found.append(row)
+        if not found:
+            return {}
+        return {"TABLE_channel": {"ROW_channel": found[0] if len(found) == 1 else found}}
+
+    def channel_database(self) -> dict[str, Any]:
+        found = []
+        for number, members in sorted(self.channels.items()):
+            rows = [
+                {"port": p, "mode": m, "port-status": "down"} for p, m in sorted(members.items())
+            ]
+            row: dict[str, Any] = {
+                "interface": f"port-channel{number}",
+                "total-ports": str(len(rows)),
+            }
+            if rows:
+                row["TABLE_member"] = {"ROW_member": rows[0] if len(rows) == 1 else rows}
+            found.append(row)
+        if not found:
+            return {}
+        return {"TABLE_interface": {"ROW_interface": found[0] if len(found) == 1 else found}}
+
+    def descriptions(self) -> dict[str, Any]:
+        """``show interface description``: the recorded ports, then the port-channels."""
+        rows = [
+            dict(row)
+            for row in load_fixture("show_interface_description")["TABLE_interface"][
+                "ROW_interface"
+            ]
+            if not row["interface"].startswith("port-channel")
+        ]
+        for row in rows:
+            desc = self.port_state.get(row["interface"], {}).get("desc")
+            if desc is not None:
+                row.pop("desc", None)
+                if desc:
+                    row["desc"] = desc
+        for number in sorted(self.channels):
+            name = f"port-channel{number}"
+            row = {"interface": name}
+            desc = self.port_state.get(name, {}).get(
+                "desc", "storage-server" if number == 43 else ""
+            )
+            if desc:
+                row["desc"] = desc
+            rows.append(row)
+        return {"TABLE_interface": {"ROW_interface": rows}}
+
+    def lacp_interfaces(self) -> dict[str, Any]:
+        body = load_fixture("show_lacp_interface")
+        for row in body["TABLE_lacp_intf"]["ROW_lacp_intf"]:
+            state = self.port_state.get(row["interface"], {})
+            if "lacp_rate" in state:
+                row["localport"]["local-timeout"] = (
+                    "Short" if state["lacp_rate"] == "fast" else "Long"
+                )
+            if "lacp_priority" in state:
+                row["localport"]["local-port-priority"] = hex(state["lacp_priority"])
+        return body
+
+    def lacp_neighbors(self) -> dict[str, Any]:
+        """The recorded neighbor of port-channel43's ports, while they are still in it."""
+        body = load_fixture("show_lacp_neighbor")
+        channel = body["TABLE_interface"]["ROW_interface"]
+        members = channel["TABLE_member"]["ROW_member"]
+        kept = [m for m in members if m["port"] in self.channels.get(43, {})]
+        if not kept:
+            return {}
+        channel["TABLE_member"]["ROW_member"] = kept[0] if len(kept) == 1 else kept
+        return body
 
     def macs(self) -> list[dict[str, Any]]:
         """The MAC address table's rows, starting from the recorded ones."""
@@ -690,6 +905,24 @@ class FakeSwitch:
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
         if cmd == "show feature":
             return _ok(ident, self.features())
+        if cmd == "show port-channel summary":
+            return _ok(ident, self.channel_summary())
+        if cmd == "show port-channel database":
+            return _ok(ident, self.channel_database())
+        if cmd == "show interface description":
+            return _ok(ident, self.descriptions())
+        if cmd.startswith("show lacp"):
+            if not self.lacp_on():
+                return _error(ident, "% Invalid command\n")
+            if cmd == "show lacp system-identifier":
+                return _ok(
+                    ident,
+                    {"system-priority": str(self.lacp_priority), "system-mac": "70-79-b3-00-00-01"},
+                )
+            if cmd == "show lacp interface":
+                return _ok(ident, self.lacp_interfaces())
+            if cmd == "show lacp neighbor":
+                return _ok(ident, self.lacp_neighbors())
         if cmd.startswith("show lldp"):
             if not self.lldp:
                 return _error(ident, "% Invalid command\n")
@@ -722,7 +955,9 @@ class FakeSwitch:
             return _ok(ident, self.ip_interfaces())
         if cmd == "show interface brief":
             body = load_fixture("show_interface_brief")
-            self._expand(body)
+            for row in self._expand(body):
+                if self.port_state.get(row["interface"], {}).get("admin_up") is False:
+                    row.update(state="down", state_rsn_desc="Administratively down")
             return _ok(ident, body)
         if cmd == "show interface status":
             body = load_fixture("show_interface_status")
@@ -817,6 +1052,17 @@ class FakeShell:
         if line == "end":
             self.mode = []
             return ""
+        if not self.mode and (match := re.fullmatch(r"show user-account (\S+)", line)):
+            name = match.group(1)
+            if name not in self.switch.users:
+                return ""
+            roles = " ".join(sorted(self.switch.roles_of(name)))
+            return f"user:{name}\n\tthis user account has no expiry date\n\troles:{roles}"
+        if not self.mode and line == "copy running-config startup-config":
+            if self.switch.save_text is not None:
+                return self.switch.save_text.strip()
+            self.switch.saved = True
+            return "Copy complete, now saving to disk (please wait)...\nCopy complete."
         if line == "exit":
             if self.mode:
                 self.mode.pop()
@@ -847,12 +1093,23 @@ class FakeShell:
                 return ""
         if current == "role-interface" and self.role is not None:
             if match := re.fullmatch(r"permit interface (\S+)", line):
-                self.role.interfaces.add(match.group(1).lower())
+                name = match.group(1).lower()
+                if (
+                    self.switch.freeze_on_channel_permit
+                    and name.startswith("port-channel")
+                    and name not in self.role.interfaces
+                ):
+                    self.switch.nxapi_frozen = True
+                self.role.interfaces.add(name)
                 return ""
         return invalid
 
     def close(self) -> None:
         self.closed = True
+
+
+def _port_key(name: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in re.findall(r"\d+", name))
 
 
 def _vlan_numbers(text: str) -> set[int]:

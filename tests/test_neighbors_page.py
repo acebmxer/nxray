@@ -158,8 +158,8 @@ def test_port_page_of_a_port_channel_member(logged_in: TestClient, switch: FakeS
     page = logged_in.get("/ports/detail", params={"name": "Ethernet1/43"})
     text = _text(page.text)
     assert (
-        'Ethernet1/43 is part of port-channel43, with <a href="/ports/detail?name=Ethernet1/44">'
-        "Ethernet1/44</a>. The switch learns" in page.text
+        'Ethernet1/43 is part of <a href="/port-channels#port-channel43">port-channel43</a>, with '
+        '<a href="/ports/detail?name=Ethernet1/44">Ethernet1/44</a>. The switch learns' in page.text
     )
     assert "b8:59:9f:00:00:0e" in text
     assert "No device on this port has announced itself." in text

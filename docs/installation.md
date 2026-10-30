@@ -56,9 +56,9 @@ Each NXray account has one of three roles:
 
 | Role | May |
 | --- | --- |
-| admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN, port settings, feature and neighbor changes, updating the port list), turning switch features on and off on the Features page, and the Users page, plus what an operator may do. |
-| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, turn CDP and LLDP on or off on a port, set the MAC address aging time, add and remove static MAC addresses, clear learned ones, Save config. Also set the labels NXray keeps on ports. |
-| viewer | Look only: the dashboard, ports, VLANs, neighbors, history and features. |
+| admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN, port settings, feature, neighbor and port-channel changes, updating the port list), turning switch features on and off on the Features page, and the Users page, plus what an operator may do. |
+| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, turn CDP and LLDP on or off on a port, set the MAC address aging time, add and remove static MAC addresses, clear learned ones, make, change and delete port-channels and set their LACP options, Save config. Also set the labels NXray keeps on ports. |
+| viewer | Look only: the dashboard, ports, VLANs, port-channels, neighbors, history and features. |
 
 Admins add accounts, change roles, disable accounts and set new passwords on
 the **Users** page. Everyone changes their own password on the Account page
@@ -199,7 +199,7 @@ The numbers live in NXray's database on the data volume and take space with
 the number of ports that are up: roughly 7 MB a day with a dozen up, so about
 200 MB once 30 days have built up. Nothing is recorded while NXray cannot
 reach the switch or is waiting for it to apply a new role after **Turn on port,
-VLAN, port settings, feature and neighbor changes**; the charts show that as a gap. A port's errors are recorded as the
+VLAN, port settings, feature, neighbor and port-channel changes**; the charts show that as a gap. A port's errors are recorded as the
 increase since the previous sample, so the first sample after NXray starts
 records none.
 

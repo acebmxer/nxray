@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% from "_devices.html" import port_link %}
+{% block title %}Port-channels — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<h1 class="page-title">Port-channels</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% elif view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+  {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="port-channels">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">LACP</h2>
+  <p class="lead">A port-channel bundles several ports into one link to one device. With LACP the switch and the device agree on which ports belong to it and leave out one that is cabled wrong; a static port-channel just bundles.</p>
+  {% if view.lacp_enabled %}
+  <dl class="facts">
+    <dt>LACP</dt><dd>on</dd>
+    <dt>The switch's LACP priority</dt><dd>{{ view.system_priority if view.system_priority is not none else "not reported" }}{% if view.system_priority == default_system_priority %} (the default){% endif %}</dd>
+    {% if view.system_mac %}<dt>The switch's LACP address</dt><dd class="mono">{{ view.system_mac }}</dd>{% endif %}
+  </dl>
+  {% if can_change %}
+  <form method="post" action="/port-channels/system-priority" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="system_priority">The switch's LACP priority</label>
+    <input id="system_priority" name="priority" type="text" inputmode="numeric" value="{{ view.system_priority if view.system_priority is not none else '' }}">
+    <p class="hint">{{ priority_min }} to {{ priority_max }}; lower wins, {{ default_system_priority }} is the default. For the whole switch: every LACP port-channel agrees on its ports again.</p>
+    <button type="submit" class="btn btn-quiet">Change LACP priority</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p>LACP is off on the switch, so only static port-channels can be made. {% if role == "admin" %}Turn it on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns it on on the <a href="/features">Features</a> page.{% endif %}</p>
+  {% endif %}
+</section>
+
+{% if view.channels %}
+{% for c in view.channels %}
+<section class="card" id="{{ c.name }}">
+  <h2 class="card-title">{{ c.name }}{% if c.description %} <span class="dim">{{ c.description }}</span>{% endif %}</h2>
+  <p class="lead">
+    {% if c.up %}<span class="badge badge-ok">up</span>{% else %}<span class="badge badge-crit">down</span>{% endif %}
+    {{ mode_words[c.mode] if c.mode in mode_words else ("LACP" if c.protocol == "LACP" else "no ports yet") }}{% if c.routed %}, routed{% endif %}.
+    {% if c.members %}{{ c.members|length }} port{{ "" if c.members|length == 1 else "s" }}, {{ c.members|selectattr("bundled")|list|length }} up in it.{% else %}It has no ports.{% endif %}
+  </p>
+  {% if c.members %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>Port</th><th>State</th><th>Joined as</th>{% if view.lacp_enabled and c.lacp %}<th>LACP rate</th><th class="num">Port priority</th><th>Device at the other end</th>{% endif %}{% if can_change %}<th></th>{% endif %}</tr>
+    </thead>
+    <tbody>
+      {% for m in c.members %}
+      <tr>
+        <td>{{ port_link(m.port) }}</td>
+        <td>{{ m.state_words }}</td>
+        <td>{{ mode_words.get(m.mode, m.mode or "—") }}</td>
+        {% if view.lacp_enabled and c.lacp %}
+        <td>{{ m.rate or "—" }}</td>
+        <td class="num">{{ m.port_priority if m.port_priority is not none else "—" }}</td>
+        <td class="wrap">{% if m.partner %}<span class="mono">{{ m.partner.mac }}</span>{% if m.partner.maker %} ({{ m.partner.maker }}){% endif %}{% if m.partner.words %}, {{ m.partner.words }}{% endif %}{% else %}<span class="dim">no LACP answer</span>{% endif %}</td>
+        {% endif %}
+        {% if can_change %}
+        <td>
+          <form method="post" action="/port-channels/remove" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="port" value="{{ m.port }}">
+            <button type="submit" class="btn btn-quiet">Take out</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if can_change %}
+  <div class="form-grid form-after">
+    {% if view.free_ports %}
+    <form method="post" action="/port-channels/add" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="number" value="{{ c.number }}">
+      <label for="add_{{ c.number }}">Add a port</label>
+      <select id="add_{{ c.number }}" name="port">
+        {% for name in view.free_ports %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+      </select>
+      <label for="add_mode_{{ c.number }}">Joins as</label>
+      <select id="add_mode_{{ c.number }}" name="mode">
+        {% for key, words in mode_words.items() %}
+        {% if c.mode %}{% if key == c.mode %}<option value="{{ key }}" selected>{{ words }}</option>{% endif %}
+        {% elif view.lacp_enabled or key == "on" %}<option value="{{ key }}">{{ words }}</option>{% endif %}
+        {% endfor %}
+      </select>
+      {% if view.lacp_enabled and c.mode != "on" %}
+      <label class="check"><input type="checkbox" name="fast_rate" value="yes"> Fast LACP rate (a message every second)</label>
+      {% endif %}
+      <button type="submit" class="btn btn-quiet">Add port</button>
+    </form>
+    {% endif %}
+
+    <form method="post" action="/port-channels/settings" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="number" value="{{ c.number }}">
+      <label for="desc_{{ c.number }}">Description</label>
+      <input id="desc_{{ c.number }}" name="description" type="text" maxlength="254" value="{{ c.description }}">
+      {% if c.lacp %}
+      <label for="links_{{ c.number }}">Stay up only while at least this many ports are up</label>
+      <input id="links_{{ c.number }}" name="min_links" type="text" inputmode="numeric" value="">
+      <p class="hint">{{ links_min }} to {{ links_max }}; 1 is the default. The switch does not report the current value to NXray, so leave it empty to keep it.</p>
+      {% endif %}
+      <button type="submit" class="btn btn-quiet">Change settings</button>
+    </form>
+
+    {% if view.lacp_enabled and c.lacp and c.members %}
+    <form method="post" action="/port-channels/port-lacp" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <label for="lacp_port_{{ c.number }}">LACP settings of one port</label>
+      <select id="lacp_port_{{ c.number }}" name="port">
+        {% for m in c.members %}<option value="{{ m.port }}">{{ m.port }}</option>{% endfor %}
+      </select>
+      <label for="lacp_rate_{{ c.number }}">LACP rate</label>
+      <select id="lacp_rate_{{ c.number }}" name="rate">
+        <option value="normal">Normal (a message every 30 seconds)</option>
+        <option value="fast">Fast (a message every second)</option>
+      </select>
+      <label for="lacp_prio_{{ c.number }}">Port priority</label>
+      <input id="lacp_prio_{{ c.number }}" name="priority" type="text" inputmode="numeric" value="">
+      <p class="hint">{{ priority_min }} to {{ priority_max }}; lower is used first, {{ default_port_priority }} is the default. Empty keeps it. The switch changes the rate only while the port is off.</p>
+      <button type="submit" class="btn btn-quiet">Change LACP settings</button>
+    </form>
+    {% endif %}
+  </div>
+  <form method="post" action="/port-channels/delete" class="inline form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="number" value="{{ c.number }}">
+    <button type="submit" class="btn btn-quiet">Delete {{ c.name }}</button>
+  </form>
+  {% if c.members %}<p class="note">A port-channel is deleted once its ports are taken out.</p>{% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+{% else %}
+<section class="card">
+  <p>The switch has no port-channels.</p>
+</section>
+{% endif %}
+
+{% if can_change %}
+<section class="card">
+  <h2 class="card-title">Make a port-channel</h2>
+  {% if view.free_ports %}
+  <form method="post" action="/port-channels/create" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="new_number">Number</label>
+    <input id="new_number" name="number" type="text" inputmode="numeric" value="{{ form.number or '' }}">
+    <p class="hint">{{ channel_min }} to {{ channel_max }}, not in use. Naming it after its first port (43 for Ethernet1/43) makes it easy to find.</p>
+    <label for="new_ports">Ports</label>
+    <select id="new_ports" name="ports" multiple size="8">
+      {% for name in view.free_ports %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+    </select>
+    <p class="hint">Hold Ctrl to pick several. Only ports in no port-channel are listed.</p>
+    <label for="new_mode">Joins as</label>
+    <select id="new_mode" name="mode">
+      {% for key, words in mode_words.items() %}
+      {% if view.lacp_enabled or key == "on" %}<option value="{{ key }}" {% if form.mode == key %}selected{% endif %}>{{ words }}</option>{% endif %}
+      {% endfor %}
+    </select>
+    <p class="hint">LACP active starts the agreement with the device, passive only answers one; use active unless the device asks otherwise. Static needs the device bundled the same way by hand.</p>
+    {% if view.lacp_enabled %}
+    <label class="check"><input type="checkbox" name="fast_rate" value="yes" {% if form.fast_rate == "yes" %}checked{% endif %}> Fast LACP rate (a message every second)</label>
+    {% endif %}
+    <label for="new_desc">Description (optional)</label>
+    <input id="new_desc" name="description" type="text" maxlength="254" value="{{ form.description or '' }}">
+    <button type="submit" class="btn btn-primary">Make port-channel</button>
+  </form>
+  <p class="note">Each change asks you to confirm first.</p>
+  {% else %}
+  <p>Every front port is in a port-channel already.</p>
+  {% endif %}
+</section>
+{% elif role in ("admin", "operator") and connection.changes_enabled and not connection.channel_changes_enabled %}
+<section class="card">
+  <p class="lead">Port-channel changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to make, change and delete port-channels and set their LACP options.</p>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

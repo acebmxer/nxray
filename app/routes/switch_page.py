@@ -23,6 +23,7 @@ from app.nxapi import NxapiClient, NxapiError, is_valid_host
 from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes, missing_changes
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
+from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import render_port_page
 from app.routes.vlans import render_vlans_page
 from app.security import csrf_token
@@ -458,6 +459,7 @@ def switch_enable_changes(
             admin_user=admin_user,
             admin_password=admin_password,
             account_name=connection.username,
+            role_version=connection.role_version,
             transport=request.app.state.nxapi_transport,
             ssh_opener=request.app.state.ssh_opener,
         )
@@ -479,16 +481,21 @@ def switch_enable_changes(
         "turn CDP and LLDP on or off on the front ports, set how long learned MAC "
         "addresses are kept, add and remove static MAC addresses and clear learned ones"
     )
+    channel_words = (
+        "make, change and delete port-channels and set their LACP options on the Port-channels page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
-            f"Port, VLAN, port settings, feature and neighbor changes are on: {account} may "
-            f"now turn the {count} front ports on or off, edit their descriptions, set their "
-            "VLANs and their speed, MTU, FEC, flow control, storm control and layer (switched "
-            "or routed), split or join the 100G ports, create, rename and delete VLANs, "
-            f"{features_words}, and {neighbor_words}. The switch applies this once it has not "
-            f"heard from NXray for a while, so NXray now waits about {minutes} minutes before "
-            "contacting it again."
+            "Port, VLAN, port settings, feature, neighbor and port-channel changes are on: "
+            f"{account} may now turn the {count} front ports on or off, edit their "
+            "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
+            "control and layer (switched or routed), split or join the 100G ports, create, "
+            f"rename and delete VLANs, {features_words}, {neighbor_words}, and {channel_words}. "
+            "The switch applies this once it has not heard from NXray for a while, and naming "
+            "the port-channels makes its NX-API stop answering every account for a while, so "
+            f"NXray now waits about {minutes} minutes before contacting it again. Other NXray "
+            "installs on this switch cannot reach it meanwhile; it recovers by itself."
         )
     elif connection.role_version >= ROLE_VERSION:
         done = (
@@ -503,13 +510,21 @@ def switch_enable_changes(
             parts.append(settings_words)
         if connection.role_version < 4:
             parts.append(features_words)
-        parts.append(neighbor_words)
+        if connection.role_version < 5:
+            parts.append(neighbor_words)
+        parts.append(channel_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
-        done = (
-            f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
-            "The switch applies this at once, so there is no wait."
-        )
+        done = f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
+        if result.pause_seconds:
+            done += (
+                "Naming the port-channels in NXray's role makes the switch's NX-API stop "
+                "answering every account for a while, so NXray now waits about "
+                f"{result.pause_seconds // 60} minutes before contacting it again. Other NXray "
+                "installs on this switch cannot reach it meanwhile; it recovers by itself."
+            )
+        else:
+            done += "The switch applies this at once, so there is no wait."
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
     return _render(
@@ -534,7 +549,8 @@ def switch_save(
     """Save config: copy running-config startup-config with NXray's own account.
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
-    ``vlans``, ``features`` or ``neighbors``); the answer is shown there. Anything else means the
+    ``vlans``, ``features``, ``neighbors`` or ``port-channels``); the answer is shown there.
+    Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
     require_csrf(request, csrf)
@@ -548,6 +564,8 @@ def switch_save(
             return render_features_page(request, username, error=error, notice=notice)
         if back == "neighbors":
             return render_neighbors_page(request, username, error=error, notice=notice)
+        if back == "port-channels":
+            return render_port_channels_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)
 
     connection, target, error = stored_switch(request)

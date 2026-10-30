@@ -13,6 +13,7 @@ from app.nxapi import (
     validate_port_name,
 )
 from app.port_changes import (
+    CHANNEL_FREEZE_SECONDS,
     ROLE_NAME,
     ROLE_RULES,
     account_roles,
@@ -192,14 +193,67 @@ def test_without_the_role_the_switch_refuses_port_changes(switch: FakeSwitch) ->
 
 def test_enable_creates_the_role_gives_it_and_saves(switch: FakeSwitch) -> None:
     result = _enable(switch)
-    assert (result.pause_seconds, result.port_count, result.config_saved) == (660, 54, True)
+    assert (result.pause_seconds, result.port_count, result.config_saved) == (1200, 54, True)
     assert switch.saved
     assert ROLE_NAME in switch.roles_of("nxray")
     role = switch.roles[ROLE_NAME]
-    assert role.interface_policy_deny and len(role.interfaces) == 54
-    assert switch.ssh_lines[0] == "configure terminal" and switch.ssh_lines[-1] == "end"
+    # The 54 front ports one by one, and every port-channel in one line; never mgmt0.
+    assert role.interface_policy_deny and len(role.interfaces) == 55
+    assert "port-channel1-4096" in role.interfaces and "mgmt0" not in role.interfaces
+    assert switch.ssh_lines[0] == "configure terminal"
+    # The role gains the port-channels, so the check and the save go over SSH.
+    assert switch.ssh_lines[-3:] == [
+        "end",
+        "show user-account nxray",
+        "copy running-config startup-config",
+    ]
     # NXray's own account is never used for this; only the admin login is.
     assert all(";" not in cmd for request in switch.requests for cmd in request)
+
+
+def test_enable_works_while_nxapi_is_frozen(switch: FakeSwitch) -> None:
+    """As on cisco-25gb: once the role names port-channels, NX-API stops answering
+    every account for a while. NXray must not need it after typing the role."""
+    switch.freeze_on_channel_permit = True
+    result = _enable(switch)
+    assert switch.nxapi_frozen
+    assert result.config_saved and switch.saved
+    assert result.pause_seconds == CHANNEL_FREEZE_SECONDS
+    assert ROLE_NAME in switch.roles_of("nxray")
+
+
+def test_enable_over_ssh_reports_a_failed_save(switch: FakeSwitch) -> None:
+    switch.freeze_on_channel_permit = True
+    switch.save_text = "Copy failed\n"
+    result = _enable(switch)
+    assert not result.config_saved and result.save_error == "Copy failed"
+
+
+def test_enable_over_ssh_checks_the_role_took(switch: FakeSwitch) -> None:
+    opener = switch.ssh_opener()
+
+    def without_the_role(host, port, username, password, timeout):  # noqa: ANN001
+        shell = opener(host, port, username, password, timeout)
+        real = shell.run
+
+        def run(line: str) -> str:
+            return "" if line.startswith("username ") else real(line)
+
+        shell.run = run
+        return shell
+
+    with pytest.raises(SetupError, match="does not have the nxray-ports role. Nothing was saved"):
+        _enable(switch, ssh_opener=without_the_role)
+    assert not switch.saved
+
+
+def test_a_current_role_is_checked_and_saved_over_nxapi(switch: FakeSwitch) -> None:
+    _enable(switch)
+    switch.ssh_lines.clear()
+    switch.saved = False
+    result = _enable(switch, role_version=6)
+    assert result.pause_seconds == 0 and result.config_saved and switch.saved
+    assert switch.ssh_lines[-1] == "end"
 
 
 def test_enable_twice_gives_the_same_role(switch: FakeSwitch) -> None:
@@ -264,6 +318,6 @@ def test_missing_account_is_explained(switch: FakeSwitch) -> None:
 
 def test_a_failed_save_is_reported_not_raised(switch: FakeSwitch) -> None:
     switch.save_text = "Copy failed\n"
-    result = _enable(switch)
+    result = _enable(switch, role_version=6)
     assert not result.config_saved and "Copy failed" in (result.save_error or "")
     assert ROLE_NAME in switch.roles_of("nxray")

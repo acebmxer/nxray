@@ -21,6 +21,7 @@ from app.nxapi import (
     validate_vlan_name,
 )
 from app.port_changes import (
+    CHANNEL_FREEZE_SECONDS,
     ROLE_RULES,
     ROLE_VERSION,
     VLAN_RULES,
@@ -339,8 +340,9 @@ def test_role_lines_carry_the_vlan_rules() -> None:
         )
 
 
-def _enable(switch: FakeSwitch):
+def _enable(switch: FakeSwitch, role_version: int = 0):
     return enable_port_changes(
+        role_version=role_version,
         host="192.0.2.10",
         nxapi_port=443,
         ssh_port=22,
@@ -356,8 +358,9 @@ def test_updating_a_role_the_account_has_needs_no_wait() -> None:
     switch = FakeSwitch()
     switch.users["nxray"] = (NXRAY_PASSWORD, "network-operator")
     first = _enable(switch)
-    assert (first.had_role, first.pause_seconds) == (False, 660)
-    again = _enable(switch)
+    assert (first.had_role, first.pause_seconds) == (False, CHANNEL_FREEZE_SECONDS)
+    # The role already names the port-channels (version 6): no freeze, no wait.
+    again = _enable(switch, role_version=ROLE_VERSION)
     assert (again.had_role, again.pause_seconds) == (True, 0)
     assert again.config_saved
 

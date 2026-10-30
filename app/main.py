@@ -29,6 +29,7 @@ from app.routes import (
     health,
     history,
     neighbors,
+    port_channels,
     ports,
     settings_page,
     switch_page,
@@ -131,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(neighbors.router)
+    app.include_router(port_channels.router)
     app.include_router(features.router)
     app.include_router(users.router)
     app.include_router(settings_page.router)

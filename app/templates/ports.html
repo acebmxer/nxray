@@ -60,7 +60,7 @@
     <tbody>
       {% for port in shown %}
       <tr>
-        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a>{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
+        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a>{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}{% set pc = neighbors.channel_of(port.name) if neighbors else none %}{% if pc %}<a class="reason" href="/port-channels#{{ pc.name }}">in {{ pc.name }}</a>{% endif %}</td>
         <td>{{ port.description }}</td>
         <td>
           <span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
