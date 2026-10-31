@@ -11,6 +11,23 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Routing protocols.** A new **Routing protocols** page (Protocols in the
+  menu) lists every routing protocol the switch has with whether its feature
+  is on, and the switch's whole route table per VRF. Each protocol has its
+  own page: OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM,
+  PIM6, IGMP, MSDP and BFD, plus **Routing policy** for route-maps, IPv4 and
+  IPv6 prefix-lists and key chains. Each page shows the processes,
+  neighbors, interfaces or groups the switch reports, and operators and
+  admins can, after a confirm page that shows the exact lines sent, make and
+  delete processes, VRF parts, address families, neighbors and groups and
+  set or remove each of their settings (router ID, areas, redistribution,
+  summaries, timers, authentication, BFD, interface costs and more).
+  Passwords and keys are never shown back. A protocol whose feature is off
+  links to the Features page. NXray's `nxray-ports` role gets rules 63 to
+  128 (role version 10); an older role gets a **Turn on routing protocol
+  changes** button, with no wait. The rules were tried on an N9K-C92160YC-X
+  with NX-OS 9.3(16) with a throwaway account on an unused port.
+
 - **Routing page: static routes.** The Routing page lists the IPv4 and IPv6
   static routes of every VRF, with whether the switch uses each IPv4 one.
   Operators and admins can, after a confirm page, add a static route (a VRF,

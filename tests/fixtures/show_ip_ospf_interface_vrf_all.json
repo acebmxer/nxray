@@ -1,0 +1,30 @@
+{
+  "TABLE_ctx": {
+    "ROW_ctx": [
+      {
+        "ptag": "nxprobe",
+        "cname": "default",
+        "TABLE_intf": {
+          "ROW_intf": {
+            "ifname": "Ethernet1/54",
+            "admin_status": "up",
+            "proto_status": "down",
+            "addr": "192.0.2.1",
+            "masklen": 24,
+            "area": "0.0.0.0",
+            "if_cfg": "true",
+            "state_str": "DOWN",
+            "type_str": "P2P",
+            "cost": 10,
+            "index": 1,
+            "passive": "true"
+          }
+        }
+      },
+      {
+        "ptag": "nxprobe",
+        "cname": "nxprobe-v"
+      }
+    ]
+  }
+}

@@ -110,10 +110,10 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface, VRF and static route changes**, tick the box and press **Turn on
-port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface,
-VRF and static route changes**. One press turns on all nine, with a single
-wait.
+interface, VRF, static route and routing protocol changes**, tick the box
+and press **Turn on port, VLAN, port settings, feature, neighbor,
+port-channel, VLAN interface, VRF, static route and routing protocol
+changes**. One press turns on all ten, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -185,6 +185,72 @@ NXray then:
          rule 60 permit command conf t ; vrf context * ; no ip route *
          rule 61 permit command conf t ; vrf context * ; ipv6 route *
          rule 62 permit command conf t ; vrf context * ; no ipv6 route *
+         rule 63 permit command conf t ; router ospf *
+         rule 64 permit command conf t ; no router ospf *
+         rule 65 permit command conf t ; router ospfv3 *
+         rule 66 permit command conf t ; no router ospfv3 *
+         rule 67 permit command conf t ; router bgp *
+         rule 68 permit command conf t ; no router bgp *
+         rule 69 permit command conf t ; router eigrp *
+         rule 70 permit command conf t ; no router eigrp *
+         rule 71 permit command conf t ; router rip *
+         rule 72 permit command conf t ; no router rip *
+         rule 73 permit command conf t ; router isis *
+         rule 74 permit command conf t ; no router isis *
+         rule 75 permit command conf t ; route-map *
+         rule 76 permit command conf t ; no route-map *
+         rule 77 permit command conf t ; ip prefix-list *
+         rule 78 permit command conf t ; no ip prefix-list *
+         rule 79 permit command conf t ; ipv6 prefix-list *
+         rule 80 permit command conf t ; no ipv6 prefix-list *
+         rule 81 permit command conf t ; key chain *
+         rule 82 permit command conf t ; no key chain *
+         rule 83 permit command conf t ; ip pim *
+         rule 84 permit command conf t ; no ip pim *
+         rule 85 permit command conf t ; ipv6 pim *
+         rule 86 permit command conf t ; no ipv6 pim *
+         rule 87 permit command conf t ; ip msdp *
+         rule 88 permit command conf t ; no ip msdp *
+         rule 89 permit command conf t ; bfd *
+         rule 90 permit command conf t ; no bfd *
+         rule 91 permit command conf t ; interface * ; ip router *
+         rule 92 permit command conf t ; interface * ; no ip router *
+         rule 93 permit command conf t ; interface * ; ipv6 router *
+         rule 94 permit command conf t ; interface * ; no ipv6 router *
+         rule 95 permit command conf t ; interface * ; ip ospf *
+         rule 96 permit command conf t ; interface * ; no ip ospf *
+         rule 97 permit command conf t ; interface * ; ospfv3 *
+         rule 98 permit command conf t ; interface * ; no ospfv3 *
+         rule 99 permit command conf t ; interface * ; ipv6 * eigrp *
+         rule 100 permit command conf t ; interface * ; no ipv6 * eigrp *
+         rule 101 permit command conf t ; interface * ; ip * eigrp *
+         rule 102 permit command conf t ; interface * ; no ip * eigrp *
+         rule 103 permit command conf t ; interface * ; ip rip *
+         rule 104 permit command conf t ; interface * ; no ip rip *
+         rule 105 permit command conf t ; vrf context * ; ip pim *
+         rule 106 permit command conf t ; vrf context * ; no ip pim *
+         rule 107 permit command conf t ; vrf context * ; ipv6 pim *
+         rule 108 permit command conf t ; vrf context * ; no ipv6 pim *
+         rule 109 permit command conf t ; vrf context * ; ip msdp *
+         rule 110 permit command conf t ; vrf context * ; no ip msdp *
+         rule 111 permit command conf t ; interface * ; ipv6 rip *
+         rule 112 permit command conf t ; interface * ; no ipv6 rip *
+         rule 113 permit command conf t ; interface * ; isis *
+         rule 114 permit command conf t ; interface * ; no isis *
+         rule 115 permit command conf t ; interface * ; hsrp *
+         rule 116 permit command conf t ; interface * ; no hsrp *
+         rule 117 permit command conf t ; interface * ; vrrp *
+         rule 118 permit command conf t ; interface * ; no vrrp *
+         rule 119 permit command conf t ; interface * ; vrrpv3 *
+         rule 120 permit command conf t ; interface * ; no vrrpv3 *
+         rule 121 permit command conf t ; interface * ; ip pim *
+         rule 122 permit command conf t ; interface * ; no ip pim *
+         rule 123 permit command conf t ; interface * ; ipv6 pim *
+         rule 124 permit command conf t ; interface * ; no ipv6 pim *
+         rule 125 permit command conf t ; interface * ; ip igmp *
+         rule 126 permit command conf t ; interface * ; no ip igmp *
+         rule 127 permit command conf t ; interface * ; bfd *
+         rule 128 permit command conf t ; interface * ; no bfd *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -212,8 +278,10 @@ priority; on the port-channels, the same port settings, their LACP minimum
 links, and deleting them; set the switch's LACP priority; make, turn on or
 off, describe, set the MTU of and delete VLAN interfaces and put IPv4 and
 IPv6 addresses on them; make and delete VRFs and move VLAN interfaces and
-routed ports between them; add and remove IPv4 and IPv6 static routes; and
-save the configuration. The switch
+routed ports between them; add and remove IPv4 and IPv6 static routes; run
+the routing protocols and change their settings, on those interfaces too,
+and the route-maps, prefix-lists and key chains they use; and save the
+configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
@@ -223,8 +291,8 @@ session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
-port settings, feature, neighbor, port-channel, VLAN interface, VRF and
-static route changes take effect straight away. When the role gains the port-channels or the VLAN
+port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
+route and routing protocol changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -232,11 +300,12 @@ minutes right after such a change (SSH kept working), though a later change
 went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
-features, neighbor, port-channel, VLAN interface, VRF or static route
-changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29,
-1 to 40, 1 to 47, 1 to 50 or 1 to 54. The Switch page then shows a card
-named for what is missing (for example **VRF and static route changes** or
-**Static route changes**): type the admin login,
+features, neighbor, port-channel, VLAN interface, VRF, static route or
+routing protocol changes existed.** Their role has rules 1 to 5, 1 to 11, 1
+to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to 54 or 1 to 62. The Switch
+page then shows a card named for what is missing (for example **Static route
+and routing protocol changes** or **Routing protocol changes**): type the
+admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
 applies new rules in a role the account already has at once.
@@ -496,6 +565,29 @@ removed. An install whose role predates static routes gets a **Turn on
 static route changes** card on the Switch page; it adds rules 55 to 62 with
 no wait. These commands were tried on an N9K-C92160YC-X with NX-OS 9.3(16)
 with a throwaway account.
+
+**Routing protocols.** The **Routing protocols** page (Protocols in the menu)
+lists every routing protocol the switch has, whether its feature is on, and
+the switch's whole route table per VRF (connected networks, static routes and
+what each protocol learned). Each protocol has its own page: OSPF, OSPFv3,
+BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP, MSDP and BFD,
+plus **Routing policy** for the route-maps, IPv4 and IPv6 prefix-lists and
+key chains the protocols point at (redistribution needs a route-map on
+NX-OS; authentication uses key chains). A protocol whose feature is off says
+so and links to the Features page, where an admin turns it on. Each page
+shows what the switch reports (processes, neighbors, interfaces, groups) and,
+for operators and admins, a form for every setting: making and deleting a
+process, VRF part, address family, neighbor or group, and setting or removing
+each of its lines. The confirm page shows the exact lines the switch gets;
+passwords and keys are shown as `***` and never read back. Interfaces are the
+VLAN interfaces (up to Vlan254), routed ports and routed port-channels, never
+mgmt0; VRFs never include management. An install whose role predates this
+gets a **Turn on routing protocol changes** card on the Switch page; it adds
+rules 63 to 128 with no wait. The rules were tried on an N9K-C92160YC-X with
+NX-OS 9.3(16) with a throwaway account on an unused port: a rule naming a
+protocol's mode (`router ospf *`) covers every line inside it. Rules 99, 100
+and 105 to 110 (IPv6 EIGRP lines, and PIM and MSDP inside a VRF) are the same
+shapes as tried ones but were not tried on their own.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

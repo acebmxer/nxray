@@ -488,3 +488,10 @@ a { color: var(--accent); }
 .card-title + .table-devices, .lead + .table-devices { margin-top: 0.25rem; }
 .devices-part + .devices-part { margin-top: 1.25rem; }
 .devices-part h3 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+
+/* Routing protocol pages: a place's settings, grouped in collapsible parts. */
+.protocol-place { border-top: 1px solid var(--border); padding-top: 0.75rem; margin-top: 0.75rem; }
+.protocol-place h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.settings-group { margin-top: 0.6rem; }
+.settings-group > summary { cursor: pointer; font-weight: 600; color: var(--text-dim); }
+.settings-group .form-grid { margin-top: 0.6rem; }

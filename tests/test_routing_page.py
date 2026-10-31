@@ -283,12 +283,13 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     page = _text(logged_in.get("/routing").text)
     assert "VLAN interface changes are off" in page
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VLAN interface, VRF and static route changes" in switch_page
+    assert "Turn on VLAN interface, VRF, static route and routing protocol changes" in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN interface, VRF and static route changes are on: nxray may now also make, change and "
+        "VLAN interface, VRF, static route and routing protocol changes are on: nxray may now "
+        "also make, change and "
         "delete VLAN" in text
     )
     assert "there is no wait" in text
@@ -414,11 +415,14 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     refused = _post(logged_in, "/routing/vrf/create", confirm=True, name="lab")
     assert refused.status_code == 400 and "VRF changes are off" in _text(refused.text)
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VRF and static route changes" in switch_page
+    assert "Turn on VRF, static route and routing protocol changes" in switch_page
     assert "this version of NXray can also make and delete VRFs and move" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
-    assert "VRF and static route changes are on: nxray may now also make and delete VRFs" in text
+    assert (
+        "VRF, static route and routing protocol changes are on: nxray may now also make and "
+        "delete VRFs" in text
+    )
     assert "there is no wait" in text
     # Only rules change: checked and saved over NX-API, no SSH save.
     assert "rule 53 permit command conf t ; interface * ; vrf member *" in enabled.ssh_lines
@@ -486,8 +490,13 @@ def test_role_version_8_offers_static_route_changes(
         next_hop="192.0.2.254",
     )  # fmt: skip
     assert refused.status_code == 400 and "Static route changes are off" in _text(refused.text)
-    assert "Turn on static route changes" in _text(logged_in.get("/switch").text)
+    assert "Turn on static route and routing protocol changes" in _text(
+        logged_in.get("/switch").text
+    )
     text = _text(_enable_changes(logged_in).text)
-    assert "Static route changes are on: nxray may now also add and remove static routes" in text
+    assert (
+        "Static route and routing protocol changes are on: nxray may now also add and remove "
+        "static routes" in text
+    )
     assert "there is no wait" in text
     assert "/routing/route/add" in logged_in.get("/routing").text

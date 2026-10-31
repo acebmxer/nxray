@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ proto.name if proto is defined and proto else "Routing protocols" }} — NXray{% endblock %}
+
+{# One input for one field. ``name`` is the form name (id_x or v_x), ``value`` the current value. #}
+{% macro field_input(f, name, value, uid) -%}
+<label for="{{ uid }}">{{ f.label }}{% if f.optional and f.kind != "flag" %} <span class="dim">(optional)</span>{% endif %}</label>
+{% if f.kind == "choice" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
+  {% for c in f.choices %}<option value="{{ c }}" {% if value == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+</select>
+{% elif f.kind == "flag" %}
+<label class="check"><input id="{{ uid }}" type="checkbox" name="{{ name }}" value="yes" {% if value %}checked{% endif %}> {{ f.choices[0] }}</label>
+{% elif f.kind == "interface" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
+  {% for i in page.interfaces %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
+</select>
+{% elif f.kind == "vrf" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% for v in page.vrfs %}<option value="{{ v }}" {% if (value or "default") == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+</select>
+{% elif f.kind == "secret" %}
+<input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="63">
+{% else %}
+<input id="{{ uid }}" name="{{ name }}" type="text" spellcheck="false" value="{{ value or '' }}" placeholder="{{ f.placeholder }}">
+{% endif %}
+{% if f.hint %}<p class="hint">{{ f.hint }}</p>{% endif %}
+{%- endmacro %}
+
+{# The forms of one scope's settings, for one place (``inst``) or a place still to be named. #}
+{% macro setting_forms(scope, inst, uidbase) -%}
+{% for group, settings in scope.groups %}
+<details class="settings-group">
+  <summary>{{ group }}</summary>
+  <div class="form-grid">
+  {% for s in settings %}
+  {% set current = inst.values.get(s.key, {}) if inst else {} %}
+  <form method="post" action="/routing/protocols/{{ proto.key }}/change" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="scope" value="{{ scope.key }}">
+    <input type="hidden" name="setting" value="{{ s.key }}">
+    <p class="label">{{ s.label }}{% if current %} <span class="badge badge-ok">set</span>{% endif %}</p>
+    {% if s.help %}<p class="hint">{{ s.help }}</p>{% endif %}
+    {% if inst %}
+    {% for f in scope.ident %}<input type="hidden" name="id_{{ f.name }}" value="{{ inst.ident.get(f.name, '') }}">{% endfor %}
+    {% else %}
+    {% for f in scope.ident %}{{ field_input(f, "id_" ~ f.name, form.get("id_" ~ f.name, ""), uidbase ~ "-" ~ s.key ~ "-id-" ~ f.name) }}{% endfor %}
+    {% endif %}
+    {% for f in s.fields %}{{ field_input(f, "v_" ~ f.name, current.get(f.name, ""), uidbase ~ "-" ~ s.key ~ "-" ~ f.name) }}{% endfor %}
+    <div class="button-row">
+      {% if s.settable %}<button type="submit" name="action" value="set" class="btn btn-quiet">Set</button>{% endif %}
+      {% if s.removable %}<button type="submit" name="action" value="remove" class="btn btn-quiet">Remove</button>{% endif %}
+    </div>
+  </form>
+  {% endfor %}
+  </div>
+</details>
+{% endfor %}
+{%- endmacro %}
+
+{% block content %}
+{% set role = current_role(request) %}
+{% if unknown is defined %}
+<h1 class="page-title">Routing protocols</h1>
+<div class="card"><p>NXray has no page called {{ unknown }}. <a href="/routing/protocols">Back to Routing protocols</a>.</p></div>
+{% else %}
+<p class="breadcrumb"><a href="/routing/protocols">← Routing protocols</a></p>
+<h1 class="page-title">{{ proto.name }}</h1>
+<p class="lead">{{ proto.summary }}</p>
+{% if proto.about %}<p class="note">{{ proto.about }}</p>{% endif %}
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  {% if role == "admin" %}<p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>{% else %}<p class="note">An NXray admin sets it up on the Switch page.</p>{% endif %}
+</div>
+{% elif page is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p>
+</div>
+{% else %}
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="protocol">
+    <input type="hidden" name="protocol" value="{{ proto.key }}">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+{% if page.missing %}
+<section class="card">
+  <p>{% for name in page.missing %}{{ feature_command(name) }}{% if not loop.last %} and {% endif %}{% endfor %} {{ "is" if page.missing|length == 1 else "are" }} off on the switch, so {{ proto.name }} is not running. {% if role == "admin" %}Turn {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% endif %}</p>
+</section>
+{% else %}
+{% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
+{% for n in page.view.notes %}<p class="note">{{ n }}</p>{% endfor %}
+
+{% for t in page.view.tables %}
+<section class="card">
+  <h2 class="card-title">{{ t.title }}</h2>
+  {% if t.rows %}
+  <table class="table table-devices">
+    <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for r in t.rows %}<tr>{% for cell in r %}<td class="wrap">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">{{ t.empty }}</p>
+  {% endif %}
+  {% if t.note %}<p class="note">{{ t.note }}</p>{% endif %}
+</section>
+{% endfor %}
+
+{% for scope in proto.scopes %}
+{% set sidx = loop.index %}
+<section class="card" id="{{ scope.key }}">
+  <h2 class="card-title">{{ scope.label }}</h2>
+  {% if scope.help %}<p class="lead">{{ scope.help }}</p>{% endif %}
+  {% set places = page.view.of(scope.key) %}
+  {% for inst in places %}
+  <div class="protocol-place">
+    <h3>{{ inst.title }}</h3>
+    {% if inst.facts %}
+    <dl class="facts">{% for label, value in inst.facts %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+    {% endif %}
+    {% if can_change %}
+    {{ setting_forms(scope, inst, "s" ~ sidx ~ "-i" ~ loop.index) }}
+    {% if scope.delete is not none %}
+    <form method="post" action="/routing/protocols/{{ proto.key }}/change" class="inline form-after">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="scope" value="{{ scope.key }}">
+      <input type="hidden" name="action" value="delete">
+      {% for f in scope.ident %}<input type="hidden" name="id_{{ f.name }}" value="{{ inst.ident.get(f.name, '') }}">{% endfor %}
+      <button type="submit" class="btn btn-quiet">Delete {{ inst.title }}</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="dim">None on the switch.</p>
+  {% endfor %}
+
+  {% if can_change %}
+  {% if scope.create %}
+  <form method="post" action="/routing/protocols/{{ proto.key }}/change" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="scope" value="{{ scope.key }}">
+    <input type="hidden" name="action" value="create">
+    <p class="label">{{ scope.create_label or ("Make a " ~ scope.label|lower) }}</p>
+    {% for f in scope.ident %}{{ field_input(f, "id_" ~ f.name, form.get("id_" ~ f.name, "") if form.get("scope") == scope.key else "", "new-s" ~ sidx ~ "-" ~ f.name) }}{% endfor %}
+    <button type="submit" class="btn btn-quiet">{{ scope.create_label or ("Make " ~ scope.label|lower) }}</button>
+  </form>
+  {% endif %}
+  {% if scope.settings %}
+  <details class="settings-group form-after">
+    <summary>Settings for {{ "another" if places else "a" }} {{ scope.label|lower }}</summary>
+    {{ setting_forms(scope, none, "s" ~ sidx ~ "-new") }}
+  </details>
+  {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+{% endif %}
+
+{% if role in ("admin", "operator") and not can_change %}
+<p class="note">Routing protocol changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %}.</p>
+{% elif role not in ("admin", "operator") %}
+<p class="note">Your role ({{ role }}) can look at routing protocols but not change them.</p>
+{% else %}
+<p class="note">Each change asks you to confirm first and shows the lines the switch gets.</p>
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

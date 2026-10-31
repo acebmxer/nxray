@@ -1,0 +1,38 @@
+{
+  "TABLE_asn": {
+    "ROW_asn": {
+      "asn": "100",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default",
+          "TABLE_if": {
+            "ROW_if": [
+              {
+                "ifname": "Ethernet1/54",
+                "peer_count": "1",
+                "xmitq_unrel": "0",
+                "xmitq_rel": "0",
+                "mean_srtt": "6",
+                "send_intvl_unrel": "0",
+                "send_intvl_rel": "0",
+                "mcast_flow_delay": "50",
+                "pending_routes": "0"
+              },
+              {
+                "ifname": "Vlan10",
+                "peer_count": "1",
+                "xmitq_unrel": "0",
+                "xmitq_rel": "0",
+                "mean_srtt": "7",
+                "send_intvl_unrel": "0",
+                "send_intvl_rel": "0",
+                "mcast_flow_delay": "50",
+                "pending_routes": "0"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

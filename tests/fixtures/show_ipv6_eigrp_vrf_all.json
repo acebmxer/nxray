@@ -1,0 +1,57 @@
+{
+  "TABLE_asn": {
+    "ROW_asn": {
+      "asn": 0,
+      "router_id": "192.0.2.1",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default",
+          "eigrp_ptag": "nxprobe",
+          "instance_num": 1,
+          "state": 0,
+          "authen_md5": "false",
+          "authen_keychain": "none",
+          "metric_weight_k1": 1,
+          "metric_weight_k2": 0,
+          "metric_weight_k3": 1,
+          "metric_weight_k4": 0,
+          "metric_weight_k5": 0,
+          "metric_version": "32bit",
+          "eigrp_proto": 88,
+          "multicast_groupv6": "ff02::a",
+          "int_distance": 90,
+          "ext_distance": 170,
+          "max_paths": 8,
+          "active_interval": 3,
+          "num_interfaces": 0,
+          "num_lo_interfaces": 0,
+          "num_pass_interfaces": 1,
+          "num_peers": 0,
+          "tmap_route_map": "",
+          "default_info_originate": "false",
+          "graceful_restart": "true",
+          "stub_configured": "false",
+          "isolate": "false",
+          "nsf_converge_time": 120,
+          "nsf_converge_expiries": 0,
+          "nsf_route_hold_time": 240,
+          "nsf_route_hold_expiries": 0,
+          "nsf_signal_time": 20,
+          "nsf_signal_expiries": 0,
+          "redist_max_prefix": "false",
+          "bfd_enabled": "false",
+          "eigrp_mmode": "true",
+          "await_redist_proto_converge": "false",
+          "suppress_fib_pending": "true",
+          "nsf_in_progress": "false",
+          "TABLE_redist": {
+            "ROW_redist": {
+              "redist_srcproto": "static",
+              "redist_routemap": "nxprobe-rm"
+            }
+          }
+        }
+      }
+    }
+  }
+}

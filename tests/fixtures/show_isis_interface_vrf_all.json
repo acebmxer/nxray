@@ -1,0 +1,74 @@
+{
+  "TABLE_process_tag": {
+    "ROW_process_tag": {
+      "process-tag-out": "nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf-name-out": "default",
+          "TABLE_interface": {
+            "ROW_interface": {
+              "intf-name-out": "Ethernet1/54",
+              "intf-status-out": "protocol-down/link-down/admin-up",
+              "intf-state-out": "Down",
+              "intf-internal-state-out": "Ready",
+              "intf-ix-out": 1,
+              "intf-cid-out": 1,
+              "intf-ckt-type-out": "L2",
+              "intf-passive-mask-out": "true",
+              "intf-passive-mask-lvl-out": "level-1-2",
+              "intf-mgrp-set-out": "false",
+              "intf-p2p-type-out": "true",
+              "intf-p2p-ext-local-cid-out": "1A006A00",
+              "intf-p2p-cid-out": "0000.0000.0000.00",
+              "intf-retx-intv-out": 5,
+              "intf-retx-throttle-out": 66,
+              "intf-loopback-type-out": "false",
+              "intf-lsp-intv-out": 33,
+              "intf-mtu-out": "1500",
+              "intf-p2p-adj-count-out": 0,
+              "intf-p2p-adj-up-count-out": 0,
+              "intf-p2p-prio-out": "64",
+              "intf-p2p-hello-intv-out": "5",
+              "intf-p2p-hello-multi-out": 3,
+              "intf-p2p-hello-next-out": "Inactive",
+              "TABLE_auth": {
+                "ROW_auth": {
+                  "intf-auth-info-out": "    No auth type and keychain",
+                  "intf-auth-chk-info-out": "    Auth check set"
+                }
+              },
+              "TABLE_p2p": {
+                "ROW_p2p": [
+                  {
+                    "intf-p2p-lvl-out": "1",
+                    "intf-p2p-adj-lvl-out": 0,
+                    "intf-p2p-adj-up-lvl-out": 0,
+                    "intf-p2p-metric-lvl-out": 1,
+                    "intf-p2p-csnp-lvl-out": "60",
+                    "intf-p2p-csnp-nxt-lvl-out": "Inactive",
+                    "intf-p2p-lspid-last-lvl-out": "ffff.ffff.ffff.ff-ff"
+                  },
+                  {
+                    "intf-p2p-lvl-out": "2",
+                    "intf-p2p-adj-lvl-out": 0,
+                    "intf-p2p-adj-up-lvl-out": 0,
+                    "intf-p2p-metric-lvl-out": 20,
+                    "intf-p2p-csnp-lvl-out": "60",
+                    "intf-p2p-csnp-nxt-lvl-out": "Inactive",
+                    "intf-p2p-lspid-last-lvl-out": "ffff.ffff.ffff.ff-ff"
+                  }
+                ]
+              },
+              "TABLE_bfd": {
+                "ROW_bfd": {
+                  "intf-bfd-ipv4-state-out": "false",
+                  "intf-bfd-ipv6-state-out": "false"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

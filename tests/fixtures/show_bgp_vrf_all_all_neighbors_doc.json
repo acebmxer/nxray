@@ -1,0 +1,77 @@
+{
+  "TABLE_neighbor": {
+    "ROW_neighbor": {
+      "neighbor": "198.51.100.2",
+      "remoteas": 65010,
+      "link": "ebgp",
+      "index": 5,
+      "description": "lab-peer",
+      "version": 4,
+      "remote-id": "198.51.100.2",
+      "prevstate": "OpenConfirm",
+      "state": "Established",
+      "up": "true",
+      "vrf": "nxprobe-v",
+      "elapsedtime": "P1DT2H3M4S",
+      "restarttime": "0.000000",
+      "sourceif": "Eth1/54",
+      "bfd": "false",
+      "ttlsecurity": "false",
+      "passiveonly": "true",
+      "localas-inactive": "false",
+      "remove-privateas": "true",
+      "holdtime": 90,
+      "keepalivetime": 30,
+      "msgrecvd": 1520,
+      "msgsent": 1498,
+      "resetreason": "No error",
+      "TABLE_peraf": {
+        "ROW_peraf": {
+          "per-afi": "1",
+          "TABLE_persaf": {
+            "ROW_persaf": {
+              "per-safi": "1",
+              "per-af-name": "IPv4 Unicast",
+              "pfxrecvd": "12",
+              "pathsrecvd": "12",
+              "pfxsent": "3",
+              "pathssent": "3",
+              "insoftreconfigallowed": "true",
+              "insoftreconfigallowedalways": "true",
+              "sendcommunity": "true",
+              "sendextcommunity": "true",
+              "asoverride": "true",
+              "peerascheckdisabled": "true",
+              "rrconfigured": "true",
+              "defaultoriginate": "true",
+              "TABLE_inpolicy": {
+                "ROW_inpolicy": [
+                  {
+                    "inpolicynr": "1",
+                    "inpolicytype": "filter-list",
+                    "inpolicyname": "lab-aspath",
+                    "inpolicyhandle": "true"
+                  },
+                  {
+                    "inpolicynr": "2",
+                    "inpolicytype": "route-map",
+                    "inpolicyname": "lab-in",
+                    "inpolicyhandle": "true"
+                  }
+                ]
+              },
+              "TABLE_outpolicy": {
+                "ROW_outpolicy": {
+                  "outpolicynr": "1",
+                  "outpolicytype": "prefix-list",
+                  "outpolicyname": "lab-out",
+                  "outpolicyhandle": "true"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

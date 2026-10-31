@@ -1,0 +1,77 @@
+{
+  "TABLE_grp": {
+    "ROW_grp": [
+      {
+        "intf": "Ethernet1/54",
+        "id": 40,
+        "af": "IPv4",
+        "state": "INIT",
+        "duration": "0.357 secs",
+        "vip": "192.0.2.252",
+        "vmac": "0000.5e00.0128",
+        "adv": 200,
+        "preempt": "enabled",
+        "priority": 115,
+        "cfg_priority": 115,
+        "adv_sent": 0,
+        "adv_err": 0,
+        "adv_recvd": 0,
+        "v2adv_sent": 0,
+        "v2adv_err": 0,
+        "v2adv_recvd": 0,
+        "drops": 0,
+        "incompat": 0,
+        "conflict": 0,
+        "bad_count": 0,
+        "bad_config": 0,
+        "bad_advert": 0,
+        "bad_state": 0,
+        "bad_other": 0,
+        "init_master": 0,
+        "init_backup": 0,
+        "back_master": 0,
+        "master_back": 0,
+        "mast_init": 0,
+        "back_init": 0
+      },
+      {
+        "intf": "Ethernet1/54",
+        "id": 41,
+        "af": "IPv6",
+        "state": "INIT",
+        "duration": "0.193 secs",
+        "vip": "fe80::41",
+        "vmac": "0000.5e00.0229",
+        "adv": 1000,
+        "preempt": "enabled",
+        "priority": 100,
+        "cfg_priority": 100,
+        "adv_sent": 0,
+        "adv_err": 0,
+        "adv_recvd": 0,
+        "v2adv_sent": 0,
+        "v2adv_err": 0,
+        "v2adv_recvd": 0,
+        "drops": 0,
+        "incompat": 0,
+        "conflict": 0,
+        "bad_count": 0,
+        "bad_config": 0,
+        "bad_advert": 0,
+        "bad_state": 0,
+        "bad_other": 0,
+        "init_master": 0,
+        "init_backup": 0,
+        "back_master": 0,
+        "master_back": 0,
+        "mast_init": 0,
+        "back_init": 0,
+        "TABLE_sec": {
+          "ROW_sec": {
+            "addr": "2001:db8:1::fd"
+          }
+        }
+      }
+    ]
+  }
+}

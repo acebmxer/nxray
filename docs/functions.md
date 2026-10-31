@@ -53,6 +53,8 @@ prose columns; those are a reviewer's job.
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
 | Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
+| Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
+| Read the switch's route table | `app/routing_protocols.py`, `load_overview` / `parse_routes` |
 | Read, add or remove static routes | `app/routing.py` (`load_routing`, `plan_add_static_route`, `plan_remove_static_route`); command from `NxapiClient.set_static_route` |
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
@@ -202,7 +204,10 @@ VLAN interface or routed port), `create_vrf(name)`, `delete_vrf(name)`,
 `set_interface_vrf(name, vrf, current=)` (`no vrf member` the old VRF, `vrf
 member` the new one; the switch deletes the interface's addresses),
 `set_static_route(vrf, prefix, next_hop, add=)` (one static route in default,
-or inside `vrf context`; never management) and `save_config()`; each builds its
+or inside `vrf context`; never management),
+`configure_protocol(protocol, scope, setting, action, ident, values)` (one
+change on a routing protocol page; the lines come from
+`routing_protocols.build_protocol_change`) and `save_config()`; each builds its
 commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
@@ -457,6 +462,12 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
+| `form_fields` | `(request) -> dict[str, str]` | The posted form as plain strings, for the protocol forms whose field names vary | `protocol_change` | v0.1.0 |
+| `render_protocols_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing protocols overview with a message | `protocols_page`, `switch_save` | v0.1.0 |
+| `protocols_page` | `(request, username) -> Response` | `GET /routing/protocols`: every protocol with whether its feature is on, and the route table per VRF | router | v0.1.0 |
+| `render_protocol_page` | `(request, username, key, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows one protocol's page with a message; `form` keeps what was typed (never secrets) | `protocol_page`, `protocol_change`, `switch_save` | v0.1.0 |
+| `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
+| `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
 | `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
 | `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, the VRFs and the static routes, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
 | `vlan_interface_create` | `(request, username, csrf, vlan, ipv4, ipv6, description, mtu, enabled, vrf, confirm) -> Response` | `POST /routing/vlan-interface/create`: asks to confirm, then makes a VLAN interface for a VLAN that has none, in the default VRF or another one | router | v0.1.0 |
@@ -701,6 +712,78 @@ A port-channel's LACP minimum links appears only in `show running-config`,
 which NXray's role may not read, so its form has no current value.
 NXray refuses to delete a port-channel that still has ports; the switch itself
 would take them out silently.
+
+## `app/protocols.py` — routing protocols as data: fields, settings, scopes
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
+| `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
+| `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
+| `text` | `(value: Any) -> str` | A value from switch output as stripped text | `protocols_*` parsers | v0.1.0 |
+| `route_age` | `(value: str) -> str` | An age as the switch writes it (`P1DT13H30M23S`) in short words (`1d 13h 30m`) | `routing_protocols.parse_routes`, `protocols_bgp` | v0.1.0 |
+| `table_rows` | `(body, table: str, row: str) -> list[dict]` | The rows of an NX-OS table, one row or many, also when the table is a list; deliberately not a change to `switch.rows` | `protocols_*` parsers, `routing_protocols.parse_routes` | v0.1.0 |
+| `vrf_field` | `(optional=True) -> Field` | The VRF identity field protocol scopes share | `protocols_*` | v0.1.0 |
+| `interface_field` | `() -> Field` | The interface identity field of interface scopes | `protocols_*` | v0.1.0 |
+| `source_field` | `(name="source", label="Source interface") -> Field` | A field for an interface whose address a protocol uses, loopbacks included (BGP update source, PIM register source, MSDP connect source) | `protocols_bgp`, `protocols_multicast` | v0.1.0 |
+
+## `app/routing_protocols.py` — the Routing protocols pages and the route table
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `protocol` | `(key: str) -> Protocol \| None` | The protocol a page key names | `routes/protocols`, `switch_save` | v0.1.0 |
+| `build_protocol_change` | `(key, scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for a protocol named by its key | `NxapiClient.configure_protocol`, `routes/protocols.protocol_change` | v0.1.0 |
+| `feature_command` | `(name: str) -> str` | The word typed after `feature` for a `show feature` name (`hsrp_engine` -> `hsrp`) | protocol pages | v0.1.0 |
+| `parse_routes` | `(body) -> list[Route]` | Every route of `show ip route vrf all` or `show ipv6 route vrf all`, with its source, next hops, distance, metric and age | `load_overview` | v0.1.0 |
+| `load_overview` | `(client) -> ProtocolsOverview` | Which protocols' features are on, and the route table; one request | `routes/protocols` | v0.1.0 |
+| `load_protocol_page` | `(client, proto) -> ProtocolPage` | The features, layer 3 interfaces and VRFs in one request, then the protocol's own show commands when it is on | `routes/protocols` | v0.1.0 |
+
+## `app/protocols_ospf.py` — OSPF and OSPFv3 pages
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_ospf` | `(bodies: list[dict]) -> ProtocolView` | The OSPF page from show ip ospf / interface / neighbors / summary-address vrf all: processes, VRF parts, interfaces with prefilled values; neighbor, interface, area and summary tables | `OSPF.parse` (`routing_protocols.load_protocol_page`) | v0.1.0 |
+| `parse_ospfv3` | `(bodies: list[dict]) -> ProtocolView` | The OSPFv3 page from show ospfv3 / interface / neighbors vrf all: processes, VRF parts, IPv6 address families, interfaces; neighbor, interface and area tables | `OSPFV3.parse` (`routing_protocols.load_protocol_page`) | v0.1.0 |
+
+## `app/protocols_bgp.py` — BGP: the process, VRF parts, address families and neighbors
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_bgp` | `(bodies: list[dict]) -> ProtocolView` | The BGP page from `show bgp process`, `show bgp all summary vrf all`, `show bgp vrf all all neighbors`, `show bgp sessions vrf all` and `show bgp ipv6 unicast vrf all`: process, VRF parts, address families, neighbors and their address families with the settings the output tells; neighbor, session and IPv6 BGP tables | `BGP.parse` | v0.1.0 |
+
+## `app/protocols_igp.py` — EIGRP, RIP and IS-IS pages
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_eigrp` | `(bodies: list[dict]) -> ProtocolView` | EIGRP processes, interfaces and neighbors from the five EIGRP reads | `EIGRP.parse` | v0.1.0 |
+| `parse_rip` | `(bodies: list[dict]) -> ProtocolView` | RIP processes, families, interfaces and neighbors from the five RIP reads | `RIP.parse` | v0.1.0 |
+| `parse_isis` | `(bodies: list[dict]) -> ProtocolView` | IS-IS processes, families, interfaces and adjacencies from the three IS-IS reads | `ISIS.parse` | v0.1.0 |
+
+## `app/protocols_fhrp.py` — gateway backup: HSRP, VRRP and VRRPv3 groups
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_hsrp` | `(bodies: list[dict]) -> ProtocolView` | HSRP interfaces and groups, with a groups table, from `show hsrp` | `HSRP.parse` | v0.1.0 |
+| `parse_vrrp` | `(bodies: list[dict]) -> ProtocolView` | VRRP groups and a groups table from `show vrrp detail` (falls back to `show vrrp`) | `VRRP.parse` | v0.1.0 |
+| `parse_vrrpv3` | `(bodies: list[dict]) -> ProtocolView` | VRRPv3 groups per address family and a groups table from `show vrrpv3 detail` (falls back to `show vrrpv3`) | `VRRPV3.parse` | v0.1.0 |
+
+## `app/protocols_multicast.py` — PIM, PIM6, IGMP, MSDP and BFD pages
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pim` | `(bodies: list[dict]) -> ProtocolView` | PIM's VRFs (RPs, SSM range, policies) and interfaces, plus tables of interfaces, neighbors, RPs, group ranges, multicast routes | `PIM.parse` | v0.1.0 |
+| `parse_pim6` | `(bodies: list[dict]) -> ProtocolView` | PIM6's VRFs (RPs) and interfaces, plus tables of interfaces and RPs | `PIM6.parse` | v0.1.0 |
+| `parse_igmp` | `(bodies: list[dict]) -> ProtocolView` | IGMP interfaces with their version and timers, plus a table | `IGMP.parse` | v0.1.0 |
+| `parse_msdp` | `(bodies: list[dict]) -> ProtocolView` | MSDP's VRFs and peers with their settings, plus a peer table | `MSDP.parse` | v0.1.0 |
+| `parse_bfd` | `(bodies: list[dict]) -> ProtocolView` | The switch-wide BFD place, interfaces with sessions, and a session table (the two-row form is merged) | `BFD.parse` | v0.1.0 |
+
+## `app/protocols_policy.py` — Routing policy: route-maps, prefix-lists, key chains
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_policy` | `(bodies: list[dict]) -> ProtocolView` | Routing policy page from show route-map / ip / ipv6 prefix-list / key chain | `POLICY.parse` | v0.1.0 |
+| `check_prefix_entry` | `(prefix: str, ge: str = "", le: str = "") -> tuple[str, str, str]` | Checks a prefix-list entry's length < ge <= le <= 32/128 | the prefix-list entry setting's `check` | v0.1.0 |
 
 ## `app/routing.py` — VLAN interfaces, routed ports, their addresses, VRFs and static routes
 

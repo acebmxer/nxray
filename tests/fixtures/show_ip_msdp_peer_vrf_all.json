@@ -1,0 +1,43 @@
+{
+  "TABLE_peer": {
+    "ROW_peer": {
+      "peer-ipaddr": "198.51.100.9",
+      "out-vrf": "default",
+      "peer-asn": "0",
+      "local-ipaddr": "192.0.2.1",
+      "local-iface": "Ethernet1/54",
+      "peer-description": "probe-msdp",
+      "connection-status": "Connecting",
+      "peer-uptime": "P2DT13H19M57S",
+      "peer-password": "false",
+      "KeepaliveInterval": "60",
+      "KeepaliveTimeout": "90",
+      "ReconnectionInterval": "10",
+      "sa-in-policy": "none",
+      "sa-out-policy": "none",
+      "mesh-name": "no",
+      "last-rcvd": "PT0S",
+      "sa-rcvd": 0,
+      "sa-sent": 0,
+      "sa-req-rcvd": 0,
+      "sa-req-sent": 0,
+      "sa-resp-rcvd": 0,
+      "sa-resp-sent": 0,
+      "in-ctrl-msgs": 0,
+      "out-ctrl-msgs": 0,
+      "in-data-msgs": 0,
+      "out-data-msgs": 0,
+      "sa-ka-rcvd": 0,
+      "sa-ka-sent": 0,
+      "sa-notif-rcvd": 0,
+      "sa-notif-sent": 0,
+      "rem-port": 0,
+      "local-port": 0,
+      "rpf-failures": 0,
+      "cache-lifetime": "PT3M30S",
+      "estb-transitions": 0,
+      "conn-attempts": 1,
+      "discont-time": "PT2S"
+    }
+  }
+}

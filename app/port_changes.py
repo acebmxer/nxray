@@ -10,7 +10,10 @@ and IPv6 addresses when routed; on the port-channels, the same settings plus
 their description and LACP minimum links, and deleting them; on the VLAN
 interfaces, making and deleting them, their addresses, description, MTU and
 on/off; the VRFs, making and deleting them and moving VLAN interfaces and
-routed ports between them, and their static routes; switch-wide, creating,
+routed ports between them, and their static routes; the routing protocols
+(OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP,
+MSDP, BFD), their settings on those interfaces, and the route-maps,
+prefix-lists and key chains they use; switch-wide, creating,
 naming and deleting VLANs, splitting a 100G port into four and joining it
 again, turning switch features on and off, setting how long learned MAC addresses are kept,
 adding and removing static MAC addresses, clearing learned ones, and the
@@ -47,7 +50,8 @@ through with NX-API answering at once), so NXray adds no wait for it.
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
-rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules.
+rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
+10 the routing protocol rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -255,11 +259,90 @@ ROUTE_RULES = (
     "rule 62 permit command conf t ; vrf context * ; no ipv6 route *",
 )
 
+# Routing protocol rules, added in ROLE_VERSION 10. Proven on cisco-25gb
+# (2026-10-31) with a throwaway account on one unused port: a rule naming a
+# configuration mode ("conf t ; router ospf *") covers every line inside it,
+# however deep (a VRF, an address family, a neighbor and its address family,
+# a route-map's match and set lines, a key chain's keys); the interface rules
+# name the start of each protocol's lines, with "*" also in the middle
+# ("ip * eigrp *" matched "ip passive-interface eigrp <tag>"). PIM and MSDP
+# lines inside a VRF (rules 105-108) and the IPv6 EIGRP rules (99-100) were
+# not tried on their own: they are the same shapes as the ones that were.
+# The port list stays as it was, so this needs no SSH save and no wait.
+PROTOCOL_RULES = (
+    "rule 63 permit command conf t ; router ospf *",
+    "rule 64 permit command conf t ; no router ospf *",
+    "rule 65 permit command conf t ; router ospfv3 *",
+    "rule 66 permit command conf t ; no router ospfv3 *",
+    "rule 67 permit command conf t ; router bgp *",
+    "rule 68 permit command conf t ; no router bgp *",
+    "rule 69 permit command conf t ; router eigrp *",
+    "rule 70 permit command conf t ; no router eigrp *",
+    "rule 71 permit command conf t ; router rip *",
+    "rule 72 permit command conf t ; no router rip *",
+    "rule 73 permit command conf t ; router isis *",
+    "rule 74 permit command conf t ; no router isis *",
+    "rule 75 permit command conf t ; route-map *",
+    "rule 76 permit command conf t ; no route-map *",
+    "rule 77 permit command conf t ; ip prefix-list *",
+    "rule 78 permit command conf t ; no ip prefix-list *",
+    "rule 79 permit command conf t ; ipv6 prefix-list *",
+    "rule 80 permit command conf t ; no ipv6 prefix-list *",
+    "rule 81 permit command conf t ; key chain *",
+    "rule 82 permit command conf t ; no key chain *",
+    "rule 83 permit command conf t ; ip pim *",
+    "rule 84 permit command conf t ; no ip pim *",
+    "rule 85 permit command conf t ; ipv6 pim *",
+    "rule 86 permit command conf t ; no ipv6 pim *",
+    "rule 87 permit command conf t ; ip msdp *",
+    "rule 88 permit command conf t ; no ip msdp *",
+    "rule 89 permit command conf t ; bfd *",
+    "rule 90 permit command conf t ; no bfd *",
+    "rule 91 permit command conf t ; interface * ; ip router *",
+    "rule 92 permit command conf t ; interface * ; no ip router *",
+    "rule 93 permit command conf t ; interface * ; ipv6 router *",
+    "rule 94 permit command conf t ; interface * ; no ipv6 router *",
+    "rule 95 permit command conf t ; interface * ; ip ospf *",
+    "rule 96 permit command conf t ; interface * ; no ip ospf *",
+    "rule 97 permit command conf t ; interface * ; ospfv3 *",
+    "rule 98 permit command conf t ; interface * ; no ospfv3 *",
+    "rule 99 permit command conf t ; interface * ; ipv6 * eigrp *",
+    "rule 100 permit command conf t ; interface * ; no ipv6 * eigrp *",
+    "rule 101 permit command conf t ; interface * ; ip * eigrp *",
+    "rule 102 permit command conf t ; interface * ; no ip * eigrp *",
+    "rule 103 permit command conf t ; interface * ; ip rip *",
+    "rule 104 permit command conf t ; interface * ; no ip rip *",
+    "rule 105 permit command conf t ; vrf context * ; ip pim *",
+    "rule 106 permit command conf t ; vrf context * ; no ip pim *",
+    "rule 107 permit command conf t ; vrf context * ; ipv6 pim *",
+    "rule 108 permit command conf t ; vrf context * ; no ipv6 pim *",
+    "rule 109 permit command conf t ; vrf context * ; ip msdp *",
+    "rule 110 permit command conf t ; vrf context * ; no ip msdp *",
+    "rule 111 permit command conf t ; interface * ; ipv6 rip *",
+    "rule 112 permit command conf t ; interface * ; no ipv6 rip *",
+    "rule 113 permit command conf t ; interface * ; isis *",
+    "rule 114 permit command conf t ; interface * ; no isis *",
+    "rule 115 permit command conf t ; interface * ; hsrp *",
+    "rule 116 permit command conf t ; interface * ; no hsrp *",
+    "rule 117 permit command conf t ; interface * ; vrrp *",
+    "rule 118 permit command conf t ; interface * ; no vrrp *",
+    "rule 119 permit command conf t ; interface * ; vrrpv3 *",
+    "rule 120 permit command conf t ; interface * ; no vrrpv3 *",
+    "rule 121 permit command conf t ; interface * ; ip pim *",
+    "rule 122 permit command conf t ; interface * ; no ip pim *",
+    "rule 123 permit command conf t ; interface * ; ipv6 pim *",
+    "rule 124 permit command conf t ; interface * ; no ipv6 pim *",
+    "rule 125 permit command conf t ; interface * ; ip igmp *",
+    "rule 126 permit command conf t ; interface * ; no ip igmp *",
+    "rule 127 permit command conf t ; interface * ; bfd *",
+    "rule 128 permit command conf t ; interface * ; no bfd *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 9
+ROLE_VERSION = 10
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -271,6 +354,7 @@ _ADDED_BY_VERSION = {
     7: "VLAN interface",
     8: "VRF",
     9: "static route",
+    10: "routing protocol",
 }
 
 
@@ -335,6 +419,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *LAYER3_RULES,
         *VRF_RULES,
         *ROUTE_RULES,
+        *PROTOCOL_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

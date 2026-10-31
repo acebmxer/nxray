@@ -1,0 +1,63 @@
+{
+  "TABLE_bfdNeighbor": {
+    "ROW_bfdNeighbor": [
+      {
+        "local_disc": 1090519041,
+        "header": 1,
+        "sess_type": "SH",
+        "vrf_name": "default",
+        "src_ip_addr": "192.0.2.1",
+        "dest_ip_addr": "192.0.2.2"
+      },
+      {
+        "local_disc": 1090519041,
+        "remote_disc": 1090519045,
+        "local_state": "Up",
+        "remote_state": "Up",
+        "holddown": 642,
+        "cur_detect_mult": 3,
+        "intf": "Eth1/54",
+        "echo": 0,
+        "min_tx": 250000,
+        "min_rx": 250000,
+        "up_time": 6888000,
+        "down_reason": "None",
+        "auth": "None",
+        "TABLE_bfdNeighborApp": {
+          "ROW_bfdNeighborApp": [
+            {
+              "app": "bgp"
+            },
+            {
+              "app": "pim"
+            }
+          ]
+        }
+      },
+      {
+        "local_disc": 1090519042,
+        "header": 0,
+        "sess_type": "SH",
+        "vrf_name": "tenant-a",
+        "src_ipv6_addr": "2001:db8:1::1",
+        "dest_ipv6_addr": "2001:db8:1::2"
+      },
+      {
+        "local_disc": 1090519042,
+        "remote_disc": 0,
+        "local_state": "Down",
+        "remote_state": "Down",
+        "holddown": 0,
+        "cur_detect_mult": 3,
+        "intf": "Vlan20",
+        "down_reason": "No Diagnostic",
+        "auth": "None",
+        "TABLE_bfdNeighborApp": {
+          "ROW_bfdNeighborApp": {
+            "app": "ospfv3"
+          }
+        }
+      }
+    ]
+  }
+}

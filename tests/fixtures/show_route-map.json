@@ -1,0 +1,21 @@
+{
+  "TABLE_rmap": {
+    "ROW_rmap": {
+      "name": "nxprobe-rm",
+      "action": "permit",
+      "seq": 10,
+      "TABLE_rmap_match": {
+        "ROW_rmap_match": {
+          "match_type": "ip address prefix-lists",
+          "match_stmt": "nxprobe-pl"
+        }
+      },
+      "TABLE_rmap_set": {
+        "ROW_rmap_set": {
+          "set_type": "metric",
+          "set_stmt": "100"
+        }
+      }
+    }
+  }
+}

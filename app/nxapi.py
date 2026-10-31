@@ -1191,6 +1191,29 @@ class NxapiClient:
         commands = [line] if vrf == DEFAULT_VRF else [f"vrf context {validate_vrf_name(vrf)}", line]
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
+    def configure_protocol(
+        self,
+        protocol: str,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on a routing protocol's page (OSPF, BGP, HSRP, route-maps, ...).
+
+        The lines are built here from the protocol's own description and the
+        checked values (``routing_protocols.build_protocol_change``): entering the
+        place (``router ospf core``, ``interface Vlan10``) and the one setting
+        line, or making or deleting the place. Secrets are masked in error
+        messages.
+        """
+        # Imported here: the protocol modules use this module's checks.
+        from app.routing_protocols import build_protocol_change
+
+        change = build_protocol_change(protocol, scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.
 

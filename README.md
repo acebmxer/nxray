@@ -24,7 +24,9 @@ ports on or off, edit their descriptions, create, rename and delete VLANs, set t
 VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
-and IPv6 addresses, make VRFs and move interfaces between them, add static routes, turn switch features
+and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
+OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
+route-maps, prefix-lists and key chains, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
@@ -124,7 +126,7 @@ default: *(built)*.
 14. **Link aggregation**: port-channels and LACP. *(built)*
 15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
     routed ports: *(built)*. VRFs: *(built)*. Static routes: *(built)*. Routing
-    protocols: *(planned)*
+    protocols: *(built)*
 16. **Spanning tree.** *(planned)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(planned)*

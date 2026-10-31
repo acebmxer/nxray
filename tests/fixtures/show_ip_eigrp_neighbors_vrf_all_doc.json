@@ -1,0 +1,61 @@
+{
+  "TABLE_asn": {
+    "ROW_asn": [
+      {
+        "asn": "100",
+        "TABLE_vrf": {
+          "ROW_vrf": {
+            "vrf": "default",
+            "TABLE_peer": {
+              "ROW_peer": [
+                {
+                  "peer_handle": "0",
+                  "peer_ipaddr": "192.0.2.2",
+                  "peer_ifname": "Eth1/54",
+                  "peer_holdtime": "13",
+                  "peer_srtt": "6",
+                  "peer_rto": "50",
+                  "peer_xmitq_count": "0",
+                  "peer_last_seqno": "4",
+                  "peer_uptime": "PT46M49S"
+                },
+                {
+                  "peer_handle": "1",
+                  "peer_ipaddr": "192.0.2.3",
+                  "peer_ifname": "Vlan10",
+                  "peer_holdtime": "11",
+                  "peer_srtt": "7",
+                  "peer_rto": "50",
+                  "peer_xmitq_count": "0",
+                  "peer_last_seqno": "9",
+                  "peer_uptime": "P1DT2H3M4S"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "asn": "200",
+        "TABLE_vrf": {
+          "ROW_vrf": {
+            "vrf": "lab",
+            "TABLE_peer": {
+              "ROW_peer": {
+                "peer_handle": "0",
+                "peer_ipaddr": "198.51.100.2",
+                "peer_ifname": "Eth1/53",
+                "peer_holdtime": "14",
+                "peer_srtt": "1",
+                "peer_rto": "50",
+                "peer_xmitq_count": "0",
+                "peer_last_seqno": "2",
+                "peer_uptime": "PT10S"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

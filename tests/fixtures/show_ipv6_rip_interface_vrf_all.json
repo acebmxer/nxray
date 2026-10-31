@@ -1,0 +1,30 @@
+{
+  "TABLE_inst": {
+    "ROW_inst": {
+      "inst-name": "rip-nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default",
+          "TABLE_inter": {
+            "ROW_inter": {
+              "if-name": "Ethernet1/54",
+              "if-status": "protocol-down/link-down/admin-up",
+              "protocol-up": "false",
+              "local-only": "false",
+              "no-addr-conf": "true",
+              "if-metric": 1,
+              "poison-reverse": "false",
+              "if-passive": "true",
+              "route-dist-filter": "false",
+              "TABLE_auth": {
+                "ROW_auth": {
+                  "auth-ena": "false"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

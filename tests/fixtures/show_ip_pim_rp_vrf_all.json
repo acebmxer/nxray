@@ -1,0 +1,34 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "out-context": "default",
+      "is-bsr-enabled": "BSR disabled",
+      "is-autorp-enabled": "Auto-RP disabled",
+      "rp-cand-policy-name": "None",
+      "bsr-policy-name": "None",
+      "rp-announce-policy-name": "None",
+      "rp-discovery-policy-name": "None",
+      "TABLE_rp": {
+        "ROW_rp": {
+          "rp-addr": "192.0.2.10",
+          "is-rp-local": "FALSE",
+          "df-ordinal": 0,
+          "rp-uptime": "00:00:02",
+          "rp-priority": 255,
+          "is_autorp_source": "false",
+          "is_bsr_source": "false",
+          "is_static_source": "true",
+          "rp-source": "local",
+          "TABLE_grange": {
+            "ROW_grange": {
+              "grange-grp": "224.0.0.0",
+              "grange-masklen": 4,
+              "grange-is-deny": "false",
+              "is-bidir-grp": "false"
+            }
+          }
+        }
+      }
+    }
+  }
+}

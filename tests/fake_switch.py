@@ -62,7 +62,7 @@ import httpx
 
 from app.features import CATALOG
 from app.switch_ssh import SshAuthError, SshUnreachable
-from tests.conftest import load_fixture
+from tests.conftest import FIXTURES, load_fixture
 
 ADMIN_PASSWORD = "Adm1n-switch-pw"
 
@@ -155,6 +155,54 @@ _SWITCHPORT = (
 # What follows "feature" -> the name show feature uses for it.
 _FEATURE_NAMES = {info.command: name for name, info in CATALOG.items() if info.command is not None}
 
+# Routing protocols (stage 15d). Global lines that enter a protocol's
+# configuration mode, interface lines of a protocol, and global one-line
+# settings; each with the feature it needs (None: always there). As on
+# cisco-25gb, a line of a feature that is off is "% Invalid command", and a
+# role rule naming a mode ("conf t ; router ospf *") covers every line inside
+# it, at any depth.
+_PROTOCOL_MODES = (
+    (re.compile(r"router ospf \S+"), "ospf"),
+    (re.compile(r"router ospfv3 \S+"), "ospfv3"),
+    (re.compile(r"router bgp \S+"), "bgp"),
+    (re.compile(r"router eigrp \S+"), "eigrp"),
+    (re.compile(r"router rip \S+"), "rip"),
+    (re.compile(r"router isis \S+"), "isis"),
+    (re.compile(r"route-map \S+ (?:permit|deny) \d+"), None),
+    (re.compile(r"key chain \S+"), None),
+)
+_PROTOCOL_GLOBAL = (
+    ("ip prefix-list ", None),
+    ("ipv6 prefix-list ", None),
+    ("ip pim ", "pim"),
+    ("ipv6 pim ", "pim6"),
+    ("ip msdp ", "msdp"),
+    ("bfd ", "bfd"),
+)
+_PROTOCOL_INTERFACE = (
+    (re.compile(r"ip router (ospf|eigrp|rip|isis) "), None),
+    (re.compile(r"ipv6 router (ospfv3|eigrp|rip|isis) "), None),
+    (re.compile(r"ip ospf "), "ospf"),
+    (re.compile(r"ospfv3 "), "ospfv3"),
+    (re.compile(r"ipv6? \S+ eigrp "), "eigrp"),
+    (re.compile(r"ipv6? eigrp "), "eigrp"),
+    (re.compile(r"ipv6? rip "), "rip"),
+    (re.compile(r"isis "), "isis"),
+    (re.compile(r"hsrp "), "hsrp_engine"),
+    (re.compile(r"vrrp "), "vrrp"),
+    (re.compile(r"vrrpv3 "), "vrrpv3"),
+    (re.compile(r"ip pim "), "pim"),
+    (re.compile(r"ipv6 pim "), "pim6"),
+    (re.compile(r"ip igmp "), "pim"),
+    (re.compile(r"bfd(?: |$)"), "bfd"),
+)
+# Lines inside a protocol's mode that open a deeper mode.
+_PROTOCOL_SUBMODES = re.compile(
+    r"(?:vrf \S+|address-family .+|neighbor \S+(?: remote-as \S+)?|key \d+|template .+)"
+)
+# Interface lines that open a group's mode (HSRP, VRRP, VRRPv3).
+_GROUP_MODES = re.compile(r"(?:hsrp \d+(?: ipv6)?|vrrp \d+|vrrpv3 \d+ address-family ipv[46])")
+
 # VLANs NX-OS keeps for itself (show system vlan reserved).
 RESERVED_VLANS = range(3968, 4096)
 
@@ -246,6 +294,9 @@ class FakeSwitch:
     static_routes: list[tuple[str, str, str]] = field(
         default_factory=lambda: [("management", "0.0.0.0/0", "203.0.113.254")]
     )
+    # Routing protocol lines as entered, each the mode path joined with " ; "
+    # ("router ospf core ; vrf lab ; router-id 192.0.2.1").
+    protocol_lines: list[str] = field(default_factory=list)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -302,6 +353,105 @@ class FakeSwitch:
                 return True
         return False
 
+    def _role_matches(self, user: str, path: str, interface: str | None) -> bool:
+        """Whether a rule of the account's roles covers ``path`` ("conf t ; router ospf
+        core ; router-id 1.1.1.1"): "*" stands for anything, and a rule naming a mode
+        covers every line inside it."""
+        for name in self.roles_of(user):
+            role = self.roles.get(name)
+            if role is None:
+                continue
+            if interface is not None and role.interface_policy_deny and not role.names(interface):
+                continue
+            for entity in role.entities:
+                pattern = re.escape(entity).replace(r"\*", ".*")
+                if re.fullmatch(pattern, path):
+                    return True
+        return False
+
+    def _feature_on(self, name: str | None) -> bool:
+        return name is None or self.feature_state.get(name, False)
+
+    def _record(self, path: str) -> None:
+        """Keep a protocol line; its "no" form removes it and everything under it."""
+        parts = path.split(" ; ")
+        last = parts[-1]
+        if last.startswith("no "):
+            gone = " ; ".join([*parts[:-1], last[3:]])
+            self.protocol_lines = [
+                line
+                for line in self.protocol_lines
+                if line != gone
+                and not line.startswith(gone + " ; ")
+                and not line.startswith(gone + " ")
+            ]
+        elif path not in self.protocol_lines:
+            self.protocol_lines.append(path)
+
+    def _protocol(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A routing protocol line, or None when ``cmd`` is not one."""
+        bare = cmd.removeprefix("no ")
+        denied = _error(ident, "% Permission denied for the role\n")
+        invalid = _error(ident, "% Invalid command at '^' marker.\n")
+        for pattern, feature in _PROTOCOL_MODES:
+            if pattern.fullmatch(bare):
+                if not self._feature_on(feature):
+                    return invalid, None
+                if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                    return denied, None
+                self._record(cmd)
+                return _ok(ident, None), None if cmd.startswith("no ") else ("protocol", cmd)
+        kind = context[0] if context else None
+        if kind in (None, "vrf"):
+            for prefix, feature in _PROTOCOL_GLOBAL:
+                if bare.startswith(prefix):
+                    if not self._feature_on(feature):
+                        return invalid, context
+                    where = f"vrf context {context[1]} ; " if kind == "vrf" and context else ""
+                    if not (is_admin or self._role_matches(user, f"conf t ; {where}{cmd}", None)):
+                        return denied, context
+                    self._record(f"{where}{cmd}")
+                    return _ok(ident, None), context
+            return None
+        if kind == "interface" and context:
+            name = context[1]
+            for pattern, feature in _PROTOCOL_INTERFACE:
+                if match := pattern.match(bare):
+                    needed = (
+                        feature
+                        or {
+                            "ospf": "ospf",
+                            "ospfv3": "ospfv3",
+                            "eigrp": "eigrp",
+                            "rip": "rip",
+                            "isis": "isis",
+                        }[match.group(1)]
+                    )
+                    if not self._feature_on(needed):
+                        return invalid, context
+                    path = f"interface {name} ; {cmd}"
+                    if not (is_admin or self._role_matches(user, f"conf t ; {path}", name)):
+                        return denied, context
+                    self._record(path)
+                    if not cmd.startswith("no ") and _GROUP_MODES.fullmatch(cmd):
+                        return _ok(ident, None), ("protocol", path)
+                    return _ok(ident, None), context
+            return None
+        if kind == "protocol" and context:
+            path = f"{context[1]} ; {cmd}"
+            interface = None
+            if context[1].startswith("interface "):
+                interface = context[1].split(" ; ")[0].removeprefix("interface ")
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+                return denied, context
+            self._record(path)
+            if not cmd.startswith("no ") and _PROTOCOL_SUBMODES.fullmatch(cmd):
+                return _ok(ident, None), ("protocol", path)
+            return _ok(ident, None), context
+        return None
+
     def _run(
         self, user: str, cmd: str, ident: int, context: tuple[str, str] | None
     ) -> tuple[dict[str, Any], tuple[str, str] | None]:
@@ -320,6 +470,8 @@ class FakeSwitch:
             return _ok(ident, self.bodies[cmd]), context
         if cmd.startswith("show "):
             return self._show(cmd, ident), context
+        if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
+            return protocol_reply
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
@@ -1323,6 +1475,11 @@ class FakeSwitch:
             return _ok(
                 ident, {"TABLE_template": {"ROW_template": rows[0] if len(rows) == 1 else rows}}
             )
+        for name in (cmd.replace(" ", "_"), cmd.replace(" ", "_") + "_doc"):
+            # The routing protocols' show commands, as recorded on cisco-25gb
+            # (or, for neighbors never seen live, shaped after Cisco's docs).
+            if FIXTURES.joinpath(name + ".json").exists():
+                return _ok(ident, load_fixture(name))
         return _error(ident, "% Invalid command\n")
 
     # ---- SSH ----------------------------------------------------------------

@@ -1,0 +1,96 @@
+{
+  "TABLE_ctx": {
+    "ROW_ctx": {
+      "ptag": "nxprobe",
+      "instance_number": 1,
+      "cname": "default",
+      "rid": "192.0.2.1",
+      "stateful_ha": "true",
+      "gr_ha": "true",
+      "gr_planned_only": "true",
+      "gr_grace_period": "PT60S",
+      "gr_state": "inactive",
+      "gr_last_status": "None",
+      "support_tos0_only": "true",
+      "support_opaque_lsa": "true",
+      "is_abr": "false",
+      "is_asbr": "true",
+      "admin_dist": 110,
+      "ref_bw": 40000,
+      "spf_start_time": "PT0S",
+      "spf_hold_time": "PT1S",
+      "spf_max_time": "PT5S",
+      "lsa_start_time": "PT0S",
+      "lsa_hold_time": "PT5S",
+      "lsa_max_time": "PT5S",
+      "min_lsa_arr_time": "PT1S",
+      "lsa_aging_pace": 10,
+      "spf_max_paths": 4,
+      "max_metric_adver": "false",
+      "asext_lsa_cnt": 1,
+      "asext_lsa_crc": "0xde74",
+      "area_total": 2,
+      "area_normal": 1,
+      "area_stub": 1,
+      "area_nssa": 0,
+      "act_area_total": 0,
+      "act_area_normal": 0,
+      "act_area_stub": 0,
+      "act_area_nssa": 0,
+      "no_discard_rt_ext": "false",
+      "no_discard_rt_int": "false",
+      "num_new_lsa_tx": 1,
+      "num_new_lsa_rx": 0,
+      "TABLE_redist": {
+        "ROW_redist": {
+          "proto": "static"
+        }
+      },
+      "TABLE_area": {
+        "ROW_area": [
+          {
+            "aname": "0.0.0.0",
+            "backbone_active": "false",
+            "age": 0,
+            "total_intf": 1,
+            "act_intf": 0,
+            "passive_intf": 1,
+            "loopback_intf": 0,
+            "stub": "false",
+            "nssa": "false",
+            "no_summary": "false",
+            "spf_runs": 1,
+            "last_spf_run_time": "PT0S",
+            "lsa_cnt": 0,
+            "lsa_crc": "0",
+            "TABLE_range": {
+              "ROW_range": {
+                "addr": "2001:db8:1::",
+                "masklen": 48,
+                "state": "passive",
+                "nets": 0,
+                "advertise": "advertise"
+              }
+            }
+          },
+          {
+            "aname": "0.0.0.1",
+            "active": "false",
+            "age": 0,
+            "total_intf": 0,
+            "act_intf": 0,
+            "passive_intf": 0,
+            "loopback_intf": 0,
+            "stub": "true",
+            "nssa": "false",
+            "no_summary": "false",
+            "spf_runs": 1,
+            "last_spf_run_time": "PT0S",
+            "lsa_cnt": 0,
+            "lsa_crc": "0"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "TABLE_inst": {
+    "ROW_inst": {
+      "inst-name": "rip-nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default",
+          "numberof-adj": 1,
+          "dead-timer-seconds": 420,
+          "TABLE_adj": {
+            "ROW_adj": {
+              "adj-addr": "192.0.2.2",
+              "if-name": "Ethernet1/54",
+              "in-bad-packets": 0,
+              "in-bad-routes": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

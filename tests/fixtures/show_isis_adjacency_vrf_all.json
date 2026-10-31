@@ -1,0 +1,14 @@
+{
+  "TABLE_process_tag": {
+    "ROW_process_tag": {
+      "process-tag-out": "nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf-name-out": "default",
+          "adj-summary-out": "false",
+          "adj-interface-out": "false"
+        }
+      }
+    }
+  }
+}

@@ -92,6 +92,13 @@ class SwitchConnection:
         """True once that role includes the static route rules (role version 9 or later)."""
         return self.changes_enabled and self.role_version >= 9
 
+    @property
+    def protocol_changes_enabled(self) -> bool:
+        """True once that role includes the routing protocol rules (role version 10 or
+        later): OSPF, BGP, HSRP and the others, and route-maps, prefix-lists and key
+        chains."""
+        return self.changes_enabled and self.role_version >= 10
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

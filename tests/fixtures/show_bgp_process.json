@@ -1,0 +1,89 @@
+{
+  "processid": 7058,
+  "protocolstartedreason": "configuration",
+  "protocoltag": "65001",
+  "protocolstate": "Running",
+  "clibinarydone": "true",
+  "cliasciidone": "true",
+  "isolatemode": "No",
+  "gshut-aware": "Yes",
+  "gshut-activate": "No",
+  "mmode": "Initialized",
+  "memorystate": "OK",
+  "forwardingstatesaved": "false",
+  "asformat": "asplain",
+  "attributeentries": 2,
+  "hwmattributeentries": 3,
+  "bytesused": 256,
+  "entriespendingdelete": 0,
+  "hwmentriespendingdelete": 0,
+  "pathsperattribute": 1,
+  "aspathentries": 0,
+  "aspathbytes": 0,
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "vrf-name-out": "default",
+      "vrf-id": 1,
+      "vrf-state": "UP",
+      "vrf-delete-pending": "false",
+      "vrf-evpn-mpls": "false",
+      "vrf-router-id": "192.0.2.1",
+      "vrf-cfgd-id": "192.0.2.1",
+      "vrf-confed-id": "0",
+      "vrf-cluster-id": "0.0.0.0",
+      "vrf-peers": "2",
+      "vrf-pending-peers": "0",
+      "vrf-est-peers": "0",
+      "vrf-rd-configured": "false",
+      "vrf-secondary-rd-configured": "false",
+      "TABLE_af": {
+        "ROW_af": [
+          {
+            "af-id": "0",
+            "af-name": "IPv4 Unicast",
+            "af-table-id": "1",
+            "af-state": "UP",
+            "af-num-peers": "1",
+            "af-num-active-peers": "0",
+            "af-peer-routes": "2",
+            "af-peer-paths": "2",
+            "af-peer-networks": "1",
+            "af-peer-aggregates": "1",
+            "wait-igp-convergence": "false",
+            "import_vrf_advertisevpn": "false",
+            "export_vrf_allowvpn": "false",
+            "af-rr": "false",
+            "default-information-enabled": "false",
+            "nexthop-trigger-delay-critical": 3000,
+            "nexthop-trigger-delay-non-critical": 10000,
+            "TABLE_redist": {
+              "ROW_redist": {
+                "protocol": "static",
+                "route-map": "nxprobe-rm"
+              }
+            }
+          },
+          {
+            "af-id": "2",
+            "af-name": "IPv6 Unicast",
+            "af-table-id": "80000001",
+            "af-state": "UP",
+            "af-num-peers": "1",
+            "af-num-active-peers": "0",
+            "af-peer-routes": "1",
+            "af-peer-paths": "1",
+            "af-peer-networks": "1",
+            "af-peer-aggregates": "0",
+            "wait-igp-convergence": "false",
+            "import_vrf_advertisevpn": "false",
+            "export_vrf_allowvpn": "false",
+            "af-rr": "false",
+            "default-information-enabled": "false",
+            "nexthop-trigger-delay-critical": 3000,
+            "nexthop-trigger-delay-non-critical": 10000
+          }
+        ]
+      }
+    }
+  }
+}

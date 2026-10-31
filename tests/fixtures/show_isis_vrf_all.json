@@ -1,0 +1,92 @@
+{
+  "TABLE_process_tag": {
+    "ROW_process_tag": {
+      "process-tag-out": "nxprobe",
+      "instance_num": 1,
+      "uuid": 1090519320,
+      "process-id": 7168,
+      "vrf-name-out": "default",
+      "system-id-out": "1920.0000.2001",
+      "is-type-out": "L2",
+      "sap-out": 412,
+      "qh-out": 11,
+      "mtu-out": 1492,
+      "gr-status-out": "  Graceful Restart enabled.",
+      "gr-state-inactive-out": " State: Inactive",
+      "last-gr-status-none-out": "  Last graceful restart status : none",
+      "metric-style": "",
+      "accept-metric": "accept(narrow, wide)",
+      "proc-state-running": "  Process is up and running",
+      "vrf-id-out": 1,
+      "srte-registered-out": "false",
+      "srv6-enabled": "false",
+      "TABLE_auth": {
+        "ROW_auth": [
+          {
+            "auth-lvl-out": 1,
+            "auth-type-none": "  No auth type and keychain",
+            "auth-check": "  Auth check set"
+          },
+          {
+            "auth-lvl-out": 2,
+            "auth-type-md5": "  Auth type:MD5",
+            "auth-type-key-chain": "nxprobe-kc",
+            "auth-check": "  Auth check set"
+          }
+        ]
+      },
+      "TABLE_area_addr": {
+        "ROW_area_addr": {
+          "area-addr-nsap": "49.0001"
+        }
+      },
+      "TABLE_iib_list_yeild": {
+        "ROW_iib_list_yeild": {
+          "intf-name-out": "Ethernet1/54"
+        }
+      },
+      "TABLE_segment_routing": {
+        "ROW_segment_routing": [
+          {
+            "af-out": "IPv4",
+            "ptag-out": "nxprobe",
+            "cfg-out": "false",
+            "enable-out": "false"
+          },
+          {
+            "af-out": "IPv6",
+            "ptag-out": "nxprobe",
+            "cfg-out": "false",
+            "enable-out": "false"
+          }
+        ]
+      },
+      "TABLE_spf": {
+        "ROW_spf": [
+          {
+            "spf-lvl-out": 1,
+            "spf-timer": "Inactive"
+          },
+          {
+            "spf-lvl-out": 2,
+            "spf-timer": "Inactive"
+          }
+        ]
+      },
+      "TABLE_afi_safi": {
+        "ROW_afi_safi": [
+          {
+            "af-ix": "IPv4",
+            "af-bfd-config": "disabled",
+            "af-pib-tag": "nxprobe"
+          },
+          {
+            "af-ix": "IPv6",
+            "af-bfd-config": "disabled",
+            "af-pib-tag": "nxprobe"
+          }
+        ]
+      }
+    }
+  }
+}

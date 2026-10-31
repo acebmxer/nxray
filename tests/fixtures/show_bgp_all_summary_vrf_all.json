@@ -1,0 +1,120 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": [
+      {
+        "vrf-name-out": "default",
+        "vrf-router-id": "192.0.2.1",
+        "vrf-local-as": "65001",
+        "TABLE_af": {
+          "ROW_af": [
+            {
+              "af-id": "1",
+              "TABLE_saf": {
+                "ROW_saf": {
+                  "safi": 1,
+                  "af-name": "IPv4 Unicast",
+                  "tableversion": "7",
+                  "configuredpeers": "1",
+                  "capablepeers": "0",
+                  "totalnetworks": "2",
+                  "totalpaths": "2",
+                  "memoryused": "488",
+                  "numberattrs": "2",
+                  "bytesattrs": "344",
+                  "numberpaths": "0",
+                  "bytespaths": "0",
+                  "numbercommunities": "0",
+                  "bytescommunities": "0",
+                  "numberclusterlist": "0",
+                  "bytesclusterlist": "0",
+                  "dampening": "false",
+                  "TABLE_neighbor": {
+                    "ROW_neighbor": {
+                      "neighborid": "192.0.2.2",
+                      "neighborversion": "4",
+                      "msgrecvd": 0,
+                      "msgsent": 0,
+                      "neighbortableversion": "0",
+                      "inq": "0",
+                      "outq": "0",
+                      "neighboras": "65002",
+                      "time": "PT11S",
+                      "state": "Idle",
+                      "prefixreceived": "0"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "af-id": "2",
+              "TABLE_saf": {
+                "ROW_saf": {
+                  "safi": 1,
+                  "af-name": "IPv6 Unicast",
+                  "tableversion": "4",
+                  "configuredpeers": "1",
+                  "capablepeers": "0",
+                  "totalnetworks": "1",
+                  "totalpaths": "1",
+                  "memoryused": "256",
+                  "numberattrs": "1",
+                  "bytesattrs": "172",
+                  "numberpaths": "0",
+                  "bytespaths": "0",
+                  "numbercommunities": "0",
+                  "bytescommunities": "0",
+                  "numberclusterlist": "0",
+                  "bytesclusterlist": "0",
+                  "dampening": "false",
+                  "TABLE_neighbor": {
+                    "ROW_neighbor": {
+                      "neighborid": "2001:db8:1::2",
+                      "neighborversion": "4",
+                      "msgrecvd": 0,
+                      "msgsent": 0,
+                      "neighbortableversion": "0",
+                      "inq": "0",
+                      "outq": "0",
+                      "neighboras": "65002",
+                      "time": "PT10S",
+                      "state": "Idle",
+                      "prefixreceived": "0"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "vrf-name-out": "nxprobe-v",
+        "vrf-router-id": "192.0.2.3",
+        "vrf-local-as": "65001",
+        "TABLE_af": {
+          "ROW_af": [
+            {
+              "af-id": "1",
+              "TABLE_saf": {
+                "ROW_saf": {
+                  "safi": 1,
+                  "af-name": "IPv4 Unicast"
+                }
+              }
+            },
+            {
+              "af-id": "2",
+              "TABLE_saf": {
+                "ROW_saf": {
+                  "safi": 1,
+                  "af-name": "IPv6 Unicast"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

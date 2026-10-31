@@ -1,0 +1,76 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": [
+      {
+        "vrf-name-out": "default",
+        "TABLE_addrf": {
+          "ROW_addrf": {
+            "addrf": "ipv4"
+          }
+        }
+      },
+      {
+        "vrf-name-out": "management",
+        "TABLE_addrf": {
+          "ROW_addrf": {
+            "addrf": "ipv4",
+            "TABLE_prefix": {
+              "ROW_prefix": [
+                {
+                  "ipprefix": "0.0.0.0/0",
+                  "ucast-nhops": 1,
+                  "mcast-nhops": 0,
+                  "attached": "false",
+                  "TABLE_path": {
+                    "ROW_path": {
+                      "ipnexthop": "203.0.113.254",
+                      "uptime": "P1DT13H30M23S",
+                      "pref": 1,
+                      "metric": 0,
+                      "clientname": "static",
+                      "ubest": "true"
+                    }
+                  }
+                },
+                {
+                  "ipprefix": "203.0.113.0/24",
+                  "ucast-nhops": 1,
+                  "mcast-nhops": 0,
+                  "attached": "true",
+                  "TABLE_path": {
+                    "ROW_path": {
+                      "ipnexthop": "203.0.113.10",
+                      "ifname": "mgmt0",
+                      "uptime": "P1DT13H30M25S",
+                      "pref": 0,
+                      "metric": 0,
+                      "clientname": "direct",
+                      "ubest": "true"
+                    }
+                  }
+                },
+                {
+                  "ipprefix": "203.0.113.10/32",
+                  "ucast-nhops": 1,
+                  "mcast-nhops": 0,
+                  "attached": "true",
+                  "TABLE_path": {
+                    "ROW_path": {
+                      "ipnexthop": "203.0.113.10",
+                      "ifname": "mgmt0",
+                      "uptime": "P1DT13H30M25S",
+                      "pref": 0,
+                      "metric": 0,
+                      "clientname": "local",
+                      "ubest": "true"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

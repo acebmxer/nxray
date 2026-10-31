@@ -1,0 +1,10 @@
+{
+  "TABLE_ip_pfl": {
+    "ROW_ip_pfl": {
+      "name": "nxprobe-pl",
+      "seq": 5,
+      "action": "permit",
+      "rule": "192.0.2.0/24 le 32"
+    }
+  }
+}
