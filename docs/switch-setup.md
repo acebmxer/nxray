@@ -176,7 +176,7 @@ NXray then:
            permit interface Ethernet1/1
            ... (one line per front-panel port)
            permit interface port-channel1-4096
-           permit interface Vlan1-4094
+           permit interface Vlan1-254
        username <name> role nxray-ports
        end
 
@@ -421,6 +421,15 @@ confirm page:
 - **Delete** a VLAN interface (`no interface vlan<n>`); its addresses go with
   it and the VLAN stays. Vlan1 is never deleted, and the VLANs page refuses
   to delete a VLAN that has a VLAN interface.
+
+The role names the VLAN interfaces of VLANs 1 to 254 only: the switch
+stores that range as one line per VLAN interface, and all 4094 took it
+minutes and stopped NX-API answering. A VLAN above 254 gets no VLAN
+interface from NXray. The switch takes `permit interface Vlan1-254` into the
+role only while interface-vlan is on; with it off it answers "Invalid interface format". So
+when changes are turned on with interface-vlan off, NXray leaves that line
+out and says so, the Routing page offers no VLAN interface forms, and the
+Switch page asks for **Update the port list** once interface-vlan is on.
 
 A port becomes routed on its own page (**Port settings**, Layer). That page
 shows its extra IPv4 and IPv6 addresses and takes them off when the port

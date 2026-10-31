@@ -1243,6 +1243,11 @@ class FakeShell:
         if current == "role-interface" and self.role is not None:
             if match := re.fullmatch(r"permit interface (\S+)", line):
                 name = match.group(1).lower()
+                if name.startswith("vlan") and not self.switch.feature_state.get(
+                    "interface-vlan", False
+                ):
+                    # As on cisco-25gb: the Vlan type exists only while the feature is on.
+                    return "% Invalid interface format at '^' marker."
                 if (
                     self.switch.freeze_on_channel_permit
                     and name.startswith("port-channel")

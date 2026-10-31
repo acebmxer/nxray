@@ -84,6 +84,13 @@ _DESCRIPTION = re.compile(r"^[\x20-\x7e]*$")
 VLAN_MIN = 1
 VLAN_MAX = 4094
 
+# The highest VLAN that can have a VLAN interface NXray changes. NXray's role
+# names the VLAN interfaces as one range, and NX-OS 9.3(16) stores that range
+# as one line per VLAN interface: Vlan1-4094 took the switch minutes (NXray's
+# SSH session timed out at Vlan3400) and NX-API stopped answering (issue #11).
+# Vlan1-254 is 254 lines, a few seconds.
+VLAN_INTERFACE_MAX = 254
+
 # What NX-OS 9.3 stores as a VLAN name, found by trying them on the switch:
 # no spaces ("% Invalid command"), and a name of 33 to 128 characters is
 # accepted but silently not stored. NXray allows the plainest subset.

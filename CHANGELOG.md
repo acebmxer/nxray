@@ -27,9 +27,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   page now shows its extra IPv4 and IPv6 addresses and takes them off when
   the port goes back to switched. NXray's `nxray-ports` role gets rules 48
   to 50 (`ipv6 address *`, `no ipv6 address *`, `no interface Vlan *`) and
-  `permit interface Vlan1-4094` in its port list (role version 7); an older
+  `permit interface Vlan1-254` in its port list (role version 7), so NXray
+  makes and changes VLAN interfaces of VLANs 1 to 254 only: the switch stores
+  the range as one line per VLAN interface, and all 4094 took it minutes and
+  stopped NX-API answering (#11); an older
   role gets a **Turn on VLAN interface changes** button, with no wait,
-  checked and saved over SSH. The rules were tried on an N9K-C92160YC-X with
+  checked and saved over SSH. The switch takes the VLAN interfaces into the
+  port list only while interface-vlan is on, so with it off NXray leaves
+  that line out and says so; once an admin turns interface-vlan on, **Update
+  the port list** adds it (#10). The rules were tried on an N9K-C92160YC-X with
   NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
 - **Port-channels page.** A new **Port-channels** page lists every
   port-channel with its ports, each port's state and how it joined (LACP

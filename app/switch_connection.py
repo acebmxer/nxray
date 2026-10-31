@@ -35,6 +35,8 @@ class SwitchConnection:
     paused_until: float | None = None
     unsaved_changes: bool = False
     role_version: int = 0
+    # The role's port list names the VLAN interfaces (needs interface-vlan on).
+    role_vlan_interfaces: bool = False
 
     @property
     def changes_enabled(self) -> bool:
@@ -73,6 +75,12 @@ class SwitchConnection:
         """True once that role includes the VLAN interface and IPv6 rules and names
         the VLAN interfaces (role version 7 or later)."""
         return self.changes_enabled and self.role_version >= 7
+
+    @property
+    def vlan_interface_changes_enabled(self) -> bool:
+        """True once the role also names the VLAN interfaces in its port list, which
+        the switch takes only while interface-vlan is on."""
+        return self.layer3_changes_enabled and self.role_vlan_interfaces
 
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
@@ -136,13 +144,19 @@ def get_connection(conn: sqlite3.Connection) -> SwitchConnection | None:
         paused_until=row["paused_until"],
         unsaved_changes=bool(row["unsaved_changes"]),
         role_version=row["role_version"],
+        role_vlan_interfaces=bool(row["role_vlan_interfaces"]),
     )
 
 
 def set_changes_enabled(
-    conn: sqlite3.Connection, *, pause_seconds: float, role_version: int
+    conn: sqlite3.Connection,
+    *,
+    pause_seconds: float,
+    role_version: int,
+    vlan_interfaces: bool | None = None,
 ) -> None:
-    """Record that port changes are on with the given role version.
+    """Record that port changes are on with the given role version, and whether
+    its port list names the VLAN interfaces (None keeps what is stored).
 
     Switch calls pause for ``pause_seconds`` (0: no new pause). A pause
     still running from an earlier change is kept, never shortened: the
@@ -154,10 +168,16 @@ def set_changes_enabled(
         UPDATE switch_connection
            SET changes_enabled_at = ?,
                paused_until = MAX(COALESCE(paused_until, 0), ?),
-               role_version = ?
+               role_version = ?,
+               role_vlan_interfaces = COALESCE(?, role_vlan_interfaces)
          WHERE id = 1
         """,
-        (time.time(), until, role_version),
+        (
+            time.time(),
+            until,
+            role_version,
+            None if vlan_interfaces is None else int(vlan_interfaces),
+        ),
     )
     conn.commit()
 
@@ -165,7 +185,8 @@ def set_changes_enabled(
 def set_changes_off(conn: sqlite3.Connection) -> None:
     """Record that port changes are off (the role is gone from the switch)."""
     conn.execute(
-        "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0 WHERE id = 1"
+        "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0, "
+        "role_vlan_interfaces = 0 WHERE id = 1"
     )
     conn.commit()
 

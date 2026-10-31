@@ -204,7 +204,7 @@ def test_the_role_lets_the_account_make_neighbor_changes() -> None:
     fake.users["nxray"] = ("Passw0rdForTests", "network-operator")
     shell = fake.ssh_opener()("192.0.2.10", 22, "admin", ADMIN_PASSWORD, 5.0)
     shell.run("configure terminal")
-    for line in role_lines(["Ethernet1/5"], "nxray"):
+    for line in role_lines(["Ethernet1/5"], "nxray", vlan_interfaces=False):
         assert "Invalid" not in shell.run(line), line
     target = SwitchTarget("192.0.2.10", 443, "nxray", "Passw0rdForTests", 5.0)
     with NxapiClient(target, transport=fake.transport()) as client:

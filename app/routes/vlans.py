@@ -16,6 +16,7 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import (
+    VLAN_INTERFACE_MAX,
     VLAN_NAME_MAX,
     NxapiClient,
     NxapiError,
@@ -69,6 +70,7 @@ def _render(
             "form": form or {"vlan_id": "", "name": ""},
             "name_max": VLAN_NAME_MAX,
             "csrf_token": csrf_token(request),
+            "vlan_interface_max": VLAN_INTERFACE_MAX,
         },
         status_code=status_code,
     )

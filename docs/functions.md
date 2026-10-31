@@ -249,7 +249,7 @@ port's own page shows.
 | `replace_login` | `(conn, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
 | `set_address` | `(conn, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
-| `set_changes_enabled` | `(conn, *, pause_seconds, role_version) -> None` | Records that port changes are on with that role version and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `set_changes_enabled` | `(conn, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
 | `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
@@ -258,8 +258,11 @@ port's own page shows.
 changes are on and how long NXray still waits before calling the switch;
 `vlan_changes_enabled` says whether the role includes the VLAN rules
 (`role_version` 2 or later), `settings_changes_enabled`,
-`feature_changes_enabled`, `neighbor_changes_enabled` and
-`channel_changes_enabled` the later rule sets (3, 4, 5 and 6).
+`feature_changes_enabled`, `neighbor_changes_enabled`,
+`channel_changes_enabled` and `layer3_changes_enabled` the later rule sets
+(3, 4, 5, 6 and 7). `vlan_interface_changes_enabled` also needs
+`role_vlan_interfaces`: the role's port list names the VLAN interfaces, which
+the switch takes only while interface-vlan is on.
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -309,11 +312,11 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 7) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
-| `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
+| `role_lines` | `(ports, account_name, vlan_interfaces=True) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off) | `enable_port_changes` | v0.1.0 |
 
 `ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES`,
 `NEIGHBOR_RULES`, `CHANNEL_RULES` and `LAYER3_RULES` are the role's only
@@ -701,7 +704,8 @@ would take them out silently.
 | `plan_vlan_interface_settings` | `(view, *, vlan, ipv4, description, mtu, enabled) -> tuple[VlanInterfaceChange, list[str], list[str]]` | A VLAN interface's main IPv4 address, description, MTU and on/off; only what differs | `routes/routing.vlan_interface_settings` | v0.1.0 |
 
 VLAN interfaces exist only while the interface-vlan feature is on; turning it
-on makes Vlan1 by itself, turned off. A port becomes routed on its own page;
+on makes Vlan1 by itself, turned off. NXray changes VLAN interfaces of VLANs 1
+to `nxapi.VLAN_INTERFACE_MAX` (254) only, the range its role names. A port becomes routed on its own page;
 the Routing page puts extra IPv4 and IPv6 addresses on it. An extra address
 may share its main address's network, but not another interface's in the same
 VRF. Link-local IPv6 addresses are never typed: the switch makes one on every

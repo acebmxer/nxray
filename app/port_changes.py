@@ -46,7 +46,13 @@ through with NX-API answering at once), so NXray adds no wait for it.
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
-rules and the VLAN interfaces in the port list. NXray
+rules and the VLAN interfaces in the port list.
+
+The switch knows the ``Vlan`` interface type only while the interface-vlan
+feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
+("Invalid interface format"). So the port list names the VLAN interfaces only
+when the feature is on; once an admin turns it on, Update the port list adds
+them. NXray
 stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
@@ -59,8 +65,10 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.features import feature_states
 from app.nxapi import (
     PORT_CHANGES_ROLE,
+    VLAN_INTERFACE_MAX,
     NxapiClient,
     NxapiError,
     SwitchTarget,
@@ -210,7 +218,9 @@ LAYER3_RULES = (
     "rule 49 permit command conf t ; interface * ; no ipv6 address *",
     "rule 50 permit command conf t ; no interface Vlan *",
 )
-VLAN_INTERFACE_PERMIT = "permit interface Vlan1-4094"
+# One range, which the switch stores as one line per VLAN interface, so it stays
+# small (see VLAN_INTERFACE_MAX).
+VLAN_INTERFACE_PERMIT = f"permit interface Vlan1-{VLAN_INTERFACE_MAX}"
 
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
@@ -251,6 +261,8 @@ class EnableResult:
     save_error: str | None
     # True when the account already had the role, so only its rules changed.
     had_role: bool = False
+    # True when the role's port list names the VLAN interfaces (interface-vlan on).
+    vlan_interfaces: bool = False
 
 
 def front_ports(interface_brief_body: dict) -> list[str]:
@@ -265,11 +277,12 @@ def front_ports(interface_brief_body: dict) -> list[str]:
     return names
 
 
-def role_lines(ports: list[str], account_name: str) -> list[str]:
+def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True) -> list[str]:
     """The configuration lines that create the role and give it to the account.
 
     Typed after ``configure terminal``. Every value is checked first, so the
-    lines can only ever be these.
+    lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
+    to the port list; the switch refuses that line while interface-vlan is off.
     """
     validate_account_name(account_name)
     if not ports:
@@ -288,7 +301,7 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,
-        VLAN_INTERFACE_PERMIT,
+        *([VLAN_INTERFACE_PERMIT] if vlan_interfaces else []),
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -326,7 +339,7 @@ def _check_role_output(roles_output: str, account_name: str) -> None:
 
 
 def _saved_over_ssh(
-    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int
+    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int, vlans: bool
 ) -> EnableResult:
     """Save the configuration over SSH, and the result."""
     try:
@@ -335,9 +348,9 @@ def _saved_over_ssh(
         output = _scrub(str(exc), admin_password)
     if "Copy complete" not in output:
         log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
-        return EnableResult(wait, port_count, False, output or "no answer", had_role)
+        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans)
     log.info("saved the switch configuration over SSH")
-    return EnableResult(wait, port_count, True, None, had_role)
+    return EnableResult(wait, port_count, True, None, had_role, vlans)
 
 
 def _scrub(text: str, secret: str) -> str:
@@ -353,6 +366,7 @@ def enable_port_changes(
     admin_password: str,
     account_name: str,
     role_version: int = 0,
+    vlan_interfaces_listed: bool = False,
     transport: httpx.BaseTransport | None = None,
     ssh_opener: ShellOpener | None = None,
 ) -> EnableResult:
@@ -360,8 +374,9 @@ def enable_port_changes(
 
     ``role_version`` is the version NXray gave its account before (0 for
     none). Below ``LAST_PERMIT_VERSION`` the role's port list gains a line,
-    so the check and the save go over SSH, which does not depend on NX-API
-    answering.
+    and so does it when interface-vlan is on and ``vlan_interfaces_listed``
+    (the port list names the VLAN interfaces already) is false; then the
+    check and the save go over SSH, which does not depend on NX-API answering.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -373,8 +388,8 @@ def enable_port_changes(
     )
     with NxapiClient(admin, transport=transport) as client:
         try:
-            brief, users, nxapi = client.show(
-                "show interface brief", "show user-account", "show nxapi"
+            brief, users, nxapi, features = client.show(
+                "show interface brief", "show user-account", "show nxapi", "show feature"
             )
         except NxapiError as exc:
             raise SetupError(
@@ -387,8 +402,9 @@ def enable_port_changes(
             )
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
-        lines = role_lines(ports, account_name)
-        over_ssh = role_version < LAST_PERMIT_VERSION
+        vlans = feature_states(features).get("interface-vlan", False)
+        lines = role_lines(ports, account_name, vlan_interfaces=vlans)
+        over_ssh = role_version < LAST_PERMIT_VERSION or (vlans and not vlan_interfaces_listed)
         then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:
@@ -437,7 +453,7 @@ def enable_port_changes(
                 "timeout": SSH_TIMEOUT,
                 "opener": ssh_opener,
             }
-            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait)
+            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans)
 
         try:
             (users,) = client.show("show user-account")
@@ -455,7 +471,9 @@ def enable_port_changes(
             client.save_config()
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
-            return EnableResult(wait, len(ports), False, _scrub(str(exc), admin_password), had_role)
+            return EnableResult(
+                wait, len(ports), False, _scrub(str(exc), admin_password), had_role, vlans
+            )
 
     log.info("saved the switch configuration on %s", host)
-    return EnableResult(wait, len(ports), True, None, had_role)
+    return EnableResult(wait, len(ports), True, None, had_role, vlans)

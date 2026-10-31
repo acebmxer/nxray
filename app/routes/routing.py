@@ -18,7 +18,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
-from app.nxapi import MTU_MAX, MTU_MIN, NxapiClient, NxapiError
+from app.nxapi import MTU_MAX, MTU_MIN, VLAN_INTERFACE_MAX, NxapiClient, NxapiError
 from app.routes.ports import change_refused
 from app.routing import (
     DEFAULT_MTU,
@@ -41,6 +41,12 @@ NOT_SAVED = "Not saved yet: Save config keeps it over a restart of the switch."
 LAYER3_CHANGES_OFF = (
     "VLAN interface changes are off. An NXray admin turns them on on the Switch page first: "
     "NXray's role on the switch does not allow them yet."
+)
+
+VLAN_INTERFACES_NOT_LISTED = (
+    "NXray's role on the switch does not name the VLAN interfaces yet: interface-vlan was "
+    "off when it was written. An NXray admin presses Update the port list on the Switch "
+    "page once interface-vlan is on."
 )
 
 
@@ -87,6 +93,8 @@ def _render(
             "form": form or {"enabled": "yes", "vlan": request.query_params.get("vlan", "")},
             "csrf_token": csrf_token(request),
             "can_change": _can_change(request, connection),
+            "vlan_ready": connection is not None and connection.vlan_interface_changes_enabled,
+            "vlan_interface_max": VLAN_INTERFACE_MAX,
             "mtu_min": MTU_MIN,
             "mtu_max": MTU_MAX,
             "default_mtu": DEFAULT_MTU,
@@ -136,10 +144,14 @@ def _confirm(
     )
 
 
-def _start(request: Request) -> tuple[str | None, SwitchConnection | None, RoutingView | None]:
+def _start(
+    request: Request, vlan_interface: bool = False
+) -> tuple[str | None, SwitchConnection | None, RoutingView | None]:
     """The checks every change shares, then the switch read fresh.
 
-    (why it cannot go ahead or None, connection, view).
+    ``vlan_interface``: the change acts on a VLAN interface, which also needs
+    the role's port list to name them. (why it cannot go ahead or None,
+    connection, view).
     """
     connection, target, problem = stored_switch(request)
     if connection is None:
@@ -148,6 +160,8 @@ def _start(request: Request) -> tuple[str | None, SwitchConnection | None, Routi
         return problem or "The switch could not be read.", None, None
     if not connection.layer3_changes_enabled:
         return LAYER3_CHANGES_OFF, None, None
+    if vlan_interface and not connection.vlan_interface_changes_enabled:
+        return VLAN_INTERFACES_NOT_LISTED, None, None
     connection, status, view = _read(request)
     if view is None:
         return (status.message if status else "The switch could not be read."), None, None
@@ -205,7 +219,7 @@ def vlan_interface_create(
         "mtu": mtu,
         "enabled": enabled,
     }
-    problem, connection, view = _start(request)
+    problem, connection, view = _start(request, vlan_interface=True)
     if problem is not None:
         return _render(request, username, error=problem, form=form, status_code=400)
     assert connection is not None and view is not None
@@ -260,7 +274,7 @@ def vlan_interface_settings(
     """A VLAN interface's IPv4 address, description, MTU and on/off. Without
     confirm=yes, asks first."""
     require_csrf(request, csrf)
-    problem, connection, view = _start(request)
+    problem, connection, view = _start(request, vlan_interface=True)
     if problem is not None:
         return _render(request, username, error=problem, status_code=400)
     assert connection is not None and view is not None
@@ -313,7 +327,7 @@ def vlan_interface_delete(
 ) -> Response:
     """Delete a VLAN interface. Without confirm=yes, asks first."""
     require_csrf(request, csrf)
-    problem, connection, view = _start(request)
+    problem, connection, view = _start(request, vlan_interface=True)
     if problem is not None:
         return _render(request, username, error=problem, status_code=400)
     assert connection is not None and view is not None
@@ -347,7 +361,9 @@ def address_add(
     """Put one more address on a VLAN interface or routed port. Without confirm=yes,
     asks first."""
     require_csrf(request, csrf)
-    problem, connection, view = _start(request)
+    problem, connection, view = _start(
+        request, vlan_interface=name.strip().lower().startswith("vlan")
+    )
     if problem is not None:
         return _render(request, username, error=problem, status_code=400)
     assert connection is not None and view is not None
@@ -384,7 +400,9 @@ def address_remove(
     """Take one address off a VLAN interface or routed port. Without confirm=yes,
     asks first."""
     require_csrf(request, csrf)
-    problem, connection, view = _start(request)
+    problem, connection, view = _start(
+        request, vlan_interface=name.strip().lower().startswith("vlan")
+    )
     if problem is not None:
         return _render(request, username, error=problem, status_code=400)
     assert connection is not None and view is not None

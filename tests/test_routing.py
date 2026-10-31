@@ -118,6 +118,20 @@ def test_create_needs_the_feature_and_an_existing_vlan_without_one() -> None:
         )
 
 
+def test_only_vlans_up_to_254_can_get_a_vlan_interface() -> None:
+    """Issue #11: the role names Vlan1-254 only, one line each on the switch."""
+    view = _view(vlans=[Vlan(1, "default", "active"), Vlan(254, "a", "active"),
+                        Vlan(300, "b", "active")])  # fmt: skip
+    assert [v.id for v in view.free_vlans] == [254]
+    with pytest.raises(ValueError, match="VLANs 1 to 254 only"):
+        plan_create_vlan_interface(
+            view, vlan="300", ipv4="", ipv6="", description="", mtu="", enabled=True
+        )
+    with pytest.raises(ValueError, match="change Vlan300 on the switch itself"):
+        plan_add_address(view, name="Vlan300", address="203.0.113.1/24")
+    assert VLAN_INTERFACE_PERMIT == "permit interface Vlan1-254"
+
+
 def test_create_with_both_addresses() -> None:
     change, lines, warnings = plan_create_vlan_interface(
         _view(), vlan="20", ipv4="203.0.113.129/25", ipv6="2001:db8:14::1/64",

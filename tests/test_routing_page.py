@@ -81,10 +81,10 @@ def _vlan_interfaces_on(switch: FakeSwitch) -> None:
 
 @pytest.fixture
 def enabled(logged_in: TestClient, switch: FakeSwitch, settings: Settings) -> FakeSwitch:
-    """All changes on, the wait over, and VLAN interfaces on on the switch."""
+    """VLAN interfaces on on the switch, then all changes on and the wait over."""
+    _vlan_interfaces_on(switch)
     assert _enable_changes(logged_in).status_code == 200
     _db(settings, f"UPDATE switch_connection SET paused_until = {time.time() - 1}")
-    _vlan_interfaces_on(switch)
     switch.requests.clear()
     switch.saved = False
     return switch
@@ -290,9 +290,45 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     assert "VLAN interface changes are on: nxray may now also make, change and delete VLAN" in text
     assert "there is no wait" in text
     # The role's port list gains the VLAN interfaces, so the check and save go over SSH.
-    assert "permit interface Vlan1-4094" in enabled.ssh_lines
+    assert "permit interface Vlan1-254" in enabled.ssh_lines
     assert enabled.ssh_lines[-1] == "copy running-config startup-config"
     assert "Make a VLAN interface" in logged_in.get("/routing").text
+
+
+def test_turning_on_with_interface_vlan_off_then_updating_the_port_list(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+):
+    """Issue #10: the switch refuses "permit interface Vlan1-254" while
+    interface-vlan is off, so the turn-on leaves it out and says what to do."""
+    response = _enable_changes(logged_in)
+    text = _text(response.text)
+    assert response.status_code == 200 and "refused" not in text
+    assert "turn interface-vlan on on the Features page, then press Update the port list" in text
+    assert "vlan1-254" not in switch.roles["nxray-ports"].interfaces
+    assert "rule 50 permit command conf t ; no interface Vlan *" in switch.ssh_lines
+    _db(settings, f"UPDATE switch_connection SET paused_until = {time.time() - 1}")
+    assert "NXray's role does not name the VLAN interfaces yet" in _text(
+        logged_in.get("/switch").text
+    )
+
+    # interface-vlan on: the Routing page says the port list needs updating and
+    # offers no VLAN interface forms; the VLAN interface changes are refused.
+    _vlan_interfaces_on(switch)
+    page = _text(logged_in.get("/routing").text)
+    assert "does not name the VLAN interfaces yet" in page
+    assert "Make a VLAN interface" not in page
+    refused = _make_vlan10(logged_in)
+    assert refused.status_code == 400 and "Update the port list" in _text(refused.text)
+    assert _config_requests(switch) == []
+
+    switch.ssh_lines.clear()
+    updated = _text(_enable_changes(logged_in).text)
+    assert "front ports the switch has now and the VLAN interfaces" in updated
+    assert "permit interface Vlan1-254" in switch.ssh_lines
+    assert switch.ssh_lines[-1] == "copy running-config startup-config"
+    assert "vlan1-254" in switch.roles["nxray-ports"].interfaces
+    assert "Make a VLAN interface" in logged_in.get("/routing").text
+    assert _make_vlan10(logged_in).status_code == 200
 
 
 def test_save_config_from_the_routing_page_stays_there(logged_in: TestClient, enabled: FakeSwitch):

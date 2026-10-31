@@ -167,8 +167,17 @@
 {% else %}
 <section class="card">
   <h2 class="card-title">Update the port list</h2>
+  {% if not connection.role_vlan_interfaces %}
+  <p class="warning">
+    NXray's role does not name the VLAN interfaces yet: interface-vlan was off
+    on the switch when the role was last written, and the switch takes them
+    into a role only while it is on. Turn interface-vlan on on the
+    <a href="/features">Features</a> page, then press Update the port list.
+  </p>
+  {% endif %}
   <p class="lead">
-    NXray's role names every front port it may change one by one. After a 100G
+    NXray's role names every front port it may change one by one, and the
+    VLAN interfaces. After a 100G
     port is split into four, or four split ports are joined again, the role
     does not name the new ports yet, and the switch refuses NXray's changes to
     them. NXray signs in to the switch over SSH with the admin login below and

@@ -461,6 +461,7 @@ def switch_enable_changes(
             admin_password=admin_password,
             account_name=connection.username,
             role_version=connection.role_version,
+            vlan_interfaces_listed=connection.role_vlan_interfaces,
             transport=request.app.state.nxapi_transport,
             ssh_opener=request.app.state.ssh_opener,
         )
@@ -470,7 +471,12 @@ def switch_enable_changes(
         _setup_lock.release()
 
     with open_db(settings.db_path) as conn:
-        set_changes_enabled(conn, pause_seconds=result.pause_seconds, role_version=ROLE_VERSION)
+        set_changes_enabled(
+            conn,
+            pause_seconds=result.pause_seconds,
+            role_version=ROLE_VERSION,
+            vlan_interfaces=result.vlan_interfaces,
+        )
     account = connection.username
     count = result.port_count
     settings_words = (
@@ -503,9 +509,14 @@ def switch_enable_changes(
             f"now waits about {minutes} minutes before contacting it again."
         )
     elif connection.role_version >= ROLE_VERSION:
+        vlans = (
+            " and the VLAN interfaces"
+            if result.vlan_interfaces and not connection.role_vlan_interfaces
+            else ""
+        )
         done = (
             f"The port list is updated: NXray's role now names the {count} front ports the "
-            "switch has now. The switch applies this at once, so there is no wait."
+            f"switch has now{vlans}. The switch applies this at once, so there is no wait."
         )
     else:
         parts = []
@@ -525,6 +536,13 @@ def switch_enable_changes(
         done = (
             f"{kinds[:1].upper()}{kinds[1:]} are on: {account} may now also {allowed}. "
             "The switch applies this at once, so there is no wait."
+        )
+    if not result.vlan_interfaces:
+        done += (
+            " VLAN interfaces are off on the switch (interface-vlan), and the switch only "
+            "takes them into the role while they are on, so NXray cannot make them yet: "
+            "turn interface-vlan on on the Features page, then press Update the port list "
+            "here."
         )
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")

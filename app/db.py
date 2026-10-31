@@ -142,6 +142,12 @@ _MIGRATIONS: list[str] = [
         updated_by  TEXT NOT NULL
     );
     """,
+    # 9 -> 10: whether the nxray-ports role's port list names the VLAN
+    # interfaces. The switch takes that line only while interface-vlan is on,
+    # so a role made with it off lacks it until Update the port list.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_vlan_interfaces INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

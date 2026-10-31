@@ -39,6 +39,7 @@ from app.neighbors import feature_enabled
 from app.nxapi import (
     MTU_MAX,
     MTU_MIN,
+    VLAN_INTERFACE_MAX,
     NxapiClient,
     validate_description,
     validate_interface_address,
@@ -171,9 +172,10 @@ class RoutingView:
 
     @property
     def free_vlans(self) -> list[Vlan]:
-        """VLANs with no VLAN interface yet, which can get one."""
+        """VLANs with no VLAN interface yet, which can get one (up to
+        ``VLAN_INTERFACE_MAX``, the range NXray's role names)."""
         taken = {i.vlan for i in self.vlan_interfaces}
-        return [v for v in self.vlans if v.id not in taken]
+        return [v for v in self.vlans if v.id not in taken and v.id <= VLAN_INTERFACE_MAX]
 
     @property
     def interfaces(self) -> list[L3Interface]:
@@ -370,8 +372,18 @@ class VlanInterfaceChange:
     add: tuple[tuple[str, bool], ...] = ()
 
 
+def _in_range(number: int) -> None:
+    """Refuse a VLAN interface outside the range NXray's role names."""
+    if number > VLAN_INTERFACE_MAX:
+        raise ValueError(
+            f"NXray changes VLAN interfaces of VLANs 1 to {VLAN_INTERFACE_MAX} only, the range "
+            f"its role on the switch names; change Vlan{number} on the switch itself"
+        )
+
+
 def _existing_vlan_interface(view: RoutingView, vlan: str) -> L3Interface:
     number = validate_vlan_id(vlan.strip().removeprefix("Vlan").removeprefix("vlan"))
+    _in_range(number)
     interface = view.vlan_interface(number)
     if interface is None:
         raise ValueError(f"the switch has no VLAN interface for VLAN {number}")
@@ -400,6 +412,7 @@ def plan_create_vlan_interface(
     if not view.interface_vlan_on:
         raise ValueError(FEATURE_OFF)
     number = validate_vlan_id(vlan)
+    _in_range(number)
     if view.vlan(number) is None:
         raise ValueError(f"VLAN {number} does not exist; create it on the VLANs page first")
     if view.vlan_interface(number) is not None:
@@ -538,6 +551,8 @@ class AddressChange:
 
 def _routed(view: RoutingView, name: str) -> L3Interface:
     cleaned = validate_routed_interface(name)
+    if match := _VLAN_NAME.match(cleaned):
+        _in_range(int(match.group(1)))
     interface = view.interface(cleaned)
     if interface is None:
         raise ValueError(f"{cleaned} is not a VLAN interface or routed port on the switch")

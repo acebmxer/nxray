@@ -64,7 +64,7 @@
         </td>
         <td>
           {% if vlan.id in view.interfaces %}<a href="/routing#Vlan{{ vlan.id }}">Vlan{{ vlan.id }}</a>
-          {% elif can_change and connection.layer3_changes_enabled %}<a href="/routing?vlan={{ vlan.id }}">make one</a>
+          {% elif can_change and connection.vlan_interface_changes_enabled and vlan.id <= vlan_interface_max %}<a href="/routing?vlan={{ vlan.id }}">make one</a>
           {% else %}<span class="dim">none</span>{% endif %}
         </td>
         {% if connection.vlan_changes_enabled and can_change %}

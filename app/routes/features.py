@@ -151,4 +151,10 @@ def feature_set(
         state,
         feature.command,
     )
-    return _render(request, username, notice=f"Done: {feature.label} is {state}. {NOT_SAVED}")
+    notice = f"Done: {feature.label} is {state}. {NOT_SAVED}"
+    if feature.name == "interface-vlan" and turn_on and not connection.role_vlan_interfaces:
+        notice += (
+            " To make VLAN interfaces on the Routing page, press Update the port list on the "
+            "Switch page: NXray's role names them only once interface-vlan is on."
+        )
+    return _render(request, username, notice=notice)

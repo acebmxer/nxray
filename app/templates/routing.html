@@ -100,7 +100,12 @@
 </section>
 
 {% if can_change %}
-{% for i in view.interfaces %}
+{% if view.interface_vlan_on and not vlan_ready %}
+<section class="card">
+  <p class="warning">NXray's role on the switch does not name the VLAN interfaces yet: interface-vlan was off when the role was written, and the switch takes them into a role only while it is on. {% if role == "admin" %}Press <a href="/switch">Update the port list on the Switch page</a>{% else %}An NXray admin presses Update the port list on the Switch page{% endif %}; until then VLAN interfaces cannot be made or changed here.</p>
+</section>
+{% endif %}
+{% for i in view.interfaces if i.kind != "vlan" or (vlan_ready and i.vlan <= vlan_interface_max) %}
 <section class="card" id="{{ i.name|replace('/', '-') }}">
   <h2 class="card-title">{{ i.name }}{% if i.description %} <span class="dim">{{ i.description }}</span>{% endif %}</h2>
   <dl class="facts">
@@ -174,7 +179,7 @@
 </section>
 {% endfor %}
 
-{% if view.interface_vlan_on %}
+{% if view.interface_vlan_on and vlan_ready %}
 <section class="card">
   <h2 class="card-title">Make a VLAN interface</h2>
   {% if view.free_vlans %}
@@ -184,7 +189,7 @@
     <select id="new_vlan" name="vlan">
       {% for v in view.free_vlans %}<option value="{{ v.id }}" {% if form.vlan == v.id|string %}selected{% endif %}>{{ v.id }} {{ v.name }}</option>{% endfor %}
     </select>
-    <p class="hint">Only VLANs without a VLAN interface are listed. Create a VLAN on the <a href="/vlans">VLANs</a> page.</p>
+    <p class="hint">VLANs 1 to {{ vlan_interface_max }} without a VLAN interface are listed: NXray's role on the switch names that range only. Create a VLAN on the <a href="/vlans">VLANs</a> page.</p>
     <label for="new_ipv4">IPv4 address (optional)</label>
     <input id="new_ipv4" name="ipv4" type="text" spellcheck="false" placeholder="192.0.2.1/24" value="{{ form.ipv4 or '' }}">
     <label for="new_ipv6">IPv6 address (optional)</label>
