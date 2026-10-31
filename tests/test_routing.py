@@ -14,19 +14,26 @@ from app.nxapi import (
     validate_interface_address,
     validate_ipv6_interface,
     validate_routed_interface,
+    validate_vrf_name,
 )
-from app.port_changes import LAYER3_RULES, VLAN_INTERFACE_PERMIT, role_lines
+from app.port_changes import LAYER3_RULES, VLAN_INTERFACE_PERMIT, VRF_RULES, role_lines
 from app.routing import (
     Address,
     L3Interface,
     RoutingView,
+    Vrf,
     parse_brief,
     parse_ipv4,
     parse_ipv6,
     parse_vlan_interface,
+    parse_vrf_members,
+    parse_vrfs,
     plan_add_address,
     plan_create_vlan_interface,
+    plan_create_vrf,
     plan_delete_vlan_interface,
+    plan_delete_vrf,
+    plan_interface_vrf,
     plan_remove_address,
     plan_vlan_interface_settings,
 )
@@ -284,3 +291,139 @@ def test_role_names_the_vlan_interfaces_and_has_the_layer3_rules() -> None:
     assert "rule 50 permit command conf t ; no interface Vlan *" in lines
     policy = lines.index("interface policy deny")
     assert lines.index(VLAN_INTERFACE_PERMIT) > policy
+
+
+# ---- VRFs ----------------------------------------------------------------------
+
+
+def test_vrfs_and_their_interfaces_from_the_recorded_output() -> None:
+    members = parse_vrf_members(load_fixture("show_vrf_interface"))
+    assert members == {
+        "Vlan1": "default",
+        "Vlan3900": "default",
+        "mgmt0": "management",
+        "Ethernet1/54": "tenant-a",
+    }
+    vrfs = parse_vrfs(load_fixture("show_vrf"), members)
+    assert [(v.name, v.up, v.reason, v.kept) for v in vrfs] == [
+        ("default", True, "", True),
+        ("management", True, "", True),
+        ("tenant-a", True, "", False),
+    ]
+    assert vrfs[0].interfaces == ("Vlan1", "Vlan3900")
+    assert vrfs[2].interfaces == ("Ethernet1/54",)
+    assert parse_vrfs({}, {}) == [] and parse_vrf_members({}) == {}
+
+
+def _vrf_view(**kwargs) -> RoutingView:
+    return _view(
+        vrfs=[
+            Vrf("default", interfaces=("Vlan1", "Vlan10")),
+            Vrf("management", interfaces=("mgmt0",)),
+            Vrf("tenant-a", interfaces=("Ethernet1/54",)),
+            Vrf("lab"),
+        ],
+        **kwargs,
+    )
+
+
+def test_vrf_names() -> None:
+    assert validate_vrf_name(" tenant-a ") == "tenant-a"
+    assert validate_vrf_name("Lab_2") == "Lab_2"
+    for bad in ("default", "Management", "all", "", "-a", "a b", "a;b", "x" * 33):
+        with pytest.raises(ValueError):
+            validate_vrf_name(bad)
+    assert _vrf_view().vrf_choices == ["default", "tenant-a", "lab"]
+
+
+def test_create_and_delete_a_vrf() -> None:
+    name, lines, warnings = plan_create_vrf(_vrf_view(), name="blue")
+    assert name == "blue" and lines[0].startswith("Make the VRF blue.") and warnings == []
+    with pytest.raises(ValueError, match="has a VRF lab already"):
+        plan_create_vrf(_vrf_view(), name="LAB")
+    with pytest.raises(ValueError, match="keeps the VRF name"):
+        plan_create_vrf(_vrf_view(), name="management")
+    assert plan_delete_vrf(_vrf_view(), name="lab")[1] == ["Delete the VRF lab."]
+    with pytest.raises(ValueError, match="Ethernet1/54 is in VRF tenant-a; move it"):
+        plan_delete_vrf(_vrf_view(), name="tenant-a")
+    with pytest.raises(ValueError, match="has no VRF blue"):
+        plan_delete_vrf(_vrf_view(), name="blue")
+    with pytest.raises(ValueError, match="keeps the VRF name"):
+        plan_delete_vrf(_vrf_view(), name="default")
+
+
+def test_moving_an_interface_names_the_addresses_the_switch_deletes() -> None:
+    move, lines, warnings = plan_interface_vrf(_vrf_view(), name="Vlan10", vrf="lab")
+    assert (move.name, move.vrf, move.current) == ("Vlan10", "lab", "default")
+    assert lines[0] == "Move Vlan10 from VRF default to VRF lab."
+    assert len(lines) == 1 and "changes: 192.0.2.1/24, 2001:db8:a::1/64." in warnings[0]
+    assert "Add them again afterwards" in warnings[0] and len(warnings) == 2  # it is on
+    move, lines, warnings = plan_interface_vrf(_vrf_view(), name="Vlan1", vrf="tenant-a")
+    assert move.vrf == "tenant-a" and len(lines) == 1 and warnings == []
+    move, _, _ = plan_interface_vrf(_vrf_view(), name="Ethernet1/54", vrf="default")
+    assert (move.vrf, move.current) == ("default", "tenant-a")
+    with pytest.raises(ValueError, match="in VRF default already"):
+        plan_interface_vrf(_vrf_view(), name="Vlan10", vrf="default")
+    with pytest.raises(ValueError, match="has no VRF blue; make it first"):
+        plan_interface_vrf(_vrf_view(), name="Vlan10", vrf="blue")
+    with pytest.raises(ValueError, match="keeps the VRF name"):
+        plan_interface_vrf(_vrf_view(), name="Vlan10", vrf="management")
+    with pytest.raises(ValueError):
+        plan_interface_vrf(_vrf_view(), name="mgmt0", vrf="lab")
+
+
+def test_a_new_vlan_interface_in_a_vrf() -> None:
+    # 192.0.2.1/24 is Vlan10's in default; in VRF lab the same network is free.
+    change, lines, _ = plan_create_vlan_interface(
+        _vrf_view(), vlan="20", ipv4="192.0.2.5/24", ipv6="", description="", mtu="",
+        enabled=True, vrf="lab",
+    )  # fmt: skip
+    assert change.vrf == "lab" and "VRF: lab." in lines
+    # tenant-a has Ethernet1/54's network.
+    with pytest.raises(ValueError, match="same network as 198.51.100.1/24 on Ethernet1/54"):
+        plan_create_vlan_interface(
+            _vrf_view(), vlan="20", ipv4="198.51.100.9/24", ipv6="", description="", mtu="",
+            enabled=True, vrf="tenant-a",
+        )  # fmt: skip
+    change, _, _ = plan_create_vlan_interface(
+        _vrf_view(), vlan="20", ipv4="", ipv6="", description="", mtu="", enabled=True
+    )
+    assert change.vrf is None
+
+
+def test_vrf_commands() -> None:
+    sent: list[list[str]] = []
+    with _client(sent) as client:
+        client.create_vrf("lab")
+        client.delete_vrf("lab")
+        client.set_interface_vrf("Vlan10", "lab", current="default")
+        client.set_interface_vrf("Ethernet1/54", "default", current="tenant-a")
+        client.set_interface_vrf("Ethernet1/54", "lab", current="tenant-a")
+        client.configure_vlan_interface(20, vrf="lab", add=[("192.0.2.1/24", False)])
+        for bad in (
+            lambda: client.create_vrf("management"),
+            lambda: client.delete_vrf("default"),
+            lambda: client.set_interface_vrf("Vlan10", "default", current="default"),
+            lambda: client.set_interface_vrf("mgmt0", "lab", current="management"),
+            lambda: client.set_interface_vrf("Vlan10", "a b", current="default"),
+        ):
+            with pytest.raises(ValueError):
+                bad()
+    assert sent == [
+        ["vrf context lab"],
+        ["no vrf context lab"],
+        ["interface Vlan10", "vrf member lab"],
+        ["interface Ethernet1/54", "no vrf member tenant-a"],
+        ["interface Ethernet1/54", "no vrf member tenant-a", "vrf member lab"],
+        ["interface vlan20", "vrf member lab", "ip address 192.0.2.1/24"],
+    ]
+
+
+def test_role_has_the_vrf_rules() -> None:
+    lines = role_lines(["Ethernet1/1"], "nxray")
+    for rule in VRF_RULES:
+        assert rule in lines
+    # The forms proven on the switch.
+    assert "rule 52 permit command conf t ; no vrf context *" in lines
+    assert "rule 53 permit command conf t ; interface * ; vrf member *" in lines
+    assert lines.index(VRF_RULES[-1]) < lines.index("interface policy deny")

@@ -305,8 +305,8 @@ def test_old_role_offers_turning_on_vlan_changes(
     text = _text(logged_in.get("/switch").text)
     assert "On for ports" in text
     assert (
-        "Turn on VLAN, port settings, feature, neighbor, port-channel and VLAN interface changes"
-        in text
+        "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF "
+        "changes" in text
     )
     assert "There is no wait this time" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
@@ -320,8 +320,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     response = _enable(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN, port settings, feature, neighbor, port-channel and VLAN "
-        "interface changes are on: nxray may now "
+        "VLAN, port settings, feature, neighbor, port-channel, VLAN interface "
+        "and VRF changes are on: nxray may now "
         "also create, rename and delete VLANs" in text
     )
     assert "no wait" in text and "leaving the switch alone" not in text
@@ -333,12 +333,13 @@ def test_turning_on_vlan_changes_needs_no_wait(
     _post(logged_in, "/vlans/create", vlan_id="20")
     assert _config_requests(ports_only) == [["vlan 20"]]
     assert (
-        "Turn on VLAN, port settings, feature, neighbor, port-channel and VLAN interface changes"
-        not in logged_in.get("/switch").text
+        "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF "
+        "changes" not in logged_in.get("/switch").text
     )
     assert (
         "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC "
-        "address table, port-channels and VLAN interfaces" in _text(logged_in.get("/switch").text)
+        "address table, port-channels, VLAN interfaces and VRFs"
+        in _text(logged_in.get("/switch").text)
     )
 
 

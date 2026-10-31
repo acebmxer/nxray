@@ -99,6 +99,45 @@
   {% endif %}
 </section>
 
+<section class="card" id="vrfs">
+  <h2 class="card-title">VRFs</h2>
+  <p class="lead">A VRF is a routing table of its own: the switch routes between the interfaces in one VRF, never between VRFs. Every interface starts in default; management holds mgmt0. NXray never changes those two.</p>
+  <table class="table table-devices">
+    <thead>
+      <tr><th>VRF</th><th>State</th><th>Interfaces</th>{% if can_change and vrf_ready %}<th></th>{% endif %}</tr>
+    </thead>
+    <tbody>
+      {% for v in view.vrfs %}
+      <tr>
+        <td>{{ v.name }}{% if v.kept %} <span class="dim">(the switch's own)</span>{% endif %}</td>
+        <td>{% if v.up %}<span class="badge badge-ok">up</span>{% else %}<span class="badge badge-crit">down</span>{% if v.reason %} <span class="dim">{{ v.reason }}</span>{% endif %}{% endif %}</td>
+        <td class="wrap">{% for name in v.interfaces %}{% if name.startswith("Ethernet") %}{{ port_link(name) }}{% elif name.startswith("Vlan") or name.startswith("port-channel") %}<a href="#{{ name|replace('/', '-') }}">{{ name }}</a>{% else %}{{ name }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}<span class="dim">none</span>{% endfor %}</td>
+        {% if can_change and vrf_ready %}
+        <td>{% if not v.kept %}
+          <form method="post" action="/routing/vrf/delete" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="name" value="{{ v.name }}">
+            <button type="submit" class="btn btn-quiet">Delete {{ v.name }}</button>
+          </form>
+        {% endif %}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if can_change and vrf_ready %}
+  <form method="post" action="/routing/vrf/create" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="new_vrf">Make a VRF</label>
+    <input id="new_vrf" name="name" type="text" spellcheck="false" maxlength="32" placeholder="lab" value="{{ form.vrf_name or '' }}">
+    <p class="hint">Up to 32 letters, digits, - or _. A VRF that interfaces are in cannot be deleted: move them out first.</p>
+    <button type="submit" class="btn btn-quiet">Make VRF</button>
+  </form>
+  {% elif can_change %}
+  <p class="note">VRF changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to make and delete VRFs and move VLAN interfaces and routed ports between them.</p>
+  {% endif %}
+</section>
+
 {% if can_change %}
 {% if view.interface_vlan_on and not vlan_ready %}
 <section class="card">
@@ -169,6 +208,18 @@
       </form>
     </div>
   </div>
+  {% if vrf_ready and i.vrf != "management" %}
+  <form method="post" action="/routing/vrf/move" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ i.name }}">
+    <label for="vrf_{{ i.name|replace('/', '-') }}">VRF of {{ i.name }}</label>
+    <select id="vrf_{{ i.name|replace('/', '-') }}" name="vrf">
+      {% for name in view.vrf_choices %}<option value="{{ name }}" {% if name == i.vrf %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+    <p class="hint">The switch deletes the addresses of an interface whose VRF changes.</p>
+    <button type="submit" class="btn btn-quiet">Move {{ i.name }} to this VRF</button>
+  </form>
+  {% endif %}
   {% if i.kind == "vlan" and i.vlan != 1 %}
   <form method="post" action="/routing/vlan-interface/delete" class="inline form-after">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -196,6 +247,12 @@
     <input id="new_ipv6" name="ipv6" type="text" spellcheck="false" placeholder="2001:db8::1/64" value="{{ form.ipv6 or '' }}">
     <label for="new_desc">Description (optional)</label>
     <input id="new_desc" name="description" type="text" maxlength="254" value="{{ form.description or '' }}">
+    {% if vrf_ready and view.vrf_choices|length > 1 %}
+    <label for="new_vrf_member">VRF</label>
+    <select id="new_vrf_member" name="vrf">
+      {% for name in view.vrf_choices %}<option value="{{ name }}" {% if form.vrf == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+    {% endif %}
     <label for="new_mtu">MTU (optional)</label>
     <input id="new_mtu" name="mtu" type="text" inputmode="numeric" value="{{ form.mtu or '' }}">
     <p class="hint">{{ mtu_min }} to {{ mtu_max }}; empty keeps {{ default_mtu }}.</p>

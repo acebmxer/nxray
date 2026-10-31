@@ -283,11 +283,14 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     page = _text(logged_in.get("/routing").text)
     assert "VLAN interface changes are off" in page
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VLAN interface changes" in switch_page
+    assert "Turn on VLAN interface and VRF changes" in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
     text = _text(response.text)
-    assert "VLAN interface changes are on: nxray may now also make, change and delete VLAN" in text
+    assert (
+        "VLAN interface and VRF changes are on: nxray may now also make, change and delete VLAN"
+        in text
+    )
     assert "there is no wait" in text
     # The role's port list gains the VLAN interfaces, so the check and save go over SSH.
     assert "permit interface Vlan1-254" in enabled.ssh_lines
@@ -336,3 +339,88 @@ def test_save_config_from_the_routing_page_stays_there(logged_in: TestClient, en
     response = _post(logged_in, "/switch/save", back="routing")
     assert response.status_code == 200
     assert "<title>Routing" in response.text and enabled.saved
+
+
+def test_vrfs_make_move_and_delete(logged_in: TestClient, enabled: FakeSwitch):
+    page = _text(logged_in.get("/routing").text)
+    assert "default (the switch's own)" in page and "management (the switch's own)" in page
+    assert "mgmt0" in page
+
+    ask = _post(logged_in, "/routing/vrf/create", name="lab")
+    assert "Make the VRF lab." in _text(ask.text) and _config_requests(enabled) == []
+    made = _post(logged_in, "/routing/vrf/create", confirm=True, name="lab")
+    assert made.status_code == 200 and _config_requests(enabled)[-1] == ["vrf context lab"]
+    assert "lab" in enabled.vrfs and "Delete lab" in made.text
+
+    _make_vlan10(logged_in)
+    ask = _text(_post(logged_in, "/routing/vrf/move", name="Vlan10", vrf="lab").text)
+    assert "Move Vlan10 from VRF default to VRF lab." in ask
+    assert (
+        "The switch deletes every address on Vlan10 when its VRF changes: 192.0.2.1/24, "
+        "2001:db8:a::1/64." in ask
+    )
+    moved = _post(logged_in, "/routing/vrf/move", confirm=True, name="Vlan10", vrf="lab")
+    assert moved.status_code == 200, _text(moved.text)[:2000]
+    assert _config_requests(enabled)[-1] == ["interface Vlan10", "vrf member lab"]
+    assert "ip" not in enabled.port_state["Vlan10"] and enabled.port_state["Vlan10"]["vrf"] == "lab"
+    # Its card now shows it in lab, and the same network is free in default again.
+    assert 'value="lab" selected' in moved.text
+
+    refused = _post(logged_in, "/routing/vrf/delete", confirm=True, name="lab")
+    assert refused.status_code == 400
+    assert "Vlan10 is in VRF lab; move it to another VRF first" in _text(refused.text)
+    back = _post(logged_in, "/routing/vrf/move", confirm=True, name="Vlan10", vrf="default")
+    assert back.status_code == 200
+    assert _config_requests(enabled)[-1] == ["interface Vlan10", "no vrf member lab"]
+    deleted = _post(logged_in, "/routing/vrf/delete", confirm=True, name="lab")
+    assert deleted.status_code == 200 and _config_requests(enabled)[-1] == ["no vrf context lab"]
+    assert enabled.vrfs == []
+
+
+def test_a_vlan_interface_made_in_a_vrf(logged_in: TestClient, enabled: FakeSwitch):
+    enabled.vrfs.append("lab")
+    page = logged_in.get("/routing").text
+    assert 'id="new_vrf_member"' in page
+    done = _make_vlan10(logged_in, vrf="lab")
+    assert done.status_code == 200, _text(done.text)[:2000]
+    assert _config_requests(enabled)[-1][:3] == [
+        "interface vlan10",
+        "vrf member lab",
+        "ip address 192.0.2.1/24",
+    ]
+    assert enabled.port_state["Vlan10"]["vrf"] == "lab" and enabled.port_state["Vlan10"]["ip"]
+
+
+def test_vrf_refusals_before_anything_is_sent(logged_in: TestClient, enabled: FakeSwitch):
+    for path, fields, words in (
+        ("/routing/vrf/create", {"name": "management"}, "keeps the VRF name"),
+        ("/routing/vrf/create", {"name": "a b"}, "a VRF name is 1 to 32"),
+        ("/routing/vrf/delete", {"name": "default"}, "keeps the VRF name"),
+        ("/routing/vrf/move", {"name": "Vlan1", "vrf": "blue"}, "has no VRF blue"),
+        ("/routing/vrf/move", {"name": "mgmt0", "vrf": "default"}, "Not moved"),
+    ):
+        response = _post(logged_in, path, confirm=True, **fields)
+        assert response.status_code == 400 and words in _text(response.text), words
+    assert _config_requests(enabled) == []
+
+
+def test_role_version_7_offers_vrf_changes_without_a_wait(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+):
+    _db(settings, "UPDATE switch_connection SET role_version = 7")
+    page = logged_in.get("/routing").text
+    assert "VRF changes are off" in _text(page) and "/routing/vrf/create" not in page
+    assert "/routing/vrf/move" not in page
+    refused = _post(logged_in, "/routing/vrf/create", confirm=True, name="lab")
+    assert refused.status_code == 400 and "VRF changes are off" in _text(refused.text)
+    switch_page = _text(logged_in.get("/switch").text)
+    assert "Turn on VRF changes" in switch_page
+    assert "this version of NXray can also make and delete VRFs and move" in switch_page
+    enabled.ssh_lines.clear()
+    text = _text(_enable_changes(logged_in).text)
+    assert "VRF changes are on: nxray may now also make and delete VRFs" in text
+    assert "there is no wait" in text
+    # Only rules change: checked and saved over NX-API, no SSH save.
+    assert "rule 53 permit command conf t ; interface * ; vrf member *" in enabled.ssh_lines
+    assert "copy running-config startup-config" not in enabled.ssh_lines and enabled.saved
+    assert "/routing/vrf/create" in logged_in.get("/routing").text

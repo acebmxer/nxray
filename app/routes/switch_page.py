@@ -495,16 +495,20 @@ def switch_enable_changes(
         "make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and "
         "on routed ports on the Routing page"
     )
+    vrf_words = (
+        "make and delete VRFs and move VLAN interfaces and routed ports between them on the "
+        "Routing page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
-            "Port, VLAN, port settings, feature, neighbor, port-channel and VLAN interface "
+            "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF "
             "changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
-            f"and {layer3_words}. "
+            f"{layer3_words}, and {vrf_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -530,7 +534,9 @@ def switch_enable_changes(
             parts.append(neighbor_words)
         if connection.role_version < 6:
             parts.append(channel_words)
-        parts.append(layer3_words)
+        if connection.role_version < 7:
+            parts.append(layer3_words)
+        parts.append(vrf_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (

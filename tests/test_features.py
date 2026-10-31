@@ -139,19 +139,20 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 7
+    assert ROLE_VERSION == 8
 
 
 @pytest.mark.parametrize(
     ("version", "words"),
     [
-        (1, "VLAN, port settings, feature, neighbor, port-channel and VLAN interface changes"),
-        (2, "port settings, feature, neighbor, port-channel and VLAN interface changes"),
-        (3, "feature, neighbor, port-channel and VLAN interface changes"),
-        (4, "neighbor, port-channel and VLAN interface changes"),
-        (5, "port-channel and VLAN interface changes"),
-        (6, "VLAN interface changes"),
-        (7, ""),
+        (1, "VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF changes"),
+        (2, "port settings, feature, neighbor, port-channel, VLAN interface and VRF changes"),
+        (3, "feature, neighbor, port-channel, VLAN interface and VRF changes"),
+        (4, "neighbor, port-channel, VLAN interface and VRF changes"),
+        (5, "port-channel, VLAN interface and VRF changes"),
+        (6, "VLAN interface and VRF changes"),
+        (7, "VRF changes"),
+        (8, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

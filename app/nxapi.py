@@ -159,6 +159,15 @@ LACP_PRIORITY_MAX = 65535
 MIN_LINKS_MIN = 1
 MIN_LINKS_MAX = 32
 
+# VRF names: Cisco's guides give up to 32 case-sensitive letters and digits;
+# NXray also allows "-" and "_" inside one. NX-OS keeps default and management
+# for itself (mgmt0 lives in management), and "all" is what show commands take
+# for every VRF, so NXray never creates, deletes or moves interfaces into those.
+VRF_NAME_MAX = 32
+_VRF_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
+RESERVED_VRFS = frozenset({"default", "management", "all"})
+DEFAULT_VRF = "default"
+
 # Features NXray needs itself: it never sends their "no feature".
 NEEDED_FEATURES = frozenset({"nxapi", "ssh"})
 
@@ -405,6 +414,20 @@ def validate_routed_interface(name: str) -> str:
     if match := re.fullmatch(r"port-channel([0-9]{1,4})", cleaned):
         return f"port-channel{validate_channel_number(match.group(1))}"
     return validate_port_name(cleaned)
+
+
+def validate_vrf_name(name: str) -> str:
+    """Return a VRF name NXray may create, delete or move interfaces into, or raise
+    ValueError (never default, management or all)."""
+    cleaned = name.strip()
+    if not _VRF_NAME.fullmatch(cleaned):
+        raise ValueError(
+            f"a VRF name is 1 to {VRF_NAME_MAX} letters, digits, '-' or '_', starting with a "
+            "letter or digit"
+        )
+    if cleaned.lower() in RESERVED_VRFS:
+        raise ValueError(f"the switch keeps the VRF name {cleaned!r} for itself")
+    return cleaned
 
 
 def validate_storm_level(value: str | float) -> str:
@@ -1020,15 +1043,20 @@ class NxapiClient:
         enabled: bool | None = None,
         remove: Iterable[tuple[str, bool]] = (),
         add: Iterable[tuple[str, bool]] = (),
+        vrf: str | None = None,
     ) -> None:
         """Make a VLAN interface (``interface vlan<n>``) or change one, in one request.
 
-        ``interface vlan<n>`` makes it when it does not exist yet. ``remove``
-        and ``add`` are (address, secondary) pairs, sent in that order, before
-        the description and MTU; turning it on or off comes last. Only the
-        values given are sent. ``description=""`` removes the description.
+        ``interface vlan<n>`` makes it when it does not exist yet. ``vrf`` puts
+        it into that VRF first (``vrf member``; for a new one, since the switch
+        deletes an interface's addresses when its VRF changes). ``remove`` and
+        ``add`` are (address, secondary) pairs, sent in that order, before the
+        description and MTU; turning it on or off comes last. Only the values
+        given are sent. ``description=""`` removes the description.
         """
         commands = [f"interface vlan{validate_vlan_id(vlan)}"]
+        if vrf is not None:
+            commands.append(f"vrf member {validate_vrf_name(vrf)}")
         commands += _address_commands(remove, add)
         if description is not None:
             text = validate_description(description)
@@ -1069,6 +1097,37 @@ class NxapiClient:
         commands = [f"interface {validate_routed_interface(name)}"]
         commands += _address_commands(remove, add)
         if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def create_vrf(self, name: str) -> None:
+        """``vrf context <name>``, which makes the VRF when it does not exist yet."""
+        command = f"vrf context {validate_vrf_name(name)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def delete_vrf(self, name: str) -> None:
+        """``no vrf context <name>``.
+
+        The switch also takes the interfaces out of it; NXray refuses that
+        before it gets here (app/routing.py).
+        """
+        command = f"no vrf context {validate_vrf_name(name)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_interface_vrf(self, name: str, vrf: str, *, current: str) -> None:
+        """Move a VLAN interface, routed port or routed port-channel from VRF
+        ``current`` to ``vrf`` (either may be ``default``), in one request.
+
+        ``no vrf member <current>`` leaves a VRF, ``vrf member <vrf>`` joins
+        one. The switch deletes the interface's addresses each time ("Deleted
+        all L3 config on interface").
+        """
+        commands = [f"interface {validate_routed_interface(name)}"]
+        if current != DEFAULT_VRF:
+            commands.append(f"no vrf member {validate_vrf_name(current)}")
+        if vrf != DEFAULT_VRF:
+            commands.append(f"vrf member {validate_vrf_name(vrf)}")
+        if len(commands) == 1 or vrf == current:
             raise ValueError("nothing to change")
         self._send(commands, commands, self._target.timeout, allow_text=True)
 

@@ -1,0 +1,30 @@
+{
+  "TABLE_if": {
+    "ROW_if": [
+      {
+        "if_name": "Vlan1",
+        "vrf_name": "default",
+        "vrf_id": 1,
+        "soo": "--"
+      },
+      {
+        "if_name": "Vlan3900",
+        "vrf_name": "default",
+        "vrf_id": 1,
+        "soo": "--"
+      },
+      {
+        "if_name": "mgmt0",
+        "vrf_name": "management",
+        "vrf_id": 2,
+        "soo": "--"
+      },
+      {
+        "if_name": "Ethernet1/54",
+        "vrf_name": "tenant-a",
+        "vrf_id": 3,
+        "soo": "--"
+      }
+    ]
+  }
+}

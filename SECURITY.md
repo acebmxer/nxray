@@ -39,11 +39,17 @@ create, name and delete VLANs; it may turn any switch feature on or off
 and remove static MAC addresses and clear learned ones (`mac address-table
 aging-time *`, `mac address-table static *`, `clear mac address-table
 dynamic`); it may set the switch's LACP priority (`lacp system-priority *`);
+it may make, change and delete VLAN interfaces of VLANs 1 to 254 and put
+IPv4 and IPv6 addresses on them and on routed ports; it may make and delete
+VRFs and move VLAN interfaces and routed ports between them (`vrf context
+*`, `no vrf context *`, `vrf member *`, `no vrf member *`);
 and it may run `copy running-config startup-config`. The switch refuses it anything else,
 including mgmt0. Anyone who takes over NXray can do whatever that account
 can, so with port changes on that includes turning ports off, moving them
 to other VLANs, sending a device's traffic to the wrong port or dropping it
 with a static MAC address, pulling ports out of a port-channel or deleting it,
+taking the switch's address off a VLAN or moving an interface into another
+VRF (both cut off the devices that use the switch as their gateway there),
 and turning features on or off: turning off a feature
 deletes its settings (LACP takes its port-channels with it), and turning on
 `telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off

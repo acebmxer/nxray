@@ -1,5 +1,5 @@
-"""Layer 3: VLAN interfaces, routed ports and their addresses, and the checked
-changes the Routing page offers.
+"""Layer 3: VLAN interfaces, routed ports and their addresses, the VRFs, and the
+checked changes the Routing page offers.
 
 A VLAN interface (``interface vlan<n>``, an SVI) gives the switch its own
 address in a VLAN, so devices there can reach it and use it as their gateway,
@@ -19,17 +19,26 @@ Read from show output recorded on cisco-25gb, in one request:
   ``Ethernet1/54`` or ``Eth1/54``;
 - ``show ipv6 interface vrf all``: each interface's IPv6 addresses and the
   link-local address the switch made for it;
-- ``show interface description``: the descriptions, VLAN interfaces too.
+- ``show interface description``: the descriptions, VLAN interfaces too;
+- ``show vrf``: the VRFs and whether each is up;
+- ``show vrf interface``: which VRF each layer 3 interface is in, those
+  without an address too;
 
 and, when there are VLAN interfaces, one ``show interface vlan<n>`` each in a
 second request, for its MTU and whether it is on and up.
 
+A VRF is a routing table of its own: interfaces in different VRFs do not
+route to each other. NX-OS keeps ``default`` (every interface starts there)
+and ``management`` (mgmt0) for itself; NXray never changes those two.
+
 The commands themselves are built by ``NxapiClient.configure_vlan_interface``,
-``delete_vlan_interface`` and ``set_interface_addresses`` from checked values.
+``delete_vlan_interface``, ``set_interface_addresses``, ``create_vrf``,
+``delete_vrf`` and ``set_interface_vrf`` from checked values.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import ipaddress
 import re
 from dataclasses import dataclass, field
@@ -37,14 +46,17 @@ from typing import Any
 
 from app.neighbors import feature_enabled
 from app.nxapi import (
+    DEFAULT_VRF,
     MTU_MAX,
     MTU_MIN,
+    RESERVED_VRFS,
     VLAN_INTERFACE_MAX,
     NxapiClient,
     validate_description,
     validate_interface_address,
     validate_routed_interface,
     validate_vlan_id,
+    validate_vrf_name,
 )
 from app.ports import port_sort_key
 from app.switch import rows
@@ -57,6 +69,8 @@ ROUTING_COMMANDS = (
     "show ip interface vrf all",
     "show ipv6 interface vrf all",
     "show interface description",
+    "show vrf",
+    "show vrf interface",
 )
 
 # A VLAN interface's MTU when nobody set one.
@@ -153,11 +167,36 @@ class L3Interface:
 
 
 @dataclass(frozen=True)
+class Vrf:
+    """A VRF and the layer 3 interfaces in it."""
+
+    name: str
+    up: bool = True
+    reason: str = ""  # why it is down, as the switch says it
+    interfaces: tuple[str, ...] = ()
+
+    @property
+    def kept(self) -> bool:
+        """default or management: the switch's own, never changed by NXray."""
+        return self.name.lower() in RESERVED_VRFS
+
+
+@dataclass(frozen=True)
 class RoutingView:
     interface_vlan_on: bool = False
     vlan_interfaces: list[L3Interface] = field(default_factory=list)
     routed_ports: list[L3Interface] = field(default_factory=list)
     vlans: list[Vlan] = field(default_factory=list)
+    vrfs: list[Vrf] = field(default_factory=list)
+
+    def vrf(self, name: str) -> Vrf | None:
+        return next((v for v in self.vrfs if v.name == name), None)
+
+    @property
+    def vrf_choices(self) -> list[str]:
+        """The VRFs an interface can be put into: default and the ones made on the
+        switch (never management)."""
+        return [DEFAULT_VRF, *(v.name for v in self.vrfs if not v.kept)]
 
     def vlan_interface(self, vlan: int) -> L3Interface | None:
         return next((i for i in self.vlan_interfaces if i.vlan == vlan), None)
@@ -309,11 +348,49 @@ def parse_routed_port(
     )
 
 
+def parse_vrf_members(body: dict[str, Any]) -> dict[str, str]:
+    """Interface -> its VRF, from ``show vrf interface``."""
+    return {
+        long_name(_text(row.get("if_name"))): _text(row.get("vrf_name")) or DEFAULT_VRF
+        for row in rows(body, "TABLE_if", "ROW_if")
+        if _text(row.get("if_name"))
+    }
+
+
+def parse_vrfs(vrf_body: dict[str, Any], members: dict[str, str]) -> list[Vrf]:
+    """The VRFs from ``show vrf``, each with its interfaces (``parse_vrf_members``);
+    default first, then management, then the others by name."""
+    found = []
+    for row in rows(vrf_body, "TABLE_vrf", "ROW_vrf"):
+        name = _text(row.get("vrf_name"))
+        if not name:
+            continue
+        reason = _text(row.get("vrf_reason"))
+        found.append(
+            Vrf(
+                name=name,
+                up=_text(row.get("vrf_state")).lower() == "up",
+                reason="" if reason == "--" else reason,
+                interfaces=tuple(
+                    sorted(
+                        (i for i, v in members.items() if v == name),
+                        key=lambda i: (port_sort_key(i), i),
+                    )
+                ),
+            )
+        )
+    order = {DEFAULT_VRF: 0, "management": 1}
+    return sorted(found, key=lambda v: (order.get(v.name, 2), v.name.lower()))
+
+
 def load_routing(client: NxapiClient) -> RoutingView:
     """Everything the Routing page shows: one request, plus one for the VLAN interfaces."""
-    feature, brief, vlans, ip4, ip6, descriptions = client.show(*ROUTING_COMMANDS)
+    feature, brief, vlans, ip4, ip6, descriptions, vrf_body, vrf_interfaces = client.show(
+        *ROUTING_COMMANDS
+    )
     svi_names, routed_rows = parse_brief(brief)
     ipv4, ipv6, descs = parse_ipv4(ip4), parse_ipv6(ip6), _descriptions(descriptions)
+    members = parse_vrf_members(vrf_interfaces)
     svis = []
     if svi_names:
         bodies = client.show(*(f"show interface {name.lower()}" for name in svi_names))
@@ -322,11 +399,15 @@ def load_routing(client: NxapiClient) -> RoutingView:
             for name, body in zip(svi_names, bodies, strict=True)
         ]
     routed = [parse_routed_port(row, ipv4, ipv6, descs) for row in routed_rows]
+    # show vrf interface also knows the VRF of an interface without an address.
+    svis = [dataclasses.replace(i, vrf=members.get(i.name, i.vrf)) for i in svis]
+    routed = [dataclasses.replace(i, vrf=members.get(i.name, i.vrf)) for i in routed]
     return RoutingView(
         interface_vlan_on=feature_enabled(feature, "interface-vlan"),
         vlan_interfaces=sorted(svis, key=lambda i: i.vlan or 0),
         routed_ports=sorted(routed, key=lambda i: port_sort_key(i.name)),
         vlans=parse_vlans(vlans),
+        vrfs=parse_vrfs(vrf_body, members),
     )
 
 
@@ -370,6 +451,7 @@ class VlanInterfaceChange:
     enabled: bool | None = None
     remove: tuple[tuple[str, bool], ...] = ()
     add: tuple[tuple[str, bool], ...] = ()
+    vrf: str | None = None  # a new one's VRF when not default
 
 
 def _in_range(number: int) -> None:
@@ -407,8 +489,9 @@ def plan_create_vlan_interface(
     description: str,
     mtu: str,
     enabled: bool,
+    vrf: str = DEFAULT_VRF,
 ) -> tuple[VlanInterfaceChange, list[str], list[str]]:
-    """A new VLAN interface for a VLAN that has none."""
+    """A new VLAN interface for a VLAN that has none, in ``vrf``."""
     if not view.interface_vlan_on:
         raise ValueError(FEATURE_OFF)
     number = validate_vlan_id(vlan)
@@ -417,20 +500,23 @@ def plan_create_vlan_interface(
         raise ValueError(f"VLAN {number} does not exist; create it on the VLANs page first")
     if view.vlan_interface(number) is not None:
         raise ValueError(f"VLAN {number} has a VLAN interface already; change it below")
+    vrf = _target_vrf(view, vrf)
     add = []
     lines = [f"Make a VLAN interface for VLAN {number} (Vlan{number})."]
+    if vrf != DEFAULT_VRF:
+        lines.append(f"VRF: {vrf}.")
     if ipv4.strip():
         address = validate_interface_address(ipv4)
         if ":" in address:
             raise ValueError("put the IPv6 address in the IPv6 box")
-        _check_overlap(view, address, "default", f"Vlan{number}")
+        _check_overlap(view, address, vrf, f"Vlan{number}")
         add.append((address, False))
         lines.append(f"IPv4 address: {address}.")
     if ipv6.strip():
         address = validate_interface_address(ipv6)
         if ":" not in address:
             raise ValueError("put the IPv4 address in the IPv4 box")
-        _check_overlap(view, address, "default", f"Vlan{number}")
+        _check_overlap(view, address, vrf, f"Vlan{number}")
         add.append((address, False))
         lines.append(f"IPv6 address: {address}.")
     text = validate_description(description)
@@ -453,6 +539,7 @@ def plan_create_vlan_interface(
         mtu=new_mtu,
         enabled=True if enabled else None,
         add=tuple(add),
+        vrf=None if vrf == DEFAULT_VRF else vrf,
     )
     return change, lines, warnings
 
@@ -610,3 +697,76 @@ def plan_remove_address(
     ]
     change = AddressChange(interface.name, remove=((text, existing.secondary),))
     return change, [f"Take {text} off {interface.name}."], warnings
+
+
+# ---- VRFs ------------------------------------------------------------------------
+
+
+def _target_vrf(view: RoutingView, name: str) -> str:
+    """The VRF an interface is to go into: default, or one made on the switch."""
+    cleaned = name.strip() or DEFAULT_VRF
+    if cleaned == DEFAULT_VRF:
+        return DEFAULT_VRF
+    cleaned = validate_vrf_name(cleaned)
+    if view.vrf(cleaned) is None:
+        raise ValueError(f"the switch has no VRF {cleaned}; make it first")
+    return cleaned
+
+
+def plan_create_vrf(view: RoutingView, *, name: str) -> tuple[str, list[str], list[str]]:
+    """A new, empty VRF."""
+    cleaned = validate_vrf_name(name)
+    same = next((v for v in view.vrfs if v.name.lower() == cleaned.lower()), None)
+    if same is not None:
+        raise ValueError(f"the switch has a VRF {same.name} already")
+    lines = [
+        f"Make the VRF {cleaned}. It has no interfaces yet: move VLAN interfaces and routed "
+        "ports into it below."
+    ]
+    return cleaned, lines, []
+
+
+def plan_delete_vrf(view: RoutingView, *, name: str) -> tuple[str, list[str], list[str]]:
+    """Deleting a VRF that no interface is in."""
+    cleaned = validate_vrf_name(name)
+    vrf = view.vrf(cleaned)
+    if vrf is None:
+        raise ValueError(f"the switch has no VRF {cleaned}")
+    if vrf.interfaces:
+        raise ValueError(
+            f"{', '.join(vrf.interfaces)} {'is' if len(vrf.interfaces) == 1 else 'are'} in "
+            f"VRF {cleaned}; move {'it' if len(vrf.interfaces) == 1 else 'them'} to another "
+            "VRF first"
+        )
+    return cleaned, [f"Delete the VRF {cleaned}."], []
+
+
+@dataclass(frozen=True)
+class VrfMove:
+    name: str
+    vrf: str
+    current: str
+
+
+def plan_interface_vrf(
+    view: RoutingView, *, name: str, vrf: str
+) -> tuple[VrfMove, list[str], list[str]]:
+    """Moving a VLAN interface or routed port into another VRF. The switch deletes
+    its addresses when it does."""
+    interface = _routed(view, name)
+    target = _target_vrf(view, vrf)
+    if target == interface.vrf:
+        raise ValueError(f"{interface.name} is in VRF {target} already")
+    if interface.vrf.lower() == "management":
+        raise ValueError(f"{interface.name} is in the management VRF, which NXray never changes")
+    lines = [f"Move {interface.name} from VRF {interface.vrf} to VRF {target}."]
+    warnings = []
+    if interface.addresses:
+        texts = ", ".join(a.text for a in interface.addresses)
+        warnings.append(
+            f"The switch deletes every address on {interface.name} when its VRF changes: "
+            f"{texts}. Add them again afterwards if it should keep them."
+        )
+        if interface.admin_up:
+            warnings.append(_gateway_warning(interface.name, interface.vlan))
+    return VrfMove(interface.name, target, interface.vrf), lines, warnings

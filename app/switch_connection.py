@@ -82,6 +82,11 @@ class SwitchConnection:
         the switch takes only while interface-vlan is on."""
         return self.layer3_changes_enabled and self.role_vlan_interfaces
 
+    @property
+    def vrf_changes_enabled(self) -> bool:
+        """True once that role includes the VRF rules (role version 8 or later)."""
+        return self.changes_enabled and self.role_version >= 8
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

@@ -9,7 +9,8 @@ and taking them out again, with their LACP rate and priority, and their IPv4
 and IPv6 addresses when routed; on the port-channels, the same settings plus
 their description and LACP minimum links, and deleting them; on the VLAN
 interfaces, making and deleting them, their addresses, description, MTU and
-on/off; switch-wide, creating, naming and deleting VLANs,
+on/off; the VRFs, making and deleting them and moving VLAN interfaces and
+routed ports between them; switch-wide, creating, naming and deleting VLANs,
 splitting a 100G port into four and joining it again, turning switch
 features on and off, setting how long learned MAC addresses are kept,
 adding and removing static MAC addresses, clearing learned ones, and the
@@ -46,7 +47,7 @@ through with NX-API answering at once), so NXray adds no wait for it.
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
-rules and the VLAN interfaces in the port list.
+rules and the VLAN interfaces in the port list, 8 the VRF rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -222,11 +223,26 @@ LAYER3_RULES = (
 # small (see VLAN_INTERFACE_MAX).
 VLAN_INTERFACE_PERMIT = f"permit interface Vlan1-{VLAN_INTERFACE_MAX}"
 
+# VRF rules, added in ROLE_VERSION 8. Proven on cisco-25gb (2026-10-30) with a
+# throwaway account: "vrf context <name>" made a VRF and "no vrf context"
+# deleted it, and on a permitted port "vrf member" and "no vrf member" moved
+# it into the VRF and out again. Entering a VRF's configuration (which makes
+# it) is allowed when a rule names a command inside it, as with VLANs: rule 51
+# is there for that. NXray sends no VRF description, since no show command
+# its account may run lists one. The port list stays as it was, so this needs
+# no SSH save and no wait.
+VRF_RULES = (
+    "rule 51 permit command conf t ; vrf context * ; description *",
+    "rule 52 permit command conf t ; no vrf context *",
+    "rule 53 permit command conf t ; interface * ; vrf member *",
+    "rule 54 permit command conf t ; interface * ; no vrf member *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 7
+ROLE_VERSION = 8
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -236,6 +252,7 @@ _ADDED_BY_VERSION = {
     5: "neighbor",
     6: "port-channel",
     7: "VLAN interface",
+    8: "VRF",
 }
 
 
@@ -298,6 +315,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *NEIGHBOR_RULES,
         *CHANNEL_RULES,
         *LAYER3_RULES,
+        *VRF_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

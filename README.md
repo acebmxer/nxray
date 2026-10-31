@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-918%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-1025%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,8 +13,8 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 14 of the [roadmap](#roadmap) are built;
-stages 15 to 22 (the advanced switch features) are planned. Today you can install NXray, sign in, connect it to a switch,
+**Status:** early. Stages 1 to 14 of the [roadmap](#roadmap) are built,
+stage 15 (layer 3) in part; stages 16 to 20 are planned. Today you can install NXray, sign in, connect it to a switch,
 see the switch's health on the dashboard, look at every port on a picture of
 the front panel coloured by state, traffic, errors or VLAN, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
@@ -23,7 +23,8 @@ address aging time, add static MAC addresses, clear learned ones, label ports, t
 ports on or off, edit their descriptions, create, rename and delete VLANs, set the
 VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
-delete port-channels with their LACP options, turn switch features
+delete port-channels with their LACP options, make VLAN interfaces with IPv4
+and IPv6 addresses, make VRFs and move interfaces between them, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
@@ -122,7 +123,7 @@ default: *(built)*.
 13. **Features**: turn switch features on and off. *(built)*
 14. **Link aggregation**: port-channels and LACP. *(built)*
 15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
-    routed ports: *(built)*. VRFs, static routes, routing protocols:
+    routed ports: *(built)*. VRFs: *(built)*. Static routes, routing protocols:
     *(planned)*
 16. **Spanning tree.** *(planned)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for

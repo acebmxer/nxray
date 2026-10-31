@@ -1,5 +1,6 @@
-"""The Routing page: VLAN interfaces, routed ports and their addresses, and their
-changes (make, change and delete VLAN interfaces; add and remove addresses)."""
+"""The Routing page: VLAN interfaces, routed ports and their addresses, the VRFs,
+and their changes (make, change and delete VLAN interfaces; add and remove
+addresses; make and delete VRFs and move interfaces between them)."""
 
 from __future__ import annotations
 
@@ -26,7 +27,10 @@ from app.routing import (
     load_routing,
     plan_add_address,
     plan_create_vlan_interface,
+    plan_create_vrf,
     plan_delete_vlan_interface,
+    plan_delete_vrf,
+    plan_interface_vrf,
     plan_remove_address,
     plan_vlan_interface_settings,
 )
@@ -41,6 +45,11 @@ NOT_SAVED = "Not saved yet: Save config keeps it over a restart of the switch."
 LAYER3_CHANGES_OFF = (
     "VLAN interface changes are off. An NXray admin turns them on on the Switch page first: "
     "NXray's role on the switch does not allow them yet."
+)
+
+VRF_CHANGES_OFF = (
+    "VRF changes are off. An NXray admin turns them on on the Switch page first: NXray's "
+    "role on the switch does not allow them yet."
 )
 
 VLAN_INTERFACES_NOT_LISTED = (
@@ -90,10 +99,16 @@ def _render(
             "view": view,
             "error": error,
             "notice": notice,
-            "form": form or {"enabled": "yes", "vlan": request.query_params.get("vlan", "")},
+            "form": {
+                "enabled": "yes",
+                "vlan": request.query_params.get("vlan", ""),
+                "vrf": "default",
+                **(form or {}),
+            },
             "csrf_token": csrf_token(request),
             "can_change": _can_change(request, connection),
             "vlan_ready": connection is not None and connection.vlan_interface_changes_enabled,
+            "vrf_ready": connection is not None and connection.vrf_changes_enabled,
             "vlan_interface_max": VLAN_INTERFACE_MAX,
             "mtu_min": MTU_MIN,
             "mtu_max": MTU_MAX,
@@ -145,13 +160,13 @@ def _confirm(
 
 
 def _start(
-    request: Request, vlan_interface: bool = False
+    request: Request, vlan_interface: bool = False, vrf: bool = False
 ) -> tuple[str | None, SwitchConnection | None, RoutingView | None]:
     """The checks every change shares, then the switch read fresh.
 
     ``vlan_interface``: the change acts on a VLAN interface, which also needs
-    the role's port list to name them. (why it cannot go ahead or None,
-    connection, view).
+    the role's port list to name them. ``vrf``: it needs the VRF rules. (why it
+    cannot go ahead or None, connection, view).
     """
     connection, target, problem = stored_switch(request)
     if connection is None:
@@ -162,6 +177,8 @@ def _start(
         return LAYER3_CHANGES_OFF, None, None
     if vlan_interface and not connection.vlan_interface_changes_enabled:
         return VLAN_INTERFACES_NOT_LISTED, None, None
+    if vrf and not connection.vrf_changes_enabled:
+        return VRF_CHANGES_OFF, None, None
     connection, status, view = _read(request)
     if view is None:
         return (status.message if status else "The switch could not be read."), None, None
@@ -207,9 +224,11 @@ def vlan_interface_create(
     description: str = Form(""),
     mtu: str = Form(""),
     enabled: str = Form(""),
+    vrf: str = Form("default"),
     confirm: str = Form(""),
 ) -> Response:
-    """Make a VLAN interface. Without confirm=yes, asks first."""
+    """Make a VLAN interface, in the default VRF or another one. Without
+    confirm=yes, asks first."""
     require_csrf(request, csrf)
     form: dict[str, str | list[str]] = {
         "vlan": vlan,
@@ -218,8 +237,10 @@ def vlan_interface_create(
         "description": description,
         "mtu": mtu,
         "enabled": enabled,
+        "vrf": vrf,
     }
-    problem, connection, view = _start(request, vlan_interface=True)
+    in_vrf = vrf.strip() not in ("", "default")
+    problem, connection, view = _start(request, vlan_interface=True, vrf=in_vrf)
     if problem is not None:
         return _render(request, username, error=problem, form=form, status_code=400)
     assert connection is not None and view is not None
@@ -232,6 +253,7 @@ def vlan_interface_create(
             description=description,
             mtu=mtu,
             enabled=enabled == "yes",
+            vrf=vrf,
         )
     except ValueError as exc:
         return _bad(request, username, "Not made", exc, form)
@@ -252,6 +274,7 @@ def vlan_interface_create(
             mtu=change.mtu,
             enabled=change.enabled,
             add=change.add,
+            vrf=change.vrf,
         ),
     )
     if refused:
@@ -425,3 +448,108 @@ def address_remove(
     if refused:
         return _refused(request, username, f"address on {change.name}", refused)
     return _done(request, username, lines, f"address removed from {change.name}", connection)
+
+
+@router.post("/routing/vrf/create", response_class=HTMLResponse)
+def vrf_create(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Make a VRF. Without confirm=yes, asks first."""
+    require_csrf(request, csrf)
+    form = {"vrf_name": name}
+    problem, connection, view = _start(request, vrf=True)
+    if problem is not None:
+        return _render(request, username, error=problem, form=form, status_code=400)
+    assert connection is not None and view is not None
+    try:
+        vrf, lines, warnings = plan_create_vrf(view, name=name)
+    except ValueError as exc:
+        return _bad(request, username, "Not made", exc, form)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/routing/vrf/create",
+            lines=lines,
+            warnings=warnings,
+            fields={"name": vrf},
+        )
+    if refused := _send(request, lambda client: client.create_vrf(vrf)):
+        return _refused(request, username, f"VRF {vrf}", refused, form)
+    return _done(request, username, lines[:1], f"VRF {vrf} made", connection)
+
+
+@router.post("/routing/vrf/delete", response_class=HTMLResponse)
+def vrf_delete(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Delete a VRF no interface is in. Without confirm=yes, asks first."""
+    require_csrf(request, csrf)
+    problem, connection, view = _start(request, vrf=True)
+    if problem is not None:
+        return _render(request, username, error=problem, status_code=400)
+    assert connection is not None and view is not None
+    try:
+        vrf, lines, warnings = plan_delete_vrf(view, name=name)
+    except ValueError as exc:
+        return _bad(request, username, "Not deleted", exc)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/routing/vrf/delete",
+            lines=lines,
+            warnings=warnings,
+            fields={"name": vrf},
+        )
+    if refused := _send(request, lambda client: client.delete_vrf(vrf)):
+        return _refused(request, username, f"deleting VRF {vrf}", refused)
+    return _done(request, username, lines, f"VRF {vrf} deleted", connection)
+
+
+@router.post("/routing/vrf/move", response_class=HTMLResponse)
+def vrf_move(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    vrf: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Move a VLAN interface or routed port into another VRF; the switch deletes
+    its addresses. Without confirm=yes, asks first."""
+    require_csrf(request, csrf)
+    problem, connection, view = _start(
+        request, vlan_interface=name.strip().lower().startswith("vlan"), vrf=True
+    )
+    if problem is not None:
+        return _render(request, username, error=problem, status_code=400)
+    assert connection is not None and view is not None
+    try:
+        move, lines, warnings = plan_interface_vrf(view, name=name, vrf=vrf)
+    except ValueError as exc:
+        return _bad(request, username, "Not moved", exc)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/routing/vrf/move",
+            lines=lines,
+            warnings=warnings,
+            fields={"name": move.name, "vrf": move.vrf},
+        )
+    refused = _send(
+        request,
+        lambda client: client.set_interface_vrf(move.name, move.vrf, current=move.current),
+    )
+    if refused:
+        return _refused(request, username, f"VRF of {move.name}", refused)
+    return _done(request, username, lines, f"{move.name} moved to VRF {move.vrf}", connection)

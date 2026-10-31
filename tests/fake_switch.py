@@ -39,6 +39,11 @@ interface-vlan feature is on (off as recorded), turning it on makes Vlan1
 interfaces, and deleting one needs the rule "conf t ; no interface Vlan *".
 Extra IPv4 and IPv6 addresses of a routed port or VLAN interface are in its
 ``port_state`` (``secondaries``, ``ipv6``).
+
+VRFs made on the switch live in ``vrfs`` (default and management are always
+there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
+entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
+and "vrf member" or "no vrf member" deletes the interface's addresses.
 """
 
 from __future__ import annotations
@@ -232,6 +237,8 @@ class FakeSwitch:
     lacp_priority: int = 32768
     # VLAN interfaces (VLAN numbers); only while interface-vlan is on.
     svis: set[int] = field(default_factory=set)
+    # VRFs made on the switch, besides default and management.
+    vrfs: list[str] = field(default_factory=list)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -281,7 +288,7 @@ class FakeSwitch:
             if interface is not None and role.interface_policy_deny:
                 if not role.names(interface):
                     continue
-            if entity in ("interface", "vlan"):
+            if entity in ("interface", "vlan", "vrf context"):
                 if any(e.startswith(f"conf t ; {entity} * ; ") for e in role.entities):
                     return True
             elif entity in role.entities:
@@ -343,6 +350,29 @@ class FakeSwitch:
             reply := self._address_command(user, is_admin, cmd, ident, interface)
         ):
             return reply, context
+        if interface is not None and (
+            reply := self._vrf_member(user, is_admin, cmd, ident, interface)
+        ):
+            return reply, context
+        if match := re.fullmatch(r"(no )?vrf context (\S+)", cmd):
+            undo, name = match.groups()
+            rule = "conf t ; no vrf context *" if undo else "vrf context"
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, None
+            if name in ("default", "management"):
+                return _error(ident, f"% VRF {name} is reserved\n"), None
+            if undo:
+                if name not in self.vrfs:
+                    return _error(ident, f"% VRF {name} not found\n"), context
+                self.vrfs.remove(name)
+                for state in self.port_state.values():
+                    if state.get("vrf") == name:
+                        _drop_l3(state)
+                        state.pop("vrf")
+                return _ok(ident, None), context
+            if name not in self.vrfs:
+                self.vrfs.append(name)
+            return _ok(ident, None), ("vrf", name)
         if match := re.fullmatch(r"(no )?interface port-channel(\d+)", cmd):
             undo, number = match.group(1), int(match.group(2))
             name = f"port-channel{number}"
@@ -604,6 +634,56 @@ class FakeSwitch:
         elif address not in found:
             found.append(address)
         return _ok(ident, None)
+
+    def _vrf_member(
+        self, user: str, is_admin: bool, cmd: str, ident: int, interface: str
+    ) -> dict[str, Any] | None:
+        """``vrf member <name>`` and its ``no`` form; None for any other command."""
+        match = re.fullmatch(r"(no )?vrf member (\S+)", cmd)
+        if match is None:
+            return None
+        undo, name = match.groups()
+        entity = "no vrf member *" if undo else "vrf member *"
+        if not (is_admin or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)):
+            return _error(ident, "% Permission denied for the role\n")
+        state = self.port_state.setdefault(interface, {})
+        if not state.get("routed"):
+            return _error(ident, "% Configure layer 3 on the interface first\n")
+        if undo:
+            if state.get("vrf", "default") != name:
+                return _error(ident, f"% {interface} is not a member of VRF {name}\n")
+            state.pop("vrf", None)
+        else:
+            if name not in self.vrfs:
+                return _error(ident, f"% VRF {name} does not exist\n")
+            state["vrf"] = name
+        _drop_l3(state)
+        return _ok(ident, {"msg": f"Warning: Deleted all L3 config on interface {interface}\n"})
+
+    def vrf_of(self, name: str) -> str:
+        return self.port_state.get(name, {}).get("vrf", "default")
+
+    def vrf_table(self) -> dict[str, Any]:
+        """``show vrf``, shaped as recorded on cisco-25gb."""
+        names = ["default", "management", *self.vrfs]
+        found = [
+            {"vrf_name": n, "vrf_id": i, "vrf_state": "Up", "vrf_reason": "--"}
+            for i, n in enumerate(names, 1)
+        ]
+        return {"TABLE_vrf": {"ROW_vrf": found}}
+
+    def vrf_interfaces(self) -> dict[str, Any]:
+        """``show vrf interface``: the VLAN interfaces, mgmt0 and the routed ports."""
+        ids = {n: i for i, n in enumerate(["default", "management", *self.vrfs], 1)}
+        names = [f"Vlan{n}" for n in sorted(self.svis)]
+        found: list[dict[str, Any]] = [{"if_name": n, "vrf_name": self.vrf_of(n)} for n in names]
+        found.append({"if_name": "mgmt0", "vrf_name": "management"})
+        for name, state in sorted(self.port_state.items(), key=lambda item: _port_key(item[0])):
+            if state.get("routed") and name.startswith("Ethernet"):
+                found.append({"if_name": name, "vrf_name": self.vrf_of(name)})
+        for row in found:
+            row.update(vrf_id=ids[row["vrf_name"]], soo="--")
+        return {"TABLE_if": {"ROW_if": found}}
 
     def _channel_command(
         self, user: str, is_admin: bool, cmd: str, ident: int, interface: str
@@ -922,7 +1002,7 @@ class FakeSwitch:
             if state.get("routed") and state.get("ip"):
                 address, _, masklen = state["ip"].partition("/")
                 row: dict[str, Any] = {
-                    "vrf-name-out": "default",
+                    "vrf-name-out": state.get("vrf", "default"),
                     # Written short, as NX-OS writes port names here.
                     "intf-name": name.replace("Ethernet", "Eth"),
                     "prefix": address,
@@ -948,7 +1028,7 @@ class FakeSwitch:
                 addresses = [{"addr": a} for a in state["ipv6"]]
                 rows.append(
                     {
-                        "vrf-name-out": "default",
+                        "vrf-name-out": state.get("vrf", "default"),
                         "intf-name": name,
                         "prefix": state["ipv6"][0],
                         "linklocal-addr": "fe80::7279:b3ff:fe00:1",
@@ -1083,6 +1163,10 @@ class FakeSwitch:
             if what == "flowcontrol":
                 return _ok(ident, self.flowcontrol(name))
             return _ok(ident, self.storm_control(name))
+        if cmd == "show vrf":
+            return _ok(ident, self.vrf_table())
+        if cmd == "show vrf interface":
+            return _ok(ident, self.vrf_interfaces())
         if cmd == "show ip interface vrf all":
             return _ok(ident, self.ip_interfaces())
         if cmd == "show ipv6 interface vrf all":
@@ -1260,6 +1344,12 @@ class FakeShell:
 
     def close(self) -> None:
         self.closed = True
+
+
+def _drop_l3(state: dict[str, Any]) -> None:
+    """What the switch deletes from an interface whose VRF changes: its addresses."""
+    for key in ("ip", "secondaries", "ipv6"):
+        state.pop(key, None)
 
 
 def _port_key(name: str) -> tuple[int, ...]:

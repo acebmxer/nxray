@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Routing page: VRFs.** The Routing page lists the VRFs (separate routing
+  tables), each with its state and the interfaces in it; default and
+  management (mgmt0) are marked as the switch's own and never changed.
+  Operators and admins can, after a confirm page, make a VRF, delete one
+  (refused while interfaces are in it, naming them), move a VLAN interface
+  or routed port into another VRF or back to default, and make a new VLAN
+  interface straight into a VRF. The switch deletes an interface's addresses
+  when its VRF changes, so the confirm page lists the ones that will go.
+  NXray's `nxray-ports` role gets rules 51 to 54 (`vrf context * ;
+  description *`, so the account may make a VRF, `no vrf context *`, `vrf
+  member *`, `no vrf member *`; role version 8); an older role gets a **Turn
+  on VRF changes** button, with no wait. The rules were tried on an
+  N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account on an unused
+  port.
 - **Routing page: VLAN interfaces.** A new **Routing** page lists the VLAN
   interfaces (which give the switch its own address in a VLAN, so devices
   there can use it as their gateway) and the routed ports, each with its
@@ -31,7 +45,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   makes and changes VLAN interfaces of VLANs 1 to 254 only: the switch stores
   the range as one line per VLAN interface, and all 4094 took it minutes and
   stopped NX-API answering (#11); an older
-  role gets a **Turn on VLAN interface changes** button, with no wait,
+  role gets a **Turn on VLAN interface and VRF changes** button, with no wait,
   checked and saved over SSH. The switch takes the VLAN interfaces into the
   port list only while interface-vlan is on, so with it off NXray leaves
   that line out and says so; once an admin turns interface-vlan on, **Update
