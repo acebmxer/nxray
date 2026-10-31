@@ -284,13 +284,15 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     assert "VLAN interface changes are off" in page
     switch_page = _text(logged_in.get("/switch").text)
     assert (
-        "Turn on VLAN interface, VRF, static route, routing protocol and spanning tree changes"
+        "Turn on VLAN interface, VRF, static route, routing protocol, spanning tree and switch "
+        "admin changes"
     ) in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN interface, VRF, static route, routing protocol and spanning tree changes are on: "
+        "VLAN interface, VRF, static route, routing protocol, spanning tree and switch admin "
+        "changes are on: "
         "nxray may now "
         "also make, change and "
         "delete VLAN" in text
@@ -418,12 +420,16 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     refused = _post(logged_in, "/routing/vrf/create", confirm=True, name="lab")
     assert refused.status_code == 400 and "VRF changes are off" in _text(refused.text)
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VRF, static route, routing protocol and spanning tree changes" in switch_page
+    assert (
+        "Turn on VRF, static route, routing protocol, spanning tree and switch admin changes"
+        in switch_page
+    )
     assert "this version of NXray can also make and delete VRFs and move" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
     assert (
-        "VRF, static route, routing protocol and spanning tree changes are on: nxray may now "
+        "VRF, static route, routing protocol, spanning tree and switch admin changes are on: "
+        "nxray may now "
         "also make and "
         "delete VRFs" in text
     )
@@ -494,12 +500,14 @@ def test_role_version_8_offers_static_route_changes(
         next_hop="192.0.2.254",
     )  # fmt: skip
     assert refused.status_code == 400 and "Static route changes are off" in _text(refused.text)
-    assert "Turn on static route, routing protocol and spanning tree changes" in _text(
-        logged_in.get("/switch").text
+    assert (
+        "Turn on static route, routing protocol, spanning tree and switch admin changes"
+        in _text(logged_in.get("/switch").text)
     )
     text = _text(_enable_changes(logged_in).text)
     assert (
-        "Static route, routing protocol and spanning tree changes are on: nxray may now also "
+        "Static route, routing protocol, spanning tree and switch admin changes are on: nxray may "
+        "now also "
         "add and remove "
         "static routes" in text
     )

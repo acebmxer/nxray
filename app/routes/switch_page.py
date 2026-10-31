@@ -28,6 +28,7 @@ from app.routes.ports import render_port_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.routing import render_routing_page
 from app.routes.spanning_tree import render_spanning_tree_page
+from app.routes.switch_admin import render_switch_admin_page
 from app.routes.vlans import render_vlans_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token
@@ -511,16 +512,21 @@ def switch_enable_changes(
         "change spanning tree for the whole switch, each VLAN, the MST region and each port on "
         "the Spanning tree page"
     )
+    admin_words = (
+        "change the switch's hostname, banner, clock, NTP, DNS, logging and SNMP settings and "
+        "read its configuration on the Switch admin page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-            "static route, routing protocol and spanning tree changes are on: "
+            "static route, routing protocol, spanning tree and switch admin changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
-            f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, and {stp_words}. "
+            f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, and "
+            f"{admin_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -554,7 +560,9 @@ def switch_enable_changes(
             parts.append(route_words)
         if connection.role_version < 10:
             parts.append(protocol_words)
-        parts.append(stp_words)
+        if connection.role_version < 11:
+            parts.append(stp_words)
+        parts.append(admin_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -594,8 +602,8 @@ def switch_save(
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``, ``protocols``,
-    ``protocol`` with ``protocol`` set to a protocol page's key, or ``spanning-tree``); the
-    answer is shown there.
+    ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree`` or
+    ``switch-admin``); the answer is shown there.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -620,6 +628,8 @@ def switch_save(
             return render_protocol_page(request, username, protocol, error=error, notice=notice)
         if back == "spanning-tree":
             return render_spanning_tree_page(request, username, error=error, notice=notice)
+        if back == "switch-admin":
+            return render_switch_admin_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)
 
     connection, target, error = stored_switch(request)

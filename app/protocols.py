@@ -86,6 +86,11 @@ KINDS = (
     "port",  # a front port or port-channel, switched (layer 2): spanning tree
     "vlan",  # one VLAN number, 1 to 3967 (the switch keeps 3968-4094 for itself)
     "vlans",  # VLAN numbers and ranges, 1 to 3967: 10 or 10,20-30
+    "host",  # a server: an IP address or a DNS name such as ntp.example.net
+    "domain",  # a DNS domain name such as example.net
+    "usevrf",  # the VRF a server is reached in: default (sent as ""), management or another
+    "hhmm",  # a time of day written 02:00
+    "hhmmss",  # a time of day written 14:30:00
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -199,6 +204,55 @@ _MAC_DIGITS = re.compile(r"[0-9a-f]{12}")
 # Characters a key or password may not start with: the switch reads them as
 # an output pipe, a redirect, an escape or the start of a quoted string.
 _SECRET_FIRST = "|>\\('\""
+
+
+# A DNS name: labels of letters, digits and "-" (not first or last), joined by ".".
+_DNS_NAME = re.compile(
+    r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
+)
+_HHMM = re.compile(r"^([0-9]{1,2}):([0-9]{2})$")
+_HHMMSS = re.compile(r"^([0-9]{1,2}):([0-9]{2}):([0-9]{2})$")
+
+
+def _host(value: str, label: str) -> str:
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        if not _DNS_NAME.fullmatch(value) or value.replace(".", "").isdigit():
+            raise ValueError(
+                f"{label} is an IP address or a name such as ntp.example.net"
+            ) from None
+        return value.lower()
+    return _address(value, None, label)
+
+
+def _domain(value: str, label: str) -> str:
+    if not _DNS_NAME.fullmatch(value) or value.replace(".", "").isdigit():
+        raise ValueError(f"{label} is a domain name such as example.net")
+    return value.lower()
+
+
+def _use_vrf(value: str, label: str) -> str:
+    if value == DEFAULT_VRF:
+        return ""
+    if value == "management":
+        return value
+    try:
+        return validate_vrf_name(value)
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from exc
+
+
+def _time_of_day(value: str, label: str, seconds: bool) -> str:
+    match = (_HHMMSS if seconds else _HHMM).fullmatch(value)
+    written = "14:30:00" if seconds else "02:00"
+    if not match:
+        raise ValueError(f"{label} is a time of day written like {written}")
+    parts = [int(g) for g in match.groups()]
+    if parts[0] > 23 or parts[1] > 59 or (seconds and parts[2] > 59):
+        raise ValueError(f"{label} is a time of day from 00:00 to 23:59, written like {written}")
+    return ":".join(f"{p:02d}" for p in parts)
 
 
 _CHANNEL = re.compile(r"(?i)^(?:po|port-channel)\s*([0-9]{1,4})$")
@@ -348,6 +402,14 @@ def check_value(spec: Field, raw: str) -> str:
         return _vlan(value, spec.label)
     if kind == "vlans":
         return _vlans(value, spec.label)
+    if kind == "host":
+        return _host(value, spec.label)
+    if kind == "domain":
+        return _domain(value, spec.label)
+    if kind == "usevrf":
+        return _use_vrf(value, spec.label)
+    if kind in ("hhmm", "hhmmss"):
+        return _time_of_day(value, spec.label, kind == "hhmmss")
     if kind == "vrf":
         if value == DEFAULT_VRF:
             if not spec.optional:
@@ -415,7 +477,9 @@ class Setting:
     alone cannot refuse (a prefix-list entry's lengths). ``ident`` names the
     scope's identity fields the lines also use, for scopes whose lines are
     typed at the top level and carry the place in them (``spanning-tree vlan
-    {vlan} priority {priority}``); the scope checks it has them.
+    {vlan} priority {priority}``); the scope checks it has them. ``config``
+    false marks a command that changes no configuration (``clock set``): it
+    leaves nothing to save.
     """
 
     key: str
@@ -430,6 +494,7 @@ class Setting:
     group: str = "Settings"
     check: Callable[[dict[str, str]], None] | None = None
     ident: tuple[str, ...] = ()
+    config: bool = True
 
     def __post_init__(self) -> None:
         names = {f.name for f in self.fields} | set(self.ident)
@@ -571,7 +636,8 @@ class ProtocolChange:
     """The lines one change sends, with the secrets masked in ``labels``.
 
     ``describe`` is the plain-words line for the confirm page and the
-    notice afterwards.
+    notice afterwards. ``config`` is false for a command that changes no
+    configuration, so there is nothing to save afterwards.
     """
 
     protocol: str
@@ -582,6 +648,7 @@ class ProtocolChange:
     labels: tuple[str, ...]
     describe: str
     warning: str = ""
+    config: bool = True
 
 
 def _checked(fields: Iterable[Field], raw: dict[str, str]) -> dict[str, str]:
@@ -684,6 +751,7 @@ def build_change(
         + (f" ({' '.join(shown)})" if shown else "")
         + ".",
         setting.warning if action == "set" else "",
+        setting.config,
     )
 
 

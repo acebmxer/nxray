@@ -29,6 +29,10 @@
 <select id="{{ uid }}" name="{{ name }}">
   {% for v in page.vrfs %}<option value="{{ v }}" {% if (value or "default") == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
 </select>
+{% elif f.kind == "usevrf" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% for v in page.vrfs %}<option value="{{ v }}" {% if (value or "default") == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+</select>
 {% elif f.kind == "secret" %}
 <input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="63">
 {% else %}
@@ -78,6 +82,7 @@
 <h1 class="page-title">{{ proto.name }}</h1>
 <p class="lead">{{ proto.summary }}</p>
 {% if proto.about %}<p class="note">{{ proto.about }}</p>{% endif %}
+{% for url, label in site.links %}<p class="note"><a href="{{ url }}">{{ label }}</a></p>{% endfor %}
 
 {% if not connection %}
 <div class="card empty-state">
@@ -136,7 +141,7 @@
   {% set places = page.view.of(scope.key) %}
   {% if can_change and scope.settings and (scope.ident or not places) %}
   <details class="settings-group pick-place">
-    <summary>Change {{ "any" if scope.ident else "the" }} {{ scope.label|lower }}{% if scope.ident %}{% if places %}, also one not listed below{% endif %}: pick it, then the setting{% endif %}</summary>
+    <summary>Change {{ "any" if scope.ident else "the" }} {{ scope.label|lower if scope.label[1:2].islower() else scope.label }}{% if scope.ident %}{% if places %}, also one not listed below{% endif %}: pick it, then the setting{% endif %}</summary>
     {{ setting_forms(scope, none, "s" ~ sidx ~ "-new") }}
   </details>
   {% endif %}

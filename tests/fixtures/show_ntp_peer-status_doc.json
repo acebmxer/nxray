@@ -1,0 +1,26 @@
+{
+  "TABLE_peersstatus": {
+    "ROW_peersstatus": [
+      {
+        "syncmode": "*",
+        "remote": "192.0.2.123",
+        "local": "198.51.100.10",
+        "st": "2",
+        "poll": "64",
+        "reach": "377",
+        "delay": "0.00052",
+        "vrf": "management"
+      },
+      {
+        "syncmode": "=",
+        "remote": "192.0.2.124",
+        "local": "198.51.100.10",
+        "st": "16",
+        "poll": "64",
+        "reach": "0",
+        "delay": "0.00000",
+        "vrf": "management"
+      }
+    ]
+  }
+}

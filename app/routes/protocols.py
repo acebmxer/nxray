@@ -121,10 +121,13 @@ def _values(form: Mapping[str, str]) -> dict[str, str]:
 @dataclass(frozen=True)
 class ProtocolSite:
     """Where a page built from ``app/protocols.py`` lives, what it reads, and how a
-    change on it is checked and sent: one routing protocol's page, or the Spanning
-    tree page. ``load`` reads the page (an object with ``view``, ``missing`` and
-    ``problem``, plus the lists its field kinds offer); ``check_place`` refuses an
-    identity value the switch does not have; ``send`` sends a checked change."""
+    change on it is checked and sent: one routing protocol's page, the Spanning
+    tree page or the Switch admin page. ``load`` reads the page (an object with
+    ``view``, ``missing`` and ``problem``, plus the lists its field kinds offer);
+    ``check_place`` refuses an
+    identity value the switch does not have; ``send`` sends a checked change;
+    ``after``, when given, runs once the switch took one (with the request, to
+    update what NXray stores); ``links`` are related pages shown under the title."""
 
     url: str
     back_url: str
@@ -138,6 +141,8 @@ class ProtocolSite:
     check_place: Callable[[Any, dict[str, str]], None]
     build: Callable[[str, str, str, dict[str, str], dict[str, str]], ProtocolChange]
     send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], None]
+    after: Callable[[Request, ProtocolChange], None] | None = None
+    links: tuple[tuple[str, str], ...] = ()  # (url, label) of related pages, under the title
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:
@@ -273,6 +278,7 @@ def _confirm(
     lines: list[str],
     warnings: list[str],
     fields: dict[str, Any],
+    not_config: bool = False,
 ) -> Response:
     return templates.TemplateResponse(
         request,
@@ -287,7 +293,7 @@ def _confirm(
             "action": f"{site.url}/change",
             "fields": fields,
             "csrf_token": csrf_token(request),
-            "not_config": False,
+            "not_config": not_config,
         },
     )
 
@@ -341,6 +347,7 @@ def site_change(
             lines,
             [change.warning] if change.warning else [],
             kept,
+            not_config=not change.config,
         )
     try:
         with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
@@ -351,12 +358,14 @@ def site_change(
             refused = refused.replace(secret, "***")
         log.warning("%s change refused: %s", proto.name, refused)
         return refuse(refused)
-    with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+    if change.config:
+        with open_db(request.app.state.settings.db_path) as conn:
+            set_unsaved_changes(conn, True)
+    if site.after is not None:
+        site.after(request, change)
     log.info("%s on %s by %s", change.describe, connection.host, username)
-    return render_site_page(
-        request, username, proto, site, notice=f"Done: {change.describe} {NOT_SAVED}"
-    )
+    done = f"Done: {change.describe}" + (f" {NOT_SAVED}" if change.config else "")
+    return render_site_page(request, username, proto, site, notice=done)
 
 
 @router.post("/routing/protocols/{key}/change", response_class=HTMLResponse)

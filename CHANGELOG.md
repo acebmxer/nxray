@@ -11,6 +11,31 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Switch admin.** A new **Switch admin** page (in the menu) shows the
+  switch's hostname, its time and where it comes from, and the NTP servers it
+  talks to; once switch admin changes are on, also its time zone and summer
+  time, DNS domain, lookups and servers, logging settings and servers, SNMP
+  contact, location, trap receivers and communities (never shown, only
+  whether each is read-only) and login banner. Operators and admins can,
+  after a confirm page that shows the lines, change the hostname (NXray
+  stores the new name too), set a one-line login banner, the time zone,
+  summer time and the time now (`clock set`, which leaves nothing to save),
+  add and delete NTP servers (by address or name, in any VRF, preferred or
+  not), set the DNS domain, turn lookups on and off, add and delete DNS
+  servers (also delete those typed inside a VRF), set the log file's level
+  and size, console and terminal logging and timestamps, add and delete
+  syslog servers, and set the SNMP contact and location, add and remove
+  read-only SNMP communities and SNMP v2c trap receivers. A new **Switch
+  log** page shows the newest 50, 200 or 1000 lines of the switch's own log,
+  newest first, with a search and a severity filter, for every role.
+  NXray's `nxray-ports` role gets rules 135 to 170 (role version 12), which
+  also let it read the running configuration; they allow only read-only SNMP
+  communities and no SNMP users, so NXray's account cannot give itself
+  more. An older role gets a **Turn on switch admin changes** button, with
+  no wait. The lines and the shapes of `show clock` and `show ntp
+  peer-status` follow Cisco's NX-OS 9.3 documentation and have not yet been
+  tried on a switch.
+
 - **Spanning tree.** A new **Spanning tree** page shows the switch's mode,
   every tree (per VLAN, or per MST instance) with its root bridge, root
   port, cost, topology changes and timers, every port in each tree with its

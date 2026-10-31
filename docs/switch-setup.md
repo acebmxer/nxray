@@ -110,10 +110,11 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface, VRF, static route, routing protocol and spanning tree changes**, tick the box
-and press **Turn on port, VLAN, port settings, feature, neighbor,
-port-channel, VLAN interface, VRF, static route, routing protocol
-and spanning tree changes**. One press turns on all eleven, with a single wait.
+interface, VRF, static route, routing protocol, spanning tree and switch admin
+changes**, tick the box and press **Turn on port, VLAN, port settings, feature,
+neighbor, port-channel, VLAN interface, VRF, static route, routing protocol,
+spanning tree and switch admin changes**. One press turns on all twelve, with a
+single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -257,6 +258,42 @@ NXray then:
          rule 132 permit command conf t ; interface * ; no spanning-tree *
          rule 133 permit command show running-config spanning-tree
          rule 134 permit command show running-config spanning-tree *
+         rule 135 permit command conf t ; hostname *
+         rule 136 permit command conf t ; banner motd *
+         rule 137 permit command conf t ; no banner motd
+         rule 138 permit command conf t ; clock timezone *
+         rule 139 permit command conf t ; no clock timezone
+         rule 140 permit command conf t ; clock summer-time *
+         rule 141 permit command conf t ; no clock summer-time
+         rule 142 permit command clock set *
+         rule 143 permit command conf t ; ntp server *
+         rule 144 permit command conf t ; no ntp server *
+         rule 145 permit command conf t ; ip domain-name *
+         rule 146 permit command conf t ; no ip domain-name *
+         rule 147 permit command conf t ; ip domain-lookup
+         rule 148 permit command conf t ; no ip domain-lookup
+         rule 149 permit command conf t ; ip name-server *
+         rule 150 permit command conf t ; no ip name-server *
+         rule 151 permit command conf t ; vrf context * ; no ip name-server *
+         rule 152 permit command conf t ; logging server *
+         rule 153 permit command conf t ; no logging server *
+         rule 154 permit command conf t ; logging logfile messages *
+         rule 155 permit command conf t ; logging console *
+         rule 156 permit command conf t ; no logging console
+         rule 157 permit command conf t ; logging monitor *
+         rule 158 permit command conf t ; no logging monitor
+         rule 159 permit command conf t ; logging timestamp *
+         rule 160 permit command conf t ; snmp-server contact *
+         rule 161 permit command conf t ; no snmp-server contact
+         rule 162 permit command conf t ; snmp-server location *
+         rule 163 permit command conf t ; no snmp-server location
+         rule 164 permit command conf t ; snmp-server community * group network-operator
+         rule 165 permit command conf t ; no snmp-server community *
+         rule 166 permit command conf t ; snmp-server host * traps version 2c *
+         rule 167 permit command conf t ; no snmp-server host * traps version 2c *
+         rule 168 permit command conf t ; snmp-server host * use-vrf *
+         rule 169 permit command conf t ; no snmp-server host * use-vrf *
+         rule 170 permit command show running-config
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -289,9 +326,14 @@ the routing protocols and change their settings, on those interfaces too,
 and the route-maps, prefix-lists and key chains they use; change spanning
 tree for the whole switch, each VLAN, the MST region and the front ports and
 port-channels, and read the spanning tree lines of the running configuration;
-and save the configuration. The switch
+change the switch's hostname, login banner, time zone, summer time and clock,
+NTP servers, DNS domain, lookups and servers, logging (servers, log file,
+console, terminal, timestamps), SNMP contact and location, read-only SNMP
+communities and trap receivers, and read the running configuration; and save
+the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
-accounts and other switch-wide settings. Every NXray install
+accounts, SNMP users and read-write SNMP communities, and other switch-wide
+settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
 
 **The wait.** The switch keeps an account's permissions in its NX-API
@@ -300,7 +342,7 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol and spanning tree changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree and switch admin changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -309,11 +351,11 @@ went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
-routing protocol or spanning tree changes existed.** Their role has rules 1
-to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to 54, 1 to 62
-or 1 to 128. The Switch page then shows a card named for what is missing (for
-example **Routing protocol and spanning tree changes** or **Spanning tree
-changes**): type the
+routing protocol, spanning tree or switch admin changes existed.** Their role
+has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to
+54, 1 to 62, 1 to 128 or 1 to 134. The Switch page then shows a card named for
+what is missing (for example **Spanning tree and switch admin changes** or
+**Switch admin changes**): type the
 admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
@@ -634,6 +676,42 @@ tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account on an
 unused port and VLAN; the switch-wide lines (mode, path cost method, the
 defaults, Bridge Assurance) use the same rule but were not typed there, since
 each changes every VLAN or port of the switch.
+
+**Switch admin.** The **Switch admin** page (in the menu) shows the switch's
+hostname, the time and where it comes from, and the NTP servers it is talking
+to, for every role. Once switch admin changes are on, NXray also reads `show
+running-config` (as text: NX-API gives it no other way) and shows the time
+zone and summer time, the DNS domain, whether lookups are on and the DNS
+servers (also those typed inside a VRF, such as `vrf context management`),
+the log file, console and terminal logging levels and timestamps, the logging
+servers, the SNMP contact, location and trap receivers, how many SNMP
+communities there are and whether each is read-only (the communities
+themselves are never shown) and the login banner. Operators and admins can,
+each after a confirm page that shows the lines:
+
+- **Name and banner**: the hostname (NXray stores the new name too) and a
+  one-line login banner (`banner motd #...#`, so the text may not contain
+  `#`), or put back the switch's own banner.
+- **Clock**: the time zone (`clock timezone`), summer time (`clock
+  summer-time`) and setting the time now (`clock set`, which changes no
+  configuration; NTP moves it back when servers are set).
+- **NTP servers**: add one (an address or a name, preferred or not, in the
+  default VRF, management or another) and delete one.
+- **DNS**: the domain name, lookups on or off, and the name servers.
+- **Logging**: the log file's level and size, console and terminal logging,
+  timestamps, and the syslog servers with their level and VRF.
+- **SNMP**: contact, location, read-only communities (typed like a password,
+  and typed again to remove one) and SNMP v2c trap receivers with their VRF.
+
+NXray never makes SNMP users or read-write communities, and its role does not
+allow them: each would be a way in to the whole switch. The **Switch log**
+page, linked from Switch admin, shows the newest 50, 200 or 1000 lines of the
+switch's own log (`show logging last <n>`), newest first, with a search and a
+severity filter; every role may look, and it needs no rule. An install whose
+role predates this gets a **Turn on switch admin changes** card on the Switch
+page; it adds rules 135 to 170 with no wait. These rules and lines follow
+Cisco's NX-OS 9.3 configuration guides and have not yet been tried on a
+switch.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

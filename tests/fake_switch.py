@@ -46,6 +46,14 @@ entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
 and "vrf member" or "no vrf member" deletes the interface's addresses.
 Static routes live in ``static_routes`` as (VRF, destination, next hop),
 starting with management's default route as recorded.
+
+The Switch admin lines (hostname, banner, clock, DNS, NTP, logging, SNMP) live
+in ``admin_lines`` as typed, one per setting or server, starting empty; name
+servers typed inside a VRF in ``context_name_servers``. ``show running-config``
+(text, needs rule 170 or network-admin) prints them; ``clock set`` goes to
+``clock_sets``. ``show logging last <n>`` prints ``log_text``. ``show clock``
+and ``show ntp peer-status`` answer from bodies shaped after Cisco's NX-API
+reference, never recorded on cisco-25gb.
 """
 
 from __future__ import annotations
@@ -203,6 +211,29 @@ _PROTOCOL_SUBMODES = re.compile(
 # Interface lines that open a group's mode (HSRP, VRRP, VRRPv3).
 _GROUP_MODES = re.compile(r"(?:hsrp \d+(?: ipv6)?|vrrp \d+|vrrpv3 \d+ address-family ipv[46])")
 
+# Switch admin lines: what identifies the line a new one replaces (and its
+# "no" form removes), checked in order.
+_ADMIN_KEYS = tuple(
+    re.compile(p)
+    for p in (
+        r"(ntp server \S+)",
+        r"(ip name-server \S+)",
+        r"(logging server \S+)",
+        r"(snmp-server community \S+)",
+        r"(snmp-server host \S+ (?:traps|use-vrf))",
+        r"(ip domain-name)",
+        r"(clock timezone)",
+        r"(clock summer-time)",
+        r"(logging logfile)",
+        r"(logging console)",
+        r"(logging monitor)",
+        r"(logging timestamp)",
+        r"(snmp-server contact)",
+        r"(snmp-server location)",
+        r"(banner motd)",
+    )
+)
+
 # VLANs NX-OS keeps for itself (show system vlan reserved).
 RESERVED_VLANS = range(3968, 4096)
 
@@ -300,6 +331,14 @@ class FakeSwitch:
     # Spanning tree lines as entered, the same way ("interface Ethernet1/54 ;
     # spanning-tree cost 100"); ``show running-config spanning-tree`` prints them.
     stp_lines: list[str] = field(default_factory=list)
+    # Switch admin (see the module notes).
+    hostname: str = "nexus-lab"
+    admin_lines: list[str] = field(default_factory=list)
+    context_name_servers: list[tuple[str, str]] = field(default_factory=list)
+    clock_sets: list[str] = field(default_factory=list)
+    log_text: str = field(
+        default_factory=lambda: FIXTURES.joinpath("show_logging_last_doc.txt").read_text()
+    )
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -443,13 +482,93 @@ class FakeSwitch:
         return "\n".join(out) + ("\n" if out else "")
 
     def _ascii(self, user: str, cmd: str, ident: int) -> dict[str, Any]:
-        """A ``cli_ascii`` request: only ``show running-config spanning-tree``, which
-        the read-only account may run only once its role has the rule for it."""
-        if cmd != "show running-config spanning-tree":
+        """A ``cli_ascii`` request: ``show running-config spanning-tree`` and ``show
+        running-config``, which the read-only account may run only once its role has
+        the rule for it, and ``show logging last <n>``, which any account may."""
+        if any(cmd.startswith(prefix) for prefix in self.reject):
+            return _error(ident, f"% Rejected by the fake switch: {cmd}\n")
+        if re.fullmatch(r"show logging last \d+", cmd):
+            wanted = int(cmd.split()[-1])
+            lines = self.log_text.splitlines(keepends=True)[-wanted:]
+            return {"jsonrpc": "2.0", "result": {"msg": "".join(lines)}, "id": ident}
+        if cmd not in ("show running-config spanning-tree", "show running-config"):
             return _error(ident, f"% Not recorded by the fake switch: {cmd}\n")
         if "network-admin" not in self.roles_of(user) and not self._role_matches(user, cmd, None):
             return _error(ident, "% Permission denied for the role\n")
-        return {"jsonrpc": "2.0", "result": {"msg": self.stp_config()}, "id": ident}
+        text = self.stp_config() if cmd.endswith("spanning-tree") else self.running_config()
+        return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
+
+    def running_config(self) -> str:
+        """``show running-config``, with only what the fake switch keeps: the hostname,
+        the switch admin lines, the VRFs and their name servers."""
+        out = [f"hostname {self.hostname}", *self.admin_lines]
+        contexts = ["management", *self.vrfs]
+        for vrf in contexts:
+            servers = [a for a, v in self.context_name_servers if v == vrf]
+            out.append(f"vrf context {vrf}")
+            out += [f"  ip name-server {a}" for a in servers]
+        return "\n".join(out) + "\n"
+
+    def _admin(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A Switch admin line, or None when ``cmd`` is not one."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        if context and context[0] == "vrf" and bare.startswith("ip name-server "):
+            path = f"conf t ; vrf context {context[1]} ; {cmd}"
+            if not (is_admin or self._role_matches(user, path, None)):
+                return denied, context
+            address = bare.split()[2]
+            entry = (address, context[1])
+            if undo:
+                if entry not in self.context_name_servers:
+                    return _error(ident, "% Name server not found\n"), context
+                self.context_name_servers.remove(entry)
+            elif entry not in self.context_name_servers:
+                self.context_name_servers.append(entry)
+            return _ok(ident, None), context
+        if context is not None:
+            return None
+        if cmd.startswith("clock set "):
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            self.clock_sets.append(cmd.removeprefix("clock set "))
+            return _ok(ident, None), context
+        if bare.startswith("hostname "):
+            if undo or not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return denied, context
+            self.hostname = bare.split()[1]
+            return _ok(ident, None), context
+        if bare == "ip domain-lookup":
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return denied, context
+            self.admin_lines = [line for line in self.admin_lines if line != "no ip domain-lookup"]
+            if undo:
+                self.admin_lines.append("no ip domain-lookup")
+            return _ok(ident, None), context
+        key = next((m.group(1) for p in _ADMIN_KEYS if (m := p.match(bare))), None)
+        if key is None:
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+            return denied, context
+        if (
+            undo
+            and not any(line == key or line.startswith(key + " ") for line in self.admin_lines)
+            and key not in ("logging console", "logging monitor")
+        ):
+            return _error(ident, f"% {key} not configured\n"), context
+        self.admin_lines = [
+            line
+            for line in self.admin_lines
+            if not (line.removeprefix("no ") == key or line.startswith(key + " "))
+        ]
+        if undo and key in ("logging console", "logging monitor"):
+            self.admin_lines.append(cmd)
+        elif not undo:
+            self.admin_lines.append(cmd)
+        return _ok(ident, None), context
 
     def _protocol(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -537,6 +656,8 @@ class FakeSwitch:
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
             return stp_reply
+        if admin_reply := self._admin(user, is_admin, cmd, ident, context):
+            return admin_reply
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
@@ -597,6 +718,8 @@ class FakeSwitch:
             rule = "conf t ; no vrf context *" if undo else "vrf context"
             if not (is_admin or self._role_allows(user, rule, None)):
                 return denied, None
+            if name == "management" and not undo:
+                return _ok(ident, None), ("vrf", name)
             if name in ("default", "management"):
                 return _error(ident, f"% VRF {name} is reserved\n"), None
             if undo:
@@ -1519,7 +1642,7 @@ class FakeSwitch:
         if cmd == "show vlan brief":
             return _ok(ident, self.vlan_brief())
         if cmd == "show hostname":
-            return _ok(ident, {"hostname": "nexus-lab"})
+            return _ok(ident, {"hostname": self.hostname})
         if cmd == "show nxapi":
             return _ok(ident, {"nxapi_status": "nxapi enabled", "timeout": "10"})
         if cmd == "show role":

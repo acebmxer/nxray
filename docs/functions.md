@@ -55,6 +55,7 @@ prose columns; those are a reviewer's job.
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
+| Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
 | Read the switch's route table | `app/routing_protocols.py`, `load_overview` / `parse_routes` |
 | Read, add or remove static routes | `app/routing.py` (`load_routing`, `plan_add_static_route`, `plan_remove_static_route`); command from `NxapiClient.set_static_route` |
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
@@ -210,11 +211,13 @@ or inside `vrf context`; never management),
 change on a routing protocol page; the lines come from
 `routing_protocols.build_protocol_change`),
 `configure_spanning_tree(scope, setting, action, ident, values)` (one change on
-the Spanning tree page; the lines come from `spanning_tree.build_stp_change`)
+the Spanning tree page; the lines come from `spanning_tree.build_stp_change`),
+`configure_switch_admin(scope, setting, action, ident, values)` (one change on
+the Switch admin page; the lines come from `switch_admin.build_admin_change`)
 and `save_config()`; each builds its commands from checked values.
 `show_text(command)` runs one show command whose answer NX-API gives only as
-printed text (`show running-config spanning-tree`, through the `cli_ascii`
-method).
+printed text (`show running-config spanning-tree`, `show running-config`, `show
+logging last <n>`, through the `cli_ascii` method).
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -270,6 +273,7 @@ port's own page shows.
 | `replace_login` | `(conn, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
 | `set_address` | `(conn, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
+| `set_switch_hostname` | `(conn, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
 | `set_changes_enabled` | `(conn, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
@@ -468,17 +472,22 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
-| `form_fields` | `(request) -> dict[str, str]` | The posted form as plain strings, for the protocol forms whose field names vary | `protocol_change`, `spanning_tree_change` | v0.1.0 |
+| `form_fields` | `(request) -> dict[str, str]` | The posted form as plain strings, for the protocol forms whose field names vary | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_protocols_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing protocols overview with a message | `protocols_page`, `switch_save` | v0.1.0 |
 | `protocols_page` | `(request, username) -> Response` | `GET /routing/protocols`: every protocol with whether its feature is on, and the route table per VRF | router | v0.1.0 |
 | `render_protocol_page` | `(request, username, key, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows one protocol's page with a message; `form` keeps what was typed (never secrets) | `protocol_page`, `protocol_change`, `switch_save` | v0.1.0 |
 | `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
 | `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
-| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, or Spanning tree) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `site_change` | v0.1.0 |
-| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends; switch errors have secrets masked | `protocol_change`, `spanning_tree_change` | v0.1.0 |
+| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
+| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
 | `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
+| `render_switch_admin_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Switch admin page with a message | `switch_admin_page`, `switch_save` | v0.1.0 |
+| `switch_admin_page` | `(request, username) -> Response` | `GET /switch-admin`: the hostname, clock, NTP, DNS, logging, SNMP and banner, read live; every role looks, operators and admins change | router | v0.1.0 |
+| `switch_admin_change` | `(request, username, form) -> Response` | `POST /switch-admin/change`: one change, after a confirm page showing the lines (role version 12); a new hostname is stored too | router | v0.1.0 |
+| `check_admin_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, and the default VRF where a VRF's own configuration is meant | `SITE.check_place` in `routes/switch_admin` | v0.1.0 |
+| `switch_log_page` | `(request, username, lines, search, level) -> Response` | `GET /switch-admin/log?lines=&search=&level=`: the newest 50, 200 or 1000 lines of the switch's log, newest first, kept to those containing `search` and of `level` or worse; every role | router | v0.1.0 |
 | `check_stp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel on the switch, or a VLAN the switch lacks | `SITE.check_place` | v0.1.0 |
 | `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
 | `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, the VRFs and the static routes, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
@@ -729,7 +738,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -808,6 +817,20 @@ would take them out silently.
 | `switch_port_names` | `(brief) -> list[str]` | The front ports and port-channels in `show interface brief` that are not routed | `parse_spanning_tree`, `load_spanning_tree_page` | v0.1.0 |
 | `load_spanning_tree_page` | `(client) -> SpanningTreePage` | One request for the reads, then the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/spanning_tree` | v0.1.0 |
 | `build_stp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Spanning tree page | `NxapiClient.configure_spanning_tree`, `routes/spanning_tree` | v0.1.0 |
+
+## `app/switch_admin.py` — Switch admin: name, clock and NTP, DNS, logging, SNMP, banner, and the log
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_admin_config` | `(config: str) -> AdminConfig` | `show running-config` text: the hostname, banner (one line or several), time zone, summer time, domain name and lookups, name servers (also those inside a `vrf context`), NTP servers, logging settings and servers, SNMP contact, location, communities and trap receivers | `parse_switch_admin` | v0.1.0 |
+| `parse_ntp_status` | `(body) -> list[NtpPeer]` | `show ntp peer-status`: each server with its VRF, stratum, reach, delay and whether the clock follows it | `parse_switch_admin` | v0.1.0 |
+| `clock_text` | `(body) -> tuple[str, str]` | `show clock`: the time as the switch writes it and its source | `parse_switch_admin` | v0.1.0 |
+| `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
+| `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
+| `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
+| `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
+| `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
+| `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
 
 ## `app/routing.py` — VLAN interfaces, routed ports, their addresses, VRFs and static routes
 

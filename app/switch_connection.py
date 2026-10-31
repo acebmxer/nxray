@@ -105,6 +105,12 @@ class SwitchConnection:
         later)."""
         return self.changes_enabled and self.role_version >= 11
 
+    @property
+    def admin_changes_enabled(self) -> bool:
+        """True once that role includes the switch admin rules (role version 12 or
+        later)."""
+        return self.changes_enabled and self.role_version >= 12
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:
@@ -234,6 +240,14 @@ def replace_login(
          WHERE id = 1
         """,
         (host, port, encrypt(password, secret_key), switch_hostname),
+    )
+    conn.commit()
+
+
+def set_switch_hostname(conn: sqlite3.Connection, switch_hostname: str) -> None:
+    """Store the switch's new name, after NXray renamed it on the Switch admin page."""
+    conn.execute(
+        "UPDATE switch_connection SET switch_hostname = ? WHERE id = 1", (switch_hostname,)
     )
     conn.commit()
 

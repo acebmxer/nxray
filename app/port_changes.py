@@ -17,8 +17,11 @@ prefix-lists and key chains they use; switch-wide, creating,
 naming and deleting VLANs, splitting a 100G port into four and joining it
 again, turning switch features on and off, setting how long learned MAC addresses are kept,
 adding and removing static MAC addresses, clearing learned ones, and the
-switch's LACP priority; and saving the configuration. Everything else
-(mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
+switch's LACP priority; spanning tree; the switch admin settings (hostname,
+banner, clock and NTP, DNS, logging, SNMP contact, location, read-only
+communities and trap receivers) and reading the running configuration; and
+saving the configuration. Everything else (mgmt0, a VLAN's own on/off state,
+accounts, SNMP users and read-write communities, other switch-wide settings)
 stays refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
@@ -51,7 +54,8 @@ the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
-10 the routing protocol rules.
+10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
+admin rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -359,11 +363,61 @@ STP_RULES = (
     "rule 134 permit command show running-config spanning-tree *",
 )
 
+# Switch admin rules, added in ROLE_VERSION 12: the hostname, banner, clock,
+# DNS, NTP, logging and SNMP lines of the Switch admin page, each with its
+# "no" form, and reading the running configuration (as text, through
+# ``NxapiClient.show_text``), the only place most of these settings show.
+# SNMP is narrow on purpose: only read-only communities ("group
+# network-operator") and trap receivers, never SNMP users or read-write
+# communities, which would each be a way in to the whole switch. "clock set"
+# changes no configuration, so its rule has no "conf t". Written after
+# Cisco's NX-OS 9.3 guides and the shapes of the rules proven before (a "*" in
+# the middle matches, as in rule 101); not yet tried on a switch. The port
+# list stays as it was, so this needs no SSH save and no wait.
+ADMIN_RULES = (
+    "rule 135 permit command conf t ; hostname *",
+    "rule 136 permit command conf t ; banner motd *",
+    "rule 137 permit command conf t ; no banner motd",
+    "rule 138 permit command conf t ; clock timezone *",
+    "rule 139 permit command conf t ; no clock timezone",
+    "rule 140 permit command conf t ; clock summer-time *",
+    "rule 141 permit command conf t ; no clock summer-time",
+    "rule 142 permit command clock set *",
+    "rule 143 permit command conf t ; ntp server *",
+    "rule 144 permit command conf t ; no ntp server *",
+    "rule 145 permit command conf t ; ip domain-name *",
+    "rule 146 permit command conf t ; no ip domain-name *",
+    "rule 147 permit command conf t ; ip domain-lookup",
+    "rule 148 permit command conf t ; no ip domain-lookup",
+    "rule 149 permit command conf t ; ip name-server *",
+    "rule 150 permit command conf t ; no ip name-server *",
+    "rule 151 permit command conf t ; vrf context * ; no ip name-server *",
+    "rule 152 permit command conf t ; logging server *",
+    "rule 153 permit command conf t ; no logging server *",
+    "rule 154 permit command conf t ; logging logfile messages *",
+    "rule 155 permit command conf t ; logging console *",
+    "rule 156 permit command conf t ; no logging console",
+    "rule 157 permit command conf t ; logging monitor *",
+    "rule 158 permit command conf t ; no logging monitor",
+    "rule 159 permit command conf t ; logging timestamp *",
+    "rule 160 permit command conf t ; snmp-server contact *",
+    "rule 161 permit command conf t ; no snmp-server contact",
+    "rule 162 permit command conf t ; snmp-server location *",
+    "rule 163 permit command conf t ; no snmp-server location",
+    "rule 164 permit command conf t ; snmp-server community * group network-operator",
+    "rule 165 permit command conf t ; no snmp-server community *",
+    "rule 166 permit command conf t ; snmp-server host * traps version 2c *",
+    "rule 167 permit command conf t ; no snmp-server host * traps version 2c *",
+    "rule 168 permit command conf t ; snmp-server host * use-vrf *",
+    "rule 169 permit command conf t ; no snmp-server host * use-vrf *",
+    "rule 170 permit command show running-config",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 11
+ROLE_VERSION = 12
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -377,6 +431,7 @@ _ADDED_BY_VERSION = {
     9: "static route",
     10: "routing protocol",
     11: "spanning tree",
+    12: "switch admin",
 }
 
 
@@ -432,7 +487,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
     return [
         f"role name {ROLE_NAME}",
         "description NXray: ports, port-channels, VLANs, layer 3, spanning tree, features, "
-        "MAC, save",
+        "MAC, switch admin, save",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
@@ -444,6 +499,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *ROUTE_RULES,
         *PROTOCOL_RULES,
         *STP_RULES,
+        *ADMIN_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,
