@@ -162,10 +162,10 @@
       <form method="post" action="/routing/address/add" class="stack">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         <input type="hidden" name="name" value="{{ i.name }}">
-        <label for="add_{{ i.name|replace('/', '-') }}">Add an address</label>
+        <label for="add_{{ i.name|replace('/', '-') }}">Add an address to {{ i.name }}</label>
         <input id="add_{{ i.name|replace('/', '-') }}" name="address" type="text" spellcheck="false" placeholder="192.0.2.2/24 or 2001:db8::1/64">
         <p class="hint">IPv4 or IPv6, with the prefix length. An IPv4 address becomes an extra (secondary) one when the interface has one already.</p>
-        <button type="submit" class="btn btn-quiet">Add address</button>
+        <button type="submit" class="btn btn-quiet">Add address to {{ i.name }}</button>
       </form>
     </div>
   </div>

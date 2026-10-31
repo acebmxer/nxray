@@ -565,6 +565,11 @@ def plan_add_address(
     """One more address on an interface: IPv6, or IPv4 (the main one when it has none,
     else an extra, secondary one)."""
     interface = _routed(view, name)
+    if not address.strip():
+        raise ValueError(
+            f"the address box of {interface.name} was empty; type the address in the box "
+            f"right above Add address to {interface.name}"
+        )
     text = validate_interface_address(address)
     if interface.address(text) is not None:
         raise ValueError(f"{interface.name} has {text} already")

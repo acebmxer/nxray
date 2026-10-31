@@ -193,6 +193,8 @@ def test_adding_ipv4_becomes_secondary_when_there_is_a_primary() -> None:
     assert change.add == (("2001:db8:9::1/64", False),)
     with pytest.raises(ValueError, match="has 192.0.2.1/24 already"):
         plan_add_address(_view(), name="Vlan10", address="192.0.2.1/24")
+    with pytest.raises(ValueError, match="address box of Vlan10 was empty"):
+        plan_add_address(_view(), name="Vlan10", address="  ")
     with pytest.raises(ValueError, match="not a VLAN interface or routed port"):
         plan_add_address(_view(), name="Ethernet1/3", address="203.0.113.1/24")
     with pytest.raises(ValueError):
