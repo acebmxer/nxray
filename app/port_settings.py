@@ -14,7 +14,11 @@ commands instead:
 - ``show interface <port> flowcontrol``: flow control as set.
 - ``show interface <port> counters storm-control``: the storm-control levels
   (100.00 means no limit) and the action.
-- ``show ip interface vrf all``: the port's IPv4 address when it is routed.
+- ``show ip interface vrf all``: the port's IPv4 address when it is routed,
+  and its extra (secondary) IPv4 addresses.
+- ``show ipv6 interface vrf all``: its IPv6 addresses. Both kinds of extra
+  address are added and removed on the Routing page (app/routing.py); this
+  page only takes them off before a routed port goes back to switched.
 
 The commands themselves are built by ``NxapiClient.configure_port_settings``,
 ``breakout_port`` and ``join_port`` from checked values.
@@ -41,6 +45,7 @@ from app.nxapi import (
     validate_storm_level,
 )
 from app.ports import Port
+from app.routing import parse_ipv4, parse_ipv6
 from app.switch import rows
 from app.vlans import PortVlans
 
@@ -116,6 +121,8 @@ class PortSettings:
     routed_capable: bool = True
     ip_address: str = ""  # "192.0.2.1/24" on a routed port with an address
     vrf: str = ""
+    ip_secondaries: tuple[str, ...] = ()  # extra IPv4 addresses
+    ipv6_addresses: tuple[str, ...] = ()
     breakout_capable: bool = False
 
     @property
@@ -151,6 +158,7 @@ def settings_commands(name: str) -> tuple[str, ...]:
         f"show interface {name} flowcontrol",
         f"show interface {name} counters storm-control",
         "show ip interface vrf all",
+        "show ipv6 interface vrf all",
     )
 
 
@@ -202,6 +210,7 @@ def parse_port_settings(
     flowcontrol_body: dict[str, Any],
     storm_body: dict[str, Any],
     ip_body: dict[str, Any],
+    ipv6_body: dict[str, Any] | None = None,
 ) -> PortSettings:
     """One port's settings from the bodies of ``settings_commands`` plus its Port."""
     name = port.name
@@ -212,6 +221,8 @@ def parse_port_settings(
         speed for speed in (s.strip() for s in str(caps.get("speed", "")).split(",")) if speed
     )
     address, vrf = parse_ip_addresses(ip_body).get(name, ("", ""))
+    _, ipv4, _ = parse_ipv4(ip_body).get(name, ("", [], {}))
+    _, ipv6, _ = parse_ipv6(ipv6_body or {}).get(name, ("", [], ""))
     try:
         mtu = int(port.mtu)
     except ValueError:
@@ -236,14 +247,16 @@ def parse_port_settings(
         routed_capable="routed" in str(caps.get("port_mode", "Routed")).lower(),
         ip_address=address,
         vrf=vrf,
+        ip_secondaries=tuple(a.text for a in ipv4 if a.secondary),
+        ipv6_addresses=tuple(a.text for a in ipv6),
         breakout_capable=str(caps.get("bkout_capable", "")).strip().lower() == "yes",
     )
 
 
 def load_port_settings(client: NxapiClient, port: Port, vlans: PortVlans | None) -> PortSettings:
     """One port's settings, from one NX-API request."""
-    caps, flow, storm, ips = client.show(*settings_commands(port.name))
-    return parse_port_settings(port, vlans, caps, flow, storm, ips)
+    caps, flow, storm, ips, ips6 = client.show(*settings_commands(port.name))
+    return parse_port_settings(port, vlans, caps, flow, storm, ips, ips6)
 
 
 def try_load_port_settings(
@@ -261,6 +274,9 @@ class SettingsChange:
     """What the settings form asks for, checked. Only the changed values are set."""
 
     layer: str | None = None
+    # (address, secondary) pairs taken off before ``remove_ip``: the extra IPv4
+    # and the IPv6 addresses of a routed port going back to switched.
+    remove_extra: tuple[tuple[str, bool], ...] = ()
     remove_ip: str | None = None
     ip_address: str | None = None
     speed: str | None = None
@@ -275,6 +291,7 @@ class SettingsChange:
     def empty(self) -> bool:
         return (
             self.layer is None
+            and not self.remove_extra
             and self.remove_ip is None
             and self.ip_address is None
             and self.speed is None
@@ -304,14 +321,24 @@ def plan_port_settings(current: PortSettings, form: dict[str, str]) -> SettingsC
 
     # The IPv4 address only counts on a routed port.
     remove_ip = ip_address = None
+    remove_extra: tuple[tuple[str, bool], ...] = ()
     if layer == "routed":
         typed = form.get("ip_address", "").strip()
         wanted = validate_ip_interface(typed) if typed else ""
         if wanted != current.ip_address:
+            if current.ip_address and current.ip_secondaries:
+                raise ValueError(
+                    f"{current.name} has extra IPv4 addresses; remove them on the Routing page "
+                    "before changing its main one"
+                )
             remove_ip = current.ip_address or None
             ip_address = wanted or None
-    elif current.ip_address and new_layer:
-        remove_ip = current.ip_address
+    elif new_layer:
+        remove_ip = current.ip_address or None
+        remove_extra = (
+            *((a, True) for a in current.ip_secondaries),
+            *((a, False) for a in current.ipv6_addresses),
+        )
 
     speed = form.get("speed", current.speed).strip() or current.speed
     if speed != "auto" and speed not in current.speeds:
@@ -361,6 +388,7 @@ def plan_port_settings(current: PortSettings, form: dict[str, str]) -> SettingsC
 
     return SettingsChange(
         layer=new_layer,
+        remove_extra=remove_extra,
         remove_ip=remove_ip,
         ip_address=ip_address,
         speed=speed if speed != current.speed else None,
@@ -397,6 +425,9 @@ def describe_port_settings(
             "The port starts carrying VLANs with the switch's defaults (access, VLAN 1), "
             "and the device on it loses its routed connection at once."
         )
+    if change.remove_extra:
+        removed = ", ".join(address for address, _ in change.remove_extra)
+        lines.append(f"Its other addresses are taken off: {removed}.")
     if change.remove_ip and not change.ip_address:
         lines.append(f"IPv4 address: {change.remove_ip} → none.")
     elif change.ip_address:

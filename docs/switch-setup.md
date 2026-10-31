@@ -109,10 +109,10 @@ new role, because signing in would make the wait start over.
 
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
-under **Port, VLAN, port settings, feature, neighbor and port-channel
-changes**, tick the box and press **Turn on port, VLAN, port settings,
-feature, neighbor and port-channel changes**. One press turns on all six,
-with a single wait.
+under **Port, VLAN, port settings, feature, neighbor, port-channel and VLAN
+interface changes**, tick the box and press **Turn on port, VLAN, port
+settings, feature, neighbor, port-channel and VLAN interface changes**. One
+press turns on all seven, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -169,10 +169,14 @@ NXray then:
          rule 45 permit command conf t ; interface * ; lacp min-links *
          rule 46 permit command conf t ; no interface port-channel *
          rule 47 permit command conf t ; lacp system-priority *
+         rule 48 permit command conf t ; interface * ; ipv6 address *
+         rule 49 permit command conf t ; interface * ; no ipv6 address *
+         rule 50 permit command conf t ; no interface Vlan *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
            permit interface port-channel1-4096
+           permit interface Vlan1-4094
        username <name> role nxray-ports
        end
 
@@ -185,15 +189,16 @@ NXray then:
 The role lets NXray's account turn front-panel ports on or off, set or
 remove their descriptions, set their mode (access or trunk) and VLANs, and
 set their speed, MTU, FEC, flow control, storm control and layer (switched,
-or routed with an IPv4 address), and turn CDP and LLDP sending and
+or routed with IPv4 and IPv6 addresses), and turn CDP and LLDP sending and
 listening on or off on them; split a 100G port into four and join it again;
 create, name and delete VLANs; turn switch features on and off; set how
 long the switch keeps learned MAC addresses, add and remove static MAC
 addresses (on a front port, or dropped) and clear learned ones; put front
 ports into port-channels and take them out, with their LACP rate and port
 priority; on the port-channels, the same port settings, their LACP minimum
-links, and deleting them; set the switch's LACP priority; and save the
-configuration. The switch
+links, and deleting them; set the switch's LACP priority; make, turn on or
+off, describe, set the MTU of and delete VLAN interfaces and put IPv4 and
+IPv6 addresses on them; and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
@@ -203,20 +208,20 @@ session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
-port settings, feature, neighbor and port-channel changes take effect
-straight away. When the role gains the port-channels, NXray checks it and
+port settings, feature, neighbor, port-channel and VLAN interface changes
+take effect straight away. When the role gains the port-channels or the VLAN
+interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
 minutes right after such a change (SSH kept working), though a later change
 went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
-features, neighbor or port-channel changes existed.** Their role has rules 1
-to 5, 1 to 11, 1 to 27, 1 to 29 or 1 to 40. The Switch page then shows a card
-named for what is missing (**VLAN, port settings, feature, neighbor and
-port-channel changes**, **Port settings, feature, neighbor and port-channel
-changes**, **Feature, neighbor and port-channel changes**, **Neighbor and
-port-channel changes** or **Port-channel changes**): type the admin login,
+features, neighbor, port-channel or VLAN interface changes existed.** Their
+role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40 or 1 to 47. The
+Switch page then shows a card named for what is missing (for example
+**Neighbor, port-channel and VLAN interface changes** or **VLAN interface
+changes**): type the admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
 applies new rules in a role the account already has at once.
@@ -253,8 +258,9 @@ settings that change, after a confirm page:
 
 - **Layer.** Switched (layer 2) carries VLANs; routed (layer 3,
   `no switchport`) has its own IPv4 address, typed with its prefix length
-  (`192.0.2.1/24`), and no VLANs. Going back to switched removes the address
-  first. Both warn that the device on the port loses its connection.
+  (`192.0.2.1/24`), and no VLANs; extra IPv4 and IPv6 addresses go on it on
+  the **Routing** page. Going back to switched removes the addresses first.
+  Both warn that the device on the port loses its connection.
 - **Speed.** Auto or a speed the port can run at (`show interface
   capabilities`). NXray's account may not read the running configuration,
   so for a port that is up the page shows the speed it runs at, which may
@@ -389,6 +395,37 @@ The rules for joining, leaving, the rate, the port priority, the minimum and
 deleting were tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway
 account on two unused ports; `lacp system-priority` was not, because it
 touches every port-channel on the switch.
+
+**VLAN interfaces and addresses.** The **Routing** page (and a link from
+each VLAN on the **VLANs** page) lists the VLAN interfaces, which give the
+switch its own address in a VLAN so devices there can reach it and use it as
+their gateway, and the routed ports, each with its state, VRF and IPv4 and
+IPv6 addresses. Every role can look. VLAN interfaces need the interface-vlan
+feature, which an admin turns on on the **Features** page; turning it on
+makes Vlan1 by itself, turned off. Operators and admins can, each after a
+confirm page:
+
+- **Make a VLAN interface** for a VLAN that has none, optionally with an
+  IPv4 and an IPv6 address, a description and an MTU, on or off
+  (`interface vlan<n>`, then `ip address`, `ipv6 address`, `description`,
+  `mtu` and `no shutdown`). Once it is on and has an address, the switch
+  routes between it and its other VLAN interfaces and routed ports.
+- **Change** a VLAN interface's main IPv4 address, description, MTU (576 to
+  9216) and on/off; only what changes is sent.
+- **Add an address** to a VLAN interface or a routed port: IPv6, or IPv4,
+  which becomes an extra (secondary) address when there is a main one
+  already, and **Remove** one. The main IPv4 address comes off only once
+  the extra ones are gone. NXray refuses an address in a network another
+  interface in the same VRF has, and link-local IPv6 addresses (`fe80::`),
+  which the switch makes by itself on every IPv6 interface.
+- **Delete** a VLAN interface (`no interface vlan<n>`); its addresses go with
+  it and the VLAN stays. Vlan1 is never deleted, and the VLANs page refuses
+  to delete a VLAN that has a VLAN interface.
+
+A port becomes routed on its own page (**Port settings**, Layer). That page
+shows its extra IPv4 and IPv6 addresses and takes them off when the port
+goes back to switched. These rules were tried on an N9K-C92160YC-X with
+NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

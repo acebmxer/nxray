@@ -20,6 +20,7 @@ from app.port_changes import (
     CHANNEL_PERMIT,
     CHANNEL_RULES,
     ROLE_VERSION,
+    VLAN_INTERFACE_PERMIT,
     missing_changes,
     role_lines,
 )
@@ -272,18 +273,20 @@ def test_role_has_the_port_channel_rules_and_names_every_port_channel() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in CHANNEL_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 6
+    assert ROLE_VERSION == 7
     # Inside "interface policy deny", after the front ports: outside it the switch refuses it.
     policy = lines.index("interface policy deny")
     assert lines.index(CHANNEL_PERMIT) > lines.index("permit interface Ethernet1/1") > policy
-    assert lines[lines.index(CHANNEL_PERMIT) + 1] == "exit"
+    assert lines[lines.index(CHANNEL_PERMIT) + 1] == VLAN_INTERFACE_PERMIT
+    assert lines[lines.index(CHANNEL_PERMIT) + 2] == "exit"
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 48))
+    assert numbers == list(range(1, 51))
 
 
 def test_missing_changes_names_port_channel_changes() -> None:
-    assert missing_changes(5) == "port-channel changes"
-    assert missing_changes(6) == ""
+    assert missing_changes(5) == "port-channel and VLAN interface changes"
+    assert missing_changes(6) == "VLAN interface changes"
+    assert missing_changes(7) == ""
 
 
 def _restricted(fake: FakeSwitch, permits: set[str]) -> NxapiClient:

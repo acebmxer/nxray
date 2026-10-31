@@ -26,7 +26,7 @@ from app.routes.ports import change_refused
 from app.security import csrf_token
 from app.switch_connection import set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
-from app.vlans import VlanView, load_vlans
+from app.vlans import VlanView, load_vlan_page
 
 router = APIRouter()
 log = logging.getLogger("nxray.vlans")
@@ -49,7 +49,9 @@ def _render(
     status = None
     view: VlanView | None = None
     if target is not None:
-        status, view = read_switch(target, load_vlans, transport=request.app.state.nxapi_transport)
+        status, view = read_switch(
+            target, load_vlan_page, transport=request.app.state.nxapi_transport
+        )
     elif problem:
         status = ConnectionStatus(False, problem)
     usage = {vlan.id: view.ports_using(vlan.id) for vlan in view.vlans} if view else {}
@@ -93,7 +95,7 @@ def _changing(request: Request):
         return connection, None, None, problem
     if not connection.vlan_changes_enabled:
         return connection, None, None, VLAN_CHANGES_OFF
-    status, view = read_switch(target, load_vlans, transport=request.app.state.nxapi_transport)
+    status, view = read_switch(target, load_vlan_page, transport=request.app.state.nxapi_transport)
     if view is None:
         return connection, None, None, status.message
     return connection, target, view, None
@@ -209,6 +211,11 @@ def vlan_delete(
         return fail(f"VLAN {number} does not exist on the switch.")
     if number == 1:
         return fail("VLAN 1 is the switch's default VLAN and cannot be deleted.")
+    if number in view.interfaces:
+        return fail(
+            f"Not deleted: VLAN {number} has a VLAN interface (Vlan{number}). Delete it on the "
+            "Routing page first."
+        )
     using = view.ports_using(number)
     if using:
         return fail(

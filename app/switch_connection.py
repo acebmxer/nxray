@@ -68,6 +68,12 @@ class SwitchConnection:
         port-channels (role version 6 or later)."""
         return self.changes_enabled and self.role_version >= 6
 
+    @property
+    def layer3_changes_enabled(self) -> bool:
+        """True once that role includes the VLAN interface and IPv6 rules and names
+        the VLAN interfaces (role version 7 or later)."""
+        return self.changes_enabled and self.role_version >= 7
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

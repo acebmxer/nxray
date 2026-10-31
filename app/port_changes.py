@@ -5,9 +5,11 @@ turning a port on or off, setting or removing its description, setting its
 mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
 control, storm control, switched or routed with an IPv4 address),
 turning CDP and LLDP on or off on them, and putting them into port-channels
-and taking them out again, with their LACP rate and priority; on the
-port-channels, the same settings plus their description and LACP minimum
-links, and deleting them; switch-wide, creating, naming and deleting VLANs,
+and taking them out again, with their LACP rate and priority, and their IPv4
+and IPv6 addresses when routed; on the port-channels, the same settings plus
+their description and LACP minimum links, and deleting them; on the VLAN
+interfaces, making and deleting them, their addresses, description, MTU and
+on/off; switch-wide, creating, naming and deleting VLANs,
 splitting a 100G port into four and joining it again, turning switch
 features on and off, setting how long learned MAC addresses are kept,
 adding and removing static MAC addresses, clearing learned ones, and the
@@ -32,17 +34,19 @@ once, so an account that already had the role (port changes turned on
 before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
-When the role gains the port-channels (``CHANNEL_PERMIT``), NXray checks the
-role and saves the configuration over SSH instead of over NX-API: on that
-switch NX-API once stopped answering every account for about 15 minutes
-right after such a change, while SSH kept working. The cause was not
-confirmed (a later change went through with NX-API answering at once), so
-NXray adds no wait for it.
+When the role gains the port-channels (``CHANNEL_PERMIT``) or the VLAN
+interfaces (``VLAN_INTERFACE_PERMIT``), NXray checks the role and saves the
+configuration over SSH instead of over NX-API: on that switch NX-API stopped
+answering every account for 10 to 15 minutes right after such a line was
+typed (once for the port-channels, once for the VLAN interfaces), while SSH
+kept working. The cause was not confirmed (a later port-channel change went
+through with NX-API answering at once), so NXray adds no wait for it.
 
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
-rules and the port-channels in the role's port list. NXray
+rules and the port-channels in the role's port list, 7 the VLAN interface
+rules and the VLAN interfaces in the port list. NXray
 stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
@@ -192,7 +196,27 @@ CHANNEL_RULES = (
 )
 CHANNEL_PERMIT = "permit interface port-channel1-4096"
 
-ROLE_VERSION = 6
+# VLAN interface rules, added in ROLE_VERSION 7, with every VLAN interface added
+# to the role's port list (VLAN_INTERFACE_PERMIT). Proven on cisco-25gb
+# (2026-10-30) with a throwaway account: without the permit the switch refuses
+# "interface vlan<n>"; with it, rules 1-4, 13, 24 and 25 act on VLAN interfaces
+# (on/off, description, MTU, IPv4 addresses, secondary ones too), and the two
+# IPv6 rules below put IPv6 addresses on them and on routed ports. Deleting one
+# needs the rule written exactly as below: "no interface vlan *" and
+# "no interface vlan*" never matched "no interface vlan3900", "no interface
+# Vlan *" matched every way of typing it.
+LAYER3_RULES = (
+    "rule 48 permit command conf t ; interface * ; ipv6 address *",
+    "rule 49 permit command conf t ; interface * ; no ipv6 address *",
+    "rule 50 permit command conf t ; no interface Vlan *",
+)
+VLAN_INTERFACE_PERMIT = "permit interface Vlan1-4094"
+
+# Role versions whose port list gained a line, and so are checked and saved
+# over SSH (see the module notes): accounts below this one get one.
+LAST_PERMIT_VERSION = 7
+
+ROLE_VERSION = 7
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -201,6 +225,7 @@ _ADDED_BY_VERSION = {
     4: "feature",
     5: "neighbor",
     6: "port-channel",
+    7: "VLAN interface",
 }
 
 
@@ -252,16 +277,18 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: ports, port-channels, VLANs, features, MAC table, save config",
+        "description NXray: ports, port-channels, VLANs, layer 3, features, MAC, save",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
         *FEATURE_RULES,
         *NEIGHBOR_RULES,
         *CHANNEL_RULES,
+        *LAYER3_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,
+        VLAN_INTERFACE_PERMIT,
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -332,8 +359,9 @@ def enable_port_changes(
     """Create the role over SSH, give it to NXray's account, check it, save the config.
 
     ``role_version`` is the version NXray gave its account before (0 for
-    none). Below 6 the role gains ``CHANNEL_PERMIT``, so the check and the
-    save go over SSH, which does not depend on NX-API answering.
+    none). Below ``LAST_PERMIT_VERSION`` the role's port list gains a line,
+    so the check and the save go over SSH, which does not depend on NX-API
+    answering.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -360,7 +388,7 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         lines = role_lines(ports, account_name)
-        over_ssh = role_version < 6
+        over_ssh = role_version < LAST_PERMIT_VERSION
         then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:

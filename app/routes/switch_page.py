@@ -25,6 +25,7 @@ from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import render_port_page
+from app.routes.routing import render_routing_page
 from app.routes.vlans import render_vlans_page
 from app.security import csrf_token
 from app.switch_connection import (
@@ -484,14 +485,20 @@ def switch_enable_changes(
     channel_words = (
         "make, change and delete port-channels and set their LACP options on the Port-channels page"
     )
+    layer3_words = (
+        "make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and "
+        "on routed ports on the Routing page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
-            "Port, VLAN, port settings, feature, neighbor and port-channel changes are on: "
+            "Port, VLAN, port settings, feature, neighbor, port-channel and VLAN interface "
+            "changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
-            f"rename and delete VLANs, {features_words}, {neighbor_words}, and {channel_words}. "
+            f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
+            f"and {layer3_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -510,7 +517,9 @@ def switch_enable_changes(
             parts.append(features_words)
         if connection.role_version < 5:
             parts.append(neighbor_words)
-        parts.append(channel_words)
+        if connection.role_version < 6:
+            parts.append(channel_words)
+        parts.append(layer3_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -541,7 +550,8 @@ def switch_save(
     """Save config: copy running-config startup-config with NXray's own account.
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
-    ``vlans``, ``features``, ``neighbors`` or ``port-channels``); the answer is shown there.
+    ``vlans``, ``features``, ``neighbors``, ``port-channels`` or ``routing``); the answer is
+    shown there.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -558,6 +568,8 @@ def switch_save(
             return render_neighbors_page(request, username, error=error, notice=notice)
         if back == "port-channels":
             return render_port_channels_page(request, username, error=error, notice=notice)
+        if back == "routing":
+            return render_routing_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)
 
     connection, target, error = stored_switch(request)

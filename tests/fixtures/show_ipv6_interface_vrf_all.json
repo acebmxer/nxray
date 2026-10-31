@@ -1,0 +1,118 @@
+{
+  "TABLE_intf": {
+    "ROW_intf": [
+      {
+        "vrf-name-out": "default",
+        "intf-name": "Vlan3900",
+        "iod": 62,
+        "proto-state": "up",
+        "link-state": "up",
+        "admin-state": "up",
+        "prefix": "2001:db8:5::/64",
+        "linklocal-addr": "fe80::7279:b3ff:fe00:1",
+        "linklocal-configured": "FALSE",
+        "mrouting-enabled": "disabled",
+        "report-linklocal-enabled": "disabled",
+        "forwarding-enabled": "disabled",
+        "mgroup-locally-joined": "TRUE",
+        "mcast-sgentries-joined": "FALSE",
+        "mtu": 9000,
+        "urpf-mode": "none",
+        "ipv6-lstype": "none",
+        "stats-last-reset": "never",
+        "upkt-fwd": 0,
+        "upkt-orig": 0,
+        "upkt-consumed": 0,
+        "ubyte-fwd": 0,
+        "ubyte-orig": 0,
+        "ubyte-consumed": 0,
+        "mpkt-fwd": 0,
+        "mpkt-orig": 7,
+        "mpkt-consumed": 0,
+        "mbyte-fwd": 0,
+        "mbyte-orig": 614,
+        "mbyte-consumed": 0,
+        "TABLE_addr": {
+          "ROW_addr": {
+            "addr": "2001:db8:5::1/64"
+          }
+        },
+        "TABLE_maddr": {
+          "ROW_maddr": [
+            {
+              "m-addr": "ff02::2"
+            },
+            {
+              "m-addr": "ff02::1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:0"
+            }
+          ]
+        }
+      },
+      {
+        "vrf-name-out": "tenant-a",
+        "intf-name": "Ethernet1/54",
+        "iod": 58,
+        "proto-state": "down",
+        "link-state": "down",
+        "admin-state": "up",
+        "prefix": "2001:db8:1::/64",
+        "linklocal-addr": "fe80::7279:b3ff:fe00:1",
+        "linklocal-configured": "FALSE",
+        "mrouting-enabled": "disabled",
+        "report-linklocal-enabled": "disabled",
+        "forwarding-enabled": "disabled",
+        "mgroup-locally-joined": "TRUE",
+        "mcast-sgentries-joined": "FALSE",
+        "mtu": 1500,
+        "urpf-mode": "none",
+        "ipv6-lstype": "none",
+        "stats-last-reset": "never",
+        "upkt-fwd": 0,
+        "upkt-orig": 0,
+        "upkt-consumed": 0,
+        "ubyte-fwd": 0,
+        "ubyte-orig": 0,
+        "ubyte-consumed": 0,
+        "mpkt-fwd": 0,
+        "mpkt-orig": 0,
+        "mpkt-consumed": 0,
+        "mbyte-fwd": 0,
+        "mbyte-orig": 0,
+        "mbyte-consumed": 0,
+        "TABLE_addr": {
+          "ROW_addr": {
+            "addr": "2001:db8:1::1/64"
+          }
+        },
+        "TABLE_maddr": {
+          "ROW_maddr": [
+            {
+              "m-addr": "ff02::2"
+            },
+            {
+              "m-addr": "ff02::1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:1"
+            },
+            {
+              "m-addr": "ff02::1:ff00:0"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

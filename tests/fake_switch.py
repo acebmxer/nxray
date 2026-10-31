@@ -31,6 +31,14 @@ rate and priority in ``port_state``, the switch's LACP priority in
 port-channel, a role reaches a port-channel's own settings only when its port
 list names port-channels, and a member's LACP rate changes only while the
 port is turned off.
+
+VLAN interfaces live in ``svis`` (VLAN numbers), their settings in
+``port_state["Vlan<n>"]``. As on cisco-25gb they exist only while the
+interface-vlan feature is on (off as recorded), turning it on makes Vlan1
+(turned off), a role reaches one only when its port list names VLAN
+interfaces, and deleting one needs the rule "conf t ; no interface Vlan *".
+Extra IPv4 and IPv6 addresses of a routed port or VLAN interface are in its
+``port_state`` (``secondaries``, ``ipv6``).
 """
 
 from __future__ import annotations
@@ -157,11 +165,12 @@ class Role:
         lowered = interface.lower()
         if lowered in self.interfaces:
             return True
-        number = lowered.removeprefix("port-channel")
+        kind = "vlan" if lowered.startswith("vlan") else "port-channel"
+        number = lowered.removeprefix(kind)
         if number == lowered or not number.isdigit():
             return False
         for entry in self.interfaces:
-            match = re.fullmatch(r"port-channel(\d+)-(\d+)", entry)
+            match = re.fullmatch(rf"{kind}(\d+)-(\d+)", entry)
             if match and int(match.group(1)) <= int(number) <= int(match.group(2)):
                 return True
         return False
@@ -221,6 +230,8 @@ class FakeSwitch:
         default_factory=lambda: {43: {"Ethernet1/43": "active", "Ethernet1/44": "active"}}
     )
     lacp_priority: int = 32768
+    # VLAN interfaces (VLAN numbers); only while interface-vlan is on.
+    svis: set[int] = field(default_factory=set)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -306,6 +317,32 @@ class FakeSwitch:
                     return _error(ident, "% Interface permission denied\n"), None
                 return denied, None
             return _ok(ident, None), ("interface", name)
+        if match := re.fullmatch(r"(no )?interface [Vv]lan ?(\d+)", cmd):
+            undo, number = match.group(1), int(match.group(2))
+            name = f"Vlan{number}"
+            if not self.feature_state.get("interface-vlan", False):
+                return _error(ident, "% Invalid command at '^' marker.\n"), None
+            rule = "conf t ; no interface Vlan *" if undo else "interface"
+            if not (is_admin or self._role_allows(user, rule, name)):
+                if self._role_allows(user, "interface", None):
+                    return _error(ident, "% Interface permission denied\n"), None
+                return denied, None
+            if undo:
+                if number == 1:
+                    return _ok(
+                        ident, {"msg": "Warning: Vlan 1 is default vlan and cannot be deleted\n"}
+                    ), context
+                self.svis.discard(number)
+                self.port_state.pop(name, None)
+                return _ok(ident, None), context
+            if number not in self.svis:
+                self.svis.add(number)
+                self.port_state[name] = {"routed": True, "admin_up": False}
+            return _ok(ident, None), ("interface", name)
+        if interface is not None and (
+            reply := self._address_command(user, is_admin, cmd, ident, interface)
+        ):
+            return reply, context
         if match := re.fullmatch(r"(no )?interface port-channel(\d+)", cmd):
             undo, number = match.group(1), int(match.group(2))
             name = f"port-channel{number}"
@@ -457,6 +494,14 @@ class FakeSwitch:
                 self.lldp = not match.group(1)
             else:
                 self.feature_state[name] = not match.group(1)
+            if name == "interface-vlan":
+                # As on cisco-25gb: on makes Vlan1 (turned off), off removes them all.
+                for number in self.svis:
+                    self.port_state.pop(f"Vlan{number}", None)
+                self.svis = set()
+                if not match.group(1):
+                    self.svis.add(1)
+                    self.port_state["Vlan1"] = {"routed": True, "admin_up": False}
             return _ok(ident, None), context
         if cmd == "copy running-config startup-config":
             if not (is_admin or self._role_allows(user, cmd, None)):
@@ -508,7 +553,7 @@ class FakeSwitch:
         state = self.port_state.setdefault(interface, {})
         routed = state.get("routed", False)
         if cmd == "switchport":
-            if state.get("ip"):
+            if state.get("ip") or state.get("secondaries") or state.get("ipv6"):
                 return _error(ident, "ERROR: Remove the IP address first\n")
             state["routed"] = False
         elif cmd == "no switchport":
@@ -518,6 +563,8 @@ class FakeSwitch:
         elif cmd.startswith("no ip address"):
             if state.get("ip") != match.group(1):
                 return _error(ident, "% Address not found\n")
+            if state.get("secondaries"):
+                return _error(ident, "% Remove the secondary addresses first\n")
             state.pop("ip", None)
         elif key == "ip" and not routed:
             return _error(ident, "% IP address not allowed on a switched port\n")
@@ -525,6 +572,37 @@ class FakeSwitch:
             return _error(ident, "ERROR: MTU on L2 interfaces can only be 1500 or 9216\n")
         elif key is not None:
             state[key] = match.group(1)
+        return _ok(ident, None)
+
+    def _address_command(
+        self, user: str, is_admin: bool, cmd: str, ident: int, interface: str
+    ) -> dict[str, Any] | None:
+        """Extra IPv4 (secondary) and IPv6 addresses; None for any other command."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        secondary = re.fullmatch(r"(no )?ip address (\S+) secondary", cmd)
+        ipv6 = re.fullmatch(r"(no )?ipv6 address (\S+)", cmd)
+        match = secondary or ipv6
+        if match is None:
+            return None
+        undo, address = match.groups()
+        entity = "ipv6 address *" if ipv6 else "ip address *"
+        if undo:
+            entity = "no " + entity
+        if not (is_admin or self._role_allows(user, f"conf t ; interface * ; {entity}", interface)):
+            return denied
+        state = self.port_state.setdefault(interface, {})
+        if not state.get("routed"):
+            return _error(ident, "% IP address not allowed on a switched port\n")
+        key = "ipv6" if ipv6 else "secondaries"
+        if secondary and not undo and not state.get("ip"):
+            return _error(ident, "% Configure the primary address first\n")
+        found = state.setdefault(key, [])
+        if undo:
+            if address not in found:
+                return _error(ident, "% Address not found\n")
+            found.remove(address)
+        elif address not in found:
+            found.append(address)
         return _ok(ident, None)
 
     def _channel_command(
@@ -657,6 +735,11 @@ class FakeSwitch:
             )
             if desc:
                 row["desc"] = desc
+            rows.append(row)
+        for svi in self.svi_rows():
+            row = {"interface": svi["interface"]}
+            if svi.get("svi_desc"):
+                row["desc"] = svi["svi_desc"]
             rows.append(row)
         return {"TABLE_interface": {"ROW_interface": rows}}
 
@@ -838,16 +921,65 @@ class FakeSwitch:
         for name, state in sorted(self.port_state.items()):
             if state.get("routed") and state.get("ip"):
                 address, _, masklen = state["ip"].partition("/")
+                row: dict[str, Any] = {
+                    "vrf-name-out": "default",
+                    # Written short, as NX-OS writes port names here.
+                    "intf-name": name.replace("Ethernet", "Eth"),
+                    "prefix": address,
+                    "masklen": int(masklen),
+                    "mtu": int(state.get("mtu", 1500)),
+                }
+                extra = []
+                for text in state.get("secondaries", []):
+                    prefix, _, length = text.partition("/")
+                    extra.append({"prefix1": prefix, "masklen1": int(length)})
+                if extra:
+                    row["TABLE_secondary_address"] = {
+                        "ROW_secondary_address": extra[0] if len(extra) == 1 else extra
+                    }
+                rows.append(row)
+        return {"TABLE_intf": {"ROW_intf": rows[0] if len(rows) == 1 else rows}}
+
+    def ipv6_interfaces(self) -> dict[str, Any]:
+        """``show ipv6 interface vrf all``, shaped as recorded on cisco-25gb."""
+        rows = []
+        for name, state in sorted(self.port_state.items()):
+            if state.get("routed") and state.get("ipv6"):
+                addresses = [{"addr": a} for a in state["ipv6"]]
                 rows.append(
                     {
                         "vrf-name-out": "default",
-                        # Written short, as NX-OS writes port names here.
-                        "intf-name": name.replace("Ethernet", "Eth"),
-                        "prefix": address,
-                        "masklen": int(masklen),
+                        "intf-name": name,
+                        "prefix": state["ipv6"][0],
+                        "linklocal-addr": "fe80::7279:b3ff:fe00:1",
+                        "mtu": int(state.get("mtu", 1500)),
+                        "TABLE_addr": {
+                            "ROW_addr": addresses[0] if len(addresses) == 1 else addresses
+                        },
                     }
                 )
+        if not rows:
+            return {}
         return {"TABLE_intf": {"ROW_intf": rows[0] if len(rows) == 1 else rows}}
+
+    def svi_rows(self) -> list[dict[str, Any]]:
+        """The VLAN interfaces as ``show interface vlan<n>`` writes them."""
+        found = []
+        for number in sorted(self.svis):
+            state = self.port_state.get(f"Vlan{number}", {})
+            up = state.get("admin_up", False)
+            row: dict[str, Any] = {
+                "interface": f"Vlan{number}",
+                "svi_admin_state": "up" if up else "down",
+                "svi_line_proto": "up" if up and number in self.vlans else "down",
+                "svi_mtu": str(state.get("mtu", 1500)),
+            }
+            if not up:
+                row["svi_rsn_desc"] = "Administratively down"
+            if state.get("desc"):
+                row["svi_desc"] = state["desc"]
+            found.append(row)
+        return found
 
     def switchports(self) -> dict[str, Any]:
         """``show interface switchport`` with the VLAN settings changed so far."""
@@ -953,11 +1085,28 @@ class FakeSwitch:
             return _ok(ident, self.storm_control(name))
         if cmd == "show ip interface vrf all":
             return _ok(ident, self.ip_interfaces())
+        if cmd == "show ipv6 interface vrf all":
+            return _ok(ident, self.ipv6_interfaces())
+        if match := re.fullmatch(r"show interface vlan(\d+)", cmd):
+            row = next(
+                (r for r in self.svi_rows() if r["interface"] == f"Vlan{match.group(1)}"), None
+            )
+            if row is None:
+                return _error(ident, "% Invalid interface format\n")
+            return _ok(ident, {"TABLE_interface": {"ROW_interface": row}})
         if cmd == "show interface brief":
             body = load_fixture("show_interface_brief")
             for row in self._expand(body):
-                if self.port_state.get(row["interface"], {}).get("admin_up") is False:
+                state = self.port_state.get(row["interface"], {})
+                if state.get("admin_up") is False:
                     row.update(state="down", state_rsn_desc="Administratively down")
+                if state.get("routed") and row["interface"].startswith("Ethernet"):
+                    row.update(portmode="routed", vlan="--")
+            for svi in self.svi_rows():
+                row = {"interface": svi["interface"], "svi_admin_state": svi["svi_admin_state"]}
+                if "svi_rsn_desc" in svi:
+                    row["svi_rsn_desc"] = svi["svi_rsn_desc"]
+                body["TABLE_interface"]["ROW_interface"].append(row)
             return _ok(ident, body)
         if cmd == "show interface status":
             body = load_fixture("show_interface_status")

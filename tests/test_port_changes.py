@@ -196,9 +196,11 @@ def test_enable_creates_the_role_gives_it_and_saves(switch: FakeSwitch) -> None:
     assert switch.saved
     assert ROLE_NAME in switch.roles_of("nxray")
     role = switch.roles[ROLE_NAME]
-    # The 54 front ports one by one, and every port-channel in one line; never mgmt0.
-    assert role.interface_policy_deny and len(role.interfaces) == 55
+    # The 54 front ports one by one, every port-channel and every VLAN interface in
+    # one line each; never mgmt0.
+    assert role.interface_policy_deny and len(role.interfaces) == 56
     assert "port-channel1-4096" in role.interfaces and "mgmt0" not in role.interfaces
+    assert "vlan1-4094" in role.interfaces
     assert switch.ssh_lines[0] == "configure terminal"
     # The role gains the port-channels, so the check and the save go over SSH.
     assert switch.ssh_lines[-3:] == [
@@ -250,7 +252,7 @@ def test_a_current_role_is_checked_and_saved_over_nxapi(switch: FakeSwitch) -> N
     _enable(switch)
     switch.ssh_lines.clear()
     switch.saved = False
-    result = _enable(switch, role_version=6)
+    result = _enable(switch, role_version=7)
     assert result.pause_seconds == 0 and result.config_saved and switch.saved
     assert switch.ssh_lines[-1] == "end"
 

@@ -735,6 +735,7 @@ def port_settings_change(
             client.configure_port_settings(
                 name,
                 layer=change.layer,
+                remove_extra=change.remove_extra,
                 remove_ip=change.remove_ip,
                 ip_address=change.ip_address,
                 speed=change.speed,

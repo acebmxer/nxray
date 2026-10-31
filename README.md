@@ -121,8 +121,9 @@ default: *(built)*.
     addresses, clearing learned addresses. *(built)*
 13. **Features**: turn switch features on and off. *(built)*
 14. **Link aggregation**: port-channels and LACP. *(built)*
-15. **Layer 3**: VLAN interfaces, routed ports, VRFs, static routes, routing
-    protocols. *(planned)*
+15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
+    routed ports: *(built)*. VRFs, static routes, routing protocols:
+    *(planned)*
 16. **Spanning tree.** *(planned)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(planned)*

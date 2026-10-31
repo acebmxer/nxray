@@ -21,7 +21,8 @@ commands NXray needs have their own methods (``create_user``,
 ``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
 ``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
 ``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
-``set_lacp_system_priority``, ``save_config``), each building
+``set_lacp_system_priority``, ``configure_vlan_interface``,
+``delete_vlan_interface``, ``set_interface_addresses``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -350,6 +351,55 @@ def validate_ip_interface(text: str) -> str:
     return f"{interface.ip}/{network.prefixlen}"
 
 
+def validate_ipv6_interface(text: str) -> str:
+    """Return an IPv6 address with its prefix ("2001:db8::1/64"), or raise ValueError.
+
+    Only an address a device can be reached at: not a link-local address
+    (the switch makes one of those on every IPv6 interface by itself), and not
+    a multicast, loopback or unspecified one.
+    """
+    cleaned = text.strip()
+    try:
+        interface = ipaddress.IPv6Interface(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an IPv6 address with a prefix length, such as 2001:db8::1/64"
+        ) from exc
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /64")
+    address = interface.ip
+    if address.is_link_local:
+        raise ValueError(
+            f"{address} is a link-local address; the switch makes one by itself on every "
+            "IPv6 interface"
+        )
+    if address.is_multicast or address.is_loopback or address.is_unspecified:
+        raise ValueError(f"{address} is not an address a device can be reached at")
+    return f"{address}/{interface.network.prefixlen}"
+
+
+def validate_interface_address(text: str) -> str:
+    """An IPv4 or IPv6 address with its prefix, as the switch takes it; or raise ValueError."""
+    cleaned = text.strip()
+    if ":" in cleaned:
+        return validate_ipv6_interface(cleaned)
+    return validate_ip_interface(cleaned)
+
+
+def validate_routed_interface(name: str) -> str:
+    """Return a name an address can go on: ``Vlan10``, a front port or ``port-channel5``.
+
+    Raises ValueError for anything else (mgmt0 above all, which NXray never
+    changes).
+    """
+    cleaned = name.strip()
+    if match := re.fullmatch(r"[Vv]lan([0-9]{1,4})", cleaned):
+        return f"Vlan{validate_vlan_id(match.group(1))}"
+    if match := re.fullmatch(r"port-channel([0-9]{1,4})", cleaned):
+        return f"port-channel{validate_channel_number(match.group(1))}"
+    return validate_port_name(cleaned)
+
+
 def validate_storm_level(value: str | float) -> str:
     """A storm-control level as the switch writes it ("10.00"), or raise ValueError."""
     text = str(value).strip()
@@ -433,6 +483,23 @@ def breakout_numbers(name: str) -> tuple[int, int]:
     validate_port_name(name)
     module, port = name[len("Ethernet") :].split("/")[:2]
     return int(module), int(port)
+
+
+def address_line(address: str, secondary: bool = False) -> str:
+    """The interface line that puts an address on: ``ip address A [secondary]`` or
+    ``ipv6 address A``. Its ``no`` form takes it off again."""
+    text = validate_interface_address(address)
+    if ":" in text:
+        if secondary:
+            raise ValueError("an IPv6 address has no primary or secondary")
+        return f"ipv6 address {text}"
+    return f"ip address {text}" + (" secondary" if secondary else "")
+
+
+def _address_commands(
+    remove: Iterable[tuple[str, bool]], add: Iterable[tuple[str, bool]]
+) -> list[str]:
+    return [f"no {address_line(a, s)}" for a, s in remove] + [address_line(a, s) for a, s in add]
 
 
 def validate_show_command(command: str) -> str:
@@ -672,6 +739,7 @@ class NxapiClient:
         name: str,
         *,
         layer: str | None = None,
+        remove_extra: Iterable[tuple[str, bool]] = (),
         remove_ip: str | None = None,
         ip_address: str | None = None,
         speed: str | None = None,
@@ -686,8 +754,10 @@ class NxapiClient:
         """Change a port's settings in one request; only the values given are sent.
 
         ``layer`` is "switched" (``switchport``) or "routed" (``no
-        switchport``). ``remove_ip`` is the address to take off the port, sent
-        before a new ``ip_address`` and before ``switchport``. A storm-control
+        switchport``). ``remove_extra`` are (address, secondary) pairs taken
+        off first: a routed port's extra IPv4 and its IPv6 addresses.
+        ``remove_ip`` is the address to take off the port, sent before a new
+        ``ip_address`` and before ``switchport``. A storm-control
         level of 100.00 is the switch's own default (no limit).
         ``storm_action`` "none" removes ``old_storm_action``.
         """
@@ -695,6 +765,7 @@ class NxapiClient:
         commands = [f"interface {name}"]
         if layer is not None and layer not in ("switched", "routed"):
             raise ValueError(f"layer {layer!r} is not switched or routed")
+        commands += _address_commands(remove_extra, ())
         if remove_ip is not None:
             commands.append(f"no ip address {validate_ip_interface(remove_ip)}")
         if layer == "switched":
@@ -932,6 +1003,67 @@ class NxapiClient:
         """``lacp system-priority <n>``: the switch's LACP priority, for every port-channel."""
         command = f"lacp system-priority {validate_lacp_priority(priority)}"
         self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_vlan_interface(
+        self,
+        vlan: int,
+        *,
+        description: str | None = None,
+        mtu: int | None = None,
+        enabled: bool | None = None,
+        remove: Iterable[tuple[str, bool]] = (),
+        add: Iterable[tuple[str, bool]] = (),
+    ) -> None:
+        """Make a VLAN interface (``interface vlan<n>``) or change one, in one request.
+
+        ``interface vlan<n>`` makes it when it does not exist yet. ``remove``
+        and ``add`` are (address, secondary) pairs, sent in that order, before
+        the description and MTU; turning it on or off comes last. Only the
+        values given are sent. ``description=""`` removes the description.
+        """
+        commands = [f"interface vlan{validate_vlan_id(vlan)}"]
+        commands += _address_commands(remove, add)
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if mtu is not None:
+            if not MTU_MIN <= int(mtu) <= MTU_MAX:
+                raise ValueError(f"an MTU is {MTU_MIN} to {MTU_MAX}")
+            commands.append(f"mtu {int(mtu)}")
+        if enabled is not None:
+            commands.append("no shutdown" if enabled else "shutdown")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_vlan_interface(self, vlan: int) -> None:
+        """``no interface vlan<n>``. Its addresses go with it; the VLAN itself stays."""
+        number = validate_vlan_id(vlan)
+        if number == 1:
+            # The switch answers "Vlan 1 is default vlan and cannot be deleted"
+            # as a note, not an error, and keeps it.
+            raise ValueError("the switch keeps the VLAN 1 interface; turn it off instead")
+        command = f"no interface vlan{number}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_interface_addresses(
+        self,
+        name: str,
+        *,
+        remove: Iterable[tuple[str, bool]] = (),
+        add: Iterable[tuple[str, bool]] = (),
+    ) -> None:
+        """Take addresses off and put addresses on a VLAN interface, routed port or
+        routed port-channel, in one request.
+
+        ``remove`` and ``add`` are (address, secondary) pairs: ``ip address A``,
+        ``ip address A secondary`` or ``ipv6 address A``, and their ``no`` forms.
+        """
+        commands = [f"interface {validate_routed_interface(name)}"]
+        commands += _address_commands(remove, add)
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.

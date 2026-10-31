@@ -227,6 +227,9 @@
     <dt>Layer</dt><dd>{% if settings.routed %}routed (layer 3){% else %}switched (layer 2){% endif %}</dd>
     {% if settings.routed %}
     <dt>IPv4 address</dt><dd>{{ settings.ip_address or "none" }}{% if settings.vrf and settings.vrf != "default" %} (VRF {{ settings.vrf }}){% endif %}</dd>
+    {% if settings.ip_secondaries %}<dt>Extra IPv4 addresses</dt><dd>{{ settings.ip_secondaries|join(", ") }}</dd>{% endif %}
+    <dt>IPv6 addresses</dt><dd>{{ settings.ipv6_addresses|join(", ") if settings.ipv6_addresses else "none" }}</dd>
+    <dt>More addresses</dt><dd><a href="/routing#{{ port.name|replace('/', '-') }}">On the Routing page</a></dd>
     {% endif %}
     <dt>Speed</dt><dd>{{ speed_label(settings.speed) }}{% if port.up %} <span class="reason">running at {{ port.speed }}</span>{% endif %}</dd>
     <dt>Duplex</dt><dd>{{ settings.duplex or "unknown" }}</dd>

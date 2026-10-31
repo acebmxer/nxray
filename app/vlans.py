@@ -11,6 +11,7 @@ The commands themselves are built by ``NxapiClient.configure_vlan``,
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -25,6 +26,8 @@ from app.ports import PORTS_COMMANDS, Port, parse_ports, port_sort_key
 from app.switch import rows
 
 VLAN_COMMANDS = ("show vlan brief", "show interface switchport")
+# The VLANs page also reads which VLANs have a VLAN interface.
+VLAN_PAGE_COMMANDS = (*VLAN_COMMANDS, "show interface brief")
 
 # Every VLAN: what a trunk carries unless told otherwise.
 ALL_VLANS = frozenset(range(1, 4095))
@@ -77,6 +80,8 @@ class VlanView:
 
     vlans: list[Vlan]
     ports: dict[str, PortVlans]
+    # VLANs with a VLAN interface (Vlan10); only the VLANs page reads them.
+    interfaces: frozenset[int] = frozenset()
 
     @property
     def ids(self) -> set[int]:
@@ -143,6 +148,23 @@ def load_vlans(client: NxapiClient) -> VlanView:
     """The VLAN list and every port's VLAN settings, from one NX-API request."""
     vlans, switchports = client.show(*VLAN_COMMANDS)
     return VlanView(parse_vlans(vlans), parse_switchports(switchports))
+
+
+def vlan_interface_ids(brief_body: dict[str, Any]) -> frozenset[int]:
+    """The VLANs that have a VLAN interface (``Vlan10``), from ``show interface brief``."""
+    found = set()
+    for row in rows(brief_body, "TABLE_interface", "ROW_interface"):
+        match = re.fullmatch(r"Vlan(\d+)", str(row.get("interface", "")).strip())
+        if match:
+            found.add(int(match.group(1)))
+    return frozenset(found)
+
+
+def load_vlan_page(client: NxapiClient) -> VlanView:
+    """What the VLANs page shows: the VLANs, every port's VLAN settings and which
+    VLANs have a VLAN interface, from one NX-API request."""
+    vlans, switchports, brief = client.show(*VLAN_PAGE_COMMANDS)
+    return VlanView(parse_vlans(vlans), parse_switchports(switchports), vlan_interface_ids(brief))
 
 
 def load_ports_with_vlans(client: NxapiClient) -> tuple[list[Port], VlanView]:

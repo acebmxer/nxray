@@ -45,7 +45,7 @@
   <table class="table table-vlans">
     <thead>
       <tr>
-        <th>VLAN</th><th>Name</th><th>State</th><th>Used by</th>
+        <th>VLAN</th><th>Name</th><th>State</th><th>Used by</th><th>VLAN interface</th>
         {% if connection.vlan_changes_enabled and can_change %}<th>Change</th>{% endif %}
       </tr>
     </thead>
@@ -61,6 +61,11 @@
           {% elif using|length > 6 %}{{ using|length }} ports
           {% else %}{% for name in using %}<a href="/ports/detail?name={{ name|urlencode }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
           {% endif %}
+        </td>
+        <td>
+          {% if vlan.id in view.interfaces %}<a href="/routing#Vlan{{ vlan.id }}">Vlan{{ vlan.id }}</a>
+          {% elif can_change and connection.layer3_changes_enabled %}<a href="/routing?vlan={{ vlan.id }}">make one</a>
+          {% else %}<span class="dim">none</span>{% endif %}
         </td>
         {% if connection.vlan_changes_enabled and can_change %}
         <td>
@@ -91,7 +96,8 @@
   Used by lists access ports in the VLAN, and trunks that use it as their native
   VLAN or name it in their list of VLANs. A trunk that carries every VLAN (the
   switch's default) is not listed. A VLAN that a port uses cannot be deleted:
-  move the port to another VLAN on its own page first.
+  move the port to another VLAN on its own page first. Nor can a VLAN with a
+  VLAN interface: delete that on the Routing page first.
 </p>
 
 <section class="card">

@@ -1,0 +1,575 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "mgmt0",
+        "state": "up",
+        "ip_addr": "192.0.2.10",
+        "speed": "1000",
+        "mtu": 1500
+      },
+      {
+        "interface": "Ethernet1/1",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/2",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/3",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/4",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/5",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/6",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/7",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/8",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/9",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/10",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/11",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/12",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/13",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/14",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/15",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/16",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/17",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/18",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/19",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/20",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/21",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/22",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/23",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/24",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/25",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/26",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/27",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/28",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/29",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/30",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/31",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/32",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/33",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/34",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/35",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/36",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/37",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/38",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/39",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/40",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/41",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "down",
+        "state_rsn_desc": "Link not connected",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/42",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "down",
+        "state_rsn_desc": "Link not connected",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/43",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D",
+        "portchan": 43
+      },
+      {
+        "interface": "Ethernet1/44",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D",
+        "portchan": 43
+      },
+      {
+        "interface": "Ethernet1/45",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/46",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "access",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "25G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/47",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "10G",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/48",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/49",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/50",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/51",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/52",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/53",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "Ethernet1/54",
+        "vlan": "--",
+        "type": "eth",
+        "portmode": "routed",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "port-channel43",
+        "vlan": "2",
+        "type": "eth",
+        "portmode": "trunk",
+        "state": "up",
+        "state_rsn_desc": "none",
+        "speed": "a-25G",
+        "ratemode": "D",
+        "proto": "lacp"
+      },
+      {
+        "interface": "Vlan1",
+        "svi_admin_state": "down",
+        "svi_rsn_desc": "Administratively down"
+      },
+      {
+        "interface": "Vlan3900",
+        "svi_admin_state": "up"
+      }
+    ]
+  }
+}

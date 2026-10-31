@@ -11,6 +11,26 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Routing page: VLAN interfaces.** A new **Routing** page lists the VLAN
+  interfaces (which give the switch its own address in a VLAN, so devices
+  there can use it as their gateway) and the routed ports, each with its
+  state, VRF and IPv4 and IPv6 addresses. Every role can look, and each VLAN
+  on the VLANs page links to its VLAN interface. Operators and admins can,
+  after a confirm page, make a VLAN interface for a VLAN (with an IPv4 and an
+  IPv6 address, a description, an MTU, on or off), change it, delete it
+  (never Vlan1), and add and remove IPv4 (main or extra) and IPv6 addresses
+  on VLAN interfaces and routed ports. NXray refuses an address in a network
+  another interface in the same VRF has and link-local IPv6 addresses, which
+  the switch makes by itself. The VLANs page refuses to delete a VLAN that
+  has a VLAN interface. VLAN interfaces need the interface-vlan feature; with
+  it off the page says so and points to the Features page. A routed port's
+  page now shows its extra IPv4 and IPv6 addresses and takes them off when
+  the port goes back to switched. NXray's `nxray-ports` role gets rules 48
+  to 50 (`ipv6 address *`, `no ipv6 address *`, `no interface Vlan *`) and
+  `permit interface Vlan1-4094` in its port list (role version 7); an older
+  role gets a **Turn on VLAN interface changes** button, with no wait,
+  checked and saved over SSH. The rules were tried on an N9K-C92160YC-X with
+  NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
 - **Port-channels page.** A new **Port-channels** page lists every
   port-channel with its ports, each port's state and how it joined (LACP
   active, LACP passive or static) and, while LACP is on, each port's LACP

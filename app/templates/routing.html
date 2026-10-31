@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% from "_devices.html" import port_link %}
+{% block title %}Routing — NXray{% endblock %}
+
+{% macro addresses(i) -%}
+{% if i.addresses %}{% for a in i.addresses %}<span class="mono">{{ a.text }}</span>{% if a.secondary %} <span class="dim">(extra)</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}<span class="dim">none</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<h1 class="page-title">Routing</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% elif view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+  {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="routing">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">VLAN interfaces</h2>
+  <p class="lead">A VLAN interface gives the switch its own address in a VLAN: devices there can reach the switch and use it as their gateway, and the switch routes between its VLAN interfaces and routed ports.</p>
+  {% if not view.interface_vlan_on %}
+  <p>VLAN interfaces are off on the switch. {% if role == "admin" %}Turn on interface-vlan on the <a href="/features">Features</a> page.{% else %}An NXray admin turns on interface-vlan on the <a href="/features">Features</a> page.{% endif %}</p>
+  {% elif view.vlan_interfaces %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>Interface</th><th>VLAN</th><th>State</th><th>Addresses</th><th class="num">MTU</th><th>VRF</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      {% for i in view.vlan_interfaces %}
+      {% set vlan = view.vlan(i.vlan) %}
+      <tr>
+        <td><a href="#{{ i.name }}">{{ i.name }}</a></td>
+        <td>{{ i.vlan }}{% if vlan %} <span class="dim">{{ vlan.name }}</span>{% else %} <span class="dim">(no such VLAN)</span>{% endif %}</td>
+        <td>{% if i.up %}<span class="badge badge-ok">up</span>{% elif not i.admin_up %}<span class="badge badge-warn">off</span>{% else %}<span class="badge badge-crit">down</span>{% endif %}</td>
+        <td class="wrap">{{ addresses(i) }}</td>
+        <td class="num">{{ i.mtu or "—" }}</td>
+        <td>{{ i.vrf }}</td>
+        <td>{{ i.description or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>The switch has no VLAN interfaces.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Routed ports</h2>
+  {% if view.routed_ports %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>Port</th><th>State</th><th>Addresses</th><th>VRF</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      {% for i in view.routed_ports %}
+      <tr>
+        <td>{% if i.kind == "port" %}{{ port_link(i.name) }}{% else %}<a href="/port-channels#{{ i.name }}">{{ i.name }}</a>{% endif %} <a class="dim" href="#{{ i.name|replace('/', '-') }}">addresses</a></td>
+        <td>{{ i.state_words }}</td>
+        <td class="wrap">{{ addresses(i) }}</td>
+        <td>{{ i.vrf }}</td>
+        <td>{{ i.description or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">A port becomes routed on its own page (Port settings, Layer). Its speed, MTU and other settings are changed there too.</p>
+  {% else %}
+  <p>No front port or port-channel is routed. A port becomes routed on its own page (Port settings, Layer).</p>
+  {% endif %}
+</section>
+
+{% if can_change %}
+{% for i in view.interfaces %}
+<section class="card" id="{{ i.name|replace('/', '-') }}">
+  <h2 class="card-title">{{ i.name }}{% if i.description %} <span class="dim">{{ i.description }}</span>{% endif %}</h2>
+  <dl class="facts">
+    <dt>State</dt><dd>{{ i.state_words }}</dd>
+    <dt>VRF</dt><dd>{{ i.vrf }}</dd>
+    {% if i.link_local %}<dt>IPv6 link-local</dt><dd class="mono">{{ i.link_local }}</dd>{% endif %}
+  </dl>
+  <div class="form-grid form-after">
+    {% if i.kind == "vlan" %}
+    <form method="post" action="/routing/vlan-interface/settings" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="vlan" value="{{ i.vlan }}">
+      <label for="ipv4_{{ i.vlan }}">IPv4 address</label>
+      <input id="ipv4_{{ i.vlan }}" name="ipv4" type="text" spellcheck="false" placeholder="192.0.2.1/24" value="{{ i.primary.text if i.primary else '' }}">
+      <p class="hint">With the prefix length. Empty for none. Extra IPv4 and IPv6 addresses are added beside this form.</p>
+      <label for="desc_{{ i.vlan }}">Description</label>
+      <input id="desc_{{ i.vlan }}" name="description" type="text" maxlength="254" value="{{ i.description }}">
+      <label for="mtu_{{ i.vlan }}">MTU</label>
+      <input id="mtu_{{ i.vlan }}" name="mtu" type="text" inputmode="numeric" value="{{ i.mtu or default_mtu }}">
+      <p class="hint">{{ mtu_min }} to {{ mtu_max }}; {{ default_mtu }} is the default.</p>
+      <fieldset class="choice">
+        <legend>On or off</legend>
+        <label class="check"><input type="radio" name="state" value="on" {% if i.admin_up %}checked{% endif %}> On</label>
+        <label class="check"><input type="radio" name="state" value="off" {% if not i.admin_up %}checked{% endif %}> Off</label>
+      </fieldset>
+      <button type="submit" class="btn btn-quiet">Change {{ i.name }}</button>
+    </form>
+    {% endif %}
+
+    <div class="stack form-narrow">
+      <p class="label">Addresses</p>
+      {% if i.addresses %}
+      <table class="table">
+        <tbody>
+          {% for a in i.addresses %}
+          <tr>
+            <td class="mono">{{ a.text }}</td>
+            <td>{% if a.ipv6 %}IPv6{% elif a.secondary %}extra IPv4{% else %}IPv4{% endif %}</td>
+            <td>
+              <form method="post" action="/routing/address/remove" class="inline">
+                <input type="hidden" name="csrf" value="{{ csrf_token }}">
+                <input type="hidden" name="name" value="{{ i.name }}">
+                <input type="hidden" name="address" value="{{ a.text }}">
+                <button type="submit" class="btn btn-quiet">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="dim">none</p>
+      {% endif %}
+      <form method="post" action="/routing/address/add" class="stack">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="{{ i.name }}">
+        <label for="add_{{ i.name|replace('/', '-') }}">Add an address</label>
+        <input id="add_{{ i.name|replace('/', '-') }}" name="address" type="text" spellcheck="false" placeholder="192.0.2.2/24 or 2001:db8::1/64">
+        <p class="hint">IPv4 or IPv6, with the prefix length. An IPv4 address becomes an extra (secondary) one when the interface has one already.</p>
+        <button type="submit" class="btn btn-quiet">Add address</button>
+      </form>
+    </div>
+  </div>
+  {% if i.kind == "vlan" and i.vlan != 1 %}
+  <form method="post" action="/routing/vlan-interface/delete" class="inline form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="vlan" value="{{ i.vlan }}">
+    <button type="submit" class="btn btn-quiet">Delete {{ i.name }}</button>
+  </form>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if view.interface_vlan_on %}
+<section class="card">
+  <h2 class="card-title">Make a VLAN interface</h2>
+  {% if view.free_vlans %}
+  <form method="post" action="/routing/vlan-interface/create" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="new_vlan">VLAN</label>
+    <select id="new_vlan" name="vlan">
+      {% for v in view.free_vlans %}<option value="{{ v.id }}" {% if form.vlan == v.id|string %}selected{% endif %}>{{ v.id }} {{ v.name }}</option>{% endfor %}
+    </select>
+    <p class="hint">Only VLANs without a VLAN interface are listed. Create a VLAN on the <a href="/vlans">VLANs</a> page.</p>
+    <label for="new_ipv4">IPv4 address (optional)</label>
+    <input id="new_ipv4" name="ipv4" type="text" spellcheck="false" placeholder="192.0.2.1/24" value="{{ form.ipv4 or '' }}">
+    <label for="new_ipv6">IPv6 address (optional)</label>
+    <input id="new_ipv6" name="ipv6" type="text" spellcheck="false" placeholder="2001:db8::1/64" value="{{ form.ipv6 or '' }}">
+    <label for="new_desc">Description (optional)</label>
+    <input id="new_desc" name="description" type="text" maxlength="254" value="{{ form.description or '' }}">
+    <label for="new_mtu">MTU (optional)</label>
+    <input id="new_mtu" name="mtu" type="text" inputmode="numeric" value="{{ form.mtu or '' }}">
+    <p class="hint">{{ mtu_min }} to {{ mtu_max }}; empty keeps {{ default_mtu }}.</p>
+    <label class="check"><input type="checkbox" name="enabled" value="yes" {% if form.enabled == "yes" %}checked{% endif %}> Turn it on</label>
+    <button type="submit" class="btn btn-primary">Make VLAN interface</button>
+  </form>
+  <p class="note">Each change asks you to confirm first.</p>
+  {% else %}
+  <p>Every VLAN has a VLAN interface already.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% elif role in ("admin", "operator") and connection.changes_enabled and not connection.layer3_changes_enabled %}
+<section class="card">
+  <p class="lead">VLAN interface changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and on routed ports.</p>
+</section>
+{% elif role not in ("admin", "operator") %}
+<p class="note">Your role ({{ role }}) can look at routing but not change it.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

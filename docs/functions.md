@@ -52,6 +52,7 @@ prose columns; those are a reviewer's job.
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
 | Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
+| Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
@@ -151,6 +152,10 @@ raises, all handled in `main.create_app`.
 | `validate_port_name` | `(name: str) -> str` | Refuses anything but a front-panel Ethernet port name | `NxapiClient.configure_port`, `port_changes` | v0.1.0 |
 | `validate_lacp_priority` | `(value: int \| str) -> int` | An LACP priority (the switch's or a port's) 1-65535, else `ValueError` | `NxapiClient.set_port_lacp`, `set_lacp_system_priority`, `port_channels` | v0.1.0 |
 | `validate_min_links` | `(value: int \| str) -> int` | A port-channel's LACP minimum links 1-32, else `ValueError` | `NxapiClient.configure_port_channel`, `port_channels.plan_channel_settings` | v0.1.0 |
+| `address_line` | `(address: str, secondary: bool = False) -> str` | The interface line that puts an address on (`ip address A [secondary]`, `ipv6 address A`); its `no` form takes it off | `NxapiClient.configure_vlan_interface`, `set_interface_addresses`, `configure_port_settings` | v0.1.0 |
+| `validate_interface_address` | `(text: str) -> str` | An IPv4 or IPv6 address with its prefix, checked by `validate_ip_interface` or `validate_ipv6_interface` | `address_line`, `routing` | v0.1.0 |
+| `validate_ipv6_interface` | `(text: str) -> str` | An IPv6 address with its prefix (`2001:db8::1/64`), written short; refuses link-local (the switch makes its own), multicast, loopback and unspecified | `validate_interface_address`, `routing` | v0.1.0 |
+| `validate_routed_interface` | `(name: str) -> str` | A name an address can go on: `Vlan1`-`Vlan4094`, a front port or a port-channel; never mgmt0 | `NxapiClient.set_interface_addresses`, `routing` | v0.1.0 |
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
@@ -182,7 +187,12 @@ ports, mode, fast_rate=, description=)` (ports into a port-channel, which the
 switch creates when needed; `active`, `passive` or `on`), `leave_port_channel(port)`,
 `delete_port_channel(number)`, `configure_port_channel(number, description=,
 min_links=)`, `set_port_lacp(port, rate=, priority=)`,
-`set_lacp_system_priority(priority)` and `save_config()`; each builds its
+`set_lacp_system_priority(priority)`, `configure_vlan_interface(vlan,
+description=, mtu=, enabled=, remove=, add=)` (make or change one VLAN
+interface: addresses off, addresses on, description, MTU, on/off last),
+`delete_vlan_interface(vlan)` (never VLAN 1), `set_interface_addresses(name,
+remove=, add=)` (IPv4 and IPv6 addresses on a VLAN interface or routed port)
+and `save_config()`; each builds its
 commands from checked values.
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
@@ -299,19 +309,21 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 6) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; when the role gains the port-channels (`role_version` below 7) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
 | `role_lines` | `(ports, account_name) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values | `enable_port_changes` | v0.1.0 |
 
 `ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES`,
-`NEIGHBOR_RULES` and `CHANNEL_RULES` are the role's only rules, and its port
-list names the front ports one by one plus every port-channel
-(`CHANNEL_PERMIT`); `ROLE_NAME` is `nxray-ports`, shared by every NXray
+`NEIGHBOR_RULES`, `CHANNEL_RULES` and `LAYER3_RULES` are the role's only
+rules, and its port list names the front ports one by one plus every
+port-channel (`CHANNEL_PERMIT`) and every VLAN interface
+(`VLAN_INTERFACE_PERMIT`); `ROLE_NAME` is `nxray-ports`, shared by every NXray
 install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
 VLANs, 3 also port settings, 4 also features, 5 also CDP and LLDP per port and
-the MAC address table, 6 also port-channels and LACP). `EnableResult.had_role`
+the MAC address table, 6 also port-channels and LACP, 7 also VLAN interfaces
+and IPv4 and IPv6 addresses, with `VLAN_INTERFACE_PERMIT` in the port list). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -337,10 +349,12 @@ interfaces). `ON_WARNINGS` and `OFF_WARNING` go on the confirm page.
 | --- | --- | --- | --- | --- |
 | `describe_port_vlans` | `(current, change) -> tuple[list[str], list[str]]` | A port's VLAN change in words, plus warnings (mode change, VLANs dropped, port moved) | `routes/ports.port_vlans_change` | v0.1.0 |
 | `load_ports_with_vlans` | `(client) -> tuple[list[Port], VlanView]` | Everything a port's own page shows, from one request | `routes/ports` | v0.1.0 |
-| `load_vlans` | `(client) -> VlanView` | The VLAN list and every port's VLAN settings, from one request | `routes/vlans` | v0.1.0 |
+| `load_vlan_page` | `(client) -> VlanView` | Like `load_vlans`, plus which VLANs have a VLAN interface (`VlanView.interfaces`), in the same request | `routes/vlans` | v0.1.0 |
+| `load_vlans` | `(client) -> VlanView` | The VLAN list and every port's VLAN settings, from one request | `routes/neighbors` | v0.1.0 |
 | `parse_switchports` | `(body) -> dict[str, PortVlans]` | Each Ethernet port's mode, access, native and carried VLANs from `show interface switchport` | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
 | `parse_vlans` | `(body) -> list[Vlan]` | Every VLAN from `show vlan brief`, lowest first | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
 | `plan_port_vlans` | `(current, view, *, mode, access_vlan, native_vlan, allowed) -> PortVlanChange` | Checks a port's VLAN form against the switch (VLANs must exist) and keeps only what changes | `routes/ports.port_vlans_change` | v0.1.0 |
+| `vlan_interface_ids` | `(brief_body) -> frozenset[int]` | The VLANs that have a VLAN interface, from `show interface brief` | `load_vlan_page` | v0.1.0 |
 
 `PortVlans.uses(vlan_id)` says whether deleting a VLAN would cut a port off
 (access VLAN, native VLAN, or a trunk naming it; a trunk carrying every VLAN
@@ -354,7 +368,7 @@ does not count); `VlanView.ports_using(vlan_id)` lists those ports.
 | `guess_breakout_map` | `(sibling_speeds: list[str]) -> str \| None` | The split four ports were made with (`10g-4x`, `25g-4x`) from their speed column, or None | `routes/ports` | v0.1.0 |
 | `load_port_settings` | `(client, port, vlans) -> PortSettings` | One port's settings, from one request of `settings_commands` | `try_load_port_settings` | v0.1.0 |
 | `parse_ip_addresses` | `(body) -> dict[str, tuple[str, str]]` | Each port's IPv4 address with prefix, and its VRF, from `show ip interface vrf all` | `parse_port_settings` | v0.1.0 |
-| `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, address and breakout | `load_port_settings` | v0.1.0 |
+| `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body, ipv6_body=None) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, addresses (main and extra IPv4, IPv6) and breakout | `load_port_settings` | v0.1.0 |
 | `plan_breakout` | `(settings, action, mapping) -> BreakoutPlan` | Checks a split or join against the port, with its lines and warnings for the confirm page | `routes/ports.port_breakout` | v0.1.0 |
 | `plan_port_settings` | `(current, form) -> SettingsChange` | Checks the settings form against the port (speeds it can run, MTU for its layer, FEC, levels) and keeps only what changes | `routes/ports.port_settings_change` | v0.1.0 |
 | `settings_commands` | `(name: str) -> tuple[str, ...]` | The per-port show commands a port's settings need | `load_port_settings` | v0.1.0 |
@@ -429,13 +443,20 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
+| `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
+| `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
+| `vlan_interface_create` | `(request, username, csrf, vlan, ipv4, ipv6, description, mtu, enabled, confirm) -> Response` | `POST /routing/vlan-interface/create`: asks to confirm, then makes a VLAN interface for a VLAN that has none | router | v0.1.0 |
+| `vlan_interface_delete` | `(request, username, csrf, vlan, confirm) -> Response` | `POST /routing/vlan-interface/delete`: asks to confirm, then deletes a VLAN interface (never Vlan1); the VLAN stays | router | v0.1.0 |
+| `vlan_interface_settings` | `(request, username, csrf, vlan, ipv4, description, mtu, state, confirm) -> Response` | `POST /routing/vlan-interface/settings`: asks to confirm, then sets a VLAN interface's main IPv4 address, description, MTU and on/off | router | v0.1.0 |
+| `address_add` | `(request, username, csrf, name, address, confirm) -> Response` | `POST /routing/address/add`: asks to confirm, then puts an IPv4 (main or extra) or IPv6 address on a VLAN interface or routed port | router | v0.1.0 |
+| `address_remove` | `(request, username, csrf, name, address, confirm) -> Response` | `POST /routing/address/remove`: asks to confirm, then takes one address off; the main IPv4 address only once the extra ones are gone | router | v0.1.0 |
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
 | `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN, port settings, feature and neighbor changes button, the Turn on button for whatever an older role lacks (for example Turn on neighbor changes), and Update the port list | router | v0.1.0 |
 | `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
 | `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
-| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, Neighbors, else Switch) | router | v0.1.0 |
+| `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, Neighbors, Port-channels, Routing, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 | `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
@@ -447,7 +468,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `static_mac_add` | `(request, username, csrf, mac, vlan, where, confirm) -> Response` | `POST /neighbors/static`: asks to confirm, then adds a static MAC address on a front port or dropped | router | v0.1.0 |
 | `static_mac_remove` | `(request, username, csrf, mac, vlan, confirm) -> Response` | `POST /neighbors/static/remove`: asks to confirm, then removes a static entry the table shows | router | v0.1.0 |
 | `vlan_create` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/create`; refuses a VLAN that exists | router | v0.1.0 |
-| `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1 and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
+| `vlan_delete` | `(request, username, csrf, vlan_id, confirm) -> Response` | `POST /vlans/delete`: refuses VLAN 1, a VLAN with a VLAN interface and a VLAN a port uses, else asks to confirm, then deletes | router | v0.1.0 |
 | `vlan_rename` | `(request, username, csrf, vlan_id, name) -> Response` | `POST /vlans/rename`; not VLAN 1 | router | v0.1.0 |
 | `vlans_page` | `(request, username) -> Response` | `GET /vlans`, every VLAN and the ports using it | router | v0.1.0 |
 
@@ -661,6 +682,30 @@ A port-channel's LACP minimum links appears only in `show running-config`,
 which NXray's role may not read, so its form has no current value.
 NXray refuses to delete a port-channel that still has ports; the switch itself
 would take them out silently.
+
+## `app/routing.py` — VLAN interfaces, routed ports and their addresses
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `load_routing` | `(client) -> RoutingView` | Whether interface-vlan is on, the VLANs, every VLAN interface and routed port with its VRF and addresses; one request, plus one for the VLAN interfaces | `routes/routing` | v0.1.0 |
+| `long_name` | `(name: str) -> str` | `Eth1/3` (as `show ip interface` writes it) -> `Ethernet1/3` | `parse_ipv4`, `parse_ipv6` | v0.1.0 |
+| `parse_brief` | `(brief_body) -> tuple[list[str], list[dict]]` | VLAN interface names, and the rows of routed front ports and port-channels, from `show interface brief` | `load_routing` | v0.1.0 |
+| `parse_ipv4` | `(body) -> dict[str, tuple[str, list[Address], dict]]` | Interface -> (VRF, IPv4 addresses with the main one first, row) from `show ip interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
+| `parse_ipv6` | `(body) -> dict[str, tuple[str, list[Address], str]]` | Interface -> (VRF, IPv6 addresses, link-local address) from `show ipv6 interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
+| `parse_routed_port` | `(row, ipv4, ipv6, descriptions) -> L3Interface` | One routed front port or port-channel from its `show interface brief` row and the address tables | `load_routing` | v0.1.0 |
+| `parse_vlan_interface` | `(name, svi_body, ipv4, ipv6, descriptions) -> L3Interface` | One VLAN interface: on/off, up/down, MTU, description and addresses, from `show interface vlan<n>` and the address tables | `load_routing` | v0.1.0 |
+| `plan_add_address` | `(view, *, name, address) -> tuple[AddressChange, list[str], list[str]]` | One more address on a VLAN interface or routed port: IPv6, or IPv4 (the main one when it has none, else extra); refuses a network another interface in the VRF has | `routes/routing.address_add` | v0.1.0 |
+| `plan_create_vlan_interface` | `(view, *, vlan, ipv4, ipv6, description, mtu, enabled) -> tuple[VlanInterfaceChange, list[str], list[str]]` | A new VLAN interface: interface-vlan on, the VLAN exists and has none, addresses checked | `routes/routing.vlan_interface_create` | v0.1.0 |
+| `plan_delete_vlan_interface` | `(view, *, vlan) -> tuple[int, list[str], list[str]]` | Deleting a VLAN interface, naming the addresses that go with it; never Vlan1 | `routes/routing.vlan_interface_delete` | v0.1.0 |
+| `plan_remove_address` | `(view, *, name, address) -> tuple[AddressChange, list[str], list[str]]` | Taking one address off; the main IPv4 address only once the extra ones are gone | `routes/routing.address_remove` | v0.1.0 |
+| `plan_vlan_interface_settings` | `(view, *, vlan, ipv4, description, mtu, enabled) -> tuple[VlanInterfaceChange, list[str], list[str]]` | A VLAN interface's main IPv4 address, description, MTU and on/off; only what differs | `routes/routing.vlan_interface_settings` | v0.1.0 |
+
+VLAN interfaces exist only while the interface-vlan feature is on; turning it
+on makes Vlan1 by itself, turned off. A port becomes routed on its own page;
+the Routing page puts extra IPv4 and IPv6 addresses on it. An extra address
+may share its main address's network, but not another interface's in the same
+VRF. Link-local IPv6 addresses are never typed: the switch makes one on every
+IPv6 interface.
 
 ## `app/oui.py` — MAC addresses and their makers
 
