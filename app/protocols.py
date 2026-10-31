@@ -38,8 +38,11 @@ from typing import Any
 from app.nxapi import (
     DEFAULT_VRF,
     VLAN_INTERFACE_MAX,
+    validate_channel_number,
     validate_description,
+    validate_port_name,
     validate_routed_interface,
+    validate_vlan_id,
     validate_vrf_name,
 )
 
@@ -80,7 +83,14 @@ KINDS = (
     "net",  # an IS-IS NET
     "mac",  # a unicast MAC address, written 0200.0000.0001
     "maddr4",  # one IPv4 multicast group address: 239.1.1.1
+    "port",  # a front port or port-channel, switched (layer 2): spanning tree
+    "vlan",  # one VLAN number, 1 to 3967 (the switch keeps 3968-4094 for itself)
+    "vlans",  # VLAN numbers and ranges, 1 to 3967: 10 or 10,20-30
 )
+
+# The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
+# own internal VLANs.
+STP_VLAN_MAX = 3967
 
 
 @dataclass(frozen=True)
@@ -191,6 +201,49 @@ _MAC_DIGITS = re.compile(r"[0-9a-f]{12}")
 _SECRET_FIRST = "|>\\('\""
 
 
+_CHANNEL = re.compile(r"(?i)^(?:po|port-channel)\s*([0-9]{1,4})$")
+_ETHERNET = re.compile(r"(?i)^(?:eth|ethernet)\s*([0-9]+/[0-9]+(?:/[0-9]+)?)$")
+_VLAN_LIST = re.compile(r"^[0-9]{1,4}(?:-[0-9]{1,4})?(?:,[0-9]{1,4}(?:-[0-9]{1,4})?)*$")
+
+
+def _switch_port(value: str, label: str) -> str:
+    if match := _CHANNEL.fullmatch(value):
+        try:
+            return f"port-channel{validate_channel_number(match.group(1))}"
+        except ValueError as exc:
+            raise ValueError(f"{label}: {exc}") from exc
+    match = _ETHERNET.fullmatch(value)
+    try:
+        return validate_port_name(f"Ethernet{match.group(1)}" if match else value)
+    except ValueError as exc:
+        raise ValueError(f"{label}: a front port such as Ethernet1/3 or a port-channel") from exc
+
+
+def _vlan(value: str, label: str) -> str:
+    try:
+        number = validate_vlan_id(value)
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from exc
+    if number > STP_VLAN_MAX:
+        raise ValueError(f"{label}: VLANs {STP_VLAN_MAX + 1} to 4094 are the switch's own")
+    return str(number)
+
+
+def _vlans(value: str, label: str) -> str:
+    """'10, 20-30' -> '10,20-30': every number 1-3967, every range low-high."""
+    compact = re.sub(r"\s*([,-])\s*", r"\1", value)
+    if not _VLAN_LIST.fullmatch(compact):
+        raise ValueError(f"{label} is VLAN numbers and ranges such as 10,20-30")
+    for part in compact.split(","):
+        low, _, high = part.partition("-")
+        _vlan(low, label)
+        if high:
+            _vlan(high, label)
+            if int(high) <= int(low):
+                raise ValueError(f"{label}: in {part} the second number must be the higher one")
+    return compact
+
+
 def _source(value: str, label: str) -> str:
     if match := _LOOPBACK.fullmatch(value):
         number = int(match.group(1))
@@ -289,6 +342,12 @@ def check_value(spec: Field, raw: str) -> str:
         return _mac(value, spec.label)
     if kind == "maddr4":
         return _multicast_address(value, spec.label)
+    if kind == "port":
+        return _switch_port(value, spec.label)
+    if kind == "vlan":
+        return _vlan(value, spec.label)
+    if kind == "vlans":
+        return _vlans(value, spec.label)
     if kind == "vrf":
         if value == DEFAULT_VRF:
             if not spec.optional:
@@ -353,7 +412,10 @@ class Setting:
     heading. ``warning`` is shown on the confirm page, for settings that
     break or restart something. ``check``, when given, gets the checked
     values before a set and raises ValueError for a combination the fields
-    alone cannot refuse (a prefix-list entry's lengths).
+    alone cannot refuse (a prefix-list entry's lengths). ``ident`` names the
+    scope's identity fields the lines also use, for scopes whose lines are
+    typed at the top level and carry the place in them (``spanning-tree vlan
+    {vlan} priority {priority}``); the scope checks it has them.
     """
 
     key: str
@@ -367,9 +429,10 @@ class Setting:
     warning: str = ""
     group: str = "Settings"
     check: Callable[[dict[str, str]], None] | None = None
+    ident: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        names = {f.name for f in self.fields}
+        names = {f.name for f in self.fields} | set(self.ident)
         used = blanks(self.line) | blanks(self.no_line or "")
         if used - names:
             raise ValueError(f"setting {self.key}: no field for {sorted(used - names)}")
@@ -420,6 +483,9 @@ class Scope:
         clash = names & {f.name for s in self.settings for f in s.fields}
         if clash:
             raise ValueError(f"scope {self.key}: settings reuse identity field names {clash}")
+        borrowed = {name for s in self.settings for name in s.ident}
+        if borrowed - names:
+            raise ValueError(f"scope {self.key}: no identity field for {sorted(borrowed - names)}")
 
     def setting(self, key: str) -> Setting | None:
         return next((s for s in self.settings if s.key == key), None)
@@ -587,17 +653,18 @@ def build_change(
         raise ValueError(f"{setting.label} is only removed from here")
     if action == "remove" and not setting.removable:
         raise ValueError(f"{setting.label} cannot be removed, only changed")
+    borrowed = {name: where[name] for name in setting.ident}
     if action == "set":
         checked = _checked(setting.fields, values)
         if setting.check is not None:
             setting.check(checked)
-        line = render(setting.line, checked)
+        line = render(setting.line, {**borrowed, **checked})
     else:
         checked = _checked(setting.remove_fields, values)
         line = (
-            render(setting.no_line, checked)
+            render(setting.no_line, {**borrowed, **checked})
             if setting.no_line
-            else "no " + render(setting.line, checked)
+            else "no " + render(setting.line, {**borrowed, **checked})
         )
     label = _mask(line, checked, setting.secret_fields)
     shown = [
@@ -696,6 +763,18 @@ def source_field(name: str = "source", label: str = "Source interface") -> Field
     )
 
 
+def port_field() -> Field:
+    """The port identity field of spanning-tree port scopes: a switched front port
+    or port-channel."""
+    return Field(
+        "port",
+        "Port",
+        "port",
+        hint="A front port (Ethernet1/3) or port-channel (port-channel43)",
+        placeholder="Ethernet1/3",
+    )
+
+
 def interface_field() -> Field:
     """The interface identity field of interface scopes."""
     return Field(
@@ -722,6 +801,7 @@ __all__ = [
     "build_change",
     "check_value",
     "interface_field",
+    "port_field",
     "render",
     "route_age",
     "source_field",

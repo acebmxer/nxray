@@ -297,6 +297,9 @@ class FakeSwitch:
     # Routing protocol lines as entered, each the mode path joined with " ; "
     # ("router ospf core ; vrf lab ; router-id 192.0.2.1").
     protocol_lines: list[str] = field(default_factory=list)
+    # Spanning tree lines as entered, the same way ("interface Ethernet1/54 ;
+    # spanning-tree cost 100"); ``show running-config spanning-tree`` prints them.
+    stp_lines: list[str] = field(default_factory=list)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -323,7 +326,10 @@ class FakeSwitch:
             if replies and "error" in replies[-1]:
                 replies.append(_error(ident, "Command not ran due to previous failures"))
                 continue
-            reply, context = self._run(user, entry["params"]["cmd"], ident, context)
+            if entry.get("method") == "cli_ascii":
+                reply = self._ascii(user, entry["params"]["cmd"], ident)
+            else:
+                reply, context = self._run(user, entry["params"]["cmd"], ident, context)
             replies.append(reply)
         status = 500 if any("error" in reply for reply in replies) else 200
         return httpx.Response(status, json=replies[0] if len(replies) == 1 else replies)
@@ -372,21 +378,78 @@ class FakeSwitch:
     def _feature_on(self, name: str | None) -> bool:
         return name is None or self.feature_state.get(name, False)
 
-    def _record(self, path: str) -> None:
-        """Keep a protocol line; its "no" form removes it and everything under it."""
+    def _record(self, path: str, kept: list[str] | None = None) -> None:
+        """Keep a protocol line; its "no" form removes it and everything under it.
+        ``kept`` is the list to keep it in (the protocol lines when not given)."""
+        lines = self.protocol_lines if kept is None else kept
         parts = path.split(" ; ")
         last = parts[-1]
         if last.startswith("no "):
             gone = " ; ".join([*parts[:-1], last[3:]])
-            self.protocol_lines = [
+            lines[:] = [
                 line
-                for line in self.protocol_lines
+                for line in lines
                 if line != gone
                 and not line.startswith(gone + " ; ")
                 and not line.startswith(gone + " ")
             ]
-        elif path not in self.protocol_lines:
-            self.protocol_lines.append(path)
+        elif path not in lines:
+            lines.append(path)
+
+    def _spanning_tree(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A spanning tree line, or None when ``cmd`` is not one. As proven on
+        cisco-25gb: the role's "conf t ; spanning-tree *" rule covers the MST
+        region's submode, the interface rules every port line."""
+        kind = context[0] if context else None
+        interface = context[1] if context and kind == "interface" else None
+        if kind == "stp-mst" and context:
+            path = f"{context[1]} ; {cmd}"
+        elif interface is not None and cmd.removeprefix("no ").startswith("spanning-tree "):
+            path = f"interface {interface} ; {cmd}"
+        elif kind is None and cmd.removeprefix("no ").startswith("spanning-tree "):
+            path = cmd
+        else:
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        self._record(path, self.stp_lines)
+        if cmd == "spanning-tree mst configuration":
+            return _ok(ident, None), ("stp-mst", cmd)
+        return _ok(ident, None), context
+
+    def stp_config(self) -> str:
+        """``show running-config spanning-tree`` from the lines entered: the top-level
+        ones, then the MST region's, then each port's."""
+        top = [
+            p for p in self.stp_lines if " ; " not in p and p != "spanning-tree mst configuration"
+        ]
+        region = [
+            p.split(" ; ", 1)[1]
+            for p in self.stp_lines
+            if p.startswith("spanning-tree mst configuration ; ")
+        ]
+        out = list(top)
+        if region:
+            out += ["spanning-tree mst configuration", *(f"  {line}" for line in region)]
+        ports: dict[str, list[str]] = {}
+        for p in self.stp_lines:
+            if p.startswith("interface "):
+                place, line = p.split(" ; ", 1)
+                ports.setdefault(place, []).append(line)
+        for place, lines in ports.items():
+            out += [place, *(f"  {line}" for line in lines)]
+        return "\n".join(out) + ("\n" if out else "")
+
+    def _ascii(self, user: str, cmd: str, ident: int) -> dict[str, Any]:
+        """A ``cli_ascii`` request: only ``show running-config spanning-tree``, which
+        the read-only account may run only once its role has the rule for it."""
+        if cmd != "show running-config spanning-tree":
+            return _error(ident, f"% Not recorded by the fake switch: {cmd}\n")
+        if "network-admin" not in self.roles_of(user) and not self._role_matches(user, cmd, None):
+            return _error(ident, "% Permission denied for the role\n")
+        return {"jsonrpc": "2.0", "result": {"msg": self.stp_config()}, "id": ident}
 
     def _protocol(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -472,6 +535,8 @@ class FakeSwitch:
             return self._show(cmd, ident), context
         if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
             return protocol_reply
+        if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
+            return stp_reply
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)

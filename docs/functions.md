@@ -54,6 +54,7 @@ prose columns; those are a reviewer's job.
 | Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
+| Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read the switch's route table | `app/routing_protocols.py`, `load_overview` / `parse_routes` |
 | Read, add or remove static routes | `app/routing.py` (`load_routing`, `plan_add_static_route`, `plan_remove_static_route`); command from `NxapiClient.set_static_route` |
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
@@ -142,7 +143,7 @@ raises, all handled in `main.create_app`.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `breakout_numbers` | `(name: str) -> tuple[int, int]` | Module and port of a port or split port: Ethernet1/50/2 gives (1, 50) | `NxapiClient.breakout_port`, `join_port` | v0.1.0 |
-| `build_payload` | `(commands: list[str]) -> list[dict]` | The JSON-RPC request body for running commands in order | `NxapiClient.show` | v0.1.0 |
+| `build_payload` | `(commands: list[str], method="cli") -> list[dict]` | The JSON-RPC request body for running commands in order; `method="cli_ascii"` asks for the printed text instead | `NxapiClient._send`, `show_text` | v0.1.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page` (setup, address, repair) | v0.1.0 |
 | `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
@@ -207,8 +208,13 @@ member` the new one; the switch deletes the interface's addresses),
 or inside `vrf context`; never management),
 `configure_protocol(protocol, scope, setting, action, ident, values)` (one
 change on a routing protocol page; the lines come from
-`routing_protocols.build_protocol_change`) and `save_config()`; each builds its
-commands from checked values.
+`routing_protocols.build_protocol_change`),
+`configure_spanning_tree(scope, setting, action, ident, values)` (one change on
+the Spanning tree page; the lines come from `spanning_tree.build_stp_change`)
+and `save_config()`; each builds its commands from checked values.
+`show_text(command)` runs one show command whose answer NX-API gives only as
+printed text (`show running-config spanning-tree`, through the `cli_ascii`
+method).
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -462,12 +468,18 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
-| `form_fields` | `(request) -> dict[str, str]` | The posted form as plain strings, for the protocol forms whose field names vary | `protocol_change` | v0.1.0 |
+| `form_fields` | `(request) -> dict[str, str]` | The posted form as plain strings, for the protocol forms whose field names vary | `protocol_change`, `spanning_tree_change` | v0.1.0 |
 | `render_protocols_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing protocols overview with a message | `protocols_page`, `switch_save` | v0.1.0 |
 | `protocols_page` | `(request, username) -> Response` | `GET /routing/protocols`: every protocol with whether its feature is on, and the route table per VRF | router | v0.1.0 |
 | `render_protocol_page` | `(request, username, key, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows one protocol's page with a message; `form` keeps what was typed (never secrets) | `protocol_page`, `protocol_change`, `switch_save` | v0.1.0 |
 | `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
 | `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
+| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, or Spanning tree) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `site_change` | v0.1.0 |
+| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends; switch errors have secrets masked | `protocol_change`, `spanning_tree_change` | v0.1.0 |
+| `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
+| `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
+| `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
+| `check_stp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel on the switch, or a VLAN the switch lacks | `SITE.check_place` | v0.1.0 |
 | `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
 | `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, the VRFs and the static routes, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
 | `vlan_interface_create` | `(request, username, csrf, vlan, ipv4, ipv6, description, mtu, enabled, vrf, confirm) -> Response` | `POST /routing/vlan-interface/create`: asks to confirm, then makes a VLAN interface for a VLAN that has none, in the default VRF or another one | router | v0.1.0 |
@@ -726,6 +738,7 @@ would take them out silently.
 | `table_rows` | `(body, table: str, row: str) -> list[dict]` | The rows of an NX-OS table, one row or many, also when the table is a list; deliberately not a change to `switch.rows` | `protocols_*` parsers, `routing_protocols.parse_routes` | v0.1.0 |
 | `vrf_field` | `(optional=True) -> Field` | The VRF identity field protocol scopes share | `protocols_*` | v0.1.0 |
 | `interface_field` | `() -> Field` | The interface identity field of interface scopes | `protocols_*` | v0.1.0 |
+| `port_field` | `() -> Field` | The port identity field of spanning-tree port scopes: a switched front port or port-channel (field kind `port`) | `spanning_tree` | v0.1.0 |
 | `source_field` | `(name="source", label="Source interface") -> Field` | A field for an interface whose address a protocol uses, loopbacks included (BGP update source, PIM register source, MSDP connect source) | `protocols_bgp`, `protocols_multicast` | v0.1.0 |
 
 ## `app/routing_protocols.py` — the Routing protocols pages and the route table
@@ -784,6 +797,17 @@ would take them out silently.
 | --- | --- | --- | --- | --- |
 | `parse_policy` | `(bodies: list[dict]) -> ProtocolView` | Routing policy page from show route-map / ip / ipv6 prefix-list / key chain | `POLICY.parse` | v0.1.0 |
 | `check_prefix_entry` | `(prefix: str, ge: str = "", le: str = "") -> tuple[str, str, str]` | Checks a prefix-list entry's length < ge <= le <= 32/128 | the prefix-list entry setting's `check` | v0.1.0 |
+
+## `app/spanning_tree.py` — Spanning tree: the trees, the ports, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `expand_vlans` | `(spec: str) -> list[int]` | A VLAN list as the switch writes it (`1-2,10`) as numbers; `[]` for anything else. Deliberately not `nxapi.parse_vlan_list`, which raises on bad input and takes `all`/`none`: here the text is the switch's own and a line it does not match is skipped | `parse_stp_config` | v0.1.0 |
+| `parse_stp_config` | `(config: str) -> StpConfig` | `show running-config spanning-tree` text sorted by where each line applies: switch-wide lines, per-VLAN values, VLANs with spanning tree off, the MST region, MST instance priorities, each port's lines | `parse_spanning_tree` | v0.1.0 |
+| `parse_spanning_tree` | `(bodies, config_text=None) -> ProtocolView` | The page from the five reads and the configuration text (None when the role may not read it): the switch, each VLAN, the MST region and instances, each port in a tree or with settings, with values prefilled; trees, ports and problem ports tables | `SPANNING_TREE.parse`, `load_spanning_tree_page` | v0.1.0 |
+| `switch_port_names` | `(brief) -> list[str]` | The front ports and port-channels in `show interface brief` that are not routed | `parse_spanning_tree`, `load_spanning_tree_page` | v0.1.0 |
+| `load_spanning_tree_page` | `(client) -> SpanningTreePage` | One request for the reads, then the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/spanning_tree` | v0.1.0 |
+| `build_stp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Spanning tree page | `NxapiClient.configure_spanning_tree`, `routes/spanning_tree` | v0.1.0 |
 
 ## `app/routing.py` — VLAN interfaces, routed ports, their addresses, VRFs and static routes
 

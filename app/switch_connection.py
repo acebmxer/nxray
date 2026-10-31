@@ -99,6 +99,12 @@ class SwitchConnection:
         chains."""
         return self.changes_enabled and self.role_version >= 10
 
+    @property
+    def stp_changes_enabled(self) -> bool:
+        """True once that role includes the spanning tree rules (role version 11 or
+        later)."""
+        return self.changes_enabled and self.role_version >= 11
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

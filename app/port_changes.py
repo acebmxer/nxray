@@ -338,11 +338,32 @@ PROTOCOL_RULES = (
     "rule 128 permit command conf t ; interface * ; no bfd *",
 )
 
+# Spanning tree rules, added in ROLE_VERSION 11. Proven on cisco-25gb
+# (2026-10-31) with a throwaway account on one unused port and a throwaway
+# VLAN: "conf t ; spanning-tree *" covers the per-VLAN lines and the MST
+# region's submode lines (name, revision, instance), the interface rules every
+# port line (port type, BPDU guard and filter, guard, cost, port priority,
+# per-VLAN cost and priority, link type), each with its "no" form. The
+# switch-wide lines (mode, path cost method, defaults, Bridge Assurance) are
+# the same rule; they were not typed, since each changes every VLAN or port.
+# Rules 133-134 let NXray read the spanning tree lines of the running
+# configuration, which NX-API gives only as text (``NxapiClient.show_text``):
+# the only place a down port's settings show. The port list stays as it was,
+# so this needs no SSH save and no wait.
+STP_RULES = (
+    "rule 129 permit command conf t ; spanning-tree *",
+    "rule 130 permit command conf t ; no spanning-tree *",
+    "rule 131 permit command conf t ; interface * ; spanning-tree *",
+    "rule 132 permit command conf t ; interface * ; no spanning-tree *",
+    "rule 133 permit command show running-config spanning-tree",
+    "rule 134 permit command show running-config spanning-tree *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 10
+ROLE_VERSION = 11
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -355,6 +376,7 @@ _ADDED_BY_VERSION = {
     8: "VRF",
     9: "static route",
     10: "routing protocol",
+    11: "spanning tree",
 }
 
 
@@ -409,7 +431,8 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: ports, port-channels, VLANs, layer 3, features, MAC, save",
+        "description NXray: ports, port-channels, VLANs, layer 3, spanning tree, features, "
+        "MAC, save",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
@@ -420,6 +443,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *VRF_RULES,
         *ROUTE_RULES,
         *PROTOCOL_RULES,
+        *STP_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

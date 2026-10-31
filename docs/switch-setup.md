@@ -110,10 +110,10 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface, VRF, static route and routing protocol changes**, tick the box
+interface, VRF, static route, routing protocol and spanning tree changes**, tick the box
 and press **Turn on port, VLAN, port settings, feature, neighbor,
-port-channel, VLAN interface, VRF, static route and routing protocol
-changes**. One press turns on all ten, with a single wait.
+port-channel, VLAN interface, VRF, static route, routing protocol
+and spanning tree changes**. One press turns on all eleven, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -251,6 +251,12 @@ NXray then:
          rule 126 permit command conf t ; interface * ; no ip igmp *
          rule 127 permit command conf t ; interface * ; bfd *
          rule 128 permit command conf t ; interface * ; no bfd *
+         rule 129 permit command conf t ; spanning-tree *
+         rule 130 permit command conf t ; no spanning-tree *
+         rule 131 permit command conf t ; interface * ; spanning-tree *
+         rule 132 permit command conf t ; interface * ; no spanning-tree *
+         rule 133 permit command show running-config spanning-tree
+         rule 134 permit command show running-config spanning-tree *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -280,8 +286,10 @@ off, describe, set the MTU of and delete VLAN interfaces and put IPv4 and
 IPv6 addresses on them; make and delete VRFs and move VLAN interfaces and
 routed ports between them; add and remove IPv4 and IPv6 static routes; run
 the routing protocols and change their settings, on those interfaces too,
-and the route-maps, prefix-lists and key chains they use; and save the
-configuration. The switch
+and the route-maps, prefix-lists and key chains they use; change spanning
+tree for the whole switch, each VLAN, the MST region and the front ports and
+port-channels, and read the spanning tree lines of the running configuration;
+and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
@@ -292,7 +300,7 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route and routing protocol changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol and spanning tree changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -300,11 +308,12 @@ minutes right after such a change (SSH kept working), though a later change
 went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
-features, neighbor, port-channel, VLAN interface, VRF, static route or
-routing protocol changes existed.** Their role has rules 1 to 5, 1 to 11, 1
-to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to 54 or 1 to 62. The Switch
-page then shows a card named for what is missing (for example **Static route
-and routing protocol changes** or **Routing protocol changes**): type the
+features, neighbor, port-channel, VLAN interface, VRF, static route,
+routing protocol or spanning tree changes existed.** Their role has rules 1
+to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to 54, 1 to 62
+or 1 to 128. The Switch page then shows a card named for what is missing (for
+example **Routing protocol and spanning tree changes** or **Spanning tree
+changes**): type the
 admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
@@ -588,6 +597,43 @@ NX-OS 9.3(16) with a throwaway account on an unused port: a rule naming a
 protocol's mode (`router ospf *`) covers every line inside it. Rules 99, 100
 and 105 to 110 (IPv6 EIGRP lines, and PIM and MSDP inside a VRF) are the same
 shapes as tried ones but were not tried on their own.
+
+**Spanning tree.** The **Spanning tree** page shows the switch's mode, which
+VLANs it is the root bridge for, every tree (one per VLAN in rapid-pvst mode,
+one per instance in mst mode) with its root bridge, root port, cost,
+topology changes and timers, every port in each tree with its role, state,
+cost and priority, the spanning tree settings of every front port and
+port-channel that carries VLANs, and any port that is blocked, inconsistent
+or in a dispute. A port's settings are changed under **Port**: **Change any
+port** at the top of that card offers every port, including ones that are
+down. Operators and admins can, each after a confirm page that shows the
+lines and warns when traffic can stop:
+
+- **For the whole switch**: the mode (`spanning-tree mode rapid-pvst|mst`),
+  the path cost method (short or long), Bridge Assurance, the defaults for
+  ports (edge ports, network ports, BPDU guard and BPDU filter on edge ports,
+  loop guard), PVST simulation and the MST timers and hop count.
+- **For one VLAN**: its bridge priority (0 to 61440 in steps of 4096), making
+  the switch the primary or secondary root (the switch stores the priority it
+  picks), hello time, forward delay and maximum age, and turning spanning
+  tree off or on for it.
+- **The MST region**: name, revision and which VLANs map to which instance;
+  and each MST instance's priority or root. They are used in mst mode only.
+- **For one front port or port-channel** (not a routed port, never mgmt0):
+  port type (edge, edge trunk, network or normal), BPDU guard, BPDU filter,
+  root or loop guard, cost and port priority (for all VLANs, some VLANs, or an
+  MST instance) and link type.
+
+Each setting can also be removed, which goes back to the switch's default.
+The settings of a port that is down only show in the running configuration,
+which NX-API gives only as text: NXray reads `show running-config
+spanning-tree` once its role allows it. An install whose role predates this
+gets a **Turn on spanning tree changes** card on the Switch page; it adds
+rules 129 to 134 with no wait. The per-VLAN, MST region and port lines were
+tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account on an
+unused port and VLAN; the switch-wide lines (mode, path cost method, the
+defaults, Bridge Assurance) use the same rule but were not typed there, since
+each changes every VLAN or port of the switch.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

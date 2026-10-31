@@ -82,13 +82,15 @@ body {
 
 .topnav {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 1rem;
+  gap: 0.4rem 1rem;
 }
 
 .who { color: var(--text-dim); font-size: 0.9rem; }
 
-.navlink { color: var(--text); text-decoration: none; font-size: 0.92rem; }
+.navlink { color: var(--text); text-decoration: none; font-size: 0.92rem; white-space: nowrap; }
 .navlink:hover { color: var(--accent); }
 .inline { display: inline; margin: 0; }
 
@@ -495,3 +497,5 @@ a { color: var(--accent); }
 .settings-group { margin-top: 0.6rem; }
 .settings-group > summary { cursor: pointer; font-weight: 600; color: var(--text-dim); }
 .settings-group .form-grid { margin-top: 0.6rem; }
+.pick-place { margin: 0.4rem 0 1rem; }
+.pick-place > summary { color: var(--accent); }

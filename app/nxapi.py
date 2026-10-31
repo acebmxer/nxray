@@ -592,12 +592,18 @@ def validate_show_command(command: str) -> str:
     return cleaned
 
 
-def build_payload(commands: list[str]) -> list[dict[str, Any]]:
-    """The JSON-RPC request body for running ``commands`` in order."""
+def build_payload(commands: list[str], method: str = "cli") -> list[dict[str, Any]]:
+    """The JSON-RPC request body for running ``commands`` in order.
+
+    ``method`` is ``cli`` (structured answers) or ``cli_ascii`` (the text the
+    CLI prints, for the few show commands with no structured form).
+    """
+    if method not in ("cli", "cli_ascii"):
+        raise ValueError(f"unknown NX-API method {method!r}")
     return [
         {
             "jsonrpc": "2.0",
-            "method": "cli",
+            "method": method,
             "params": {"cmd": command, "version": 1},
             "id": index,
         }
@@ -703,6 +709,21 @@ class NxapiClient:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
         return self._send(cleaned, cleaned, self._target.timeout)
+
+    def show_text(self, command: str) -> str:
+        """One show command's printed text, for commands with no structured form
+        (``show running-config spanning-tree``). NX-API gives that text only with
+        the ``cli_ascii`` method; the ``cli`` method answers it with nothing."""
+        cleaned = validate_show_command(command)
+        payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
+        entry = payload[0] if isinstance(payload, list) and payload else payload
+        if not isinstance(entry, dict):
+            raise NxapiProtocolError(f"no answer for {cleaned!r}")
+        if "error" in entry:
+            raise NxapiCommandError(f"{cleaned!r}: {error_message(entry['error'])}")
+        result = entry.get("result")
+        message = result.get("msg") if isinstance(result, dict) else None
+        return message if isinstance(message, str) else ""
 
     def create_user(self, name: str, password: str, role: str) -> None:
         """Create a local switch account. Needs an admin login.
@@ -1214,6 +1235,26 @@ class NxapiClient:
         change = build_protocol_change(protocol, scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_spanning_tree(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Spanning tree page: a switch-wide line, one VLAN's,
+        the MST region's, or one port's.
+
+        The lines are built from the page's description and the checked values
+        (``spanning_tree.build_stp_change``), as for the routing protocols.
+        """
+        # Imported here: the spanning tree description uses this module's checks.
+        from app.spanning_tree import build_stp_change
+
+        change = build_stp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.
 
@@ -1242,10 +1283,13 @@ class NxapiClient:
         allow_text: bool = False,
     ) -> list[dict[str, Any]]:
         """POST commands as one JSON-RPC request and parse the answer."""
+        payload = self._post(build_payload(commands), timeout)
+        return parse_response(payload, commands, labels, allow_text)
+
+    def _post(self, body: list[dict[str, Any]], timeout: float) -> Any:
+        """POST one JSON-RPC request; the decoded JSON answer, whatever its HTTP status."""
         try:
-            response = self._http.post(
-                self._target.url, json=build_payload(commands), timeout=timeout
-            )
+            response = self._http.post(self._target.url, json=body, timeout=timeout)
         except httpx.TimeoutException as exc:
             raise NxapiUnreachable(
                 f"no answer from {self._target.host}:{self._target.port} within {timeout:g} seconds"
@@ -1261,11 +1305,9 @@ class NxapiClient:
         # A rejected command comes back as HTTP 500 with a JSON-RPC error
         # body, so the body is read before the status decides anything.
         try:
-            payload = response.json()
+            return response.json()
         except ValueError as exc:
             raise NxapiProtocolError(
                 f"the switch answered HTTP {response.status_code} without JSON "
                 "(is this address really NX-API?)"
             ) from exc
-
-        return parse_response(payload, commands, labels, allow_text)

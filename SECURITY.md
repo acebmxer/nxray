@@ -48,7 +48,10 @@ remove IPv4 and IPv6 static routes (`ip route *`, `ipv6 route *` and their
 and change their settings: everything inside `router ospf|ospfv3|bgp|eigrp|rip|isis`,
 `route-map`, `key chain`, `ip prefix-list`, `ipv6 prefix-list`, the `ip pim`,
 `ipv6 pim`, `ip msdp` and `bfd` lines, and on the interfaces it may change the
-lines of those protocols and of HSRP, VRRP, VRRPv3 and IGMP; and it may run `copy running-config startup-config`. The switch refuses it anything else,
+lines of those protocols and of HSRP, VRRP, VRRPv3 and IGMP; it may change
+spanning tree (`spanning-tree *` and its `no` form, for the whole switch and
+on the permitted ports) and read the spanning tree lines of the running
+configuration; and it may run `copy running-config startup-config`. The switch refuses it anything else,
 including mgmt0. Anyone who takes over NXray can do whatever that account
 can, so with port changes on that includes turning ports off, moving them
 to other VLANs, sending a device's traffic to the wrong port or dropping it
@@ -57,7 +60,8 @@ taking the switch's address off a VLAN or moving an interface into another
 VRF (both cut off the devices that use the switch as their gateway there),
 sending a network's traffic to the wrong router with a static route or a
 routing protocol (and telling other routers about it), taking over a shared
-gateway address with HSRP or VRRP,
+gateway address with HSRP or VRRP, changing spanning tree (a wrong port
+type, filter or mode can make a loop or stop traffic on every VLAN),
 and turning features on or off: turning off a feature
 deletes its settings (LACP takes its port-channels with it), and turning on
 `telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off

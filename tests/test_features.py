@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 10
+    assert ROLE_VERSION == 11
 
 
 @pytest.mark.parametrize(
@@ -148,29 +148,34 @@ def test_role_has_the_feature_rules() -> None:
         (
             1,
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-            "route and routing protocol changes",
+            "route, routing protocol and spanning tree changes",
         ),
         (
             2,
-            "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route "
-            "and routing protocol changes",
+            "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
+            "routing protocol and spanning tree changes",
         ),
         (
             3,
-            "feature, neighbor, port-channel, VLAN interface, VRF, static route and routing "
-            "protocol changes",
+            "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
+            "protocol and spanning tree changes",
         ),
         (
             4,
-            "neighbor, port-channel, VLAN interface, VRF, static route and routing protocol "
-            "changes",
+            "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol "
+            "and spanning tree changes",
         ),
-        (5, "port-channel, VLAN interface, VRF, static route and routing protocol changes"),
-        (6, "VLAN interface, VRF, static route and routing protocol changes"),
-        (7, "VRF, static route and routing protocol changes"),
-        (8, "static route and routing protocol changes"),
-        (9, "routing protocol changes"),
-        (10, ""),
+        (
+            5,
+            "port-channel, VLAN interface, VRF, static route, routing protocol and spanning "
+            "tree changes",
+        ),
+        (6, "VLAN interface, VRF, static route, routing protocol and spanning tree changes"),
+        (7, "VRF, static route, routing protocol and spanning tree changes"),
+        (8, "static route, routing protocol and spanning tree changes"),
+        (9, "routing protocol and spanning tree changes"),
+        (10, "spanning tree changes"),
+        (11, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

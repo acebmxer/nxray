@@ -13,7 +13,8 @@ page shows them before anything is sent.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -29,10 +30,9 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import NxapiClient, NxapiError
-from app.protocols import ACTIONS, Protocol
+from app.protocols import ACTIONS, Protocol, ProtocolChange
 from app.routes.ports import change_refused
 from app.routing_protocols import (
-    ALL_PROTOCOLS,
     ProtocolPage,
     build_protocol_change,
     feature_command,
@@ -110,12 +110,103 @@ def protocols_page(request: Request, username: str = Depends(login_required)) ->
 # ---- one protocol ---------------------------------------------------------------------
 
 
-def _ident(form: dict[str, str]) -> dict[str, str]:
+def _ident(form: Mapping[str, str]) -> dict[str, str]:
     return {k[3:]: v for k, v in form.items() if k.startswith("id_")}
 
 
-def _values(form: dict[str, str]) -> dict[str, str]:
+def _values(form: Mapping[str, str]) -> dict[str, str]:
     return {k[2:]: v for k, v in form.items() if k.startswith("v_")}
+
+
+@dataclass(frozen=True)
+class ProtocolSite:
+    """Where a page built from ``app/protocols.py`` lives, what it reads, and how a
+    change on it is checked and sent: one routing protocol's page, or the Spanning
+    tree page. ``load`` reads the page (an object with ``view``, ``missing`` and
+    ``problem``, plus the lists its field kinds offer); ``check_place`` refuses an
+    identity value the switch does not have; ``send`` sends a checked change."""
+
+    url: str
+    back_url: str
+    back_label: str
+    save_back: dict[str, str]  # the hidden fields Save config sends to come back here
+    changes_name: str  # "Routing protocol", "Spanning tree"
+    subject: str  # what a viewer may look at: "routing protocols", "spanning tree"
+    off_message: str
+    enabled: Callable[[SwitchConnection], bool]
+    load: Callable[[NxapiClient], Any]
+    check_place: Callable[[Any, dict[str, str]], None]
+    build: Callable[[str, str, str, dict[str, str], dict[str, str]], ProtocolChange]
+    send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], None]
+
+
+def _routing_site(proto: Protocol) -> ProtocolSite:
+    def send(
+        client: NxapiClient, change: ProtocolChange, ident: dict[str, str], values: dict[str, str]
+    ) -> None:
+        client.configure_protocol(
+            proto.key, change.scope, change.setting, change.action, ident, values
+        )
+
+    return ProtocolSite(
+        url=f"/routing/protocols/{proto.key}",
+        back_url="/routing/protocols",
+        back_label="Routing protocols",
+        save_back={"back": "protocol", "protocol": proto.key},
+        changes_name="Routing protocol",
+        subject="routing protocols",
+        off_message=PROTOCOL_CHANGES_OFF,
+        enabled=lambda connection: connection.protocol_changes_enabled,
+        load=lambda client: load_protocol_page(client, proto),
+        check_place=_check_place,
+        build=lambda scope, setting, action, ident, values: build_protocol_change(
+            proto.key, scope, setting, action, ident, values
+        ),
+        send=send,
+    )
+
+
+def render_site_page(
+    request: Request,
+    username: str,
+    proto: Protocol,
+    site: ProtocolSite,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+    form: dict[str, str] | None = None,
+) -> Response:
+    """Read the switch fresh and show a page built from ``app/protocols.py``, with a
+    message. ``form`` keeps what was typed into the form that was refused."""
+    connection, target, problem = stored_switch(request)
+    status = page = None
+    if target is not None:
+        status, page = read_switch(target, site.load, transport=request.app.state.nxapi_transport)
+    can_change = (
+        connection is not None
+        and site.enabled(connection)
+        and current_role(request) in ("admin", "operator")
+    )
+    return templates.TemplateResponse(
+        request,
+        "protocol.html",
+        {
+            "username": username,
+            "connection": connection,
+            "status": status,
+            "problem": problem,
+            "proto": proto,
+            "site": site,
+            "page": page,
+            "error": error,
+            "notice": notice,
+            "form": form or {},
+            "csrf_token": csrf_token(request),
+            "can_change": can_change,
+            "feature_command": feature_command,
+        },
+        status_code=400 if error else 200,
+    )
 
 
 def render_protocol_page(
@@ -139,33 +230,8 @@ def render_protocol_page(
             {"username": username, "unknown": key, "connection": None},
             status_code=404,
         )
-    connection, target, problem = stored_switch(request)
-    status = page = None
-    if target is not None:
-        status, page = read_switch(
-            target,
-            lambda client: load_protocol_page(client, proto),
-            transport=request.app.state.nxapi_transport,
-        )
-    return templates.TemplateResponse(
-        request,
-        "protocol.html",
-        {
-            "username": username,
-            "connection": connection,
-            "status": status,
-            "problem": problem,
-            "proto": proto,
-            "page": page,
-            "protocols": ALL_PROTOCOLS,
-            "error": error,
-            "notice": notice,
-            "form": form or {},
-            "csrf_token": csrf_token(request),
-            "can_change": _can_change(request, connection),
-            "feature_command": feature_command,
-        },
-        status_code=400 if error else 200,
+    return render_site_page(
+        request, username, proto, _routing_site(proto), error=error, notice=notice, form=form
     )
 
 
@@ -203,6 +269,7 @@ def _confirm(
     request: Request,
     username: str,
     proto: Protocol,
+    site: ProtocolSite,
     lines: list[str],
     warnings: list[str],
     fields: dict[str, Any],
@@ -213,15 +280,82 @@ def _confirm(
         {
             "username": username,
             "title": proto.name,
-            "back_url": f"/routing/protocols/{proto.key}",
+            "back_url": site.url,
             "back_label": proto.name,
             "lines": lines,
             "warnings": warnings,
-            "action": f"/routing/protocols/{proto.key}/change",
+            "action": f"{site.url}/change",
             "fields": fields,
             "csrf_token": csrf_token(request),
             "not_config": False,
         },
+    )
+
+
+def site_change(
+    request: Request,
+    username: str,
+    form: Mapping[str, str],
+    proto: Protocol,
+    site: ProtocolSite,
+) -> Response:
+    """One change on a page built from ``app/protocols.py``. Without confirm=yes,
+    asks first, showing the lines."""
+    require_csrf(request, form.get("csrf", ""))
+    kept = {k: v for k, v in form.items() if k not in ("csrf", "confirm")}
+
+    def refuse(message: str) -> Response:
+        return render_site_page(request, username, proto, site, error=message, form=kept)
+
+    connection, target, problem = stored_switch(request)
+    if connection is None:
+        return refuse("No switch is set up yet.")
+    if target is None:
+        return refuse(problem or "The switch could not be read.")
+    if not site.enabled(connection):
+        return refuse(site.off_message)
+    action = form.get("action", "")
+    if action not in ACTIONS:
+        return refuse("Not changed: the form named no action.")
+    status, page = read_switch(target, site.load, transport=request.app.state.nxapi_transport)
+    if page is None:
+        return refuse(status.message if status else "The switch could not be read.")
+    if page.missing:
+        names = ", ".join(feature_command(n) for n in page.missing)
+        return refuse(
+            f"Not changed: {names} is off on the switch; turn it on on the Features page."
+        )
+    ident, values = _ident(form), _values(form)
+    try:
+        site.check_place(page, ident)
+        change = site.build(form.get("scope", ""), form.get("setting", ""), action, ident, values)
+    except ValueError as exc:
+        return refuse(f"Not changed: {exc}.")
+    if form.get("confirm") != "yes":
+        lines = [change.describe, "The switch gets these lines:", *change.labels]
+        return _confirm(
+            request,
+            username,
+            proto,
+            site,
+            lines,
+            [change.warning] if change.warning else [],
+            kept,
+        )
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            site.send(client, change, ident, values)
+    except NxapiError as exc:
+        refused = change_refused(exc, target)
+        for secret in _secrets(proto, change.scope, change.setting, values):
+            refused = refused.replace(secret, "***")
+        log.warning("%s change refused: %s", proto.name, refused)
+        return refuse(refused)
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, True)
+    log.info("%s on %s by %s", change.describe, connection.host, username)
+    return render_site_page(
+        request, username, proto, site, notice=f"Done: {change.describe} {NOT_SAVED}"
     )
 
 
@@ -237,60 +371,4 @@ def protocol_change(
     proto = protocol(key)
     if proto is None:
         return render_protocol_page(request, username, key)
-    kept = {k: v for k, v in form.items() if k not in ("csrf", "confirm")}
-
-    def refuse(message: str) -> Response:
-        return render_protocol_page(request, username, key, error=message, form=kept)
-
-    connection, target, problem = stored_switch(request)
-    if connection is None:
-        return refuse("No switch is set up yet.")
-    if target is None:
-        return refuse(problem or "The switch could not be read.")
-    if not connection.protocol_changes_enabled:
-        return refuse(PROTOCOL_CHANGES_OFF)
-    action = form.get("action", "")
-    if action not in ACTIONS:
-        return refuse("Not changed: the form named no action.")
-    status, page = read_switch(
-        target,
-        lambda client: load_protocol_page(client, proto),
-        transport=request.app.state.nxapi_transport,
-    )
-    if page is None:
-        return refuse(status.message if status else "The switch could not be read.")
-    if page.missing:
-        names = ", ".join(feature_command(n) for n in page.missing)
-        return refuse(
-            f"Not changed: {names} is off on the switch; turn it on on the Features page."
-        )
-    ident, values = _ident(form), _values(form)
-    try:
-        _check_place(page, ident)
-        change = build_protocol_change(
-            key, form.get("scope", ""), form.get("setting", ""), action, ident, values
-        )
-    except ValueError as exc:
-        return refuse(f"Not changed: {exc}.")
-    if form.get("confirm") != "yes":
-        lines = [change.describe, "The switch gets these lines:", *change.labels]
-        return _confirm(
-            request, username, proto, lines, [change.warning] if change.warning else [], kept
-        )
-    try:
-        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
-            client.configure_protocol(
-                key, change.scope, change.setting, change.action, ident, values
-            )
-    except NxapiError as exc:
-        refused = change_refused(exc, target)
-        for secret in _secrets(proto, change.scope, change.setting, values):
-            refused = refused.replace(secret, "***")
-        log.warning("%s change refused: %s", proto.name, refused)
-        return refuse(refused)
-    with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
-    log.info("%s on %s by %s", change.describe, connection.host, username)
-    return render_protocol_page(
-        request, username, key, notice=f"Done: {change.describe} {NOT_SAVED}"
-    )
+    return site_change(request, username, form, proto, _routing_site(proto))

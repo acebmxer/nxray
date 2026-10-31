@@ -11,6 +11,29 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Spanning tree.** A new **Spanning tree** page shows the switch's mode,
+  every tree (per VLAN, or per MST instance) with its root bridge, root
+  port, cost, topology changes and timers, every port in each tree with its
+  role, state, cost and priority, the spanning tree settings of every front
+  port and port-channel, and the ports that are blocked, inconsistent or in
+  a dispute. Operators and admins can, after a confirm
+  page that shows the lines and warns when traffic can stop, change the
+  mode, the path cost method, Bridge Assurance, the defaults for ports
+  (edge, network, BPDU guard and filter, loop guard), PVST simulation and
+  the MST timers; each VLAN's priority, root primary or secondary and
+  timers, or turn spanning tree off for it; the MST region's name, revision
+  and VLAN mapping and each instance's priority; and on a front port or
+  port-channel its port type (edge, edge trunk, network, normal), BPDU guard
+  and filter, root or loop guard, cost, port priority (also per VLAN or MST
+  instance) and link type. NXray's `nxray-ports` role gets rules 129 to 134
+  (role version 11), which also let it read the spanning tree lines of the
+  running configuration, the only place a down port's settings show; an
+  older role gets a **Turn on spanning tree changes** button, with no wait.
+  The per-VLAN, MST region and port lines were tried on an N9K-C92160YC-X
+  with NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
+  Spanning tree is in the menu, which now wraps between names on a narrower
+  window instead of splitting them.
+
 - **Routing protocols.** A new **Routing protocols** page (Protocols in the
   menu) lists every routing protocol the switch has with whether its feature
   is on, and the switch's whole route table per VRF. Each protocol has its

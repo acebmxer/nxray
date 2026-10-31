@@ -34,6 +34,7 @@ from app.routes import (
     protocols,
     routing,
     settings_page,
+    spanning_tree,
     switch_page,
     users,
     vlans,
@@ -137,6 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(port_channels.router)
     app.include_router(routing.router)
     app.include_router(protocols.router)
+    app.include_router(spanning_tree.router)
     app.include_router(features.router)
     app.include_router(users.router)
     app.include_router(settings_page.router)
