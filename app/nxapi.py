@@ -416,6 +416,56 @@ def validate_routed_interface(name: str) -> str:
     return validate_port_name(cleaned)
 
 
+def validate_route_prefix(text: str) -> str:
+    """A static route's destination, a network with its prefix length
+    (``203.0.113.0/24``, ``2001:db8::/48``, ``0.0.0.0/0``), or raise ValueError."""
+    cleaned = text.strip()
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /24")
+    try:
+        loose = ipaddress.ip_network(cleaned, strict=False)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not a network such as 203.0.113.0/24 or 2001:db8::/48"
+        ) from exc
+    try:
+        network = ipaddress.ip_network(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned} is not the start of its network; did you mean {loose}?"
+        ) from exc
+    if network.is_multicast or (network.prefixlen and network.network_address.is_unspecified):
+        raise ValueError(f"{network} is not a network a route can go to")
+    return str(network)
+
+
+def validate_next_hop(text: str) -> str:
+    """A static route's next hop: one IPv4 or IPv6 address a device can have, or
+    raise ValueError. Not a link-local IPv6 address: the switch would also need
+    the interface it is on."""
+    cleaned = text.strip()
+    try:
+        address = ipaddress.ip_address(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an address such as 192.0.2.254 or 2001:db8::fe"
+        ) from exc
+    if address.is_link_local and address.version == 6:
+        raise ValueError(f"{address} is a link-local address; use the router's other address")
+    if address.is_multicast or address.is_loopback or address.is_unspecified:
+        raise ValueError(f"{address} is not an address a router can have")
+    return str(address)
+
+
+def static_route_line(prefix: str, next_hop: str) -> str:
+    """``ip route P NH`` or ``ipv6 route P NH``; its ``no`` form removes the route."""
+    network = validate_route_prefix(prefix)
+    hop = validate_next_hop(next_hop)
+    if (":" in network) != (":" in hop):
+        raise ValueError("the destination and the next hop must both be IPv4 or both IPv6")
+    return f"{'ipv6' if ':' in network else 'ip'} route {network} {hop}"
+
+
 def validate_vrf_name(name: str) -> str:
     """Return a VRF name NXray may create, delete or move interfaces into, or raise
     ValueError (never default, management or all)."""
@@ -1129,6 +1179,16 @@ class NxapiClient:
             commands.append(f"vrf member {validate_vrf_name(vrf)}")
         if len(commands) == 1 or vrf == current:
             raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_static_route(self, vrf: str, prefix: str, next_hop: str, *, add: bool) -> None:
+        """Add (``add=True``) or remove one static route in a VRF: ``ip route P NH``
+        or ``ipv6 route P NH`` and their ``no`` forms, inside ``vrf context <vrf>``
+        unless ``vrf`` is ``default``. Never in management."""
+        line = static_route_line(prefix, next_hop)
+        if not add:
+            line = "no " + line
+        commands = [line] if vrf == DEFAULT_VRF else [f"vrf context {validate_vrf_name(vrf)}", line]
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def save_config(self) -> None:

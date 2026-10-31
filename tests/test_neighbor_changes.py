@@ -181,21 +181,28 @@ def test_role_has_the_neighbor_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in NEIGHBOR_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 8
+    assert ROLE_VERSION == 9
     # Rule numbers carry on from the feature rules and never repeat.
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 55))
+    assert numbers == list(range(1, 63))
 
 
 def test_missing_changes_names_neighbor_changes() -> None:
-    assert missing_changes(4) == "neighbor, port-channel, VLAN interface and VRF changes"
-    assert missing_changes(3) == "feature, neighbor, port-channel, VLAN interface and VRF changes"
-    assert missing_changes(1) == (
-        "VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF changes"
+    assert (
+        missing_changes(4) == "neighbor, port-channel, VLAN interface, VRF and static route changes"
     )
-    assert missing_changes(6) == "VLAN interface and VRF changes"
-    assert missing_changes(7) == "VRF changes"
-    assert missing_changes(8) == ""
+    assert (
+        missing_changes(3)
+        == "feature, neighbor, port-channel, VLAN interface, VRF and static route changes"
+    )
+    assert missing_changes(1) == (
+        "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF and static "
+        "route changes"
+    )
+    assert missing_changes(6) == "VLAN interface, VRF and static route changes"
+    assert missing_changes(7) == "VRF and static route changes"
+    assert missing_changes(8) == "static route changes"
+    assert missing_changes(9) == ""
 
 
 def test_the_role_lets_the_account_make_neighbor_changes() -> None:

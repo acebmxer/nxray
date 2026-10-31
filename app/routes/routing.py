@@ -1,6 +1,7 @@
 """The Routing page: VLAN interfaces, routed ports and their addresses, the VRFs,
-and their changes (make, change and delete VLAN interfaces; add and remove
-addresses; make and delete VRFs and move interfaces between them)."""
+the static routes, and their changes (make, change and delete VLAN interfaces;
+add and remove addresses; make and delete VRFs and move interfaces between
+them; add and remove static routes)."""
 
 from __future__ import annotations
 
@@ -26,12 +27,14 @@ from app.routing import (
     RoutingView,
     load_routing,
     plan_add_address,
+    plan_add_static_route,
     plan_create_vlan_interface,
     plan_create_vrf,
     plan_delete_vlan_interface,
     plan_delete_vrf,
     plan_interface_vrf,
     plan_remove_address,
+    plan_remove_static_route,
     plan_vlan_interface_settings,
 )
 from app.security import csrf_token
@@ -50,6 +53,11 @@ LAYER3_CHANGES_OFF = (
 VRF_CHANGES_OFF = (
     "VRF changes are off. An NXray admin turns them on on the Switch page first: NXray's "
     "role on the switch does not allow them yet."
+)
+
+ROUTE_CHANGES_OFF = (
+    "Static route changes are off. An NXray admin turns them on on the Switch page first: "
+    "NXray's role on the switch does not allow them yet."
 )
 
 VLAN_INTERFACES_NOT_LISTED = (
@@ -109,6 +117,7 @@ def _render(
             "can_change": _can_change(request, connection),
             "vlan_ready": connection is not None and connection.vlan_interface_changes_enabled,
             "vrf_ready": connection is not None and connection.vrf_changes_enabled,
+            "route_ready": connection is not None and connection.route_changes_enabled,
             "vlan_interface_max": VLAN_INTERFACE_MAX,
             "mtu_min": MTU_MIN,
             "mtu_max": MTU_MAX,
@@ -160,13 +169,14 @@ def _confirm(
 
 
 def _start(
-    request: Request, vlan_interface: bool = False, vrf: bool = False
+    request: Request, vlan_interface: bool = False, vrf: bool = False, route: bool = False
 ) -> tuple[str | None, SwitchConnection | None, RoutingView | None]:
     """The checks every change shares, then the switch read fresh.
 
     ``vlan_interface``: the change acts on a VLAN interface, which also needs
-    the role's port list to name them. ``vrf``: it needs the VRF rules. (why it
-    cannot go ahead or None, connection, view).
+    the role's port list to name them. ``vrf``: it needs the VRF rules;
+    ``route``: the static route rules. (why it cannot go ahead or None,
+    connection, view).
     """
     connection, target, problem = stored_switch(request)
     if connection is None:
@@ -179,6 +189,8 @@ def _start(
         return VLAN_INTERFACES_NOT_LISTED, None, None
     if vrf and not connection.vrf_changes_enabled:
         return VRF_CHANGES_OFF, None, None
+    if route and not connection.route_changes_enabled:
+        return ROUTE_CHANGES_OFF, None, None
     connection, status, view = _read(request)
     if view is None:
         return (status.message if status else "The switch could not be read."), None, None
@@ -553,3 +565,94 @@ def vrf_move(
     if refused:
         return _refused(request, username, f"VRF of {move.name}", refused)
     return _done(request, username, lines, f"{move.name} moved to VRF {move.vrf}", connection)
+
+
+def _route_form(vrf: str, prefix: str, next_hop: str) -> dict[str, str]:
+    return {"route_vrf": vrf, "route_prefix": prefix, "route_next_hop": next_hop}
+
+
+@router.post("/routing/route/add", response_class=HTMLResponse)
+def route_add(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    vrf: str = Form("default"),
+    prefix: str = Form(""),
+    next_hop: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Add a static route. Without confirm=yes, asks first."""
+    require_csrf(request, csrf)
+    form = _route_form(vrf, prefix, next_hop)
+    problem, connection, view = _start(request, route=True)
+    if problem is not None:
+        return _render(request, username, error=problem, form=form, status_code=400)
+    assert connection is not None and view is not None
+    try:
+        change, lines, warnings = plan_add_static_route(
+            view, vrf=vrf, prefix=prefix, next_hop=next_hop
+        )
+    except ValueError as exc:
+        return _bad(request, username, "Not added", exc, form)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/routing/route/add",
+            lines=lines,
+            warnings=warnings,
+            fields={"vrf": change.vrf, "prefix": change.prefix, "next_hop": change.next_hop},
+        )
+    refused = _send(
+        request,
+        lambda client: client.set_static_route(
+            change.vrf, change.prefix, change.next_hop, add=True
+        ),
+    )
+    if refused:
+        return _refused(request, username, f"route {change.prefix}", refused, form)
+    what = f"route {change.prefix} via {change.next_hop} in VRF {change.vrf} added"
+    return _done(request, username, lines, what, connection)
+
+
+@router.post("/routing/route/remove", response_class=HTMLResponse)
+def route_remove(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    vrf: str = Form(""),
+    prefix: str = Form(""),
+    next_hop: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Remove a static route. Without confirm=yes, asks first."""
+    require_csrf(request, csrf)
+    problem, connection, view = _start(request, route=True)
+    if problem is not None:
+        return _render(request, username, error=problem, status_code=400)
+    assert connection is not None and view is not None
+    try:
+        change, lines, warnings = plan_remove_static_route(
+            view, vrf=vrf, prefix=prefix, next_hop=next_hop
+        )
+    except ValueError as exc:
+        return _bad(request, username, "Not removed", exc)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/routing/route/remove",
+            lines=lines,
+            warnings=warnings,
+            fields={"vrf": change.vrf, "prefix": change.prefix, "next_hop": change.next_hop},
+        )
+    refused = _send(
+        request,
+        lambda client: client.set_static_route(
+            change.vrf, change.prefix, change.next_hop, add=False
+        ),
+    )
+    if refused:
+        return _refused(request, username, f"removing route {change.prefix}", refused)
+    what = f"route {change.prefix} via {change.next_hop} in VRF {change.vrf} removed"
+    return _done(request, username, lines, what, connection)

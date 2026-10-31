@@ -1,5 +1,5 @@
-"""Layer 3: VLAN interfaces, routed ports and their addresses, the VRFs, and the
-checked changes the Routing page offers.
+"""Layer 3: VLAN interfaces, routed ports and their addresses, the VRFs, the
+static routes, and the checked changes the Routing page offers.
 
 A VLAN interface (``interface vlan<n>``, an SVI) gives the switch its own
 address in a VLAN, so devices there can reach it and use it as their gateway,
@@ -23,6 +23,11 @@ Read from show output recorded on cisco-25gb, in one request:
 - ``show vrf``: the VRFs and whether each is up;
 - ``show vrf interface``: which VRF each layer 3 interface is in, those
   without an address too;
+- ``show ip static-route vrf all``: the IPv4 static routes per VRF, and
+  whether the switch uses each one;
+- ``show ipv6 static-route vrf all``: the IPv6 static routes. This output
+  names no VRF per route, only the VRF of its next hop, which is the route's
+  own for every route NXray makes;
 
 and, when there are VLAN interfaces, one ``show interface vlan<n>`` each in a
 second request, for its MTU and whether it is on and up.
@@ -33,7 +38,8 @@ and ``management`` (mgmt0) for itself; NXray never changes those two.
 
 The commands themselves are built by ``NxapiClient.configure_vlan_interface``,
 ``delete_vlan_interface``, ``set_interface_addresses``, ``create_vrf``,
-``delete_vrf`` and ``set_interface_vrf`` from checked values.
+``delete_vrf``, ``set_interface_vrf`` and ``set_static_route`` from checked
+values.
 """
 
 from __future__ import annotations
@@ -54,6 +60,8 @@ from app.nxapi import (
     NxapiClient,
     validate_description,
     validate_interface_address,
+    validate_next_hop,
+    validate_route_prefix,
     validate_routed_interface,
     validate_vlan_id,
     validate_vrf_name,
@@ -71,6 +79,8 @@ ROUTING_COMMANDS = (
     "show interface description",
     "show vrf",
     "show vrf interface",
+    "show ip static-route vrf all",
+    "show ipv6 static-route vrf all",
 )
 
 # A VLAN interface's MTU when nobody set one.
@@ -182,12 +192,36 @@ class Vrf:
 
 
 @dataclass(frozen=True)
+class StaticRoute:
+    """One static route: traffic for ``prefix`` in ``vrf`` goes to ``next_hop``."""
+
+    vrf: str
+    prefix: str
+    next_hop: str
+    # IPv4 only: whether the switch uses it (False when the next hop is not
+    # reachable); None when the switch does not say.
+    installed: bool | None = None
+
+    @property
+    def ipv6(self) -> bool:
+        return ":" in self.prefix
+
+    @property
+    def kept(self) -> bool:
+        return self.vrf.lower() in RESERVED_VRFS - {DEFAULT_VRF}
+
+
+@dataclass(frozen=True)
 class RoutingView:
     interface_vlan_on: bool = False
     vlan_interfaces: list[L3Interface] = field(default_factory=list)
     routed_ports: list[L3Interface] = field(default_factory=list)
     vlans: list[Vlan] = field(default_factory=list)
     vrfs: list[Vrf] = field(default_factory=list)
+    static_routes: list[StaticRoute] = field(default_factory=list)
+
+    def routes_in(self, vrf: str) -> list[StaticRoute]:
+        return [r for r in self.static_routes if r.vrf == vrf]
 
     def vrf(self, name: str) -> Vrf | None:
         return next((v for v in self.vrfs if v.name == name), None)
@@ -383,10 +417,56 @@ def parse_vrfs(vrf_body: dict[str, Any], members: dict[str, str]) -> list[Vrf]:
     return sorted(found, key=lambda v: (order.get(v.name, 2), v.name.lower()))
 
 
+def _host(text: str) -> str:
+    """'198.51.100.254/32' -> '198.51.100.254': the switch writes a next hop with
+    a host prefix."""
+    return text.split("/", 1)[0]
+
+
+def parse_ipv4_static(body: dict[str, Any]) -> list[StaticRoute]:
+    """The IPv4 static routes from ``show ip static-route vrf all``."""
+    found = []
+    for vrf_row in rows(body, "TABLE_vrf_all", "ROW_vrf_all"):
+        vrf = _text(vrf_row.get("cntxt_name")) or DEFAULT_VRF
+        for row in rows(vrf_row, "TABLE_each_vrf", "ROW_each_vrf"):
+            prefix = _text(row.get("prefix_addr_msk"))
+            hop = _host(_text(row.get("nhop_addr_msk"))) or _text(row.get("nhop_intr_info"))
+            if not prefix or not hop:
+                continue
+            status = _text(row.get("urib_stat")).lower()
+            installed = None if not status else "not installed" not in status
+            found.append(StaticRoute(vrf, prefix, hop, installed))
+    return found
+
+
+def parse_ipv6_static(body: dict[str, Any]) -> list[StaticRoute]:
+    """The IPv6 static routes from ``show ipv6 static-route vrf all``.
+
+    Here the table is a list of ``{"ROW_route": ...}`` objects, not one object
+    as elsewhere, and each route names only its next hop's VRF.
+    """
+    tables = body.get("TABLE_route")
+    if isinstance(tables, dict):
+        tables = [tables]
+    found = []
+    for table in tables if isinstance(tables, list) else []:
+        value = table.get("ROW_route") if isinstance(table, dict) else None
+        for row in [value] if isinstance(value, dict) else (value or []):
+            if not isinstance(row, dict):
+                continue
+            prefix = _text(row.get("prefix-out"))
+            hop = _host(_text(row.get("next-hop")))
+            if prefix and hop:
+                found.append(
+                    StaticRoute(_text(row.get("next-hop-vrf")) or DEFAULT_VRF, prefix, hop)
+                )
+    return found
+
+
 def load_routing(client: NxapiClient) -> RoutingView:
     """Everything the Routing page shows: one request, plus one for the VLAN interfaces."""
-    feature, brief, vlans, ip4, ip6, descriptions, vrf_body, vrf_interfaces = client.show(
-        *ROUTING_COMMANDS
+    (feature, brief, vlans, ip4, ip6, descriptions, vrf_body, vrf_interfaces, static4, static6) = (
+        client.show(*ROUTING_COMMANDS)
     )
     svi_names, routed_rows = parse_brief(brief)
     ipv4, ipv6, descs = parse_ipv4(ip4), parse_ipv6(ip6), _descriptions(descriptions)
@@ -408,6 +488,7 @@ def load_routing(client: NxapiClient) -> RoutingView:
         routed_ports=sorted(routed, key=lambda i: port_sort_key(i.name)),
         vlans=parse_vlans(vlans),
         vrfs=parse_vrfs(vrf_body, members),
+        static_routes=[*parse_ipv4_static(static4), *parse_ipv6_static(static6)],
     )
 
 
@@ -738,6 +819,12 @@ def plan_delete_vrf(view: RoutingView, *, name: str) -> tuple[str, list[str], li
             f"VRF {cleaned}; move {'it' if len(vrf.interfaces) == 1 else 'them'} to another "
             "VRF first"
         )
+    if routes := view.routes_in(cleaned):
+        raise ValueError(
+            f"VRF {cleaned} has static routes ("
+            + ", ".join(f"{r.prefix} via {r.next_hop}" for r in routes)
+            + "); remove them first"
+        )
     return cleaned, [f"Delete the VRF {cleaned}."], []
 
 
@@ -770,3 +857,81 @@ def plan_interface_vrf(
         if interface.admin_up:
             warnings.append(_gateway_warning(interface.name, interface.vlan))
     return VrfMove(interface.name, target, interface.vrf), lines, warnings
+
+
+# ---- static routes ----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RouteChange:
+    vrf: str
+    prefix: str
+    next_hop: str
+
+
+def _route_values(view: RoutingView, vrf: str, prefix: str, next_hop: str) -> RouteChange:
+    target = _target_vrf(view, vrf)
+    network = validate_route_prefix(prefix)
+    if not next_hop.strip():
+        raise ValueError("type the next hop: the address of the router the traffic goes to")
+    hop = validate_next_hop(next_hop)
+    if (":" in network) != (":" in hop):
+        raise ValueError("the destination and the next hop must both be IPv4 or both IPv6")
+    return RouteChange(target, network, hop)
+
+
+def _find_route(view: RoutingView, change: RouteChange) -> StaticRoute | None:
+    return next(
+        (
+            r
+            for r in view.routes_in(change.vrf)
+            if ipaddress.ip_network(r.prefix) == ipaddress.ip_network(change.prefix)
+            and ipaddress.ip_address(r.next_hop) == ipaddress.ip_address(change.next_hop)
+        ),
+        None,
+    )
+
+
+def plan_add_static_route(
+    view: RoutingView, *, vrf: str, prefix: str, next_hop: str
+) -> tuple[RouteChange, list[str], list[str]]:
+    """A new static route in default or a VRF made on the switch."""
+    change = _route_values(view, vrf, prefix, next_hop)
+    if _find_route(view, change) is not None:
+        raise ValueError(
+            f"VRF {change.vrf} has the route {change.prefix} via {change.next_hop} already"
+        )
+    lines = [
+        f"Add a static route in VRF {change.vrf}: traffic for {change.prefix} goes to "
+        f"{change.next_hop}."
+    ]
+    warnings = []
+    if ipaddress.ip_network(change.prefix).prefixlen == 0:
+        warnings.append(
+            f"This is a default route: in VRF {change.vrf}, traffic for every network the "
+            f"switch has no other route to goes to {change.next_hop}."
+        )
+    hop = ipaddress.ip_address(change.next_hop)
+    reachable = any(
+        hop in a.network for i in view.interfaces if i.vrf == change.vrf for a in i.addresses
+    )
+    if not reachable:
+        warnings.append(
+            f"No interface in VRF {change.vrf} has an address in {change.next_hop}'s network, "
+            "so the switch keeps the route but does not use it until one does."
+        )
+    return change, lines, warnings
+
+
+def plan_remove_static_route(
+    view: RoutingView, *, vrf: str, prefix: str, next_hop: str
+) -> tuple[RouteChange, list[str], list[str]]:
+    """Removing a static route (never one in management)."""
+    change = _route_values(view, vrf, prefix, next_hop)
+    if _find_route(view, change) is None:
+        raise ValueError(f"VRF {change.vrf} has no route {change.prefix} via {change.next_hop}")
+    lines = [f"Remove the static route {change.prefix} via {change.next_hop} in VRF {change.vrf}."]
+    warnings = [
+        f"Traffic for {change.prefix} in VRF {change.vrf} no longer goes to {change.next_hop}."
+    ]
+    return change, lines, warnings

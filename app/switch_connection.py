@@ -87,6 +87,11 @@ class SwitchConnection:
         """True once that role includes the VRF rules (role version 8 or later)."""
         return self.changes_enabled and self.role_version >= 8
 
+    @property
+    def route_changes_enabled(self) -> bool:
+        """True once that role includes the static route rules (role version 9 or later)."""
+        return self.changes_enabled and self.role_version >= 9
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

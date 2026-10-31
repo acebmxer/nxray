@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Routing page: static routes.** The Routing page lists the IPv4 and IPv6
+  static routes of every VRF, with whether the switch uses each IPv4 one.
+  Operators and admins can, after a confirm page, add a static route (a VRF,
+  a destination network and a next-hop address; `0.0.0.0/0` or `::/0` for a
+  default route) and remove one. The confirm page warns for a default route
+  and when no interface in the VRF reaches the next hop. Routes in management
+  are shown but never changed, and a VRF that has static routes cannot be
+  deleted until they are removed. NXray's `nxray-ports` role gets rules 55
+  to 62 (`ip route *`, `ipv6 route *` and their `no` forms, in default and
+  inside `vrf context *`; role version 9); an older role gets a **Turn on
+  static route changes** button, with no wait. The rules were tried on an
+  N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account.
 - **Routing page: VRFs.** The Routing page lists the VRFs (separate routing
   tables), each with its state and the interfaces in it; default and
   management (mgmt0) are marked as the switch's own and never changed.

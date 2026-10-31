@@ -11,30 +11,44 @@ from app.nxapi import (
     NxapiClient,
     SwitchTarget,
     address_line,
+    static_route_line,
     validate_interface_address,
     validate_ipv6_interface,
+    validate_next_hop,
+    validate_route_prefix,
     validate_routed_interface,
     validate_vrf_name,
 )
-from app.port_changes import LAYER3_RULES, VLAN_INTERFACE_PERMIT, VRF_RULES, role_lines
+from app.port_changes import (
+    LAYER3_RULES,
+    ROUTE_RULES,
+    VLAN_INTERFACE_PERMIT,
+    VRF_RULES,
+    role_lines,
+)
 from app.routing import (
     Address,
     L3Interface,
     RoutingView,
+    StaticRoute,
     Vrf,
     parse_brief,
     parse_ipv4,
+    parse_ipv4_static,
     parse_ipv6,
+    parse_ipv6_static,
     parse_vlan_interface,
     parse_vrf_members,
     parse_vrfs,
     plan_add_address,
+    plan_add_static_route,
     plan_create_vlan_interface,
     plan_create_vrf,
     plan_delete_vlan_interface,
     plan_delete_vrf,
     plan_interface_vrf,
     plan_remove_address,
+    plan_remove_static_route,
     plan_vlan_interface_settings,
 )
 from app.vlans import Vlan, vlan_interface_ids
@@ -427,3 +441,121 @@ def test_role_has_the_vrf_rules() -> None:
     assert "rule 52 permit command conf t ; no vrf context *" in lines
     assert "rule 53 permit command conf t ; interface * ; vrf member *" in lines
     assert lines.index(VRF_RULES[-1]) < lines.index("interface policy deny")
+
+
+# ---- static routes -----------------------------------------------------------------
+
+
+def test_static_routes_from_the_recorded_output() -> None:
+    assert parse_ipv4_static(load_fixture("show_ip_static_route_vrf_all")) == [
+        StaticRoute("tenant-a", "203.0.113.0/24", "198.51.100.254", False),
+        StaticRoute("default", "198.51.100.128/25", "192.0.2.254", True),
+        StaticRoute("management", "0.0.0.0/0", "203.0.113.254", True),
+    ]
+    assert parse_ipv6_static(load_fixture("show_ipv6_static_route_vrf_all")) == [
+        StaticRoute("tenant-a", "2001:db8:2::/64", "2001:db8:1::fe"),
+        StaticRoute("default", "2001:db8:3::/64", "2001:db8:4::fe"),
+    ]
+    assert parse_ipv4_static({}) == [] and parse_ipv6_static({"TABLE_vrf": []}) == []
+    assert StaticRoute("management", "0.0.0.0/0", "203.0.113.254").kept
+    assert not StaticRoute("default", "0.0.0.0/0", "192.0.2.254").kept
+
+
+def test_route_values_are_checked() -> None:
+    assert validate_route_prefix(" 203.0.113.0/24 ") == "203.0.113.0/24"
+    assert validate_route_prefix("0.0.0.0/0") == "0.0.0.0/0"
+    assert validate_route_prefix("2001:DB8:2::/48") == "2001:db8:2::/48"
+    with pytest.raises(ValueError, match="did you mean 203.0.113.0/24"):
+        validate_route_prefix("203.0.113.5/24")
+    for bad in ("203.0.113.0", "224.0.0.0/4", "nonsense/8", "0.0.0.0/8"):
+        with pytest.raises(ValueError):
+            validate_route_prefix(bad)
+    assert validate_next_hop("2001:DB8::FE") == "2001:db8::fe"
+    for bad in ("fe80::1", "0.0.0.0", "127.0.0.1", "224.0.0.1", "192.0.2.0/24", "x"):
+        with pytest.raises(ValueError):
+            validate_next_hop(bad)
+    assert static_route_line("2001:db8:2::/48", "2001:db8::fe") == (
+        "ipv6 route 2001:db8:2::/48 2001:db8::fe"
+    )
+    with pytest.raises(ValueError, match="both be IPv4 or both IPv6"):
+        static_route_line("203.0.113.0/24", "2001:db8::fe")
+
+
+def _route_view() -> RoutingView:
+    return _vrf_view(
+        static_routes=[
+            StaticRoute("default", "203.0.113.0/24", "192.0.2.254", True),
+            StaticRoute("management", "0.0.0.0/0", "203.0.113.254", True),
+            StaticRoute("lab", "198.18.0.0/15", "198.51.100.9", False),
+        ]
+    )
+
+
+def test_adding_a_route() -> None:
+    change, lines, warnings = plan_add_static_route(
+        _route_view(), vrf="default", prefix="0.0.0.0/0", next_hop="192.0.2.254"
+    )
+    assert (change.vrf, change.prefix, change.next_hop) == ("default", "0.0.0.0/0", "192.0.2.254")
+    assert lines == [
+        "Add a static route in VRF default: traffic for 0.0.0.0/0 goes to 192.0.2.254."
+    ]
+    assert len(warnings) == 1 and "default route" in warnings[0]  # 192.0.2.0/24 is Vlan10's
+    _, _, warnings = plan_add_static_route(
+        _route_view(), vrf="tenant-a", prefix="2001:db8:9::/48", next_hop="2001:db8:a::fe"
+    )
+    # 2001:db8:a::/64 is on Vlan10, in default, not in tenant-a.
+    assert "No interface in VRF tenant-a" in warnings[0]
+    with pytest.raises(ValueError, match="has the route 203.0.113.0/24 via 192.0.2.254 already"):
+        plan_add_static_route(
+            _route_view(), vrf="default", prefix="203.0.113.0/24", next_hop="192.0.2.254"
+        )
+    with pytest.raises(ValueError, match="keeps the VRF name"):
+        plan_add_static_route(
+            _route_view(), vrf="management", prefix="198.18.0.0/15", next_hop="203.0.113.1"
+        )
+    with pytest.raises(ValueError, match="has no VRF blue"):
+        plan_add_static_route(
+            _route_view(), vrf="blue", prefix="198.18.0.0/15", next_hop="192.0.2.9"
+        )
+    with pytest.raises(ValueError, match="type the next hop"):
+        plan_add_static_route(_route_view(), vrf="default", prefix="198.18.0.0/15", next_hop="")
+
+
+def test_removing_a_route_and_deleting_a_vrf_that_has_routes() -> None:
+    change, lines, warnings = plan_remove_static_route(
+        _route_view(), vrf="lab", prefix="198.18.0.0/15", next_hop="198.51.100.9"
+    )
+    assert change.vrf == "lab" and lines[0].startswith("Remove the static route") and warnings
+    with pytest.raises(ValueError, match="has no route"):
+        plan_remove_static_route(
+            _route_view(), vrf="default", prefix="198.18.0.0/15", next_hop="192.0.2.254"
+        )
+    with pytest.raises(ValueError, match="keeps the VRF name"):
+        plan_remove_static_route(
+            _route_view(), vrf="management", prefix="0.0.0.0/0", next_hop="203.0.113.254"
+        )
+    with pytest.raises(ValueError, match=r"has static routes \(198.18.0.0/15 via 198.51.100.9\)"):
+        plan_delete_vrf(_route_view(), name="lab")
+
+
+def test_route_commands() -> None:
+    sent: list[list[str]] = []
+    with _client(sent) as client:
+        client.set_static_route("default", "0.0.0.0/0", "192.0.2.254", add=True)
+        client.set_static_route("lab", "2001:db8:2::/48", "2001:db8::fe", add=True)
+        client.set_static_route("lab", "198.18.0.0/15", "198.51.100.9", add=False)
+        with pytest.raises(ValueError):
+            client.set_static_route("management", "0.0.0.0/0", "203.0.113.1", add=True)
+    assert sent == [
+        ["ip route 0.0.0.0/0 192.0.2.254"],
+        ["vrf context lab", "ipv6 route 2001:db8:2::/48 2001:db8::fe"],
+        ["vrf context lab", "no ip route 198.18.0.0/15 198.51.100.9"],
+    ]
+
+
+def test_role_has_the_route_rules() -> None:
+    lines = role_lines(["Ethernet1/1"], "nxray")
+    for rule in ROUTE_RULES:
+        assert rule in lines
+    assert "rule 59 permit command conf t ; vrf context * ; ip route *" in lines
+    assert lines.index(ROUTE_RULES[-1]) < lines.index("interface policy deny")

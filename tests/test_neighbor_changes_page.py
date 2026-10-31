@@ -110,7 +110,7 @@ def test_role_version_4_offers_neighbor_changes_without_a_wait(
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 4")
     text = _text(logged_in.get("/switch").text)
-    assert "Turn on neighbor, port-channel, VLAN interface and VRF changes" in text
+    assert "Turn on neighbor, port-channel, VLAN interface, VRF and static route changes" in text
     assert "turn CDP and LLDP on or off on the front ports" in text
     response = logged_in.post(
         "/switch/enable-changes",
@@ -124,7 +124,8 @@ def test_role_version_4_offers_neighbor_changes_without_a_wait(
     )
     text = _text(response.text)
     assert (
-        "Neighbor, port-channel, VLAN interface and VRF changes are on: nxray may now also turn "
+        "Neighbor, port-channel, VLAN interface, VRF and static route changes are on: nxray may "
+        "now also turn "
         "CDP and LLDP on or off" in text
     )
     assert "there is no wait" in text

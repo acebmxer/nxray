@@ -283,13 +283,13 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     page = _text(logged_in.get("/routing").text)
     assert "VLAN interface changes are off" in page
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VLAN interface and VRF changes" in switch_page
+    assert "Turn on VLAN interface, VRF and static route changes" in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
     text = _text(response.text)
     assert (
-        "VLAN interface and VRF changes are on: nxray may now also make, change and delete VLAN"
-        in text
+        "VLAN interface, VRF and static route changes are on: nxray may now also make, change and "
+        "delete VLAN" in text
     )
     assert "there is no wait" in text
     # The role's port list gains the VLAN interfaces, so the check and save go over SSH.
@@ -414,13 +414,80 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     refused = _post(logged_in, "/routing/vrf/create", confirm=True, name="lab")
     assert refused.status_code == 400 and "VRF changes are off" in _text(refused.text)
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on VRF changes" in switch_page
+    assert "Turn on VRF and static route changes" in switch_page
     assert "this version of NXray can also make and delete VRFs and move" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
-    assert "VRF changes are on: nxray may now also make and delete VRFs" in text
+    assert "VRF and static route changes are on: nxray may now also make and delete VRFs" in text
     assert "there is no wait" in text
     # Only rules change: checked and saved over NX-API, no SSH save.
     assert "rule 53 permit command conf t ; interface * ; vrf member *" in enabled.ssh_lines
     assert "copy running-config startup-config" not in enabled.ssh_lines and enabled.saved
     assert "/routing/vrf/create" in logged_in.get("/routing").text
+
+
+def test_static_routes_add_and_remove(logged_in: TestClient, enabled: FakeSwitch):
+    page = _text(logged_in.get("/routing").text)
+    assert "management 0.0.0.0/0 203.0.113.254" in page and "the switch's own" in page
+    _make_vlan10(logged_in)
+    ask = _text(
+        _post(logged_in, "/routing/route/add", vrf="default", prefix="0.0.0.0/0",
+              next_hop="192.0.2.254").text
+    )  # fmt: skip
+    assert "traffic for 0.0.0.0/0 goes to 192.0.2.254" in ask and "default route" in ask
+    assert _config_requests(enabled)[-1][0] == "interface vlan10"  # nothing sent yet
+    added = _post(
+        logged_in, "/routing/route/add", confirm=True, vrf="default", prefix="0.0.0.0/0",
+        next_hop="192.0.2.254",
+    )  # fmt: skip
+    assert added.status_code == 200, _text(added.text)[:2000]
+    assert _config_requests(enabled)[-1] == ["ip route 0.0.0.0/0 192.0.2.254"]
+    assert "default 0.0.0.0/0 192.0.2.254 yes" in _text(added.text)
+
+    enabled.vrfs.append("lab")
+    in_lab = _post(
+        logged_in, "/routing/route/add", confirm=True, vrf="lab", prefix="2001:db8:9::/48",
+        next_hop="2001:db8:a::fe",
+    )  # fmt: skip
+    assert in_lab.status_code == 200
+    assert _config_requests(enabled)[-1] == [
+        "vrf context lab",
+        "ipv6 route 2001:db8:9::/48 2001:db8:a::fe",
+    ]
+    refused = _post(logged_in, "/routing/vrf/delete", confirm=True, name="lab")
+    assert refused.status_code == 400 and "has static routes" in _text(refused.text)
+
+    removed = _post(
+        logged_in, "/routing/route/remove", confirm=True, vrf="lab", prefix="2001:db8:9::/48",
+        next_hop="2001:db8:a::fe",
+    )  # fmt: skip
+    assert removed.status_code == 200
+    assert _config_requests(enabled)[-1] == [
+        "vrf context lab",
+        "no ipv6 route 2001:db8:9::/48 2001:db8:a::fe",
+    ]
+    keep = _post(
+        logged_in, "/routing/route/remove", confirm=True, vrf="management", prefix="0.0.0.0/0",
+        next_hop="203.0.113.254",
+    )  # fmt: skip
+    assert keep.status_code == 400 and ("management", "0.0.0.0/0", "203.0.113.254") in (
+        enabled.static_routes
+    )
+
+
+def test_role_version_8_offers_static_route_changes(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+):
+    _db(settings, "UPDATE switch_connection SET role_version = 8")
+    page = logged_in.get("/routing").text
+    assert "Static route changes are off" in _text(page) and "/routing/route/add" not in page
+    refused = _post(
+        logged_in, "/routing/route/add", confirm=True, vrf="default", prefix="0.0.0.0/0",
+        next_hop="192.0.2.254",
+    )  # fmt: skip
+    assert refused.status_code == 400 and "Static route changes are off" in _text(refused.text)
+    assert "Turn on static route changes" in _text(logged_in.get("/switch").text)
+    text = _text(_enable_changes(logged_in).text)
+    assert "Static route changes are on: nxray may now also add and remove static routes" in text
+    assert "there is no wait" in text
+    assert "/routing/route/add" in logged_in.get("/routing").text

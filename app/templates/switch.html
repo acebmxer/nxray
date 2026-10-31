@@ -20,7 +20,7 @@
   <dl class="facts">
     <dt>Switch</dt><dd>{{ connection.switch_hostname }}</dd>
     <dt>Address</dt><dd>{{ connection.host }}, port {{ connection.port }}</dd>
-    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.vrf_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table, port-channels, VLAN interfaces and VRFs{% elif connection.layer3_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table, port-channels and VLAN interfaces{% elif connection.channel_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table and port-channels{% elif connection.neighbor_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC address table{% elif connection.feature_changes_enabled %}read, plus port changes, VLANs, port settings and features{% elif connection.settings_changes_enabled %}read, plus port changes, VLANs and port settings{% elif connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
+    <dt>NXray's account</dt><dd>{{ connection.username }} ({% if connection.route_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table, port-channels, VLAN interfaces, VRFs and static routes{% elif connection.vrf_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table, port-channels, VLAN interfaces and VRFs{% elif connection.layer3_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table, port-channels and VLAN interfaces{% elif connection.channel_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address table and port-channels{% elif connection.neighbor_changes_enabled %}read, plus port changes, VLANs, port settings, features, CDP, LLDP and the MAC address table{% elif connection.feature_changes_enabled %}read, plus port changes, VLANs, port settings and features{% elif connection.settings_changes_enabled %}read, plus port changes, VLANs and port settings{% elif connection.vlan_changes_enabled %}read, plus port changes and VLANs{% elif connection.changes_enabled %}read, plus port changes{% else %}read-only{% endif %})</dd>
     <dt>Config saved</dt>
     <dd>{% if connection.config_saved %}yes{% else %}no: run copy running-config startup-config on the switch{% endif %}</dd>
     <dt>Last test</dt>
@@ -69,7 +69,7 @@
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
       message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature, neighbor, port-channel, VLAN interface and VRF changes take effect straight
+      settings, feature, neighbor, port-channel, VLAN interface, VRF and static route changes take effect straight
       away, with no further waits.
     </p>
     <label class="check">
@@ -93,7 +93,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF and static route changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -111,7 +111,8 @@
     make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on
     them and on routed ports (on the Routing page);{% endif %}{% if connection.vrf_changes_enabled %}
     make and delete VRFs and move VLAN interfaces and routed ports between them
-    (on the Routing page);{% endif %} and save the configuration.
+    (on the Routing page);{% endif %}{% if connection.route_changes_enabled %}
+    add and remove static routes (on the Routing page);{% endif %} and save the configuration.
     The switch refuses it everything else.
   </p>
   {% elif connection.vlan_changes_enabled %}
@@ -158,9 +159,10 @@
     change and delete port-channels and set their LACP options (on the
     Port-channels page), {% endif %}{% if not connection.layer3_changes_enabled %}make,
     change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them
-    and on routed ports (on the Routing page), {% endif %}{% if not connection.layer3_changes_enabled %}and {% endif %}make and delete
-    VRFs and move VLAN interfaces and routed ports between them (on the Routing
-    page).
+    and on routed ports (on the Routing page), {% endif %}{% if not connection.vrf_changes_enabled %}make
+    and delete VRFs and move VLAN interfaces and routed ports between them (on
+    the Routing page), {% endif %}{% if not connection.vrf_changes_enabled %}and {% endif %}add and remove static routes
+    (on the Routing page).
     NXray's role on the switch ({{ role_name }}) was made
     before that and does not allow it yet. NXray signs in to the switch over SSH
     once more with the admin login below and adds the rules to the role. The
@@ -194,7 +196,7 @@
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature, neighbor, port-channel, VLAN interface and VRF changes on gives it a role
+    feature, neighbor, port-channel, VLAN interface, VRF and static route changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports, port-channels
     and VLAN interfaces only,
     turning a port on or off, editing its description, setting its mode
@@ -204,7 +206,8 @@
     taking it out, its LACP rate and priority, and a port-channel's LACP
     minimum links and deleting it; making and deleting a VLAN interface, its
     addresses, description, MTU and on/off; making and deleting VRFs and moving
-    VLAN interfaces and routed ports between them; splitting a 100G port into four and joining
+    VLAN interfaces and routed ports between them; adding and removing static
+    routes; splitting a 100G port into four and joining
     it again; creating, renaming and deleting VLANs; turning switch features on
     and off; setting how long learned MAC addresses are kept, adding and
     removing static MAC addresses and clearing learned ones; the switch's LACP
@@ -216,7 +219,7 @@
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface and VRF changes", true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF and static route changes", true) }}
 </section>
 {% endif %}
 

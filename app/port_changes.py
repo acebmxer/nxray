@@ -10,9 +10,9 @@ and IPv6 addresses when routed; on the port-channels, the same settings plus
 their description and LACP minimum links, and deleting them; on the VLAN
 interfaces, making and deleting them, their addresses, description, MTU and
 on/off; the VRFs, making and deleting them and moving VLAN interfaces and
-routed ports between them; switch-wide, creating, naming and deleting VLANs,
-splitting a 100G port into four and joining it again, turning switch
-features on and off, setting how long learned MAC addresses are kept,
+routed ports between them, and their static routes; switch-wide, creating,
+naming and deleting VLANs, splitting a 100G port into four and joining it
+again, turning switch features on and off, setting how long learned MAC addresses are kept,
 adding and removing static MAC addresses, clearing learned ones, and the
 switch's LACP priority; and saving the configuration. Everything else
 (mgmt0, a VLAN's own on/off state, accounts, other switch-wide settings)
@@ -47,7 +47,7 @@ through with NX-API answering at once), so NXray adds no wait for it.
 the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
 neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
-rules and the VLAN interfaces in the port list, 8 the VRF rules.
+rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -238,11 +238,28 @@ VRF_RULES = (
     "rule 54 permit command conf t ; interface * ; no vrf member *",
 )
 
+# Static route rules, added in ROLE_VERSION 9: "ip route" and "ipv6 route" and
+# their "no" forms, in the default VRF (typed in configuration mode) and in
+# any other (typed inside "vrf context"). Proven on cisco-25gb (2026-10-30)
+# with a throwaway account, all eight forms. The switch would also take them
+# inside the management VRF; NXray itself never sends that
+# (nxapi.validate_vrf_name refuses it).
+ROUTE_RULES = (
+    "rule 55 permit command conf t ; ip route *",
+    "rule 56 permit command conf t ; no ip route *",
+    "rule 57 permit command conf t ; ipv6 route *",
+    "rule 58 permit command conf t ; no ipv6 route *",
+    "rule 59 permit command conf t ; vrf context * ; ip route *",
+    "rule 60 permit command conf t ; vrf context * ; no ip route *",
+    "rule 61 permit command conf t ; vrf context * ; ipv6 route *",
+    "rule 62 permit command conf t ; vrf context * ; no ipv6 route *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 8
+ROLE_VERSION = 9
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -253,6 +270,7 @@ _ADDED_BY_VERSION = {
     6: "port-channel",
     7: "VLAN interface",
     8: "VRF",
+    9: "static route",
 }
 
 
@@ -316,6 +334,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *CHANNEL_RULES,
         *LAYER3_RULES,
         *VRF_RULES,
+        *ROUTE_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

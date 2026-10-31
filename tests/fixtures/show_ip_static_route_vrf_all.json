@@ -1,0 +1,48 @@
+{
+  "TABLE_vrf_all": {
+    "ROW_vrf_all": [
+      {
+        "cntxt_name": "tenant-a",
+        "cntxt_id": 3,
+        "TABLE_each_vrf": {
+          "ROW_each_vrf": {
+            "prefix_addr_msk": "203.0.113.0/24",
+            "nhop_addr_msk": "198.51.100.254/32",
+            "nhop_vrf_info": "",
+            "nhop_intr_info": "",
+            "urib_stat": "    (not installed in urib)",
+            "nhop_urib_stat": "    rnh(installed in urib)"
+          }
+        }
+      },
+      {
+        "cntxt_name": "default",
+        "cntxt_id": 1,
+        "TABLE_each_vrf": {
+          "ROW_each_vrf": {
+            "prefix_addr_msk": "198.51.100.128/25",
+            "nhop_addr_msk": "192.0.2.254/32",
+            "nhop_vrf_info": "",
+            "nhop_intr_info": "",
+            "urib_stat": "    (installed in urib)",
+            "nhop_urib_stat": "    rnh(installed in urib)"
+          }
+        }
+      },
+      {
+        "cntxt_name": "management",
+        "cntxt_id": 2,
+        "TABLE_each_vrf": {
+          "ROW_each_vrf": {
+            "prefix_addr_msk": "0.0.0.0/0",
+            "nhop_addr_msk": "203.0.113.254/32",
+            "nhop_vrf_info": "",
+            "nhop_intr_info": "",
+            "urib_stat": "    (installed in urib)",
+            "nhop_urib_stat": "    rnh(installed in urib)"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -110,9 +110,10 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface and VRF changes**, tick the box and press **Turn on port, VLAN,
-port settings, feature, neighbor, port-channel, VLAN interface and VRF
-changes**. One press turns on all eight, with a single wait.
+interface, VRF and static route changes**, tick the box and press **Turn on
+port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface,
+VRF and static route changes**. One press turns on all nine, with a single
+wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -176,6 +177,14 @@ NXray then:
          rule 52 permit command conf t ; no vrf context *
          rule 53 permit command conf t ; interface * ; vrf member *
          rule 54 permit command conf t ; interface * ; no vrf member *
+         rule 55 permit command conf t ; ip route *
+         rule 56 permit command conf t ; no ip route *
+         rule 57 permit command conf t ; ipv6 route *
+         rule 58 permit command conf t ; no ipv6 route *
+         rule 59 permit command conf t ; vrf context * ; ip route *
+         rule 60 permit command conf t ; vrf context * ; no ip route *
+         rule 61 permit command conf t ; vrf context * ; ipv6 route *
+         rule 62 permit command conf t ; vrf context * ; no ipv6 route *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -203,7 +212,8 @@ priority; on the port-channels, the same port settings, their LACP minimum
 links, and deleting them; set the switch's LACP priority; make, turn on or
 off, describe, set the MTU of and delete VLAN interfaces and put IPv4 and
 IPv6 addresses on them; make and delete VRFs and move VLAN interfaces and
-routed ports between them; and save the configuration. The switch
+routed ports between them; add and remove IPv4 and IPv6 static routes; and
+save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts and other switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
@@ -213,8 +223,8 @@ session and only reloads them once that session has been idle for NX-API's
 timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
-port settings, feature, neighbor, port-channel, VLAN interface and VRF
-changes take effect straight away. When the role gains the port-channels or the VLAN
+port settings, feature, neighbor, port-channel, VLAN interface, VRF and
+static route changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -222,11 +232,11 @@ minutes right after such a change (SSH kept working), though a later change
 went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
-features, neighbor, port-channel, VLAN interface or VRF changes existed.**
-Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1 to 47 or
-1 to 50. The Switch page then shows a card named for what is missing (for
-example **Neighbor, port-channel, VLAN interface and VRF changes** or **VRF
-changes**): type the admin login,
+features, neighbor, port-channel, VLAN interface, VRF or static route
+changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29,
+1 to 40, 1 to 47, 1 to 50 or 1 to 54. The Switch page then shows a card
+named for what is missing (for example **VRF and static route changes** or
+**Static route changes**): type the admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
 applies new rules in a role the account already has at once.
@@ -463,6 +473,29 @@ An install whose role predates VRFs gets a **Turn on VRF changes** card on the
 Switch page; it adds rules 51 to 54 with no wait. These commands were tried
 on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account on an unused
 port.
+
+**Static routes.** A static route sends the traffic for a network to a
+router (the next hop) that the switch reaches through one of its interfaces
+in the same VRF. The Routing page lists the IPv4 and IPv6 static routes of
+every VRF, with whether the switch uses each IPv4 one (it keeps a route but
+does not use it while no interface in the VRF reaches the next hop).
+Operators and admins can, each after a confirm page:
+
+- **Add a static route**: a VRF, a destination network with its prefix length
+  (`0.0.0.0/0` or `::/0` for a default route) and a next-hop address of the
+  same family (`ip route <network> <next hop>` or `ipv6 route ...`, inside
+  `vrf context <name>` for a VRF other than default). The confirm page warns
+  for a default route and when no interface in the VRF reaches the next hop.
+  Link-local IPv6 next hops are refused, as they would also need an
+  interface.
+- **Remove** a static route (the same command with `no`).
+
+Routes in management (such as mgmt0's default route) are shown but never
+changed. A VRF that has static routes cannot be deleted until they are
+removed. An install whose role predates static routes gets a **Turn on
+static route changes** card on the Switch page; it adds rules 55 to 62 with
+no wait. These commands were tried on an N9K-C92160YC-X with NX-OS 9.3(16)
+with a throwaway account.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

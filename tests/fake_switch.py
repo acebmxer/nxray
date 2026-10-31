@@ -44,11 +44,14 @@ VRFs made on the switch live in ``vrfs`` (default and management are always
 there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
 entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
 and "vrf member" or "no vrf member" deletes the interface's addresses.
+Static routes live in ``static_routes`` as (VRF, destination, next hop),
+starting with management's default route as recorded.
 """
 
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import re
 import time
@@ -239,6 +242,10 @@ class FakeSwitch:
     svis: set[int] = field(default_factory=set)
     # VRFs made on the switch, besides default and management.
     vrfs: list[str] = field(default_factory=list)
+    # Static routes: (VRF, destination, next hop).
+    static_routes: list[tuple[str, str, str]] = field(
+        default_factory=lambda: [("management", "0.0.0.0/0", "203.0.113.254")]
+    )
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -354,6 +361,20 @@ class FakeSwitch:
             reply := self._vrf_member(user, is_admin, cmd, ident, interface)
         ):
             return reply, context
+        if match := re.fullmatch(r"(no )?(ip|ipv6) route (\S+) (\S+)", cmd):
+            undo, family, prefix, hop = match.groups()
+            in_vrf = context[1] if context and context[0] == "vrf" else None
+            rule = f"conf t ; {'vrf context * ; ' if in_vrf else ''}{undo or ''}{family} route *"
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            route = (in_vrf or "default", prefix, hop)
+            if undo:
+                if route not in self.static_routes:
+                    return _error(ident, "% Route not found\n"), context
+                self.static_routes.remove(route)
+            elif route not in self.static_routes:
+                self.static_routes.append(route)
+            return _ok(ident, None), context
         if match := re.fullmatch(r"(no )?vrf context (\S+)", cmd):
             undo, name = match.groups()
             rule = "conf t ; no vrf context *" if undo else "vrf context"
@@ -365,6 +386,7 @@ class FakeSwitch:
                 if name not in self.vrfs:
                     return _error(ident, f"% VRF {name} not found\n"), context
                 self.vrfs.remove(name)
+                self.static_routes = [r for r in self.static_routes if r[0] != name]
                 for state in self.port_state.values():
                     if state.get("vrf") == name:
                         _drop_l3(state)
@@ -684,6 +706,56 @@ class FakeSwitch:
         for row in found:
             row.update(vrf_id=ids[row["vrf_name"]], soo="--")
         return {"TABLE_if": {"ROW_if": found}}
+
+    def ipv4_static(self) -> dict[str, Any]:
+        """``show ip static-route vrf all``, shaped as recorded on cisco-25gb; a route is
+        installed when an interface in its VRF has an address in the next hop's network."""
+
+        def installed(vrf: str, hop: str) -> bool:
+            if vrf == "management":
+                return True
+            for name, state in self.port_state.items():
+                if state.get("routed") and self.vrf_of(name) == vrf and state.get("ip"):
+                    if ipaddress.ip_address(hop) in ipaddress.ip_interface(state["ip"]).network:
+                        return True
+            return False
+
+        found = []
+        for vrf in ["default", "management", *self.vrfs]:
+            routes = [r for r in self.static_routes if r[0] == vrf and ":" not in r[1]]
+            if not routes:
+                continue
+            rows = [
+                {
+                    "prefix_addr_msk": prefix,
+                    "nhop_addr_msk": f"{hop}/32",
+                    "nhop_vrf_info": "",
+                    "nhop_intr_info": "",
+                    "urib_stat": "    (installed in urib)"
+                    if installed(vrf, hop)
+                    else "    (not installed in urib)",
+                    "nhop_urib_stat": "    rnh(installed in urib)",
+                }
+                for _, prefix, hop in routes
+            ]
+            found.append(
+                {
+                    "cntxt_name": vrf,
+                    "TABLE_each_vrf": {"ROW_each_vrf": rows[0] if len(rows) == 1 else rows},
+                }
+            )
+        return {"TABLE_vrf_all": {"ROW_vrf_all": found}} if found else {}
+
+    def ipv6_static(self) -> dict[str, Any]:
+        """``show ipv6 static-route vrf all``, shaped as recorded: a list of tables."""
+        routes = [
+            {"ROW_route": {"prefix-out": prefix, "next-hop": f"{hop}/128", "pref": 1,
+                           "next-hop-vrf": vrf}}
+            for vrf, prefix, hop in self.static_routes
+            if ":" in prefix
+        ]  # fmt: skip
+        vrfs = [{"ROW_vrf": {"vrf-name-out": v}} for v in ["default", "management", *self.vrfs]]
+        return {"TABLE_route": routes, "TABLE_vrf": vrfs} if routes else {"TABLE_vrf": vrfs}
 
     def _channel_command(
         self, user: str, is_admin: bool, cmd: str, ident: int, interface: str
@@ -1167,6 +1239,10 @@ class FakeSwitch:
             return _ok(ident, self.vrf_table())
         if cmd == "show vrf interface":
             return _ok(ident, self.vrf_interfaces())
+        if cmd == "show ip static-route vrf all":
+            return _ok(ident, self.ipv4_static())
+        if cmd == "show ipv6 static-route vrf all":
+            return _ok(ident, self.ipv6_static())
         if cmd == "show ip interface vrf all":
             return _ok(ident, self.ip_interfaces())
         if cmd == "show ipv6 interface vrf all":

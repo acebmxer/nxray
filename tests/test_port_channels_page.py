@@ -166,12 +166,13 @@ def test_role_version_5_offers_port_channel_changes_without_a_wait(
     page = _text(logged_in.get("/port-channels").text)
     assert "Port-channel changes are off." in page and "Make port-channel" not in page
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on port-channel, VLAN interface and VRF changes" in switch_page
+    assert "Turn on port-channel, VLAN interface, VRF and static route changes" in switch_page
     assert "make, change and delete port-channels" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
     assert (
-        "Port-channel, VLAN interface and VRF changes are on: nxray may now also make, "
+        "Port-channel, VLAN interface, VRF and static route changes are on: nxray may now also "
+        "make, "
         "change and delete" in text
     )
     assert "there is no wait" in text

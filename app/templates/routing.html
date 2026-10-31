@@ -138,6 +138,59 @@
   {% endif %}
 </section>
 
+<section class="card" id="static-routes">
+  <h2 class="card-title">Static routes</h2>
+  <p class="lead">A static route sends traffic for a network to a router (the next hop) that the switch reaches through one of its interfaces in the same VRF.</p>
+  {% if view.static_routes %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>VRF</th><th>Destination</th><th>Next hop</th><th>In use</th>{% if can_change and route_ready %}<th></th>{% endif %}</tr>
+    </thead>
+    <tbody>
+      {% for r in view.static_routes %}
+      <tr>
+        <td>{{ r.vrf }}</td>
+        <td class="mono">{{ r.prefix }}</td>
+        <td class="mono">{{ r.next_hop }}</td>
+        <td>{% if r.installed is true %}<span class="badge badge-ok">yes</span>{% elif r.installed is false %}<span class="badge badge-warn">no</span> <span class="dim">next hop not reachable</span>{% else %}<span class="dim">—</span>{% endif %}</td>
+        {% if can_change and route_ready %}
+        <td>{% if r.kept %}<span class="dim">the switch's own</span>{% else %}
+          <form method="post" action="/routing/route/remove" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="vrf" value="{{ r.vrf }}">
+            <input type="hidden" name="prefix" value="{{ r.prefix }}">
+            <input type="hidden" name="next_hop" value="{{ r.next_hop }}">
+            <button type="submit" class="btn btn-quiet">Remove</button>
+          </form>
+        {% endif %}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>The switch has no static routes.</p>
+  {% endif %}
+  {% if can_change and route_ready %}
+  <form method="post" action="/routing/route/add" class="stack form-narrow form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="route_vrf">VRF</label>
+    <select id="route_vrf" name="vrf">
+      {% for name in view.vrf_choices %}<option value="{{ name }}" {% if (form.route_vrf or "default") == name %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+    <label for="route_prefix">Destination</label>
+    <input id="route_prefix" name="prefix" type="text" spellcheck="false" placeholder="203.0.113.0/24 or 2001:db8:2::/48" value="{{ form.route_prefix or '' }}">
+    <p class="hint">A network with its prefix length; 0.0.0.0/0 or ::/0 for a default route.</p>
+    <label for="route_next_hop">Next hop</label>
+    <input id="route_next_hop" name="next_hop" type="text" spellcheck="false" placeholder="192.0.2.254" value="{{ form.route_next_hop or '' }}">
+    <p class="hint">The address of the router the traffic goes to, IPv4 or IPv6 like the destination.</p>
+    <button type="submit" class="btn btn-quiet">Add static route</button>
+  </form>
+  {% elif can_change %}
+  <p class="note">Static route changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to add and remove static routes.</p>
+  {% endif %}
+</section>
+
 {% if can_change %}
 {% if view.interface_vlan_on and not vlan_ready %}
 <section class="card">
