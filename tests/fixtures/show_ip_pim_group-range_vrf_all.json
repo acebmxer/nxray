@@ -1,0 +1,27 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "out-context": "default",
+      "TABLE_group": {
+        "ROW_group": [
+          {
+            "grp-addr": "232.0.0.0/8",
+            "action": "Accept",
+            "mode": "SSM",
+            "rp-addr": "-",
+            "sh-tree-only-range": "-",
+            "origin": "Local"
+          },
+          {
+            "grp-addr": "224.0.0.0/4",
+            "action": "-",
+            "mode": "ASM",
+            "rp-addr": "192.0.2.10",
+            "sh-tree-only-range": "-",
+            "origin": "Static"
+          }
+        ]
+      }
+    }
+  }
+}

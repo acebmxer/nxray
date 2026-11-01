@@ -1,0 +1,48 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": [
+      {
+        "TABLE_neighbor": {
+          "ROW_neighbor": [
+            {
+              "bfd-state": "n/a",
+              "bidir-capable": "true",
+              "dr-priority": "1",
+              "ecmp-redirect-capable": "false",
+              "expires": "00:01:25",
+              "if-name": "Vlan10",
+              "nbr-addr": "192.0.2.2",
+              "uptime": "1w0d"
+            },
+            {
+              "bfd-state": "Up",
+              "bidir-capable": "true",
+              "dr-priority": "10",
+              "ecmp-redirect-capable": "false",
+              "expires": "00:01:19",
+              "if-name": "Ethernet1/54",
+              "nbr-addr": "198.51.100.2",
+              "uptime": "02:10:44"
+            }
+          ]
+        },
+        "out-context": "default"
+      },
+      {
+        "TABLE_neighbor": {
+          "ROW_neighbor": {
+            "bfd-state": "n/a",
+            "bidir-capable": "false",
+            "dr-priority": "1",
+            "ecmp-redirect-capable": "false",
+            "expires": "00:01:30",
+            "if-name": "Vlan20",
+            "nbr-addr": "203.0.113.2",
+            "uptime": "00:05:12"
+          }
+        },
+        "out-context": "tenant-a"
+      }
+    ]
+  }
+}

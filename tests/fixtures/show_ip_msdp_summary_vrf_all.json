@@ -1,0 +1,23 @@
+{
+  "TABLE_VRF": {
+    "ROW_VRF": {
+      "out-vrf": "default",
+      "local-asn": "65001",
+      "originator-id": "192.0.2.1",
+      "config-peer-count": 1,
+      "estb-peer-count": 0,
+      "shut-peer-count": 0,
+      "TABLE_peer": {
+        "ROW_peer": {
+          "peer-address": "198.51.100.9",
+          "peer-asn": "0",
+          "peer-state": "Connecting",
+          "peer-uptime": "P2DT13H19M57S",
+          "peer-last-msg": "PT0S",
+          "peer-sa-rcvd": 0,
+          "peer-sa-limit": "false"
+        }
+      }
+    }
+  }
+}

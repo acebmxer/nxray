@@ -7,8 +7,13 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from app.neighbors import CDP_NEIGHBORS, NEIGHBOR_COMMANDS
 from tests.conftest import load_fixture
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
+
+PORT_COMMANDS = ["show interface", "show interface status", "show interface transceiver"]
+# Read after the ports, for what the front panel's tooltips say is plugged in.
+NEIGHBOR_READS = [list(NEIGHBOR_COMMANDS), [CDP_NEIGHBORS]]
 
 
 @pytest.fixture
@@ -37,6 +42,11 @@ def _text(html: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
 
 
+def _table(html: str) -> str:
+    """The filters and the table, as text: the front panel above them always shows every port."""
+    return _text(html.split('<nav class="filters" aria-label="Show ports">')[1])
+
+
 def _one_port_up(switch: FakeSwitch) -> None:
     interfaces = load_fixture("show_interface")
     for row in interfaces["TABLE_interface"]["ROW_interface"]:
@@ -62,24 +72,22 @@ def test_ports_page_lists_every_port_from_one_request(
     logged_in: TestClient, switch: FakeSwitch
 ) -> None:
     text = _text(logged_in.get("/ports").text)
-    assert switch.requests == [
-        ["show interface", "show interface status", "show interface transceiver"]
-    ]
-    assert "All (54)" in text and "Up (0)" in text and "Down (54)" in text
-    assert "Ethernet1/1 Down XCVR not inserted auto 1 none 0 b/s 0 b/s 0" in text
+    assert switch.requests == [PORT_COMMANDS, *NEIGHBOR_READS]
+    assert "All 54 Up 0 Down 54" in text
+    assert "Ethernet1/1 Down XCVR not inserted auto 1 none 0" in text
     assert "Ethernet1/54" in text
 
 
 def test_filters(logged_in: TestClient, switch: FakeSwitch) -> None:
     _one_port_up(switch)
-    up = _text(logged_in.get("/ports?show=up").text)
-    assert "Up (1)" in up and "Down (53)" in up and "With errors (1)" in up
-    assert "Ethernet1/3 xcp-host-1 &lt;storage&gt; Up 25 Gb/s" in up
+    up = _table(logged_in.get("/ports?show=up").text)
+    assert "Up 1 Down 53" in up and "With errors 1" in up
+    assert "Ethernet1/3 xcp-host-1 &lt;storage&gt; Up 25G" in up
     assert "Ethernet1/1 " not in up
-    assert "Ethernet1/3" in _text(logged_in.get("/ports?show=errors").text)
-    assert "Ethernet1/3 " not in _text(logged_in.get("/ports?show=down").text)
+    assert "Ethernet1/3" in _table(logged_in.get("/ports?show=errors").text)
+    assert "Ethernet1/3 " not in _table(logged_in.get("/ports?show=down").text)
     # An unknown filter shows everything.
-    assert "Ethernet1/54" in logged_in.get("/ports?show=nonsense").text
+    assert "Ethernet1/54" in _table(logged_in.get("/ports?show=nonsense").text)
 
 
 def test_descriptions_are_escaped(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -101,8 +109,25 @@ def test_port_detail(logged_in: TestClient, switch: FakeSwitch) -> None:
     assert "Nothing plugged in." in text
 
 
-def test_ports_link_to_their_detail_page(logged_in: TestClient, switch: FakeSwitch) -> None:
-    assert 'href="/ports/detail?name=Ethernet1/1"' in logged_in.get("/ports").text
+def test_ports_open_their_side_panel(logged_in: TestClient, switch: FakeSwitch) -> None:
+    page = logged_in.get("/ports").text
+    assert 'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/1"' in page
+    assert 'class="drawer"' not in page
+    panel = logged_in.get("/ports", params={"port": "Ethernet1/1"}).text
+    assert '<aside class="drawer" aria-label="Ethernet1/1">' in panel
+    # The panel links to the port's own page, and its arrows wrap around the panel.
+    assert 'href="/ports/detail?name=Ethernet1/1"' in panel
+    assert (
+        'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/54" title="Previous port"'
+        in panel
+    )
+    assert 'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/2" title="Next port"' in panel
+    assert (
+        'class="face-port face-sel" href="/ports?show=all&amp;color=state&amp;port=Ethernet1/1"'
+        in panel
+    )
+    # An unknown port opens no panel.
+    assert 'class="drawer"' not in logged_in.get("/ports", params={"port": "Ethernet9/9"}).text
 
 
 def test_unknown_port_is_a_404(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -111,7 +136,9 @@ def test_unknown_port_is_a_404(logged_in: TestClient, switch: FakeSwitch) -> Non
         assert page.status_code == 404, name
         assert "has no port called" in page.text
     # Port names never reach the switch as part of a command.
-    assert all(cmd[0] == "show interface" for cmd in switch.requests)
+    sent = [cmd for request in switch.requests for cmd in request]
+    assert sent
+    assert not any("Ethernet9/99" in cmd or "reload" in cmd for cmd in sent)
 
 
 def test_unreachable_switch(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -119,3 +146,54 @@ def test_unreachable_switch(logged_in: TestClient, switch: FakeSwitch) -> None:
     for path in ("/ports", "/ports/detail?name=Ethernet1/1"):
         text = _text(logged_in.get(path).text)
         assert "could not reach the switch" in text, path
+
+
+def test_ports_page_draws_the_front_panel(logged_in: TestClient, switch: FakeSwitch) -> None:
+    _one_port_up(switch)
+    html = logged_in.get("/ports").text
+    assert '<svg class="face"' in html
+    assert html.count('<a class="face-port"') == 54
+    assert 'class="face-cell f-up"' in html
+    # The legend counts the ports in each colour.
+    assert 'Up <span class="legend-values">1</span>' in html
+    assert 'Empty: nothing plugged in <span class="legend-values">53</span>' in html
+
+
+@pytest.mark.parametrize("mode", ["state", "traffic", "errors"])
+def test_colour_modes_read_the_switch_once(
+    logged_in: TestClient, switch: FakeSwitch, mode: str
+) -> None:
+    html = logged_in.get(f"/ports?color={mode}").text
+    assert switch.requests == [PORT_COMMANDS, *NEIGHBOR_READS]
+    assert f'filter filter-on" href="/ports?show=all&amp;color={mode}"' in html
+
+
+def test_vlan_mode_names_the_vlans_from_the_same_request(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    html = logged_in.get("/ports?color=vlan").text
+    assert switch.requests[1:] == NEIGHBOR_READS
+    assert switch.requests[0][:3] == PORT_COMMANDS
+    assert "show vlan brief" in switch.requests[0]
+    assert "VLAN 1 default" in _text(html)
+    assert "f-vlan s0" in html
+
+
+def test_filters_keep_the_colour_mode(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/ports?color=errors&show=down").text
+    assert 'href="/ports?show=up&amp;color=errors"' in html
+    assert 'href="/ports?show=down&amp;color=traffic"' in html
+
+
+def test_unknown_colour_mode_is_state(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/ports?color=<b>").text
+    assert 'filter filter-on" href="/ports?show=all&amp;color=state"' in html
+    assert "<b>" not in html
+
+
+def test_face_links_open_the_side_panel(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/ports?color=errors").text
+    assert (
+        '<a class="face-port" href="/ports?show=all&amp;color=errors&amp;port=Ethernet1/54">'
+        in html
+    )

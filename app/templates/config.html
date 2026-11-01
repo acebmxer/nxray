@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Config — NXray{% endblock %}
+
+{% macro choice_options(selected) -%}
+<option value="running" {% if selected == "running" %}selected{% endif %}>Running configuration</option>
+<option value="startup" {% if selected == "startup" %}selected{% endif %}>Saved configuration</option>
+{% for bk in backups %}<option value="backup-{{ bk.id }}" {% if selected == "backup-" ~ bk.id %}selected{% endif %}>Backup {{ bk.id }}{% if bk.note %}: {{ bk.note }}{% endif %}</option>{% endfor %}
+{%- endmacro %}
+
+{% block content %}
+<h1 class="page-title">Config</h1>
+<p class="lead">Backups of the switch's configuration, what differs between two configurations, rolling the switch back to a backup, and restarting the switch.</p>
+
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+</div>
+{% else %}
+{% if configs is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p>
+  <p class="note">NXray reads the configuration once its role allows it: an NXray admin turns on switch admin changes, or security and config changes, on the <a href="/switch">Switch</a> page.</p>
+</div>
+{% else %}
+<section class="card" id="unsaved">
+  <h2 class="card-title">Running and saved</h2>
+  {% if unsaved is none %}
+  <p class="note">NXray's role on the switch does not let it read the saved configuration yet: turn on security and config changes on the <a href="/switch">Switch</a> page.</p>
+  {% elif not unsaved %}
+  <p>The running configuration is saved: a restart of the switch keeps it as it is.</p>
+  {% else %}
+  <p class="warning">The running configuration differs from the saved one: {{ unsaved_counts[0] }} line{{ "" if unsaved_counts[0] == 1 else "s" }} only in the saved, {{ unsaved_counts[1] }} only in the running. A restart of the switch undoes these.</p>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="config">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+  <details class="settings-group"><summary>What differs (- saved, + running)</summary>{% with diff = unsaved %}{% include "_diff.html" %}{% endwith %}</details>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="card" id="backups">
+  <h2 class="card-title">Backups</h2>
+  <p class="lead">A backup is the running configuration at one moment, kept in NXray. {% if connection.security_changes_enabled %}The switch also keeps a checkpoint of it (nxray-&lt;number&gt;), which it can roll back to.{% else %}With security and config changes on (Switch page), the switch also keeps a checkpoint of each new one, to roll back to.{% endif %}</p>
+  <form method="post" action="/config/backup" class="row-form search-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input name="note" aria-label="Note" type="text" maxlength="{{ note_max }}" placeholder="A note, such as: before the VLAN 30 change">
+    <button type="submit" class="btn btn-primary">Take a backup now</button>
+  </form>
+  {% if backups %}
+  <table class="table table-devices">
+    <thead><tr><th>Backup</th><th>Taken</th><th>By</th><th>Switch</th><th>Note</th><th>Checkpoint</th><th></th></tr></thead>
+    <tbody>
+      {% for bk in backups %}
+      {% set on_switch = configs is not none and configs.checkpoints is not none and bk.checkpoint and bk.checkpoint in configs.checkpoints %}
+      <tr>
+        <td>{{ bk.id }}</td>
+        <td class="mono">{{ bk.created_at|utc }}</td>
+        <td>{{ bk.created_by }}</td>
+        <td>{{ bk.switch }}</td>
+        <td class="wrap">{{ bk.note or "—" }}</td>
+        <td>{% if not bk.checkpoint %}<span class="dim">none</span>{% elif on_switch %}{{ bk.checkpoint }}{% elif configs is none or configs.checkpoints is none %}{{ bk.checkpoint }} <span class="dim">(not checked)</span>{% else %}<span class="dim">{{ bk.checkpoint }}: gone from the switch</span>{% endif %}</td>
+        <td>
+          <div class="row-actions">
+            <a class="btn btn-quiet" href="/config/backup/{{ bk.id }}.txt">Download</a>
+            <a class="btn btn-quiet" href="/config?a=backup-{{ bk.id }}&amp;b=running#compare">Compare with running</a>
+            {% if on_switch and connection.security_changes_enabled %}
+            <form method="post" action="/config/rollback" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="id" value="{{ bk.id }}">
+              <button type="submit" class="btn btn-quiet">Roll back to this</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/config/backup/delete" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="id" value="{{ bk.id }}">
+              <button type="submit" class="btn btn-quiet">Delete</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">No backups yet.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="compare">
+  <h2 class="card-title">Compare</h2>
+  <form method="get" action="/config#compare" class="row-form search-form">
+    <select name="a" aria-label="From">{{ choice_options(a or "startup") }}</select>
+    <span>with</span>
+    <select name="b" aria-label="To">{{ choice_options(b or "running") }}</select>
+    <button type="submit" class="btn btn-quiet">Compare</button>
+  </form>
+  {% if compare %}
+  {% if compare.diff %}
+  <p>From {{ compare.a }} to {{ compare.b }}: {{ compare.counts[0] }} line{{ "" if compare.counts[0] == 1 else "s" }} removed (-), {{ compare.counts[1] }} added (+).</p>
+  {% with diff = compare.diff %}{% include "_diff.html" %}{% endwith %}
+  {% else %}
+  <p>{{ compare.a|capitalize }} and {{ compare.b }} are the same.</p>
+  {% endif %}
+  {% endif %}
+  <p class="note">Lines the switch writes about when it printed the configuration (!Time: ...) are left out.</p>
+</section>
+
+<section class="card" id="restart">
+  <h2 class="card-title">Restart the switch</h2>
+  <p class="lead">Reload NX-OS: needed after TCAM region sizes change (ACLs page), and to start over from the saved configuration. Every port goes down for several minutes. The next page asks for the switch's admin login and whether to save first.</p>
+  <form method="post" action="/config/reload" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-quiet">Restart the switch…</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

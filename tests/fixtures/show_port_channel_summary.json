@@ -1,0 +1,24 @@
+{
+  "TABLE_channel": {
+    "ROW_channel": {
+      "group": "43",
+      "port-channel": "port-channel43",
+      "layer": "S",
+      "status": "U",
+      "type": "Eth",
+      "prtcl": "LACP",
+      "TABLE_member": {
+        "ROW_member": [
+          {
+            "port": "Ethernet1/43",
+            "port-status": "P"
+          },
+          {
+            "port": "Ethernet1/44",
+            "port-status": "P"
+          }
+        ]
+      }
+    }
+  }
+}

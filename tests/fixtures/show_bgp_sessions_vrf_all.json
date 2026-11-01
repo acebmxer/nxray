@@ -1,0 +1,49 @@
+{
+  "totalpeers": 2,
+  "totalestablishedpeers": 0,
+  "localas": 65001,
+  "TABLE_vrf": {
+    "ROW_vrf": [
+      {
+        "vrf-name-out": "default",
+        "local-as": 65001,
+        "vrfpeers": 2,
+        "vrfestablishedpeers": 0,
+        "router-id": "192.0.2.1",
+        "TABLE_neighbor": {
+          "ROW_neighbor": [
+            {
+              "neighbor-id": "192.0.2.2",
+              "connectionsdropped": 0,
+              "remoteas": 65002,
+              "lastflap": "PT11S",
+              "state": "Idle",
+              "localport": 0,
+              "remoteport": 0,
+              "notificationssent": 0,
+              "notificationsreceived": 0
+            },
+            {
+              "neighbor-id": "2001:db8:1::2",
+              "connectionsdropped": 0,
+              "remoteas": 65002,
+              "lastflap": "PT11S",
+              "state": "Idle",
+              "localport": 0,
+              "remoteport": 0,
+              "notificationssent": 0,
+              "notificationsreceived": 0
+            }
+          ]
+        }
+      },
+      {
+        "vrf-name-out": "nxprobe-v",
+        "local-as": 65001,
+        "vrfpeers": 0,
+        "vrfestablishedpeers": 0,
+        "router-id": "192.0.2.3"
+      }
+    ]
+  }
+}

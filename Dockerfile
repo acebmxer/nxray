@@ -27,6 +27,17 @@ RUN pip install --no-cache-dir .
 
 RUN pip uninstall --yes pip setuptools wheel 2>/dev/null || true
 
+# The maker of each MAC address the switch learns (app/oui.py) comes from the
+# IEEE's public lists, downloaded here so each image carries them as of the day
+# it was built. OUI_REFRESH changes on every release and beta build, so this
+# step never comes from the build cache there. When the IEEE cannot be reached
+# the copy committed in the repository is kept and the build goes on.
+COPY scripts/update_oui.py app/oui.tsv.gz /tmp/oui/
+ARG OUI_REFRESH=""
+RUN echo "MAC maker list, refresh ${OUI_REFRESH:-local}" \
+    && (python /tmp/oui/update_oui.py --out /tmp/oui/oui.tsv.gz \
+        || echo "The IEEE could not be reached; keeping the MAC maker list from the repository")
+
 
 FROM python:3.14-slim
 
@@ -81,6 +92,7 @@ RUN python -m pip uninstall --yes pip 2>/dev/null || true \
 
 COPY --from=build /opt/venv /opt/venv
 COPY app/ ./app/
+COPY --from=build /tmp/oui/oui.tsv.gz ./app/oui.tsv.gz
 COPY docker/nginx.conf.template /etc/nxray/nginx.conf.template
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/nxray-entrypoint
 

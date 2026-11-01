@@ -4,7 +4,10 @@ NX-API rejects any command containing ";". The rules of the role that lets
 NXray change ports need one (``conf t ; interface * ; shutdown`` is how NX-OS
 names a command inside interface configuration), so those lines are typed
 into an SSH shell instead, signed in with the admin login the person enters
-on the Switch page. Nothing else uses SSH, and no SSH login is stored.
+on the Switch page. Restarting the switch (``reload_switch``, from the Config
+page) also goes over SSH with an admin login typed for it: ``reload`` asks a
+question, which NX-API cannot answer. Nothing else uses SSH, and no SSH login
+is stored.
 
 Like the NX-API client, this accepts the switch's SSH host key without
 checking it: the switch generates its own key, NXray has no copy to compare
@@ -13,6 +16,7 @@ with, and the same trade-off was made for the NX-API certificate.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import time
 from collections.abc import Callable
@@ -168,12 +172,15 @@ def run_config(
     lines: list[str],
     timeout: float,
     opener: ShellOpener | None = None,
-) -> None:
+    then: tuple[str, ...] = (),
+) -> list[str]:
     """Sign in over SSH and type ``lines`` in configuration mode, stopping at a refusal.
 
     The lines are built by the caller from checked values; this function adds
     ``configure terminal`` before them and ``end`` after, and raises
-    SshCommandError naming the first line the switch refused.
+    SshCommandError naming the first line the switch refused. The fixed
+    ``then`` commands are typed after ``end``, in the same session; their
+    output is returned for the caller to check.
     """
     shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
     try:
@@ -183,5 +190,62 @@ def run_config(
                 shell.run("end")
                 raise SshCommandError(f"{line!r}: {complaint}")
         shell.run("end")
+        return [shell.run(line) for line in then]
     finally:
         shell.close()
+
+
+def run_commands(
+    *,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    lines: tuple[str, ...],
+    timeout: float,
+    opener: ShellOpener | None = None,
+) -> list[str]:
+    """Sign in over SSH and type fixed commands outside configuration mode.
+
+    Returns each command's output for the caller to check.
+    """
+    shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
+    try:
+        return [shell.run(line) for line in lines]
+    finally:
+        shell.close()
+
+
+def reload_switch(
+    *,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    timeout: float,
+    opener: ShellOpener | None = None,
+) -> None:
+    """Sign in over SSH and restart the switch: ``terminal dont-ask``, so ``reload``
+    asks nothing, then ``reload``.
+
+    The switch drops the session as it goes down, so SshUnreachable after
+    ``reload`` is the answer that means it is restarting. A prompt coming back
+    means it did not: SshCommandError with what it printed. Signing in raises
+    SshAuthError or SshUnreachable as ``run_config`` does.
+    """
+    shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
+    try:
+        complaint = refused(shell.run("terminal dont-ask"))
+        if complaint:
+            raise SshCommandError(f"'terminal dont-ask': {complaint}")
+        try:
+            output = shell.run("reload")
+        except SshUnreachable:
+            return
+        raise SshCommandError(
+            f"'reload': {refused(output) or output.strip() or 'the switch did not restart'}"
+        )
+    finally:
+        # The session is usually gone already; closing it may fail in any way.
+        with contextlib.suppress(Exception):
+            shell.close()

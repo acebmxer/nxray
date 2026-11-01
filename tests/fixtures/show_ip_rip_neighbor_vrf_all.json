@@ -1,0 +1,14 @@
+{
+  "TABLE_inst": {
+    "ROW_inst": {
+      "inst-name": "rip-nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default",
+          "numberof-adj": 0,
+          "dead-timer-seconds": 420
+        }
+      }
+    }
+  }
+}

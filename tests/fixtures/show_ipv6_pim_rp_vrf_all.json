@@ -1,0 +1,31 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "out-context": "default",
+      "is-bsr-enabled": "BSR disabled",
+      "rp-cand-policy-name": "None",
+      "bsr-policy-name": "None",
+      "TABLE_rp": {
+        "ROW_rp": {
+          "rp-addr": "2001:db8:1::10",
+          "is-rp-local": "FALSE",
+          "df-ordinal": 0,
+          "rp-uptime": "00:00:03",
+          "rp-priority": 255,
+          "is_autorp_source": "false",
+          "is_bsr_source": "false",
+          "is_static_source": "true",
+          "rp-source": "local",
+          "TABLE_grange": {
+            "ROW_grange": {
+              "grange-grp": "ff00::",
+              "grange-masklen": 8,
+              "grange-is-deny": "false",
+              "is-bidir-grp": "false"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "TABLE_ipv6_pfl": {
+    "ROW_ipv6_pfl": {
+      "name": "nxprobe-pl6",
+      "seq": 5,
+      "action": "permit",
+      "rule": "2001:db8::/32 le 128"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": [
+      {
+        "vrf-name-out": "default",
+        "TABLE_afi": {
+          "ROW_afi": {
+            "afi": 2,
+            "TABLE_safi": {
+              "ROW_safi": {
+                "safi": 1,
+                "af-name": "IPv6 Unicast",
+                "table-version": "4",
+                "router-id": "192.0.2.1",
+                "TABLE_rd": {
+                  "ROW_rd": {
+                    "TABLE_prefix": {
+                      "ROW_prefix": {
+                        "ipv6prefix": "2001:db8:1::/64",
+                        "TABLE_path": {
+                          "ROW_path": {
+                            "pathnr": "0",
+                            "status": "invalid",
+                            "best": "none",
+                            "type": 0,
+                            "typecode": "l",
+                            "ipv6nexthop": "0::",
+                            "weight": 32768,
+                            "aspath": "",
+                            "origin": "i",
+                            "localpref": "100",
+                            "bestcode": {},
+                            "statuscode": {}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "vrf-name-out": "nxprobe-v",
+        "TABLE_afi": {
+          "ROW_afi": {
+            "afi": 2,
+            "TABLE_safi": {
+              "ROW_safi": {
+                "safi": 1,
+                "af-name": "IPv6 Unicast"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

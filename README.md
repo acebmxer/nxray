@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-645%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-2539%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -13,16 +13,49 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 9 of the [roadmap](#roadmap) are built, and
-stages 10 to 22 (the advanced switch features) are planned. Today you can
-install NXray, sign in, connect it to a switch,
-see the switch's health on the dashboard, look at every port, turn ports on
-or off, edit their descriptions, create, rename and delete VLANs, set the
-VLANs on ports, change the switch's address or repair NXray's switch login
+![The Ports page in the dark theme: the front panel coloured by port state, with the device plugged into each port, above the port table](docs/images/ports-dark.png)
+
+**Status:** early. All 20 stages of the [roadmap](#roadmap) are built. Today
+you can install NXray, sign in, connect it to one switch or several and pick
+the one every page shows from the top bar,
+see the switch's health on the dashboard, look at every port on a picture of
+the front panel coloured by state, speed, VLAN, port-channel, traffic or errors, see what is
+plugged into each port (CDP and LLDP neighbors, the MAC address table with
+each device's maker, ARP), turn CDP and LLDP on or off per port, set the MAC
+address aging time, add static MAC addresses, clear learned ones, label ports, turn
+ports on or off and edit their descriptions (one at a time or several at once), create, rename and delete VLANs, set the
+VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
+layer (switched or routed), split a 100G port into four, make, change and
+delete port-channels with their LACP options, make VLAN interfaces with IPv4
+and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
+OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
+route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
+priorities, the MST region, edge ports, BPDU guard and filter, root and loop
+guard), set the switch's hostname, banner, clock and NTP, DNS, logging and
+SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
+and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
+the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
+switch's configuration, compare them and roll back to one, restart the switch,
+see who changed what in an activity log, be told by e-mail or webhook
+(JSON, Slack or Discord) when the switch cannot be reached, runs hot, loses a
+fan or power supply, runs out of CPU or memory, or a port goes down or
+collects errors, turn switch features
+such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
 built-in HTTPS, update from the Settings page, and see 30 days of temperatures,
 power, CPU, memory and port traffic as graphs.
+
+## Screenshots
+
+Taken against the test suite's pretend switch, with made-up devices.
+
+| | |
+| --- | --- |
+| ![The Ports page in the light theme, ports coloured by speed](docs/images/ports-speed-light.png) | ![A port's side panel on the Ports page, ports coloured by traffic](docs/images/ports-side-panel-dark.png) |
+| Ports coloured by speed (light theme) | Clicking a port opens its side panel |
+| ![The dashboard in the light theme](docs/images/dashboard-light.png) | ![The VLANs page with its grid of VLANs against ports](docs/images/vlans-grid-dark.png) |
+| The dashboard | VLANs against ports: U untagged, T tagged |
 
 ## Read next
 
@@ -79,6 +112,9 @@ The switch's self-signed HTTPS certificate is accepted without checking; see
 
 ## Roadmap
 
+The goal is for NXray to do everything the switch offers. Anything found
+along the way that no stage below covers is added to the stage it fits best.
+
 1. **Groundwork**: install, sign in, empty dashboard. *(built)*
 2. **Switch setup**: a setup page that connects to the switch and creates
    NXray's own read-only account on it; clear messages when the switch can't
@@ -102,25 +138,31 @@ default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
    errors over time, as graphs. *(built)*
 10. **Switch face**: a picture of the front panel with every port colored by
-    state, traffic or VLAN; hover for details, click to open the port; your
-    own labels on ports. *(planned)*
+    state, speed, VLAN, port-channel, traffic or errors; hover for details,
+    click to open the port's side panel; your own labels on ports. *(built)*
 11. **Port settings**: speed, duplex, MTU and jumbo frames, FEC, breakout,
-    storm control, flow control, layer 2 or layer 3 per port. *(planned)*
+    storm control, flow control, layer 2 or layer 3 per port. *(built)*
 12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,
-    which device is on a port. *(planned)*
-13. **Features**: turn switch features on and off. *(planned)*
-14. **Link aggregation**: port-channels and LACP. *(planned)*
-15. **Layer 3**: VLAN interfaces, routed ports, VRFs, static routes, routing
-    protocols. *(planned)*
-16. **Spanning tree.** *(planned)*
-17. **Switch admin**: hostname, clock and NTP, DNS, logging, SNMP, banner.
-    *(planned)*
-18. **Security and config tools**: ACLs, port security, config diff, backup
-    and rollback. *(planned)*
-19. **Alerts** by e-mail and webhook. *(planned)*
-20. **Activity log** and a viewer for the switch's own log. *(planned)*
-21. **Several switches** in one NXray. *(planned)*
-22. **Everything else** the switch offers over NX-API. *(planned)*
+    which device is on a port, with each device's maker. *(built)* Changes:
+    CDP and LLDP on or off per port, the MAC aging time, static MAC
+    addresses, clearing learned addresses. *(built)*
+13. **Features**: turn switch features on and off. *(built)*
+14. **Link aggregation**: port-channels and LACP. *(built)*
+15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
+    routed ports: *(built)*. VRFs: *(built)*. Static routes: *(built)*. Routing
+    protocols: *(built)*
+16. **Spanning tree.** *(built)*
+17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
+    the switch's own log, SNMP, banner. *(built)*
+18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,
+    VLAN access maps, TCAM regions), port security, DHCP snooping and relay,
+    dynamic ARP inspection, IP Source Guard, an activity log of who changed
+    what in NXray, config diff, backup, rollback and restarting the switch.
+    *(built)*
+19. **Alerts** by e-mail and webhook. *(built)*
+20. **Several switches** in one NXray: add more on the Switch page, pick one
+    in the top bar; each has its own history, port labels, backups and
+    alerts. *(built)*
 
 ## Contributing
 

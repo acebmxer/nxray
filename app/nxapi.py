@@ -16,7 +16,13 @@ verified. This is a project decision, not an oversight.
 Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
-``delete_vlan``, ``configure_port_vlans``, ``save_config``), each building
+``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
+``breakout_port``, ``join_port``, ``set_feature``, ``set_port_discovery``,
+``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
+``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
+``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
+``set_lacp_system_priority``, ``configure_vlan_interface``,
+``delete_vlan_interface``, ``set_interface_addresses``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -32,6 +38,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from app.oui import normalize_mac
 
 # A hostname (RFC 1123 labels) or an IPv4/IPv6 literal. Anything else, such
 # as a value with a path, scheme or credentials in it, is refused so the
@@ -76,6 +84,13 @@ _DESCRIPTION = re.compile(r"^[\x20-\x7e]*$")
 VLAN_MIN = 1
 VLAN_MAX = 4094
 
+# The highest VLAN that can have a VLAN interface NXray changes. NXray's role
+# names the VLAN interfaces as one range, and NX-OS 9.3(16) stores that range
+# as one line per VLAN interface: Vlan1-4094 took the switch minutes (NXray's
+# SSH session timed out at Vlan3400) and NX-API stopped answering (issue #11).
+# Vlan1-254 is 254 lines, a few seconds.
+VLAN_INTERFACE_MAX = 254
+
 # What NX-OS 9.3 stores as a VLAN name, found by trying them on the switch:
 # no spaces ("% Invalid command"), and a name of 33 to 128 characters is
 # accepted but silently not stored. NXray allows the plainest subset.
@@ -87,6 +102,77 @@ _VLAN_LIST_ITEM = re.compile(r"^([0-9]{1,4})(?:-([0-9]{1,4}))?$")
 
 # The two port modes NXray sets.
 PORT_MODES = ("access", "trunk")
+
+# Port settings (app/port_settings.py checks a form against the port first).
+# Speeds are in Mb/s, as the switch's "speed" command takes them.
+PORT_SPEEDS = ("auto", "100", "1000", "10000", "25000", "40000", "50000", "100000")
+FEC_MODES = ("auto", "off", "fc-fec", "rs-fec", "rs-ieee", "rs-cons16")
+ON_OFF = ("on", "off")
+STORM_TYPES = ("broadcast", "multicast", "unicast")
+STORM_ACTIONS = ("shutdown", "trap")
+MTU_MIN = 576
+MTU_MAX = 9216
+# How a 100G port is split: four 10G or four 25G ports.
+BREAKOUT_MAPS = ("10g-4x", "25g-4x")
+
+# What may follow "feature": the commands ``feature ?`` lists on an
+# N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
+# (``feature nv ?`` gives overlay). Left out: ``password`` (not a feature),
+# ``license`` alone, and ``ntp``, ``netflow``, ``pnp`` and
+# ``signature-verification``, which ``show feature`` does not list, so NXray
+# cannot show whether they are on.
+FEATURE_COMMANDS = frozenset(
+    {
+        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x",
+        "eigrp", "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp",
+        "imp", "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
+        "mpls segment-routing", "msdp", "nat", "nbm", "netconf", "ngmvpn", "ngoam",
+        "nv overlay", "nxapi", "nxsdk", "openflow", "ospf", "ospfv3", "pbr", "pim", "pim6",
+        "port-security", "private-vlan", "ptp", "restconf", "rip", "scheduler",
+        "scp-server", "sflow", "sftp-server", "sla responder", "sla sender",
+        "sla twamp-server", "ssh", "tacacs+", "telemetry", "telnet", "tunnel",
+        "tunnel-encryption", "udld", "vmtracker", "vn-segment-vlan-based", "vpc", "vrrp",
+        "vrrpv3", "vtp",
+    }
+)  # fmt: skip
+
+# How long the switch keeps a learned MAC address without traffic, in
+# seconds: 0 keeps them for good, otherwise 120 to 918000 in steps of 5 (the
+# switch rounds anything else down to a multiple of 5 and only says so in a
+# note; found by trying it on the switch).
+MAC_AGING_MIN = 120
+MAC_AGING_MAX = 918000
+MAC_AGING_STEP = 5
+
+# Port-channels, as the switch numbers them (``interface port-channel ?``).
+CHANNEL_MIN = 1
+CHANNEL_MAX = 4096
+# How a port joins a port-channel: LACP active (it starts the negotiation),
+# LACP passive (it answers one) or static "on" (no LACP at all).
+CHANNEL_MODES = ("active", "passive", "on")
+# How often a port sends LACP messages: every 30 seconds or every second.
+LACP_RATES = ("normal", "fast")
+# The ranges ``lacp system-priority ?``, ``lacp port-priority ?`` and
+# ``lacp min-links ?`` give on an N9K-C92160YC-X with NX-OS 9.3(16).
+LACP_PRIORITY_MIN = 1
+LACP_PRIORITY_MAX = 65535
+MIN_LINKS_MIN = 1
+MIN_LINKS_MAX = 32
+
+# VRF names: Cisco's guides give up to 32 case-sensitive letters and digits;
+# NXray also allows "-" and "_" inside one. NX-OS keeps default and management
+# for itself (mgmt0 lives in management), and "all" is what show commands take
+# for every VRF, so NXray never creates, deletes or moves interfaces into those.
+VRF_NAME_MAX = 32
+_VRF_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
+RESERVED_VRFS = frozenset({"default", "management", "all"})
+DEFAULT_VRF = "default"
+
+# Features NXray needs itself: it never sends their "no feature".
+NEEDED_FEATURES = frozenset({"nxapi", "ssh"})
+
+# Turning a feature on or off can take the switch a while.
+FEATURE_TIMEOUT = 120.0
 
 # Names NX-OS keeps for itself, plus the switch's own admin account.
 RESERVED_ACCOUNT_NAMES = frozenset(
@@ -257,6 +343,262 @@ def format_vlan_list(vlans: Iterable[int]) -> str:
     return ",".join(parts)
 
 
+def validate_ip_interface(text: str) -> str:
+    """Return an IPv4 address with its prefix ("192.0.2.1/24"), or raise ValueError.
+
+    The address must be one a port can have: not the network's own address
+    or its broadcast address (both allowed on /31 and /32).
+    """
+    cleaned = text.strip()
+    try:
+        interface = ipaddress.IPv4Interface(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an IPv4 address with a prefix length, such as 192.0.2.1/24"
+        ) from exc
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /24")
+    network = interface.network
+    if network.prefixlen < 31 and interface.ip in (
+        network.network_address,
+        network.broadcast_address,
+    ):
+        raise ValueError(f"{cleaned} is the network's own or broadcast address")
+    return f"{interface.ip}/{network.prefixlen}"
+
+
+def validate_ipv6_interface(text: str) -> str:
+    """Return an IPv6 address with its prefix ("2001:db8::1/64"), or raise ValueError.
+
+    Only an address a device can be reached at: not a link-local address
+    (the switch makes one of those on every IPv6 interface by itself), and not
+    a multicast, loopback or unspecified one.
+    """
+    cleaned = text.strip()
+    try:
+        interface = ipaddress.IPv6Interface(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an IPv6 address with a prefix length, such as 2001:db8::1/64"
+        ) from exc
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /64")
+    address = interface.ip
+    if address.is_link_local:
+        raise ValueError(
+            f"{address} is a link-local address; the switch makes one by itself on every "
+            "IPv6 interface"
+        )
+    if address.is_multicast or address.is_loopback or address.is_unspecified:
+        raise ValueError(f"{address} is not an address a device can be reached at")
+    return f"{address}/{interface.network.prefixlen}"
+
+
+def validate_interface_address(text: str) -> str:
+    """An IPv4 or IPv6 address with its prefix, as the switch takes it; or raise ValueError."""
+    cleaned = text.strip()
+    if ":" in cleaned:
+        return validate_ipv6_interface(cleaned)
+    return validate_ip_interface(cleaned)
+
+
+def validate_routed_interface(name: str) -> str:
+    """Return a name an address can go on: ``Vlan10``, a front port or ``port-channel5``.
+
+    Raises ValueError for anything else (mgmt0 above all, which NXray never
+    changes).
+    """
+    cleaned = name.strip()
+    if match := re.fullmatch(r"[Vv]lan([0-9]{1,4})", cleaned):
+        return f"Vlan{validate_vlan_id(match.group(1))}"
+    if match := re.fullmatch(r"port-channel([0-9]{1,4})", cleaned):
+        return f"port-channel{validate_channel_number(match.group(1))}"
+    return validate_port_name(cleaned)
+
+
+def validate_route_prefix(text: str) -> str:
+    """A static route's destination, a network with its prefix length
+    (``203.0.113.0/24``, ``2001:db8::/48``, ``0.0.0.0/0``), or raise ValueError."""
+    cleaned = text.strip()
+    if "/" not in cleaned:
+        raise ValueError(f"add the prefix length to {cleaned!r}, such as /24")
+    try:
+        loose = ipaddress.ip_network(cleaned, strict=False)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not a network such as 203.0.113.0/24 or 2001:db8::/48"
+        ) from exc
+    try:
+        network = ipaddress.ip_network(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned} is not the start of its network; did you mean {loose}?"
+        ) from exc
+    if network.is_multicast or (network.prefixlen and network.network_address.is_unspecified):
+        raise ValueError(f"{network} is not a network a route can go to")
+    return str(network)
+
+
+def validate_next_hop(text: str) -> str:
+    """A static route's next hop: one IPv4 or IPv6 address a device can have, or
+    raise ValueError. Not a link-local IPv6 address: the switch would also need
+    the interface it is on."""
+    cleaned = text.strip()
+    try:
+        address = ipaddress.ip_address(cleaned)
+    except ValueError as exc:
+        raise ValueError(
+            f"{cleaned!r} is not an address such as 192.0.2.254 or 2001:db8::fe"
+        ) from exc
+    if address.is_link_local and address.version == 6:
+        raise ValueError(f"{address} is a link-local address; use the router's other address")
+    if address.is_multicast or address.is_loopback or address.is_unspecified:
+        raise ValueError(f"{address} is not an address a router can have")
+    return str(address)
+
+
+def static_route_line(prefix: str, next_hop: str) -> str:
+    """``ip route P NH`` or ``ipv6 route P NH``; its ``no`` form removes the route."""
+    network = validate_route_prefix(prefix)
+    hop = validate_next_hop(next_hop)
+    if (":" in network) != (":" in hop):
+        raise ValueError("the destination and the next hop must both be IPv4 or both IPv6")
+    return f"{'ipv6' if ':' in network else 'ip'} route {network} {hop}"
+
+
+def validate_vrf_name(name: str) -> str:
+    """Return a VRF name NXray may create, delete or move interfaces into, or raise
+    ValueError (never default, management or all)."""
+    cleaned = name.strip()
+    if not _VRF_NAME.fullmatch(cleaned):
+        raise ValueError(
+            f"a VRF name is 1 to {VRF_NAME_MAX} letters, digits, '-' or '_', starting with a "
+            "letter or digit"
+        )
+    if cleaned.lower() in RESERVED_VRFS:
+        raise ValueError(f"the switch keeps the VRF name {cleaned!r} for itself")
+    return cleaned
+
+
+def validate_storm_level(value: str | float) -> str:
+    """A storm-control level as the switch writes it ("10.00"), or raise ValueError."""
+    text = str(value).strip()
+    if not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,2})?", text) or not 0 <= float(text) <= 100:
+        raise ValueError(
+            "a storm-control level is a percentage from 0 to 100, with up to two decimals"
+        )
+    return f"{float(text):.2f}"
+
+
+def validate_mac_aging(value: int | str) -> int:
+    """The MAC address aging time in seconds, or raise ValueError.
+
+    0 (never forget) or 120 to 918000 in steps of 5, as the switch takes it.
+    """
+    text = str(value).strip()
+    seconds = int(text) if text.isascii() and text.isdigit() else -1
+    if seconds == 0:
+        return 0
+    if not MAC_AGING_MIN <= seconds <= MAC_AGING_MAX:
+        raise ValueError(
+            f"the aging time is 0 (never forget) or {MAC_AGING_MIN} to {MAC_AGING_MAX} seconds"
+        )
+    if seconds % MAC_AGING_STEP:
+        raise ValueError(
+            f"the switch takes the aging time in steps of {MAC_AGING_STEP} seconds, such as "
+            f"{seconds - seconds % MAC_AGING_STEP}"
+        )
+    return seconds
+
+
+def validate_device_mac(text: str) -> str:
+    """One device's MAC address in the switch's own form (``0200.0000.0001``), or raise ValueError.
+
+    Accepts any common way of writing one. A group (multicast or broadcast)
+    address and the all-zero address belong to no device and are refused:
+    static entries and clearing one address are for a device.
+    """
+    digits = normalize_mac(text)
+    if digits is None:
+        raise ValueError(f"{text.strip()!r} is not a MAC address such as 00:11:22:33:44:55")
+    if int(digits[:2], 16) & 0x01:
+        raise ValueError("that is a multicast address, not one device's address")
+    if digits == "0" * 12:
+        raise ValueError("00:00:00:00:00:00 is not a device's address")
+    return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
+
+
+def validate_channel_number(value: int | str) -> int:
+    """A port-channel's number as an int, or raise ValueError if it is not 1-4096."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not CHANNEL_MIN <= int(text) <= CHANNEL_MAX:
+        raise ValueError(f"a port-channel is a number from {CHANNEL_MIN} to {CHANNEL_MAX}")
+    return int(text)
+
+
+def validate_lacp_priority(value: int | str) -> int:
+    """An LACP priority (the switch's or a port's), or raise ValueError if not 1-65535."""
+    text = str(value).strip()
+    if (
+        not text.isascii()
+        or not text.isdigit()
+        or not LACP_PRIORITY_MIN <= int(text) <= LACP_PRIORITY_MAX
+    ):
+        raise ValueError(
+            f"an LACP priority is a number from {LACP_PRIORITY_MIN} to {LACP_PRIORITY_MAX}"
+        )
+    return int(text)
+
+
+def validate_min_links(value: int | str) -> int:
+    """How many ports must be up for a port-channel to be up, or raise ValueError if not 1-32."""
+    text = str(value).strip()
+    if not text.isascii() or not text.isdigit() or not MIN_LINKS_MIN <= int(text) <= MIN_LINKS_MAX:
+        raise ValueError(f"the minimum is a number from {MIN_LINKS_MIN} to {MIN_LINKS_MAX}")
+    return int(text)
+
+
+def breakout_numbers(name: str) -> tuple[int, int]:
+    """(module, port) of a port or breakout port: Ethernet1/50/2 gives (1, 50)."""
+    validate_port_name(name)
+    module, port = name[len("Ethernet") :].split("/")[:2]
+    return int(module), int(port)
+
+
+def address_line(address: str, secondary: bool = False) -> str:
+    """The interface line that puts an address on: ``ip address A [secondary]`` or
+    ``ipv6 address A``. Its ``no`` form takes it off again."""
+    text = validate_interface_address(address)
+    if ":" in text:
+        if secondary:
+            raise ValueError("an IPv6 address has no primary or secondary")
+        return f"ipv6 address {text}"
+    return f"ip address {text}" + (" secondary" if secondary else "")
+
+
+def _address_commands(
+    remove: Iterable[tuple[str, bool]], add: Iterable[tuple[str, bool]]
+) -> list[str]:
+    return [f"no {address_line(a, s)}" for a, s in remove] + [address_line(a, s) for a, s in add]
+
+
+# NXray's own switch checkpoints (Config page): "nxray-" and the backup's number.
+CHECKPOINT_PREFIX = "nxray-"
+_CHECKPOINT_NAME = re.compile(r"^nxray-[0-9]{1,9}$")
+
+# How long a rollback may take: the switch compares and applies the whole
+# configuration.
+ROLLBACK_TIMEOUT = 300.0
+
+
+def validate_checkpoint_name(name: str) -> str:
+    """Return ``name`` if it is one of NXray's checkpoints (``nxray-<n>``), else raise
+    ValueError: NXray never makes, deletes or rolls back to another one."""
+    if not _CHECKPOINT_NAME.fullmatch(name):
+        raise ValueError(f"{name!r} is not one of NXray's checkpoints (nxray-<number>)")
+    return name
+
+
 def validate_show_command(command: str) -> str:
     """Return the command stripped, or raise ValueError if it is not a lone show."""
     cleaned = command.strip()
@@ -267,12 +609,18 @@ def validate_show_command(command: str) -> str:
     return cleaned
 
 
-def build_payload(commands: list[str]) -> list[dict[str, Any]]:
-    """The JSON-RPC request body for running ``commands`` in order."""
+def build_payload(commands: list[str], method: str = "cli") -> list[dict[str, Any]]:
+    """The JSON-RPC request body for running ``commands`` in order.
+
+    ``method`` is ``cli`` (structured answers) or ``cli_ascii`` (the text the
+    CLI prints, for the few show commands with no structured form).
+    """
+    if method not in ("cli", "cli_ascii"):
+        raise ValueError(f"unknown NX-API method {method!r}")
     return [
         {
             "jsonrpc": "2.0",
-            "method": "cli",
+            "method": method,
             "params": {"cmd": command, "version": 1},
             "id": index,
         }
@@ -378,6 +726,21 @@ class NxapiClient:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
         return self._send(cleaned, cleaned, self._target.timeout)
+
+    def show_text(self, command: str) -> str:
+        """One show command's printed text, for commands with no structured form
+        (``show running-config spanning-tree``). NX-API gives that text only with
+        the ``cli_ascii`` method; the ``cli`` method answers it with nothing."""
+        cleaned = validate_show_command(command)
+        payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
+        entry = payload[0] if isinstance(payload, list) and payload else payload
+        if not isinstance(entry, dict):
+            raise NxapiProtocolError(f"no answer for {cleaned!r}")
+        if "error" in entry:
+            raise NxapiCommandError(f"{cleaned!r}: {error_message(entry['error'])}")
+        result = entry.get("result")
+        message = result.get("msg") if isinstance(result, dict) else None
+        return message if isinstance(message, str) else ""
 
     def create_user(self, name: str, password: str, role: str) -> None:
         """Create a local switch account. Needs an admin login.
@@ -489,6 +852,537 @@ class NxapiClient:
             raise ValueError("nothing to change")
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
+    def configure_port_settings(
+        self,
+        name: str,
+        *,
+        layer: str | None = None,
+        remove_extra: Iterable[tuple[str, bool]] = (),
+        remove_ip: str | None = None,
+        ip_address: str | None = None,
+        speed: str | None = None,
+        mtu: int | None = None,
+        fec: str | None = None,
+        flow_receive: str | None = None,
+        flow_send: str | None = None,
+        storm_levels: dict[str, str] | None = None,
+        storm_action: str | None = None,
+        old_storm_action: str | None = None,
+    ) -> None:
+        """Change a port's settings in one request; only the values given are sent.
+
+        ``layer`` is "switched" (``switchport``) or "routed" (``no
+        switchport``). ``remove_extra`` are (address, secondary) pairs taken
+        off first: a routed port's extra IPv4 and its IPv6 addresses.
+        ``remove_ip`` is the address to take off the port, sent before a new
+        ``ip_address`` and before ``switchport``. A storm-control
+        level of 100.00 is the switch's own default (no limit).
+        ``storm_action`` "none" removes ``old_storm_action``.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        if layer is not None and layer not in ("switched", "routed"):
+            raise ValueError(f"layer {layer!r} is not switched or routed")
+        commands += _address_commands(remove_extra, ())
+        if remove_ip is not None:
+            commands.append(f"no ip address {validate_ip_interface(remove_ip)}")
+        if layer == "switched":
+            commands.append("switchport")
+        elif layer == "routed":
+            commands.append("no switchport")
+        if ip_address is not None:
+            commands.append(f"ip address {validate_ip_interface(ip_address)}")
+        if speed is not None:
+            if speed not in PORT_SPEEDS:
+                raise ValueError(f"speed {speed!r} is not one the switch takes")
+            commands.append(f"speed {speed}")
+        if mtu is not None:
+            if not MTU_MIN <= int(mtu) <= MTU_MAX:
+                raise ValueError(f"an MTU is {MTU_MIN} to {MTU_MAX}")
+            commands.append(f"mtu {int(mtu)}")
+        if fec is not None:
+            if fec not in FEC_MODES:
+                raise ValueError(f"FEC {fec!r} is not one NXray sets")
+            commands.append(f"fec {fec}")
+        for direction, value in (("receive", flow_receive), ("send", flow_send)):
+            if value is not None:
+                if value not in ON_OFF:
+                    raise ValueError("flow control is on or off")
+                commands.append(f"flowcontrol {direction} {value}")
+        for kind, level in (storm_levels or {}).items():
+            if kind not in STORM_TYPES:
+                raise ValueError(f"storm-control type {kind!r} is not known")
+            commands.append(f"storm-control {kind} level {validate_storm_level(level)}")
+        if storm_action is not None:
+            if storm_action in STORM_ACTIONS:
+                commands.append(f"storm-control action {storm_action}")
+            elif storm_action == "none" and old_storm_action in STORM_ACTIONS:
+                commands.append(f"no storm-control action {old_storm_action}")
+            else:
+                raise ValueError("storm-control action is none, shutdown or trap")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def breakout_port(self, name: str, mapping: str) -> None:
+        """Split a 100G port into four: ``interface breakout module M port P map <map>``."""
+        if mapping not in BREAKOUT_MAPS:
+            raise ValueError(f"split {mapping!r} is not 10g-4x or 25g-4x")
+        module, port = breakout_numbers(name)
+        command = f"interface breakout module {module} port {port} map {mapping}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def join_port(self, name: str, mapping: str) -> None:
+        """Join a split port's four ports back into one: the ``no`` form of the split."""
+        if mapping not in BREAKOUT_MAPS:
+            raise ValueError(f"split {mapping!r} is not 10g-4x or 25g-4x")
+        module, port = breakout_numbers(name)
+        command = f"no interface breakout module {module} port {port} map {mapping}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_feature(self, command: str, enabled: bool) -> None:
+        """``feature <command>`` or ``no feature <command>``, for one known feature.
+
+        ``command`` must be one of FEATURE_COMMANDS. NX-API and SSH, which
+        NXray itself uses, are never turned off from here.
+        """
+        if command not in FEATURE_COMMANDS:
+            raise ValueError(f"{command!r} is not a feature NXray turns on or off")
+        if not enabled and command in NEEDED_FEATURES:
+            raise ValueError(f"NXray does not turn off {command}: it needs it")
+        line = f"feature {command}" if enabled else f"no feature {command}"
+        timeout = max(self._target.timeout, FEATURE_TIMEOUT)
+        self._send([line], [line], timeout, allow_text=True)
+
+    def set_port_discovery(
+        self,
+        name: str,
+        *,
+        cdp: bool | None = None,
+        lldp_transmit: bool | None = None,
+        lldp_receive: bool | None = None,
+    ) -> None:
+        """Turn CDP, LLDP sending and LLDP listening on or off on one port, in one request.
+
+        Only the values given are sent. The switch refuses the LLDP lines while
+        the lldp feature is off.
+        """
+        validate_port_name(name)
+        commands = [f"interface {name}"]
+        for value, line in (
+            (cdp, "cdp enable"),
+            (lldp_transmit, "lldp transmit"),
+            (lldp_receive, "lldp receive"),
+        ):
+            if value is not None:
+                commands.append(line if value else f"no {line}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_mac_aging(self, seconds: int) -> None:
+        """``mac address-table aging-time <seconds>``; 0 keeps learned addresses for good."""
+        command = f"mac address-table aging-time {validate_mac_aging(seconds)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def add_static_mac(self, mac: str, vlan: int, port: str | None) -> None:
+        """A static MAC address entry: always on ``port``, or dropped when ``port`` is None.
+
+        ``mac address-table static <mac> vlan <n> interface <port>`` or ``... drop``.
+        """
+        command = self._static_mac_line(mac, vlan, port)
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def remove_static_mac(self, mac: str, vlan: int, port: str | None) -> None:
+        """Remove a static entry: the ``no`` form of the line that made it."""
+        command = "no " + self._static_mac_line(mac, vlan, port)
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    @staticmethod
+    def _static_mac_line(mac: str, vlan: int, port: str | None) -> str:
+        where = "drop" if port is None else f"interface {validate_port_name(port)}"
+        return (
+            f"mac address-table static {validate_device_mac(mac)} "
+            f"vlan {validate_vlan_id(vlan)} {where}"
+        )
+
+    def clear_learned_macs(
+        self, *, port: str | None = None, vlan: int | None = None, mac: str | None = None
+    ) -> None:
+        """``clear mac address-table dynamic``: forget learned addresses.
+
+        Everything when nothing is given; else those on one port, in one VLAN,
+        or one address (optionally only in one VLAN), the forms the switch
+        takes. Static entries stay. Not a configuration change, so there is
+        nothing to save afterwards.
+        """
+        command = "clear mac address-table dynamic"
+        if port is not None:
+            if vlan is not None or mac is not None:
+                raise ValueError("a port cannot be combined with a VLAN or an address")
+            command += f" interface {validate_port_name(port)}"
+        else:
+            if mac is not None:
+                command += f" address {validate_device_mac(mac)}"
+            if vlan is not None:
+                command += f" vlan {validate_vlan_id(vlan)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def join_port_channel(
+        self,
+        number: int,
+        ports: list[str],
+        mode: str,
+        *,
+        fast_rate: bool = False,
+        description: str | None = None,
+    ) -> None:
+        """Put ports into a port-channel, in one request; the switch creates it if needed.
+
+        Per port: ``interface <port>``, ``lacp rate fast`` when asked (the
+        switch takes it only before the port is in a channel), then
+        ``channel-group <n> mode active|passive``, or ``channel-group <n>``
+        for static "on". ``description`` then names the port-channel itself.
+        """
+        channel = validate_channel_number(number)
+        if mode not in CHANNEL_MODES:
+            raise ValueError(f"mode {mode!r} is not active, passive or on")
+        if fast_rate and mode == "on":
+            raise ValueError("a static port-channel sends no LACP, so it has no LACP rate")
+        if not ports:
+            raise ValueError("no ports given")
+        commands: list[str] = []
+        for port in ports:
+            commands.append(f"interface {validate_port_name(port)}")
+            if fast_rate:
+                commands.append("lacp rate fast")
+            commands.append(
+                f"channel-group {channel}"
+                if mode == "on"
+                else f"channel-group {channel} mode {mode}"
+            )
+        if description is not None:
+            text = validate_description(description)
+            if text:
+                commands += [f"interface port-channel{channel}", f"description {text}"]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def leave_port_channel(self, port: str) -> None:
+        """Take a port out of its port-channel: ``no channel-group``. Its own settings stay."""
+        commands = [f"interface {validate_port_name(port)}", "no channel-group"]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_port_channel(self, number: int) -> None:
+        """``no interface port-channel<n>``.
+
+        The switch also takes the ports out of the channel when it still has
+        some; NXray refuses that before it gets here (app/port_channels.py).
+        """
+        command = f"no interface port-channel{validate_channel_number(number)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_port_channel(
+        self, number: int, *, description: str | None = None, min_links: int | None = None
+    ) -> None:
+        """Set a port-channel's description and/or LACP minimum links, in one request.
+
+        ``description=""`` removes the description.
+        """
+        commands = [f"interface port-channel{validate_channel_number(number)}"]
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if min_links is not None:
+            commands.append(f"lacp min-links {validate_min_links(min_links)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_port_lacp(
+        self, port: str, *, rate: str | None = None, priority: int | None = None
+    ) -> None:
+        """Set a port's LACP rate (normal or fast) and/or LACP port priority, in one request.
+
+        The switch refuses a rate change on a port that is in a port-channel
+        and not turned off.
+        """
+        commands = [f"interface {validate_port_name(port)}"]
+        if rate is not None:
+            if rate not in LACP_RATES:
+                raise ValueError(f"LACP rate {rate!r} is not normal or fast")
+            commands.append(f"lacp rate {rate}")
+        if priority is not None:
+            commands.append(f"lacp port-priority {validate_lacp_priority(priority)}")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_lacp_system_priority(self, priority: int) -> None:
+        """``lacp system-priority <n>``: the switch's LACP priority, for every port-channel."""
+        command = f"lacp system-priority {validate_lacp_priority(priority)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def configure_vlan_interface(
+        self,
+        vlan: int,
+        *,
+        description: str | None = None,
+        mtu: int | None = None,
+        enabled: bool | None = None,
+        remove: Iterable[tuple[str, bool]] = (),
+        add: Iterable[tuple[str, bool]] = (),
+        vrf: str | None = None,
+    ) -> None:
+        """Make a VLAN interface (``interface vlan<n>``) or change one, in one request.
+
+        ``interface vlan<n>`` makes it when it does not exist yet. ``vrf`` puts
+        it into that VRF first (``vrf member``; for a new one, since the switch
+        deletes an interface's addresses when its VRF changes). ``remove`` and
+        ``add`` are (address, secondary) pairs, sent in that order, before the
+        description and MTU; turning it on or off comes last. Only the values
+        given are sent. ``description=""`` removes the description.
+        """
+        commands = [f"interface vlan{validate_vlan_id(vlan)}"]
+        if vrf is not None:
+            commands.append(f"vrf member {validate_vrf_name(vrf)}")
+        commands += _address_commands(remove, add)
+        if description is not None:
+            text = validate_description(description)
+            commands.append(f"description {text}" if text else "no description")
+        if mtu is not None:
+            if not MTU_MIN <= int(mtu) <= MTU_MAX:
+                raise ValueError(f"an MTU is {MTU_MIN} to {MTU_MAX}")
+            commands.append(f"mtu {int(mtu)}")
+        if enabled is not None:
+            commands.append("no shutdown" if enabled else "shutdown")
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def delete_vlan_interface(self, vlan: int) -> None:
+        """``no interface vlan<n>``. Its addresses go with it; the VLAN itself stays."""
+        number = validate_vlan_id(vlan)
+        if number == 1:
+            # The switch answers "Vlan 1 is default vlan and cannot be deleted"
+            # as a note, not an error, and keeps it.
+            raise ValueError("the switch keeps the VLAN 1 interface; turn it off instead")
+        command = f"no interface vlan{number}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_interface_addresses(
+        self,
+        name: str,
+        *,
+        remove: Iterable[tuple[str, bool]] = (),
+        add: Iterable[tuple[str, bool]] = (),
+    ) -> None:
+        """Take addresses off and put addresses on a VLAN interface, routed port or
+        routed port-channel, in one request.
+
+        ``remove`` and ``add`` are (address, secondary) pairs: ``ip address A``,
+        ``ip address A secondary`` or ``ipv6 address A``, and their ``no`` forms.
+        """
+        commands = [f"interface {validate_routed_interface(name)}"]
+        commands += _address_commands(remove, add)
+        if len(commands) == 1:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def create_vrf(self, name: str) -> None:
+        """``vrf context <name>``, which makes the VRF when it does not exist yet."""
+        command = f"vrf context {validate_vrf_name(name)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def delete_vrf(self, name: str) -> None:
+        """``no vrf context <name>``.
+
+        The switch also takes the interfaces out of it; NXray refuses that
+        before it gets here (app/routing.py).
+        """
+        command = f"no vrf context {validate_vrf_name(name)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_interface_vrf(self, name: str, vrf: str, *, current: str) -> None:
+        """Move a VLAN interface, routed port or routed port-channel from VRF
+        ``current`` to ``vrf`` (either may be ``default``), in one request.
+
+        ``no vrf member <current>`` leaves a VRF, ``vrf member <vrf>`` joins
+        one. The switch deletes the interface's addresses each time ("Deleted
+        all L3 config on interface").
+        """
+        commands = [f"interface {validate_routed_interface(name)}"]
+        if current != DEFAULT_VRF:
+            commands.append(f"no vrf member {validate_vrf_name(current)}")
+        if vrf != DEFAULT_VRF:
+            commands.append(f"vrf member {validate_vrf_name(vrf)}")
+        if len(commands) == 1 or vrf == current:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def set_static_route(self, vrf: str, prefix: str, next_hop: str, *, add: bool) -> None:
+        """Add (``add=True``) or remove one static route in a VRF: ``ip route P NH``
+        or ``ipv6 route P NH`` and their ``no`` forms, inside ``vrf context <vrf>``
+        unless ``vrf`` is ``default``. Never in management."""
+        line = static_route_line(prefix, next_hop)
+        if not add:
+            line = "no " + line
+        commands = [line] if vrf == DEFAULT_VRF else [f"vrf context {validate_vrf_name(vrf)}", line]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_protocol(
+        self,
+        protocol: str,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on a routing protocol's page (OSPF, BGP, HSRP, route-maps, ...).
+
+        The lines are built here from the protocol's own description and the
+        checked values (``routing_protocols.build_protocol_change``): entering the
+        place (``router ospf core``, ``interface Vlan10``) and the one setting
+        line, or making or deleting the place. Secrets are masked in error
+        messages.
+        """
+        # Imported here: the protocol modules use this module's checks.
+        from app.routing_protocols import build_protocol_change
+
+        change = build_protocol_change(protocol, scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_spanning_tree(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Spanning tree page: a switch-wide line, one VLAN's,
+        the MST region's, or one port's.
+
+        The lines are built from the page's description and the checked values
+        (``spanning_tree.build_stp_change``), as for the routing protocols.
+        """
+        # Imported here: the spanning tree description uses this module's checks.
+        from app.spanning_tree import build_stp_change
+
+        change = build_stp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_switch_admin(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Switch admin page: the hostname, banner, clock, DNS,
+        logging and SNMP lines, and the NTP, DNS, logging and SNMP trap servers.
+
+        The lines are built from the page's description and the checked values
+        (``switch_admin.build_admin_change``), as for spanning tree. SNMP
+        communities are masked in error messages.
+        """
+        # Imported here: the switch admin description uses this module's checks.
+        from app.switch_admin import build_admin_change
+
+        change = build_admin_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_acl(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the ACLs page: make or delete an IPv4, IPv6 or MAC ACL, an
+        object group or a VLAN access map entry, add or remove one of their entries,
+        apply one to an interface, port or VLANs, or size a TCAM region.
+
+        The lines are built from the page's description and the checked values
+        (``acls.build_acl_change``), as for spanning tree.
+        """
+        # Imported here: the ACL description uses this module's checks.
+        from app.acls import build_acl_change
+
+        change = build_acl_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_port_security(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Port security page: one port's port security setting.
+
+        The lines are built from the page's description and the checked values
+        (``port_security.build_port_security_change``).
+        """
+        # Imported here: the port security description uses this module's checks.
+        from app.port_security import build_port_security_change
+
+        change = build_port_security_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_dhcp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the DHCP and ARP page: a DHCP snooping, DHCP relay, ARP
+        inspection or IP Source Guard setting, switch-wide, on a port or on a layer 3
+        interface, or an ARP ACL.
+
+        The lines are built from the page's description and the checked values
+        (``dhcp_security.build_dhcp_change``).
+        """
+        # Imported here: the DHCP description uses this module's checks.
+        from app.dhcp_security import build_dhcp_change
+
+        change = build_dhcp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def create_checkpoint(self, name: str) -> None:
+        """``checkpoint nxray-<n>``: the switch keeps a copy of its running
+        configuration under that name, to roll back to later."""
+        self._checkpoint_command(f"checkpoint {validate_checkpoint_name(name)}")
+
+    def delete_checkpoint(self, name: str) -> None:
+        """``no checkpoint nxray-<n>``: delete one of NXray's checkpoints."""
+        self._checkpoint_command(f"no checkpoint {validate_checkpoint_name(name)}")
+
+    def rollback_to_checkpoint(self, name: str) -> str:
+        """``rollback running-config checkpoint nxray-<n>``: make the running
+        configuration that checkpoint again. NX-OS rolls back atomically: when a
+        line fails, nothing changes. Sent with the switch admin login (the Config
+        page asks for it each time); NXray's own role has no rule for it. Returns
+        what the switch printed."""
+        command = f"rollback running-config checkpoint {validate_checkpoint_name(name)}"
+        timeout = max(self._target.timeout, ROLLBACK_TIMEOUT)
+        (body,) = self._send([command], [command], timeout, allow_text=True)
+        text = str(body.get("text", body.get("msg", "")))
+        if "fail" in text.lower() or "error" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
+        return text
+
+    def _checkpoint_command(self, command: str) -> None:
+        (body,) = self._send([command], [command], self._target.timeout, allow_text=True)
+        text = str(body.get("text", body.get("msg", "")))
+        if "fail" in text.lower() or "error" in text.lower() or "invalid" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
+
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.
 
@@ -517,10 +1411,13 @@ class NxapiClient:
         allow_text: bool = False,
     ) -> list[dict[str, Any]]:
         """POST commands as one JSON-RPC request and parse the answer."""
+        payload = self._post(build_payload(commands), timeout)
+        return parse_response(payload, commands, labels, allow_text)
+
+    def _post(self, body: list[dict[str, Any]], timeout: float) -> Any:
+        """POST one JSON-RPC request; the decoded JSON answer, whatever its HTTP status."""
         try:
-            response = self._http.post(
-                self._target.url, json=build_payload(commands), timeout=timeout
-            )
+            response = self._http.post(self._target.url, json=body, timeout=timeout)
         except httpx.TimeoutException as exc:
             raise NxapiUnreachable(
                 f"no answer from {self._target.host}:{self._target.port} within {timeout:g} seconds"
@@ -536,11 +1433,9 @@ class NxapiClient:
         # A rejected command comes back as HTTP 500 with a JSON-RPC error
         # body, so the body is read before the status decides anything.
         try:
-            payload = response.json()
+            return response.json()
         except ValueError as exc:
             raise NxapiProtocolError(
                 f"the switch answered HTTP {response.status_code} without JSON "
                 "(is this address really NX-API?)"
             ) from exc
-
-        return parse_response(payload, commands, labels, allow_text)

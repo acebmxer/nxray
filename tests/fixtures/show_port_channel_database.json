@@ -1,0 +1,62 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "port-channel43",
+        "last-membership-update": "successful",
+        "total-ports": "2",
+        "total-up-ports": "2",
+        "first_operational-port": "Ethernet1/44",
+        "age-of-channel": "1d:19h:35m:59s",
+        "time-since-last-bundle": "1d:19h:35m:59s",
+        "last-bundled-member": "Ethernet1/43",
+        "TABLE_member": {
+          "ROW_member": [
+            {
+              "port": "Ethernet1/43",
+              "mode": "active",
+              "port-status": "up"
+            },
+            {
+              "port": "Ethernet1/44",
+              "mode": "active",
+              "port-status": "up"
+            }
+          ]
+        }
+      },
+      {
+        "interface": "port-channel54",
+        "last-membership-update": "successful",
+        "total-ports": "1",
+        "total-up-ports": "0",
+        "age-of-channel": "0d:00h:00m:07s",
+        "time-since-last-bundle": "0d:00h:00m:07s",
+        "last-bundled-member": "Ethernet1/53",
+        "TABLE_member": {
+          "ROW_member": {
+            "port": "Ethernet1/53",
+            "mode": "active",
+            "port-status": "down"
+          }
+        }
+      },
+      {
+        "interface": "port-channel55",
+        "last-membership-update": "successful",
+        "total-ports": "1",
+        "total-up-ports": "0",
+        "age-of-channel": "0d:00h:00m:01s",
+        "time-since-last-bundle": "0d:00h:00m:01s",
+        "last-bundled-member": "Ethernet1/54",
+        "TABLE_member": {
+          "ROW_member": {
+            "port": "Ethernet1/54",
+            "mode": "on",
+            "port-status": "down"
+          }
+        }
+      }
+    ]
+  }
+}

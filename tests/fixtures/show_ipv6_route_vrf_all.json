@@ -1,0 +1,12 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "vrf-name-out": "default",
+      "TABLE_addrf": {
+        "ROW_addrf": {
+          "addrf": "ipv6"
+        }
+      }
+    }
+  }
+}

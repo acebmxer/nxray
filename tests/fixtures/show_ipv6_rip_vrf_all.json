@@ -1,0 +1,52 @@
+{
+  "TABLE_mode": {
+    "ROW_mode": {
+      "isolate-mode": "false",
+      "mmode": "true",
+      "TABLE_inst": {
+        "ROW_inst": {
+          "inst-name": "rip-nxprobe",
+          "TABLE_vrf": {
+            "ROW_vrf": {
+              "vrf": "default",
+              "rip-shut-globally-in-this-vrf": "false",
+              "port": 521,
+              "mcast-grp": "ff02::9",
+              "admin-dist": 120,
+              "update-tmr": 30,
+              "expire-tmr": 180,
+              "garbage-tmr": 120,
+              "def-metric": 1,
+              "max-paths": 16,
+              "def-rt-distrib": "false",
+              "def-distrib-always": "false",
+              "process-disabled": "false",
+              "out-of-mem": "false",
+              "TABLE_afi": {
+                "ROW_afi": {
+                  "af": "ipv6",
+                  "TABLE_redistrib": {
+                    "ROW_redistrib": {
+                      "redistributing": "true",
+                      "TABLE_clients": {
+                        "ROW_clients": {
+                          "pibname": "static",
+                          "policy": "nxprobe-rm"
+                        }
+                      }
+                    }
+                  },
+                  "TABLE_interface": {
+                    "ROW_interface": {
+                      "if-name": "Ethernet1/54"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

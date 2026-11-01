@@ -1,0 +1,41 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "vrf-name-out": "nxprobe-v",
+      "vrf-router-id": "192.0.2.3",
+      "vrf-local-as": "65001",
+      "TABLE_af": {
+        "ROW_af": {
+          "af-id": "1",
+          "TABLE_saf": {
+            "ROW_saf": {
+              "safi": 1,
+              "af-name": "IPv4 Unicast",
+              "tableversion": "40",
+              "configuredpeers": "1",
+              "capablepeers": "1",
+              "totalnetworks": "13",
+              "totalpaths": "13",
+              "dampening": "false",
+              "TABLE_neighbor": {
+                "ROW_neighbor": {
+                  "neighborid": "198.51.100.2",
+                  "neighborversion": "4",
+                  "msgrecvd": 1520,
+                  "msgsent": 1498,
+                  "neighbortableversion": "40",
+                  "inq": "0",
+                  "outq": "0",
+                  "neighboras": "65010",
+                  "time": "P1DT2H3M4S",
+                  "state": "Established",
+                  "prefixreceived": "12"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

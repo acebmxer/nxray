@@ -1,0 +1,24 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": {
+      "interface": "Vlan3900",
+      "svi_admin_state": "up",
+      "svi_line_proto": "up",
+      "svi_mac": "7079.b300.0001",
+      "svi_desc": "probe",
+      "svi_ip_addr": "192.0.2.1",
+      "svi_ip_mask": "24",
+      "svi_mtu": "9000",
+      "svi_bw": "1000000",
+      "svi_delay": "10",
+      "svi_tx_load": 1,
+      "svi_rx_load": "1",
+      "svi_arp_type": "ARPA",
+      "svi_time_last_cleared": "never",
+      "svi_ucast_pkts_in": "0",
+      "svi_ucast_bytes_in": "0",
+      "svi_ucast_pkts_out": "0",
+      "svi_ucast_bytes_out": "0"
+    }
+  }
+}

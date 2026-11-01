@@ -1,0 +1,11 @@
+{
+  "stp-mode": "rapid-pvst",
+  "name": "",
+  "rev-id": 0,
+  "TABLE_instance_to_vlan_map": {
+    "ROW_instance_to_vlan_map": {
+      "mst_id": 0,
+      "vlan_bit_map": "1-4094"
+    }
+  }
+}

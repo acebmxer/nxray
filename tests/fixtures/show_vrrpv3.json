@@ -1,0 +1,37 @@
+{
+  "TABLE_grp": {
+    "ROW_grp": [
+      {
+        "intf": "Ethernet1/54",
+        "id": 40,
+        "af": "IPv4",
+        "state": "INIT",
+        "duration": "0.283 secs",
+        "vip": "192.0.2.252",
+        "vmac": "0000.5e00.0128",
+        "adv": 200,
+        "preempt": "enabled",
+        "priority": 115,
+        "cfg_priority": 115
+      },
+      {
+        "intf": "Ethernet1/54",
+        "id": 41,
+        "af": "IPv6",
+        "state": "INIT",
+        "duration": "0.119 secs",
+        "vip": "fe80::41",
+        "vmac": "0000.5e00.0229",
+        "adv": 1000,
+        "preempt": "enabled",
+        "priority": 100,
+        "cfg_priority": 100,
+        "TABLE_sec": {
+          "ROW_sec": {
+            "addr": "2001:db8:1::fd"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": {
+      "interface": "Ethernet1/1",
+      "model": "N9K-C92160YC-X",
+      "type": "SFP-H10GB-CU3M",
+      "speed": "1000,10000,25000",
+      "duplex": "full",
+      "trunk_encap": "802.1Q",
+      "channel": "yes",
+      "bcast_supp": "percentage(0-100)",
+      "flo_ctrl": "rx-(off/on),tx-(off/on)",
+      "rate_mode": "dedicated",
+      "port_mode": "Routed,Switched",
+      "qos_scheduling": "rx-(8q2t),tx-(7q)",
+      "cos_rewrite": "yes",
+      "tos_rewrite": "yes",
+      "span": "yes",
+      "udld": "yes",
+      "mdix": "no",
+      "tdr": "no",
+      "lnk_debounce": "yes",
+      "lnk_debounce_time": "yes",
+      "fex_fabric": "no",
+      "dot1q_tunnel": "no",
+      "pvlan_trunk_mode": "no",
+      "port_group_members": "1",
+      "eee_capable": "no",
+      "pfc_capable": "no",
+      "buffer_boost_capable": "no",
+      "bkout_capable": "no",
+      "macsec_capable": "no"
+    }
+  }
+}

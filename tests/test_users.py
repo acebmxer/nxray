@@ -212,8 +212,15 @@ ANY_ROLE_POSTS = {
     "/account/2fa/confirm",
     "/account/2fa/codes",
     "/account/2fa/off",
+    "/switches/select",
+    "/preferences",
 }
-ADMIN_ONLY_POSTS_EXCEPT = {"/switch/save"}
+ADMIN_ONLY_POSTS_EXCEPT = {
+    "/switch/save",
+    "/switch-admin/change",
+    "/switches/select",
+    "/preferences",
+}
 
 
 def _post_routes(routes: Iterable[object], found: set[str]) -> None:
@@ -294,6 +301,8 @@ def test_a_viewer_sees_no_change_buttons(logged_in: TestClient, switch: FakeSwit
     assert "Turn off this port" not in port and "Turn on this port" not in port
     assert "Change VLANs" not in port
     assert "Your role (viewer) can look at ports but not change them" in _text(port)
+    ports = vera.get("/ports").text
+    assert "Change several ports" not in ports and 'name="names"' not in ports
     vlans = vera.get("/vlans").text
     assert "Create VLAN" not in vlans and 'action="/vlans/rename"' not in vlans
     assert "Your role (viewer) can look at VLANs but not change them" in _text(vlans)

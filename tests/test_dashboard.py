@@ -126,3 +126,17 @@ def test_a_rejected_show_command_is_reported(logged_in: TestClient, switch: Fake
     text = _text(logged_in.get("/").text)
     assert "The switch refused a command" in text
     assert "Go to the Switch page" in text
+
+
+def test_the_strip_names_the_switch_once_the_dashboard_read_it(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    def strip() -> str:
+        page = logged_in.get("/ports").text
+        return page.split('<header class="strip">')[1].split("</header>")[0]
+
+    assert "nexus-lab" in strip() and "192.0.2.10" in strip()
+    assert "NX-OS" not in strip()
+    logged_in.get("/")
+    assert "<dt>Model</dt><dd>Nexus9000 C92160YC-X chassis</dd>" in strip()
+    assert "<dt>NX-OS</dt><dd>9.3(16)</dd>" in strip()

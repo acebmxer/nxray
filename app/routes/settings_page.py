@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
-from app.dependencies import admin_required, require_csrf, templates
+from app.dependencies import admin_required, note_activity, require_csrf, templates
 from app.security import csrf_token
 from app.tls import MAX_PEM_BYTES, CertificateError, current_certificate, install_certificate
 from app.update import (
@@ -98,6 +98,9 @@ async def settings_certificate(
     except CertificateError as exc:
         return _render(request, username, error=str(exc), status_code=400)
     log.info("%s uploaded a new HTTPS certificate (%s)", username, info.subject)
+    note_activity(
+        request, username, "Settings", f"Uploaded a new HTTPS certificate ({info.subject})"
+    )
     return _render(
         request,
         username,
@@ -143,6 +146,7 @@ def settings_update_apply(
     if not state.available:
         return _render(request, username, error="No update is available.", status_code=409)
     log.info("%s started an update to %s", username, state.latest_digest[:19])
+    note_activity(request, username, "Settings", f"Started an update to {state.latest_digest[:19]}")
     error = apply_update(settings.db_path)
     if error:
         return _render(request, username, error=f"Could not start the update: {error}")

@@ -1,0 +1,12 @@
+{
+  "TABLE_cdp_all": {
+    "ROW_cdp_all": {
+      "intf_id": "Ethernet1/54",
+      "port_up": "down",
+      "cdp_global_enabled": "enabled",
+      "cdp_intf_enabled": "enabled",
+      "refresh_time": "60",
+      "ttl": "180"
+    }
+  }
+}

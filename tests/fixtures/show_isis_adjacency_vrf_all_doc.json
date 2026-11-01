@@ -1,0 +1,36 @@
+{
+  "TABLE_process_tag": {
+    "ROW_process_tag": {
+      "process-tag-out": "nxprobe",
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf-name-out": "default",
+          "adj-summary-out": "false",
+          "adj-interface-out": "false",
+          "TABLE_process_adj": {
+            "ROW_process_adj": [
+              {
+                "adj-sys-name-out": "nexus-peer",
+                "adj-sys-id-out": "1920.0000.2002",
+                "adj-usage-out": "2",
+                "adj-state-out": "UP",
+                "adj-hold-time-out": "00:00:25",
+                "adj-intf-name-out": "Ethernet1/54",
+                "adj-detail-set-out": "false"
+              },
+              {
+                "adj-sys-name-out": "1920.0000.2003",
+                "adj-sys-id-out": "1920.0000.2003",
+                "adj-usage-out": "1-2",
+                "adj-state-out": "INIT",
+                "adj-hold-time-out": "00:00:08",
+                "adj-intf-name-out": "Vlan10",
+                "adj-detail-set-out": "false"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

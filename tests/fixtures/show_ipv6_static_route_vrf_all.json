@@ -1,0 +1,49 @@
+{
+  "TABLE_route": [
+    {
+      "ROW_route": {
+        "prefix-out": "2001:db8:2::/64",
+        "next-hop": "2001:db8:1::fe/128",
+        "pref": 1,
+        "next-hop-vrf": "tenant-a",
+        "reslv-tid": 80000003,
+        "real-nh": "0::",
+        "has-real-intf": "false",
+        "real-intf-name": "none",
+        "rnh-status": "    rnh(installed in u6rib)",
+        "bfd-status": "no"
+      }
+    },
+    {
+      "ROW_route": {
+        "prefix-out": "2001:db8:3::/64",
+        "next-hop": "2001:db8:4::fe/128",
+        "pref": 1,
+        "next-hop-vrf": "default",
+        "reslv-tid": 80000001,
+        "real-nh": "0::",
+        "has-real-intf": "false",
+        "real-intf-name": "none",
+        "rnh-status": "    rnh(installed in u6rib)",
+        "bfd-status": "no"
+      }
+    }
+  ],
+  "TABLE_vrf": [
+    {
+      "ROW_vrf": {
+        "vrf-name-out": "tenant-a"
+      }
+    },
+    {
+      "ROW_vrf": {
+        "vrf-name-out": "default"
+      }
+    },
+    {
+      "ROW_vrf": {
+        "vrf-name-out": "management"
+      }
+    }
+  ]
+}

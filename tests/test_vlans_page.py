@@ -248,6 +248,36 @@ def test_switching_to_trunk_warns(logged_in: TestClient, enabled: FakeSwitch) ->
     assert "still used by Ethernet1/3" in _post(logged_in, "/vlans/delete", vlan_id="20").text
 
 
+def test_trunk_carries_its_native_vlan(logged_in: TestClient, enabled: FakeSwitch) -> None:
+    # Native VLAN 2 with only 253-254 carried passed no untagged traffic (#12).
+    for vlan in (2, 253, 254):
+        enabled.vlans[vlan] = f"v{vlan}"
+    fields = {"mode": "trunk", "native_vlan": "2", "allowed": "253-254"}
+    ask = _text(_port_vlans(logged_in, **fields).text)
+    assert "VLANs carried: 1-4094 → 2,253-254." in ask
+    assert "VLAN 2 is the native VLAN, so it is added to the VLANs carried" in ask
+    _port_vlans(logged_in, confirm="yes", **fields)
+    assert _config_requests(enabled) == [
+        [
+            "interface Ethernet1/3",
+            "switchport mode trunk",
+            "switchport trunk native vlan 2",
+            "switchport trunk allowed vlan 2,253-254",
+        ]
+    ]
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
+    assert "VLANs carried 2,253-254" in text and "leaves out native VLAN" not in text
+
+
+def test_port_page_flags_a_trunk_without_its_native_vlan(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.vlans[2] = "v2"
+    enabled.port_state["Ethernet1/3"] = {"mode": "trunk", "native": "2", "allowed": "253-254"}
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
+    assert "leaves out native VLAN 2: untagged traffic on this port is dropped" in text
+
+
 @pytest.mark.parametrize(
     ("fields", "message"),
     [
@@ -303,7 +333,12 @@ def test_old_role_offers_turning_on_vlan_changes(
     logged_in: TestClient, ports_only: FakeSwitch
 ) -> None:
     text = _text(logged_in.get("/switch").text)
-    assert "On for ports" in text and "Turn on VLAN changes" in text
+    assert "On for ports" in text
+    assert (
+        "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
+        "static route, routing protocol, spanning tree, switch admin, security and config "
+        "and layer 2 security changes" in text
+    )
     assert "There is no wait this time" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
     page = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
@@ -315,7 +350,12 @@ def test_turning_on_vlan_changes_needs_no_wait(
 ) -> None:
     response = _enable(logged_in)
     text = _text(response.text)
-    assert "VLAN changes are on: nxray may now also create, rename and delete VLANs" in text
+    assert (
+        "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
+        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
+        "security changes "
+        "are on: nxray may now also create, rename and delete VLANs" in text
+    )
     assert "no wait" in text and "leaving the switch alone" not in text
     assert ADMIN_PASSWORD not in response.text
     assert ports_only.saved
@@ -324,8 +364,17 @@ def test_turning_on_vlan_changes_needs_no_wait(
     ports_only.requests.clear()
     _post(logged_in, "/vlans/create", vlan_id="20")
     assert _config_requests(ports_only) == [["vlan 20"]]
-    assert "Turn on VLAN changes" not in logged_in.get("/switch").text
-    assert "read, plus port changes and VLANs" in _text(logged_in.get("/switch").text)
+    assert (
+        "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF and "
+        "static route changes" not in logged_in.get("/switch").text
+    )
+    assert (
+        "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address "
+        "table, port-channels, VLAN interfaces, VRFs, static routes, routing protocols, spanning "
+        "tree, switch admin, ACLs, port security, checkpoints, DHCP snooping and relay, ARP "
+        "inspection, IP Source Guard, MAC and VLAN ACLs, object groups and TCAM regions"
+        in _text(logged_in.get("/switch").text)
+    )
 
 
 # ---- protection -------------------------------------------------------------
@@ -368,3 +417,14 @@ def test_save_from_the_vlans_page_stays_there(logged_in: TestClient, enabled: Fa
     assert "changed the switch since" not in saved.text
     assert "storage" in saved.text  # the page was read again
     assert enabled.saved
+
+
+def test_vlans_page_draws_the_port_grid(logged_in: TestClient, switch: FakeSwitch) -> None:
+    switch.vlans[20] = "storage"
+    page = logged_in.get("/vlans").text
+    assert '<table class="vlan-grid">' in page
+    grid = page.split('<table class="vlan-grid">')[1].split("</table>")[0]
+    # Every port is an access port in VLAN 1 on the recorded switch.
+    assert grid.count('class="cell-u"') == 54
+    assert 'title="Ethernet1/1: VLAN 1 untagged"' in grid
+    assert '<span class="mono">20</span> <span class="dim">storage</span>' in grid

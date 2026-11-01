@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "_icons.html" import brand_mark %}
 {% block title %}Sign in — NXray{% endblock %}
 {% block main_class %}wrap wrap-centred{% endblock %}
 
 {% block content %}
 <div class="card card-login">
   <div class="login-head">
-    <span class="brand-mark brand-mark-lg">◈</span>
+    {{ brand_mark("brand-mark-lg") }}
     <h1>NXray</h1>
     <p class="sub">Cisco Nexus switch monitoring and management</p>
   </div>

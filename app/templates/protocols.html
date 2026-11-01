@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Routing protocols — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<p class="breadcrumb"><a href="/routing">← Routing</a></p>
+<h1 class="page-title">Routing protocols</h1>
+<p class="lead">Routing protocols let the switch learn routes from other routers and tell them its own, or share a gateway address with a second switch. Each one runs only while its feature is on.</p>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  {% if role == "admin" %}<p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>{% else %}<p class="note">An NXray admin sets it up on the Switch page.</p>{% endif %}
+</div>
+{% elif view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p>
+</div>
+{% else %}
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="protocols">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Protocols</h2>
+  <table class="table table-devices">
+    <thead><tr><th>Protocol</th><th>State</th><th>What it does</th></tr></thead>
+    <tbody>
+      {% for s in view.states %}
+      <tr>
+        <td><a href="/routing/protocols/{{ s.protocol.key }}">{{ s.protocol.name }}</a></td>
+        <td>{% if not s.protocol.features %}<span class="dim">always there</span>{% elif s.on %}<span class="badge badge-ok">on</span>{% else %}<span class="badge badge-warn">off</span> <span class="dim">feature {% for n in s.missing %}{{ feature_command(n) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</td>
+        <td class="wrap">{{ s.protocol.summary }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">{% if role == "admin" %}Turn a protocol's feature on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns a protocol's feature on on the <a href="/features">Features</a> page.{% endif %}{% if role in ("admin", "operator") and not can_change %} Routing protocol changes are off: {% if role == "admin" %}<a href="/switch">turn them on on the Switch page</a>{% else %}an NXray admin turns them on on the Switch page{% endif %}.{% endif %}</p>
+</section>
+
+<section class="card" id="route-table">
+  <h2 class="card-title">Route table</h2>
+  <p class="lead">Every route the switch uses, per VRF: its own networks (direct, local), static routes and the routes each protocol learned.</p>
+  {% for vrf in view.vrfs %}
+  <h3>VRF {{ vrf }}</h3>
+  <table class="table table-devices">
+    <thead><tr><th>Destination</th><th>From</th><th>Next hops</th><th class="num">Distance</th><th class="num">Metric</th><th>Age</th></tr></thead>
+    <tbody>
+      {% for r in view.routes if r.vrf == vrf %}
+      <tr>
+        <td class="mono">{{ r.prefix }}</td>
+        <td>{{ r.source }}</td>
+        <td class="mono wrap">{{ r.next_hops|join(", ") }}</td>
+        <td class="num">{{ r.distance }}</td>
+        <td class="num">{{ r.metric }}</td>
+        <td>{{ r.age }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="dim">The switch has no routes.</p>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

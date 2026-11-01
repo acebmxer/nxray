@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+{% from "_icons.html" import icon, brand_mark %}
+{% set prefs = ui_preferences(request) %}
+<html lang="en" data-theme="{{ prefs.theme }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,36 +11,132 @@
   {% block head_extra %}{% endblock %}
 </head>
 <body>
-  {% if username %}
-  {% set nav_role = current_role(request) %}
-  <header class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-mark">◈</span> NXray
-    </a>
-    <nav class="topnav">
-      <a class="navlink" href="/">Dashboard</a>
-      <a class="navlink" href="/ports">Ports</a>
-      <a class="navlink" href="/vlans">VLANs</a>
-      <a class="navlink" href="/history">History</a>
-      {% if nav_role == "admin" %}
-      <a class="navlink" href="/switch">Switch</a>
-      <a class="navlink" href="/users">Users</a>
-      <a class="navlink" href="/settings">Settings</a>
-      {% endif %}
-      <a class="navlink who" href="/account" title="Your account">{{ username }}{% if nav_role %} ({{ nav_role }}){% endif %}</a>
-      <form method="post" action="/logout" class="inline">
-        <button type="submit" class="btn btn-quiet">Log out</button>
-      </form>
-    </nav>
-  </header>
+{% if username %}
+{% set nav_role = current_role(request) %}
+{% set picker_switches, picker_selected = switch_picker(request) %}
+{% set here = picker_switches|selectattr("id", "equalto", picker_selected)|first %}
+{# After a form was sent the address is that form's; go to the dashboard then. #}
+{#- A long query (an overlong search) is left out rather than written back into the page. -#}
+{% set back_to = (request.url.path ~ ("?" ~ request.url.query if request.url.query and request.url.query|length <= 200 else "")) if request.method == "GET" else "/" %}
+{#- (group, address, words, icon, the address prefix that lights it, admins only) -#}
+{% set nav = [
+  ("Monitor", "/", "Dashboard", "dashboard", "/", false),
+  ("Monitor", "/ports", "Ports", "ports", "/ports", false),
+  ("Monitor", "/neighbors", "Neighbors", "neighbors", "/neighbors", false),
+  ("Monitor", "/history", "History", "history", "/history", false),
+  ("Monitor", "/alerts", "Alerts", "alerts", "/alerts", true),
+  ("Configure", "/vlans", "VLANs", "vlans", "/vlans", false),
+  ("Configure", "/port-channels", "Port-channels", "channels", "/port-channels", false),
+  ("Configure", "/spanning-tree", "Spanning tree", "stp", "/spanning-tree", false),
+  ("Configure", "/routing", "Routing", "routing", "/routing", false),
+  ("Configure", "/routing/protocols", "Protocols", "protocols", "/routing/protocols", false),
+  ("Configure", "/security/acls", "Security", "security", "/security", false),
+  ("Configure", "/features", "Features", "features", "/features", false),
+  ("Switch", "/switch-admin", "Switch admin", "switch-admin", "/switch-admin", false),
+  ("Switch", "/config", "Config", "config", "/config", true),
+  ("Switch", "/switch", "Switch", "switch", "/switch", true),
+  ("Admin", "/users", "Users", "users", "/users", true),
+  ("Admin", "/activity", "Activity", "activity", "/activity", true),
+  ("Admin", "/settings", "Settings", "settings", "/settings", true),
+] %}
+{% set path = request.url.path %}
+{% set lit = namespace(prefix="") %}
+{% for item in nav %}
+  {% set prefix = item[4] %}
+  {% if (path == prefix or (prefix != "/" and path.startswith(prefix ~ "/")) or (prefix == "/switch" and path.startswith("/switches"))) and prefix|length > lit.prefix|length %}
+    {% set lit.prefix = prefix %}
   {% endif %}
+{% endfor %}
+<div class="shell{% if prefs.menu == 'narrow' %} shell-narrow{% endif %}">
+  <aside class="side">
+    <a class="brand" href="/" title="NXray">
+      {{ brand_mark() }}
+      <span class="brand-name">NX<span class="brand-accent">ray</span></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      {% for group in ["Monitor", "Configure", "Switch", "Admin"] %}
+      {% set shown = [] %}
+      {% for item in nav if item[0] == group and (not item[5] or nav_role == "admin") %}{% set _ = shown.append(item) %}{% endfor %}
+      {% if shown %}
+      <div class="nav-group">
+        <span class="nav-heading">{{ group }}</span>
+        {% for item in shown %}
+        <a class="navlink{% if item[4] == lit.prefix %} navlink-on{% endif %}" href="{{ item[1] }}" title="{{ item[2] }}"{% if item[4] == lit.prefix %} aria-current="page"{% endif %}>{{ icon(item[3]) }}<span class="nav-words">{{ item[2] }}</span></a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </nav>
+    <div class="side-foot">
+      <form method="post" action="/preferences" class="theme-choice" aria-label="Colours">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <input type="hidden" name="next" value="{{ back_to }}">
+        {% for key, words in themes.items() %}
+        <button type="submit" name="theme" value="{{ key }}"{% if prefs.theme == key %} class="on" aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ words }}</button>
+        {% endfor %}
+      </form>
+      <a class="navlink{% if path.startswith('/account') %} navlink-on{% endif %}" href="/account" title="Your account">{{ icon("account") }}<span class="nav-words">{{ username }}{% if nav_role %} <span class="who">({{ nav_role }})</span>{% endif %}</span></a>
+      <form method="post" action="/logout" class="inline">
+        <button type="submit" class="navlink navlink-button" title="Log out">{{ icon("logout") }}<span class="nav-words">Log out</span></button>
+      </form>
+      <form method="post" action="/preferences" class="inline">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <input type="hidden" name="next" value="{{ back_to }}">
+        {% if prefs.menu == "narrow" %}
+        <button type="submit" name="menu" value="wide" class="navlink navlink-button" title="Widen the menu">{{ icon("wide") }}<span class="nav-words">Widen the menu</span></button>
+        {% else %}
+        <button type="submit" name="menu" value="narrow" class="navlink navlink-button" title="Narrow the menu">{{ icon("narrow") }}<span class="nav-words">Narrow the menu</span></button>
+        {% endif %}
+      </form>
+      <span class="version">NXray v{{ app_version }}</span>
+    </div>
+  </aside>
 
-  <main class="{% block main_class %}wrap{% endblock %}">
-    {% block content %}{% endblock %}
-  </main>
-
-  <footer class="footer">
-    <span>NXray v{{ app_version }}</span>
-  </footer>
+  <div class="main">
+    <header class="strip">
+      {% if here %}
+      <span class="strip-host">
+        <span class="led {{ 'led-ok' if here.last_test_ok else ('led-bad' if here.last_test_ok is false else 'led-unknown') }}" title="{{ 'The last connection test worked' if here.last_test_ok else ('The last connection test failed' if here.last_test_ok is false else 'Not tested yet') }}"></span>
+        {{ here.switch_hostname or here.host }}
+      </span>
+      <dl class="strip-facts">
+        <div><dt>Address</dt><dd>{{ here.host }}</dd></div>
+        {% if here.switch_model %}<div><dt>Model</dt><dd>{{ here.switch_model }}</dd></div>{% endif %}
+        {% if here.nxos_version %}<div><dt>NX-OS</dt><dd>{{ here.nxos_version }}</dd></div>{% endif %}
+      </dl>
+      {% else %}
+      <span class="strip-host"><span class="led led-unknown"></span>No switch set up</span>
+      {% endif %}
+      <span class="strip-gap"></span>
+      {% if here and here.unsaved_changes %}
+      <span class="strip-unsaved" title="NXray changed the switch since its configuration was last saved">Unsaved changes</span>
+      {% endif %}
+      {% if picker_switches|length > 1 %}
+      <form method="post" action="/switches/select" class="switch-picker">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <input type="hidden" name="next" value="{{ back_to }}">
+        <label for="picker_switch" class="sr-only">Switch</label>
+        <select id="picker_switch" name="switch_id">
+          {% for s in picker_switches %}
+          <option value="{{ s.id }}"{% if s.id == picker_selected %} selected{% endif %}>{{ s.switch_hostname or s.host }} ({{ s.host }})</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-quiet">Show</button>
+      </form>
+      {% endif %}
+    </header>
+    <main class="{% block main_class %}wrap{% endblock %}">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+<main class="{{ self.main_class() }} wrap-alone">
+  {{ self.content() }}
+</main>
+<footer class="footer">
+  <span>NXray v{{ app_version }}</span>
+</footer>
+{% endif %}
 </body>
 </html>

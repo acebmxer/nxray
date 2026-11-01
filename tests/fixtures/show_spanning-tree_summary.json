@@ -1,0 +1,113 @@
+{
+  "stp-mode": "rapid-pvst",
+  "stp_root_bmp_info": 0,
+  "stp_root_tree_type": "vlan",
+  "tree_root_bmp": "1-2,10,69,79,253-254",
+  "stp_l2gstp_bmp_info": "",
+  "stp_l2gstp_tree_type": "vlan",
+  "stp_global_info": 0,
+  "pcost_method": 1,
+  "oper_pcost_method": 1,
+  "port_fast": "default1",
+  "bpdu_guard": "default1",
+  "bpdu_filter": "default1",
+  "oper_loopguard": "false",
+  "bridge_assurance": 1,
+  "networkport_default": 0,
+  "simulate_pvst": "true",
+  "max-hops": 20,
+  "peer_switch_cfg": 0,
+  "oper_peer_switch": 0,
+  "stp_l2gstp_domain_id": 1024,
+  "stp_lite": 0,
+  "stp_summary_totals": 7,
+  "total_tree_type": "vlan",
+  "disabled": 0,
+  "blocking": 0,
+  "listening": 0,
+  "learning": 0,
+  "forwarding": 64,
+  "invalid": 0,
+  "port_count": 64,
+  "TABLE_tree": {
+    "ROW_tree": [
+      {
+        "stp_tree_summary": 1,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      },
+      {
+        "stp_tree_summary": 2,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 10,
+        "invalid": 0,
+        "port_count": 10
+      },
+      {
+        "stp_tree_summary": 10,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      },
+      {
+        "stp_tree_summary": 69,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      },
+      {
+        "stp_tree_summary": 79,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      },
+      {
+        "stp_tree_summary": 253,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      },
+      {
+        "stp_tree_summary": 254,
+        "summary_tree_type": "vlan",
+        "disabled": 0,
+        "blocking": 0,
+        "listening": 0,
+        "learning": 0,
+        "forwarding": 9,
+        "invalid": 0,
+        "port_count": 9
+      }
+    ]
+  }
+}

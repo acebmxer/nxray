@@ -1,11 +1,32 @@
 """Turning on port changes: give NXray's switch account a role that allows them.
 
 The role allows exactly these: on the front-panel Ethernet ports only,
-turning a port on or off, setting or removing its description, and setting
-its mode (access or trunk) and VLANs; switch-wide, creating, naming and
-deleting VLANs; and saving the configuration. Everything else (mgmt0, speed,
-MTU, a VLAN's own on/off state, accounts, other switch-wide settings) stays
-refused by the switch itself, not just by NXray.
+turning a port on or off, setting or removing its description, setting its
+mode (access or trunk) and VLANs, and its settings (speed, MTU, FEC, flow
+control, storm control, switched or routed with an IPv4 address),
+turning CDP and LLDP on or off on them, and putting them into port-channels
+and taking them out again, with their LACP rate and priority, and their IPv4
+and IPv6 addresses when routed; on the port-channels, the same settings plus
+their description and LACP minimum links, and deleting them; on the VLAN
+interfaces, making and deleting them, their addresses, description, MTU and
+on/off; the VRFs, making and deleting them and moving VLAN interfaces and
+routed ports between them, and their static routes; the routing protocols
+(OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP,
+MSDP, BFD), their settings on those interfaces, and the route-maps,
+prefix-lists and key chains they use; switch-wide, creating,
+naming and deleting VLANs, splitting a 100G port into four and joining it
+again, turning switch features on and off, setting how long learned MAC addresses are kept,
+adding and removing static MAC addresses, clearing learned ones, and the
+switch's LACP priority; spanning tree; the switch admin settings (hostname,
+banner, clock and NTP, DNS, logging, SNMP contact, location, read-only
+communities and trap receivers) and reading the running configuration; IPv4
+and IPv6 ACLs and where they apply, port security on the ports, reading the
+saved configuration and making and deleting checkpoints; DHCP snooping, the
+DHCP relay, ARP inspection, IP Source Guard, MAC ACLs, object groups, VLAN
+access maps and the TCAM regions' sizes; and saving the configuration.
+Everything else (mgmt0, a VLAN's own on/off state, accounts, SNMP users and
+read-write communities, rolling the switch back, reloading it, other
+switch-wide settings) stays refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
 the admin login entered on the Switch page (``app/switch_ssh.py``). Checks
@@ -24,20 +45,43 @@ once, so an account that already had the role (port changes turned on
 before VLAN changes existed) needs no wait. Both were measured on an
 N9K-C92160YC-X with NX-OS 9.3(16).
 
+When the role gains the port-channels (``CHANNEL_PERMIT``) or the VLAN
+interfaces (``VLAN_INTERFACE_PERMIT``), NXray checks the role and saves the
+configuration over SSH instead of over NX-API: on that switch NX-API stopped
+answering every account for 10 to 15 minutes right after such a line was
+typed (once for the port-channels, once for the VLAN interfaces), while SSH
+kept working. The cause was not confirmed (a later port-channel change went
+through with NX-API answering at once), so NXray adds no wait for it.
+
 ``ROLE_VERSION`` counts the rule sets: 1 had the port rules only, 2 added
-the VLAN rules. NXray stores the version it gave its account, so the
+the VLAN rules, 3 the port settings rules, 4 the feature rules, 5 the
+neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
+rules and the port-channels in the role's port list, 7 the VLAN interface
+rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
+10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
+admin rules, 13 the security and config rules, 14 the layer 2 security rules.
+
+The switch knows the ``Vlan`` interface type only while the interface-vlan
+feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
+("Invalid interface format"). So the port list names the VLAN interfaces only
+when the feature is on; once an admin turns it on, Update the port list adds
+them. NXray
+stores the version it gave its account, so the
 Switch page can offer the update when the code knows newer rules.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 import httpx
 
+from app.features import feature_states
 from app.nxapi import (
     PORT_CHANGES_ROLE,
+    VLAN_INTERFACE_MAX,
     NxapiClient,
     NxapiError,
     SwitchTarget,
@@ -52,6 +96,7 @@ from app.switch_ssh import (
     SshAuthError,
     SshCommandError,
     SshError,
+    run_commands,
     run_config,
 )
 
@@ -65,6 +110,7 @@ SSH_TIMEOUT = 30.0
 # Added to NX-API's idle timeout before NXray calls the switch again.
 PAUSE_MARGIN_SECONDS = 60
 DEFAULT_NXAPI_TIMEOUT_MINUTES = 10
+
 
 # The role's command rules. "conf t ; interface * ; <cmd>" is how NX-OS
 # names a command typed inside an interface's configuration; a rule without
@@ -92,7 +138,406 @@ VLAN_RULES = (
     "rule 11 permit command conf t ; interface * ; switchport trunk native vlan *",
 )
 
-ROLE_VERSION = 2
+# Port settings rules, added in ROLE_VERSION 3. Each names one command
+# with its value as "*", so the account can set these and nothing else
+# inside a port. A storm-control level goes back to "no limit" by setting
+# 100.00 (the switch's default), so only the action needs a "no" form. The
+# breakout lines are typed outside any port: the role's port list does not
+# cover them, so they are named on their own. The ports a split makes are not
+# in the role's port list until it is updated (Switch page).
+SETTINGS_RULES = (
+    "rule 12 permit command conf t ; interface * ; speed *",
+    "rule 13 permit command conf t ; interface * ; mtu *",
+    "rule 14 permit command conf t ; interface * ; fec *",
+    "rule 15 permit command conf t ; interface * ; flowcontrol receive *",
+    "rule 16 permit command conf t ; interface * ; flowcontrol send *",
+    "rule 17 permit command conf t ; interface * ; storm-control broadcast level *",
+    "rule 18 permit command conf t ; interface * ; storm-control multicast level *",
+    "rule 19 permit command conf t ; interface * ; storm-control unicast level *",
+    "rule 20 permit command conf t ; interface * ; storm-control action *",
+    "rule 21 permit command conf t ; interface * ; no storm-control action *",
+    "rule 22 permit command conf t ; interface * ; switchport",
+    "rule 23 permit command conf t ; interface * ; no switchport",
+    "rule 24 permit command conf t ; interface * ; ip address *",
+    "rule 25 permit command conf t ; interface * ; no ip address *",
+    "rule 26 permit command conf t ; interface breakout module * port * map *",
+    "rule 27 permit command conf t ; no interface breakout module * port * map *",
+)
+
+# Feature rules, added in ROLE_VERSION 4: "feature <name>" and "no feature
+# <name>", typed in configuration mode. Proven on cisco-25gb (2026-10-30)
+# with a throwaway account holding only these two rules: it turned the
+# scheduler feature on and off over NX-API and was refused everything else.
+# NXray itself never turns off NX-API or SSH (NxapiClient.set_feature).
+FEATURE_RULES = (
+    "rule 28 permit command conf t ; feature *",
+    "rule 29 permit command conf t ; no feature *",
+)
+
+# Neighbor rules, added in ROLE_VERSION 5: CDP and LLDP per port, the MAC
+# address aging time, static MAC addresses and clearing learned ones. Proven on
+# cisco-25gb (2026-10-30) with a throwaway account holding the CDP, MAC table
+# and clearing rules: each worked over NX-API on the one port its role named.
+# The static entry's port is checked by NXray (NxapiClient.add_static_mac takes
+# front ports only). The LLDP lines need the lldp feature on and were not
+# tried on the switch. Clearing is not a configuration command, so its rule has
+# no "conf t"; the bare form clears every learned address.
+NEIGHBOR_RULES = (
+    "rule 30 permit command conf t ; interface * ; cdp enable",
+    "rule 31 permit command conf t ; interface * ; no cdp enable",
+    "rule 32 permit command conf t ; interface * ; lldp transmit",
+    "rule 33 permit command conf t ; interface * ; no lldp transmit",
+    "rule 34 permit command conf t ; interface * ; lldp receive",
+    "rule 35 permit command conf t ; interface * ; no lldp receive",
+    "rule 36 permit command conf t ; mac address-table aging-time *",
+    "rule 37 permit command conf t ; mac address-table static *",
+    "rule 38 permit command conf t ; no mac address-table static *",
+    "rule 39 permit command clear mac address-table dynamic",
+    "rule 40 permit command clear mac address-table dynamic *",
+)
+
+# Port-channel rules, added in ROLE_VERSION 6, with every port-channel added
+# to the role's port list (CHANNEL_PERMIT). Proven on cisco-25gb (2026-10-30)
+# with a throwaway account on two unused ports: "channel-group" on a port
+# creates the port-channel even without CHANNEL_PERMIT, but its description,
+# minimum links and "no interface port-channel" are "Interface permission
+# denied" until the role names port-channels, and that line is taken only
+# inside "interface policy deny" (stored as one line). Naming port-channels
+# also lets rules 1-27 act on them, as on the front ports. The switch-wide
+# "lacp system-priority" line was not tried on the switch: it makes every
+# LACP port-channel negotiate again.
+CHANNEL_RULES = (
+    "rule 41 permit command conf t ; interface * ; channel-group *",
+    "rule 42 permit command conf t ; interface * ; no channel-group",
+    "rule 43 permit command conf t ; interface * ; lacp rate *",
+    "rule 44 permit command conf t ; interface * ; lacp port-priority *",
+    "rule 45 permit command conf t ; interface * ; lacp min-links *",
+    "rule 46 permit command conf t ; no interface port-channel *",
+    "rule 47 permit command conf t ; lacp system-priority *",
+)
+CHANNEL_PERMIT = "permit interface port-channel1-4096"
+
+# VLAN interface rules, added in ROLE_VERSION 7, with every VLAN interface added
+# to the role's port list (VLAN_INTERFACE_PERMIT). Proven on cisco-25gb
+# (2026-10-30) with a throwaway account: without the permit the switch refuses
+# "interface vlan<n>"; with it, rules 1-4, 13, 24 and 25 act on VLAN interfaces
+# (on/off, description, MTU, IPv4 addresses, secondary ones too), and the two
+# IPv6 rules below put IPv6 addresses on them and on routed ports. Deleting one
+# needs the rule written exactly as below: "no interface vlan *" and
+# "no interface vlan*" never matched "no interface vlan3900", "no interface
+# Vlan *" matched every way of typing it.
+LAYER3_RULES = (
+    "rule 48 permit command conf t ; interface * ; ipv6 address *",
+    "rule 49 permit command conf t ; interface * ; no ipv6 address *",
+    "rule 50 permit command conf t ; no interface Vlan *",
+)
+# One range, which the switch stores as one line per VLAN interface, so it stays
+# small (see VLAN_INTERFACE_MAX).
+VLAN_INTERFACE_PERMIT = f"permit interface Vlan1-{VLAN_INTERFACE_MAX}"
+
+# VRF rules, added in ROLE_VERSION 8. Proven on cisco-25gb (2026-10-30) with a
+# throwaway account: "vrf context <name>" made a VRF and "no vrf context"
+# deleted it, and on a permitted port "vrf member" and "no vrf member" moved
+# it into the VRF and out again. Entering a VRF's configuration (which makes
+# it) is allowed when a rule names a command inside it, as with VLANs: rule 51
+# is there for that. NXray sends no VRF description, since no show command
+# its account may run lists one. The port list stays as it was, so this needs
+# no SSH save and no wait.
+VRF_RULES = (
+    "rule 51 permit command conf t ; vrf context * ; description *",
+    "rule 52 permit command conf t ; no vrf context *",
+    "rule 53 permit command conf t ; interface * ; vrf member *",
+    "rule 54 permit command conf t ; interface * ; no vrf member *",
+)
+
+# Static route rules, added in ROLE_VERSION 9: "ip route" and "ipv6 route" and
+# their "no" forms, in the default VRF (typed in configuration mode) and in
+# any other (typed inside "vrf context"). Proven on cisco-25gb (2026-10-30)
+# with a throwaway account, all eight forms. The switch would also take them
+# inside the management VRF; NXray itself never sends that
+# (nxapi.validate_vrf_name refuses it).
+ROUTE_RULES = (
+    "rule 55 permit command conf t ; ip route *",
+    "rule 56 permit command conf t ; no ip route *",
+    "rule 57 permit command conf t ; ipv6 route *",
+    "rule 58 permit command conf t ; no ipv6 route *",
+    "rule 59 permit command conf t ; vrf context * ; ip route *",
+    "rule 60 permit command conf t ; vrf context * ; no ip route *",
+    "rule 61 permit command conf t ; vrf context * ; ipv6 route *",
+    "rule 62 permit command conf t ; vrf context * ; no ipv6 route *",
+)
+
+# Routing protocol rules, added in ROLE_VERSION 10. Proven on cisco-25gb
+# (2026-10-31) with a throwaway account on one unused port: a rule naming a
+# configuration mode ("conf t ; router ospf *") covers every line inside it,
+# however deep (a VRF, an address family, a neighbor and its address family,
+# a route-map's match and set lines, a key chain's keys); the interface rules
+# name the start of each protocol's lines, with "*" also in the middle
+# ("ip * eigrp *" matched "ip passive-interface eigrp <tag>"). PIM and MSDP
+# lines inside a VRF (rules 105-108) and the IPv6 EIGRP rules (99-100) were
+# not tried on their own: they are the same shapes as the ones that were.
+# The port list stays as it was, so this needs no SSH save and no wait.
+PROTOCOL_RULES = (
+    "rule 63 permit command conf t ; router ospf *",
+    "rule 64 permit command conf t ; no router ospf *",
+    "rule 65 permit command conf t ; router ospfv3 *",
+    "rule 66 permit command conf t ; no router ospfv3 *",
+    "rule 67 permit command conf t ; router bgp *",
+    "rule 68 permit command conf t ; no router bgp *",
+    "rule 69 permit command conf t ; router eigrp *",
+    "rule 70 permit command conf t ; no router eigrp *",
+    "rule 71 permit command conf t ; router rip *",
+    "rule 72 permit command conf t ; no router rip *",
+    "rule 73 permit command conf t ; router isis *",
+    "rule 74 permit command conf t ; no router isis *",
+    "rule 75 permit command conf t ; route-map *",
+    "rule 76 permit command conf t ; no route-map *",
+    "rule 77 permit command conf t ; ip prefix-list *",
+    "rule 78 permit command conf t ; no ip prefix-list *",
+    "rule 79 permit command conf t ; ipv6 prefix-list *",
+    "rule 80 permit command conf t ; no ipv6 prefix-list *",
+    "rule 81 permit command conf t ; key chain *",
+    "rule 82 permit command conf t ; no key chain *",
+    "rule 83 permit command conf t ; ip pim *",
+    "rule 84 permit command conf t ; no ip pim *",
+    "rule 85 permit command conf t ; ipv6 pim *",
+    "rule 86 permit command conf t ; no ipv6 pim *",
+    "rule 87 permit command conf t ; ip msdp *",
+    "rule 88 permit command conf t ; no ip msdp *",
+    "rule 89 permit command conf t ; bfd *",
+    "rule 90 permit command conf t ; no bfd *",
+    "rule 91 permit command conf t ; interface * ; ip router *",
+    "rule 92 permit command conf t ; interface * ; no ip router *",
+    "rule 93 permit command conf t ; interface * ; ipv6 router *",
+    "rule 94 permit command conf t ; interface * ; no ipv6 router *",
+    "rule 95 permit command conf t ; interface * ; ip ospf *",
+    "rule 96 permit command conf t ; interface * ; no ip ospf *",
+    "rule 97 permit command conf t ; interface * ; ospfv3 *",
+    "rule 98 permit command conf t ; interface * ; no ospfv3 *",
+    "rule 99 permit command conf t ; interface * ; ipv6 * eigrp *",
+    "rule 100 permit command conf t ; interface * ; no ipv6 * eigrp *",
+    "rule 101 permit command conf t ; interface * ; ip * eigrp *",
+    "rule 102 permit command conf t ; interface * ; no ip * eigrp *",
+    "rule 103 permit command conf t ; interface * ; ip rip *",
+    "rule 104 permit command conf t ; interface * ; no ip rip *",
+    "rule 105 permit command conf t ; vrf context * ; ip pim *",
+    "rule 106 permit command conf t ; vrf context * ; no ip pim *",
+    "rule 107 permit command conf t ; vrf context * ; ipv6 pim *",
+    "rule 108 permit command conf t ; vrf context * ; no ipv6 pim *",
+    "rule 109 permit command conf t ; vrf context * ; ip msdp *",
+    "rule 110 permit command conf t ; vrf context * ; no ip msdp *",
+    "rule 111 permit command conf t ; interface * ; ipv6 rip *",
+    "rule 112 permit command conf t ; interface * ; no ipv6 rip *",
+    "rule 113 permit command conf t ; interface * ; isis *",
+    "rule 114 permit command conf t ; interface * ; no isis *",
+    "rule 115 permit command conf t ; interface * ; hsrp *",
+    "rule 116 permit command conf t ; interface * ; no hsrp *",
+    "rule 117 permit command conf t ; interface * ; vrrp *",
+    "rule 118 permit command conf t ; interface * ; no vrrp *",
+    "rule 119 permit command conf t ; interface * ; vrrpv3 *",
+    "rule 120 permit command conf t ; interface * ; no vrrpv3 *",
+    "rule 121 permit command conf t ; interface * ; ip pim *",
+    "rule 122 permit command conf t ; interface * ; no ip pim *",
+    "rule 123 permit command conf t ; interface * ; ipv6 pim *",
+    "rule 124 permit command conf t ; interface * ; no ipv6 pim *",
+    "rule 125 permit command conf t ; interface * ; ip igmp *",
+    "rule 126 permit command conf t ; interface * ; no ip igmp *",
+    "rule 127 permit command conf t ; interface * ; bfd *",
+    "rule 128 permit command conf t ; interface * ; no bfd *",
+)
+
+# Spanning tree rules, added in ROLE_VERSION 11. Proven on cisco-25gb
+# (2026-10-31) with a throwaway account on one unused port and a throwaway
+# VLAN: "conf t ; spanning-tree *" covers the per-VLAN lines and the MST
+# region's submode lines (name, revision, instance), the interface rules every
+# port line (port type, BPDU guard and filter, guard, cost, port priority,
+# per-VLAN cost and priority, link type), each with its "no" form. The
+# switch-wide lines (mode, path cost method, defaults, Bridge Assurance) are
+# the same rule; they were not typed, since each changes every VLAN or port.
+# Rules 133-134 let NXray read the spanning tree lines of the running
+# configuration, which NX-API gives only as text (``NxapiClient.show_text``):
+# the only place a down port's settings show. The port list stays as it was,
+# so this needs no SSH save and no wait.
+STP_RULES = (
+    "rule 129 permit command conf t ; spanning-tree *",
+    "rule 130 permit command conf t ; no spanning-tree *",
+    "rule 131 permit command conf t ; interface * ; spanning-tree *",
+    "rule 132 permit command conf t ; interface * ; no spanning-tree *",
+    "rule 133 permit command show running-config spanning-tree",
+    "rule 134 permit command show running-config spanning-tree *",
+)
+
+# Switch admin rules, added in ROLE_VERSION 12: the hostname, banner, clock,
+# DNS, NTP, logging and SNMP lines of the Switch admin page, each with its
+# "no" form, and reading the running configuration (as text, through
+# ``NxapiClient.show_text``), the only place most of these settings show.
+# SNMP is narrow on purpose: only read-only communities ("group
+# network-operator") and trap receivers, never SNMP users or read-write
+# communities, which would each be a way in to the whole switch. "clock set"
+# changes no configuration, so its rule has no "conf t". Written after
+# Cisco's NX-OS 9.3 guides and the shapes of the rules proven before (a "*" in
+# the middle matches, as in rule 101); not yet tried on a switch. The port
+# list stays as it was, so this needs no SSH save and no wait.
+ADMIN_RULES = (
+    "rule 135 permit command conf t ; hostname *",
+    "rule 136 permit command conf t ; banner motd *",
+    "rule 137 permit command conf t ; no banner motd",
+    "rule 138 permit command conf t ; clock timezone *",
+    "rule 139 permit command conf t ; no clock timezone",
+    "rule 140 permit command conf t ; clock summer-time *",
+    "rule 141 permit command conf t ; no clock summer-time",
+    "rule 142 permit command clock set *",
+    "rule 143 permit command conf t ; ntp server *",
+    "rule 144 permit command conf t ; no ntp server *",
+    "rule 145 permit command conf t ; ip domain-name *",
+    "rule 146 permit command conf t ; no ip domain-name *",
+    "rule 147 permit command conf t ; ip domain-lookup",
+    "rule 148 permit command conf t ; no ip domain-lookup",
+    "rule 149 permit command conf t ; ip name-server *",
+    "rule 150 permit command conf t ; no ip name-server *",
+    "rule 151 permit command conf t ; vrf context * ; no ip name-server *",
+    "rule 152 permit command conf t ; logging server *",
+    "rule 153 permit command conf t ; no logging server *",
+    "rule 154 permit command conf t ; logging logfile messages *",
+    "rule 155 permit command conf t ; logging console *",
+    "rule 156 permit command conf t ; no logging console",
+    "rule 157 permit command conf t ; logging monitor *",
+    "rule 158 permit command conf t ; no logging monitor",
+    "rule 159 permit command conf t ; logging timestamp *",
+    "rule 160 permit command conf t ; snmp-server contact *",
+    "rule 161 permit command conf t ; no snmp-server contact",
+    "rule 162 permit command conf t ; snmp-server location *",
+    "rule 163 permit command conf t ; no snmp-server location",
+    "rule 164 permit command conf t ; snmp-server community * group network-operator",
+    "rule 165 permit command conf t ; no snmp-server community *",
+    "rule 166 permit command conf t ; snmp-server host * traps version 2c *",
+    "rule 167 permit command conf t ; no snmp-server host * traps version 2c *",
+    "rule 168 permit command conf t ; snmp-server host * use-vrf *",
+    "rule 169 permit command conf t ; no snmp-server host * use-vrf *",
+    "rule 170 permit command show running-config",
+)
+
+# Security and config rules, added in ROLE_VERSION 13: IPv4 and IPv6 ACLs (a
+# rule naming the ACL's mode covers its entries, as rule 63 does a router's
+# lines), applying them to interfaces (routed and VLAN interfaces with
+# "ip access-group" and "ipv6 traffic-filter", switched ports with their "port"
+# forms), port security on the ports, reading the saved configuration for the
+# Config page's comparison, and making, listing and deleting checkpoints. NXray
+# names its checkpoints nxray-<n> (nxapi.validate_checkpoint_name). Rolling back
+# is left out on purpose: NXray rolls back with the switch admin login typed on
+# the Config page, never with its own account. Written after Cisco's NX-OS 9.3
+# Security and System Management Configuration Guides and the shapes of the
+# rules proven before; not yet tried on a switch. The port list stays as it
+# was, so this needs no SSH save and no wait.
+SECURITY_RULES = (
+    "rule 171 permit command conf t ; ip access-list *",
+    "rule 172 permit command conf t ; no ip access-list *",
+    "rule 173 permit command conf t ; ipv6 access-list *",
+    "rule 174 permit command conf t ; no ipv6 access-list *",
+    "rule 175 permit command conf t ; interface * ; ip access-group *",
+    "rule 176 permit command conf t ; interface * ; no ip access-group *",
+    "rule 177 permit command conf t ; interface * ; ip port access-group *",
+    "rule 178 permit command conf t ; interface * ; no ip port access-group *",
+    "rule 179 permit command conf t ; interface * ; ipv6 traffic-filter *",
+    "rule 180 permit command conf t ; interface * ; no ipv6 traffic-filter *",
+    "rule 181 permit command conf t ; interface * ; ipv6 port traffic-filter *",
+    "rule 182 permit command conf t ; interface * ; no ipv6 port traffic-filter *",
+    "rule 183 permit command conf t ; interface * ; switchport port-security",
+    "rule 184 permit command conf t ; interface * ; switchport port-security *",
+    "rule 185 permit command conf t ; interface * ; no switchport port-security",
+    "rule 186 permit command conf t ; interface * ; no switchport port-security *",
+    "rule 187 permit command show startup-config",
+    "rule 188 permit command checkpoint *",
+    "rule 189 permit command no checkpoint *",
+    "rule 190 permit command show checkpoint *",
+)
+
+# Layer 2 security rules, added in ROLE_VERSION 14: DHCP snooping, the DHCP and
+# DHCPv6 relay, dynamic ARP inspection and its ARP ACLs, IP Source Guard and its
+# fixed bindings, switch-wide and on the ports and interfaces; MAC ACLs and MAC
+# port ACLs; object groups; VLAN access maps and the VLAN filters that apply
+# them; and the TCAM regions' sizes. A bare line ("ip dhcp snooping") gets its
+# own rule next to the "*" one, as rules 183 and 184 do. Reloading the switch is
+# left out on purpose: NXray reloads with the switch admin login typed on the
+# Config page. Written after Cisco's NX-OS 9.3 Security Configuration Guide and
+# the shapes of the rules proven before; not yet tried on a switch. The port list
+# stays as it was, so this needs no SSH save and no wait.
+LAYER2_RULES = (
+    "rule 191 permit command conf t ; ip dhcp snooping",
+    "rule 192 permit command conf t ; ip dhcp snooping *",
+    "rule 193 permit command conf t ; no ip dhcp snooping",
+    "rule 194 permit command conf t ; no ip dhcp snooping *",
+    "rule 195 permit command conf t ; ip dhcp relay",
+    "rule 196 permit command conf t ; ip dhcp relay *",
+    "rule 197 permit command conf t ; no ip dhcp relay",
+    "rule 198 permit command conf t ; no ip dhcp relay *",
+    "rule 199 permit command conf t ; ipv6 dhcp relay",
+    "rule 200 permit command conf t ; no ipv6 dhcp relay",
+    "rule 201 permit command conf t ; interface * ; ip dhcp snooping *",
+    "rule 202 permit command conf t ; interface * ; no ip dhcp snooping *",
+    "rule 203 permit command conf t ; interface * ; ip dhcp relay address *",
+    "rule 204 permit command conf t ; interface * ; no ip dhcp relay address *",
+    "rule 205 permit command conf t ; interface * ; ipv6 dhcp relay address *",
+    "rule 206 permit command conf t ; interface * ; no ipv6 dhcp relay address *",
+    "rule 207 permit command conf t ; ip arp inspection *",
+    "rule 208 permit command conf t ; no ip arp inspection *",
+    "rule 209 permit command conf t ; interface * ; ip arp inspection trust",
+    "rule 210 permit command conf t ; interface * ; no ip arp inspection trust",
+    "rule 211 permit command conf t ; arp access-list *",
+    "rule 212 permit command conf t ; no arp access-list *",
+    "rule 213 permit command conf t ; ip source binding *",
+    "rule 214 permit command conf t ; no ip source binding *",
+    "rule 215 permit command conf t ; interface * ; ip verify source *",
+    "rule 216 permit command conf t ; interface * ; no ip verify source *",
+    "rule 217 permit command conf t ; mac access-list *",
+    "rule 218 permit command conf t ; no mac access-list *",
+    "rule 219 permit command conf t ; interface * ; mac port access-group *",
+    "rule 220 permit command conf t ; interface * ; no mac port access-group *",
+    "rule 221 permit command conf t ; object-group *",
+    "rule 222 permit command conf t ; no object-group *",
+    "rule 223 permit command conf t ; vlan access-map *",
+    "rule 224 permit command conf t ; no vlan access-map *",
+    "rule 225 permit command conf t ; vlan filter *",
+    "rule 226 permit command conf t ; no vlan filter *",
+    "rule 227 permit command conf t ; hardware access-list tcam region *",
+)
+
+# Role versions whose port list gained a line, and so are checked and saved
+# over SSH (see the module notes): accounts below this one get one.
+LAST_PERMIT_VERSION = 7
+
+ROLE_VERSION = 14
+
+# What each role version added, for the Switch page's button names.
+_ADDED_BY_VERSION = {
+    2: "VLAN",
+    3: "port settings",
+    4: "feature",
+    5: "neighbor",
+    6: "port-channel",
+    7: "VLAN interface",
+    8: "VRF",
+    9: "static route",
+    10: "routing protocol",
+    11: "spanning tree",
+    12: "switch admin",
+    13: "security and config",
+    14: "layer 2 security",
+}
+
+
+def missing_changes(role_version: int) -> str:
+    """The kinds of change a role of ``role_version`` lacks, in words.
+
+    ``missing_changes(4)`` is "neighbor and port-channel changes"; "" when
+    nothing is missing.
+    """
+    names = [name for version, name in _ADDED_BY_VERSION.items() if version > role_version]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f"{names[0]} changes"
+    return f"{', '.join(names[:-1])} and {names[-1]} changes"
 
 
 @dataclass(frozen=True)
@@ -103,6 +548,8 @@ class EnableResult:
     save_error: str | None
     # True when the account already had the role, so only its rules changed.
     had_role: bool = False
+    # True when the role's port list names the VLAN interfaces (interface-vlan on).
+    vlan_interfaces: bool = False
 
 
 def front_ports(interface_brief_body: dict) -> list[str]:
@@ -117,11 +564,12 @@ def front_ports(interface_brief_body: dict) -> list[str]:
     return names
 
 
-def role_lines(ports: list[str], account_name: str) -> list[str]:
+def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True) -> list[str]:
     """The configuration lines that create the role and give it to the account.
 
     Typed after ``configure terminal``. Every value is checked first, so the
-    lines can only ever be these.
+    lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
+    to the port list; the switch refuses that line while interface-vlan is off.
     """
     validate_account_name(account_name)
     if not ports:
@@ -129,11 +577,27 @@ def role_lines(ports: list[str], account_name: str) -> list[str]:
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: front ports on/off, descriptions, VLANs, save config",
+        # Kept short: NX-OS takes up to 128 characters here.
+        "description NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
+        "switch admin, ACLs, port security, DHCP, ARP, checkpoints",
         *ROLE_RULES,
         *VLAN_RULES,
+        *SETTINGS_RULES,
+        *FEATURE_RULES,
+        *NEIGHBOR_RULES,
+        *CHANNEL_RULES,
+        *LAYER3_RULES,
+        *VRF_RULES,
+        *ROUTE_RULES,
+        *PROTOCOL_RULES,
+        *STP_RULES,
+        *ADMIN_RULES,
+        *SECURITY_RULES,
+        *LAYER2_RULES,
         "interface policy deny",
         *permits,
+        CHANNEL_PERMIT,
+        *([VLAN_INTERFACE_PERMIT] if vlan_interfaces else []),
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -158,6 +622,33 @@ def pause_seconds(nxapi_body: dict) -> int:
     return max(minutes, 1) * 60 + PAUSE_MARGIN_SECONDS
 
 
+SAVE_COMMAND = "copy running-config startup-config"
+
+
+def _check_role_output(roles_output: str, account_name: str) -> None:
+    """Stop unless ``show user-account <name>`` (typed over SSH) lists the role."""
+    if not re.search(rf"(?<![\w-]){re.escape(ROLE_NAME)}(?![\w-])", roles_output):
+        raise SetupError(
+            f"The switch accepted the commands, but {account_name} does not have the "
+            f"{ROLE_NAME} role. Nothing was saved."
+        )
+
+
+def _saved_over_ssh(
+    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int, vlans: bool
+) -> EnableResult:
+    """Save the configuration over SSH, and the result."""
+    try:
+        (output,) = run_commands(lines=(SAVE_COMMAND,), **ssh)
+    except SshError as exc:
+        output = _scrub(str(exc), admin_password)
+    if "Copy complete" not in output:
+        log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
+        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans)
+    log.info("saved the switch configuration over SSH")
+    return EnableResult(wait, port_count, True, None, had_role, vlans)
+
+
 def _scrub(text: str, secret: str) -> str:
     return text.replace(secret, "***") if secret else text
 
@@ -170,11 +661,18 @@ def enable_port_changes(
     admin_user: str,
     admin_password: str,
     account_name: str,
+    role_version: int = 0,
+    vlan_interfaces_listed: bool = False,
     transport: httpx.BaseTransport | None = None,
     ssh_opener: ShellOpener | None = None,
 ) -> EnableResult:
     """Create the role over SSH, give it to NXray's account, check it, save the config.
 
+    ``role_version`` is the version NXray gave its account before (0 for
+    none). Below ``LAST_PERMIT_VERSION`` the role's port list gains a line,
+    and so does it when interface-vlan is on and ``vlan_interfaces_listed``
+    (the port list names the VLAN interfaces already) is false; then the
+    check and the save go over SSH, which does not depend on NX-API answering.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -186,8 +684,8 @@ def enable_port_changes(
     )
     with NxapiClient(admin, transport=transport) as client:
         try:
-            brief, users, nxapi = client.show(
-                "show interface brief", "show user-account", "show nxapi"
+            brief, users, nxapi, features = client.show(
+                "show interface brief", "show user-account", "show nxapi", "show feature"
             )
         except NxapiError as exc:
             raise SetupError(
@@ -200,10 +698,13 @@ def enable_port_changes(
             )
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
-        lines = role_lines(ports, account_name)
+        vlans = feature_states(features).get("interface-vlan", False)
+        lines = role_lines(ports, account_name, vlan_interfaces=vlans)
+        over_ssh = role_version < LAST_PERMIT_VERSION or (vlans and not vlan_interfaces_listed)
+        then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:
-            run_config(
+            outputs = run_config(
                 host=host,
                 port=ssh_port,
                 username=admin_user,
@@ -211,6 +712,7 @@ def enable_port_changes(
                 lines=lines,
                 timeout=SSH_TIMEOUT,
                 opener=ssh_opener,
+                then=then,
             )
         except SshAuthError as exc:
             raise SetupError("The switch refused the admin username or password over SSH.") from exc
@@ -237,6 +739,17 @@ def enable_port_changes(
         )
         # Rules added to a role the account already has apply at once.
         wait = 0 if had_role else pause_seconds(nxapi)
+        if over_ssh:
+            _check_role_output(outputs[0], account_name)
+            ssh = {
+                "host": host,
+                "port": ssh_port,
+                "username": admin_user,
+                "password": admin_password,
+                "timeout": SSH_TIMEOUT,
+                "opener": ssh_opener,
+            }
+            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans)
 
         try:
             (users,) = client.show("show user-account")
@@ -254,7 +767,9 @@ def enable_port_changes(
             client.save_config()
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
-            return EnableResult(wait, len(ports), False, _scrub(str(exc), admin_password), had_role)
+            return EnableResult(
+                wait, len(ports), False, _scrub(str(exc), admin_password), had_role, vlans
+            )
 
     log.info("saved the switch configuration on %s", host)
-    return EnableResult(wait, len(ports), True, None, had_role)
+    return EnableResult(wait, len(ports), True, None, had_role, vlans)

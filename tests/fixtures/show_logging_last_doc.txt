@@ -1,0 +1,5 @@
+2026 Oct 31 18:30:02 nexus-lab %ETHPORT-5-IF_DOWN_LINK_FAILURE: Interface Ethernet1/7 is down (Link failure)
+2026 Oct 31 18:30:05 nexus-lab %ETHPORT-5-IF_UP: Interface Ethernet1/7 is up in mode access
+2026 Oct 31 18:35:41 nexus-lab %VSHD-5-VSHD_SYSLOG_CONFIG_I: Configured from vty by admin on 198.51.100.20@pts/0
+2026 Oct 31 18:40:11 nexus-lab %NTP-2-NTP_SYSLOG_NO_RESP_FROM_LS: No response from server 192.0.2.124
+2026 Oct 31 18:41:58 nexus-lab %AUTHPRIV-3-SYSTEM_MSG: pam_aaa:Authentication failed from 198.51.100.21 - sshd[12345]

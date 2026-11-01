@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Features — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+{% set can_change = role == "admin" %}
+<h1 class="page-title">Features</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Set up the switch first.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% else %}
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+{% if view is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+  {% if role == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
+</div>
+{% else %}
+{% if connection.unsaved_changes and role in ("admin", "operator") %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="features">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<section class="card">
+  <p class="lead">
+    The parts of NX-OS that can be turned on and off. On now:
+    {% for f in view.enabled %}<strong>{{ f.label }}</strong>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}.
+  </p>
+  {% if not can_change %}
+  <p class="note">Your role ({{ role }}) can look at features but not change them; an NXray admin can.</p>
+  {% elif not connection.feature_changes_enabled %}
+  <p class="note">Feature changes are off. <a href="/switch">Turn them on on the Switch page</a> to turn features on and off here.</p>
+  {% else %}
+  <p class="note">Turning a feature off deletes all of its settings. NXray refuses while it can see something that uses the feature, and never turns off NX-API or SSH, which it needs itself.</p>
+  {% endif %}
+</section>
+
+{% for group, members in view.grouped() %}
+<section class="card card-flush">
+  <h2 class="card-title">{{ group }}</h2>
+  <table class="table table-features">
+    <thead>
+      <tr>
+        <th>Feature</th><th>What it does</th><th>State</th>
+        {% if can_change and connection.feature_changes_enabled %}<th>Change</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in members %}
+      <tr>
+        <td class="mono">{{ f.label }}</td>
+        <td>{{ f.description or "—" }}{% if f.used_by %}<br><span class="dim">Used by {{ f.used_by|join(", ") }}.</span>{% endif %}</td>
+        <td><span class="badge {{ 'badge-ok' if f.enabled else 'badge-unknown' }}">{{ "on" if f.enabled else "off" }}</span></td>
+        {% if can_change and connection.feature_changes_enabled %}
+        <td>
+          {% set refusal = f.refusal(not f.enabled) %}
+          {% if refusal %}
+          <span class="dim">{% if f.command is none %}not changed from NXray{% elif f.used_by %}in use: remove what uses it first{% else %}kept on: NXray needs it{% endif %}</span>
+          {% else %}
+          <form method="post" action="/features/set" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="name" value="{{ f.name }}">
+            <input type="hidden" name="state" value="{{ 'off' if f.enabled else 'on' }}">
+            <button type="submit" class="btn btn-quiet">Turn {{ "off" if f.enabled else "on" }}</button>
+          </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+<p class="note">
+  Features the switch manages itself, or that this model does not offer, are
+  listed with their internal name and are not changed from NXray.
+</p>
+{% endif %}
+{% endif %}
+{% endblock %}

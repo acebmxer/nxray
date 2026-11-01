@@ -1,0 +1,301 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "mgmt0"
+      },
+      {
+        "interface": "Ethernet1/1",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/2",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/3",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/4",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/5",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/6",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/7",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/8",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/9",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/10",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/11",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/12",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/13",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/14",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/15",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/16",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/17",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/18",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/19",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/20",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/21",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/22",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/23",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/24",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/25",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/26",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/27",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/28",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/29",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/30",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/31",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/32",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/33",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/34",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/35",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/36",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/37",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-1"
+      },
+      {
+        "interface": "Ethernet1/38",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-1 data"
+      },
+      {
+        "interface": "Ethernet1/39",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-2"
+      },
+      {
+        "interface": "Ethernet1/40",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-2 data"
+      },
+      {
+        "interface": "Ethernet1/41",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-3"
+      },
+      {
+        "interface": "Ethernet1/42",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "server-3 data"
+      },
+      {
+        "interface": "Ethernet1/43",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "storage-server"
+      },
+      {
+        "interface": "Ethernet1/44",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "storage-server"
+      },
+      {
+        "interface": "Ethernet1/45",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "backup-server"
+      },
+      {
+        "interface": "Ethernet1/46",
+        "type": "eth",
+        "speed": "25G",
+        "desc": "backup-server"
+      },
+      {
+        "interface": "Ethernet1/47",
+        "type": "eth",
+        "speed": "10G",
+        "desc": "uplink"
+      },
+      {
+        "interface": "Ethernet1/48",
+        "type": "eth",
+        "speed": "25G"
+      },
+      {
+        "interface": "Ethernet1/49",
+        "type": "eth",
+        "speed": "40G"
+      },
+      {
+        "interface": "Ethernet1/50",
+        "type": "eth",
+        "speed": "100G"
+      },
+      {
+        "interface": "Ethernet1/51",
+        "type": "eth",
+        "speed": "40G"
+      },
+      {
+        "interface": "Ethernet1/52",
+        "type": "eth",
+        "speed": "100G"
+      },
+      {
+        "interface": "Ethernet1/53",
+        "type": "eth",
+        "speed": "40G"
+      },
+      {
+        "interface": "Ethernet1/54",
+        "type": "eth",
+        "speed": "40G"
+      },
+      {
+        "interface": "port-channel43",
+        "desc": "storage-server"
+      },
+      {
+        "interface": "port-channel54"
+      },
+      {
+        "interface": "port-channel55",
+        "desc": "lab-bundle"
+      }
+    ]
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "TABLE_grp_detail": {
+    "ROW_grp_detail": [
+      {
+        "sh_if_index": "Ethernet1/54",
+        "sh_group_num": 10,
+        "sh_group_type": "v4",
+        "sh_group_version": "v2",
+        "sh_group_state": "Initial",
+        "sh_state_reason": "(Interface Down)",
+        "sh_prio": 110,
+        "sh_cfg_prio": 110,
+        "sh_fwd_lower_threshold": 0,
+        "sh_fwd_upper_threshold": 110,
+        "sh_can_forward": "enabled",
+        "sh_preempt": "enabled",
+        "sh_cur_hello": 1,
+        "sh_cur_hello_attr": "sec",
+        "sh_cfg_hello": 1,
+        "sh_cfg_hello_attr": "sec",
+        "sh_cur_hold": 3,
+        "sh_cur_hold_attr": "sec",
+        "sh_cfg_hold": 3,
+        "sh_cfg_hold_attr": "sec",
+        "sh_vip": "192.0.2.254",
+        "sh_vip_attr": "config",
+        "sh_active_router_addr": "0.0.0.0",
+        "sh_active_router_prio": 0,
+        "sh_standby_router_addr": "0.0.0.0",
+        "sh_standby_router_prio": 0,
+        "sh_authentication_type": "md5",
+        "sh_authentication_data": "nxprobe-kc",
+        "sh_vmac": "0000.0c9f.f00a",
+        "sh_vmac_attr": "Default MAC",
+        "sh_num_of_state_changes": 0,
+        "sh_num_of_total_state_changes": 0,
+        "sh_num_track_obj": 0,
+        "sh_ip_redund_name": "nxprobe-hsrp",
+        "sh_ip_redund_name_attr": "Configured"
+      },
+      {
+        "sh_if_index": "Ethernet1/54",
+        "sh_group_num": 20,
+        "sh_group_type": "v6",
+        "sh_group_version": "v2",
+        "sh_group_state": "Initial",
+        "sh_state_reason": "(Interface Down)",
+        "sh_prio": 105,
+        "sh_cfg_prio": 105,
+        "sh_fwd_lower_threshold": 0,
+        "sh_fwd_upper_threshold": 105,
+        "sh_can_forward": "enabled",
+        "sh_preempt": "enabled",
+        "sh_cur_hello": 3,
+        "sh_cur_hello_attr": "sec",
+        "sh_cur_hold": 10,
+        "sh_cur_hold_attr": "sec",
+        "sh_vip_v6": "fe80::5:73ff:fea0:14",
+        "sh_vip_attr": "config",
+        "sh_active_router_addr_v6": "0::",
+        "sh_active_router_prio": 0,
+        "sh_standby_router_addr_v6": "0::",
+        "sh_standby_router_prio": 0,
+        "sh_authentication_type": "text",
+        "sh_authentication_data": "cisco",
+        "sh_vmac": "0005.73a0.0014",
+        "sh_vmac_attr": "Default MAC",
+        "sh_num_of_state_changes": 0,
+        "sh_num_of_total_state_changes": 0,
+        "sh_num_track_obj": 0,
+        "sh_ip_redund_name": "hsrp-Eth1/54-20-V6",
+        "sh_ip_redund_name_attr": "Default",
+        "TABLE_grp_vip_sec": {
+          "ROW_grp_vip_sec": {
+            "sh_vip_sec": "184.13.1.32"
+          }
+        }
+      }
+    ]
+  }
+}

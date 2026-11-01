@@ -1,0 +1,384 @@
+{
+  "TABLE_mac_address": {
+    "ROW_mac_address": [
+      {
+        "disp_mac_addr": "0cea.1400.0001",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0cea.1400.0002",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "1c6a.1b00.0003",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "58d6.1f00.0004",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "6022.3200.0005",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0200.0000.bbde",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "8478.4800.0006",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "9009.d000.0007",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "d021.f900.0008",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "f4e2.c600.0009",
+        "disp_type": "dynamic",
+        "disp_vlan": "1",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.000a",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/38"
+      },
+      {
+        "disp_mac_addr": "506b.4b00.000b",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/39"
+      },
+      {
+        "disp_mac_addr": "6022.3200.0005",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "9803.9b00.000c",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/46"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.000d",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/37"
+      },
+      {
+        "disp_mac_addr": "b859.9f00.000e",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Po43"
+      },
+      {
+        "disp_mac_addr": "b859.9f00.000f",
+        "disp_type": "dynamic",
+        "disp_vlan": "2",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/37"
+      },
+      {
+        "disp_mac_addr": "0499.b900.0010",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0499.b900.0011",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0499.b900.0012",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.0013",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/40"
+      },
+      {
+        "disp_mac_addr": "4461.3200.0014",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "54ef.4400.0015",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "54ef.4400.0016",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "5847.ca00.0017",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "6022.3200.0005",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "98b7.8500.0018",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "a4cf.9900.0019",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.001a",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/40"
+      },
+      {
+        "disp_mac_addr": "b859.9f00.000e",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Po43"
+      },
+      {
+        "disp_mac_addr": "c018.0300.001b",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "d450.ee00.001c",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "ecb5.fa00.001d",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.001e",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/38"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.001f",
+        "disp_type": "dynamic",
+        "disp_vlan": "10",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.0020",
+        "disp_type": "dynamic",
+        "disp_vlan": "79",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/40"
+      },
+      {
+        "disp_mac_addr": "6022.3200.0005",
+        "disp_type": "dynamic",
+        "disp_vlan": "79",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "0a00.0000.0021",
+        "disp_type": "dynamic",
+        "disp_vlan": "79",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/47"
+      },
+      {
+        "disp_mac_addr": "b859.9f00.000e",
+        "disp_type": "dynamic",
+        "disp_vlan": "79",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Po43"
+      },
+      {
+        "disp_mac_addr": "506b.4b00.000b",
+        "disp_type": "dynamic",
+        "disp_vlan": "253",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Eth1/39"
+      },
+      {
+        "disp_mac_addr": "b859.9f00.000e",
+        "disp_type": "dynamic",
+        "disp_vlan": "253",
+        "disp_age": "0",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "Po43"
+      },
+      {
+        "disp_mac_addr": "0200.0000.bbe5",
+        "disp_type": "static",
+        "disp_vlan": "-",
+        "disp_age": "-",
+        "disp_is_secure": "F",
+        "disp_is_ntfy": "F",
+        "disp_port": "sup-eth1(R)"
+      }
+    ]
+  }
+}

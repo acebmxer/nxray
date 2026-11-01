@@ -1,0 +1,23 @@
+spanning-tree vlan 250 priority 4096
+spanning-tree vlan 250 hello-time 3
+spanning-tree vlan 250 forward-time 20
+spanning-tree vlan 250 max-age 30
+spanning-tree mst configuration
+  name lab-region
+  revision 5
+  instance 1 vlan 250
+interface Ethernet1/54
+  spanning-tree port-priority 64
+  spanning-tree cost 100
+  spanning-tree link-type point-to-point
+  spanning-tree port type normal
+  spanning-tree bpduguard enable
+  spanning-tree guard root
+  spanning-tree bpdufilter enable
+  spanning-tree vlan 250 port-priority 32
+  spanning-tree vlan 250 cost 200
+interface Ethernet1/53
+  spanning-tree port type edge trunk
+  spanning-tree guard loop
+  spanning-tree bpduguard disable
+  spanning-tree link-type shared

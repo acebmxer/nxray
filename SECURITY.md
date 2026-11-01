@@ -20,18 +20,76 @@ generated `secret_key` file on the data volume). The two-factor keys of
 NXray accounts that turned two-factor sign-in on are encrypted the same way.
 With built-in HTTPS on, its private key is on the data volume too
 (`/data/tls/key.pem`, readable by the container user only).
+When alerts are set up, the SMTP password and each webhook's URL and signing
+secret are encrypted the same way (a Slack or Discord webhook URL is itself
+the password, so the Alerts page shows only its host); the mail server, the
+addresses and what is alerted on are not.
 It also keeps 30 days of history in its database, unencrypted: temperatures,
 power, fan speed, CPU and memory use, and each port's traffic rate and error
 counts (no addresses, no packet contents).
 NXray's switch account starts
 read-only (`network-operator`). Once port changes are turned on it also has
 the `nxray-ports` role: on the front-panel Ethernet ports it may turn a port
-on or off, set or remove its description and set its mode (access or trunk)
-and VLANs; it may create, name and delete VLANs; and it may run `copy
-running-config startup-config`. The switch refuses it anything else,
-including mgmt0. Anyone who takes over NXray can do whatever that account
-can, so with port changes on that includes turning ports off and moving them
-to other VLANs. Like any local NX-OS account it can also
+on or off, set or remove its description, set its mode (access or trunk)
+and VLANs, and set its speed, MTU, FEC, flow control, storm control and layer
+(switched, or routed with an IPv4 address), and turn CDP and LLDP on or off
+on them; it may put them into port-channels and take them out (`channel-group
+*`, `no channel-group`) and set their LACP rate and priority, and on every
+port-channel it may do the same port settings and set its LACP minimum links
+or delete it (`no interface port-channel *`); it may split a 100G port into
+four and join it again; it may
+create, name and delete VLANs; it may turn any switch feature on or off
+(`feature *`, `no feature *`); it may set the MAC address aging time, add
+and remove static MAC addresses and clear learned ones (`mac address-table
+aging-time *`, `mac address-table static *`, `clear mac address-table
+dynamic`); it may set the switch's LACP priority (`lacp system-priority *`);
+it may make, change and delete VLAN interfaces of VLANs 1 to 254 and put
+IPv4 and IPv6 addresses on them and on routed ports; it may make and delete
+VRFs and move VLAN interfaces and routed ports between them (`vrf context
+*`, `no vrf context *`, `vrf member *`, `no vrf member *`); it may add and
+remove IPv4 and IPv6 static routes (`ip route *`, `ipv6 route *` and their
+`no` forms, also inside `vrf context`); it may run the routing protocols
+and change their settings: everything inside `router ospf|ospfv3|bgp|eigrp|rip|isis`,
+`route-map`, `key chain`, `ip prefix-list`, `ipv6 prefix-list`, the `ip pim`,
+`ipv6 pim`, `ip msdp` and `bfd` lines, and on the interfaces it may change the
+lines of those protocols and of HSRP, VRRP, VRRPv3 and IGMP; it may change
+spanning tree (`spanning-tree *` and its `no` form, for the whole switch and
+on the permitted ports) and read the spanning tree lines of the running
+configuration; it may change the switch admin settings (hostname, login
+banner, time zone, summer time, `clock set`, NTP servers, DNS domain, lookups
+and servers, logging, SNMP contact and location, read-only SNMP communities
+and SNMP v2c trap receivers) and read the whole running configuration (which
+holds the switch's password hashes and SNMP communities); it may make, change,
+delete and apply IPv4 and IPv6 ACLs, set port security on the permitted ports,
+read the saved configuration and make, list and delete checkpoints; it may set
+DHCP snooping, the DHCP and DHCPv6 relay (including which servers requests go
+to), dynamic ARP inspection and its ARP ACLs, and IP Source Guard and its
+fixed bindings, make, change, delete and apply MAC ACLs, object groups and
+VLAN access maps (`vlan filter`), and size the TCAM regions (`hardware
+access-list tcam region *`, counted only after a restart); and it may run `copy running-config startup-config`. The switch refuses it anything else,
+including mgmt0, accounts, SNMP users, read-write SNMP communities, rolling
+the switch back to a checkpoint and restarting it (NXray asks for the admin
+login each time for those). Anyone who takes over NXray can do whatever that account
+can, so with port changes on that includes turning ports off, moving them
+to other VLANs, sending a device's traffic to the wrong port or dropping it
+with a static MAC address, pulling ports out of a port-channel or deleting it,
+taking the switch's address off a VLAN or moving an interface into another
+VRF (both cut off the devices that use the switch as their gateway there),
+sending a network's traffic to the wrong router with a static route or a
+routing protocol (and telling other routers about it), taking over a shared
+gateway address with HSRP or VRRP, changing spanning tree (a wrong port
+type, filter or mode can make a loop or stop traffic on every VLAN),
+renaming the switch, pointing its clock, DNS or logging at other servers,
+adding a read-only SNMP community, applying an ACL that drops traffic
+(also NXray's own), turning on port security that shuts a port down,
+turning on DHCP snooping, ARP inspection or IP Source Guard that cuts devices
+off, sending DHCP requests to another server, shrinking a TCAM region so ACLs
+no longer fit after the next restart,
+and turning features on or off: turning off a feature
+deletes its settings (LACP takes its port-channels with it), and turning on
+`telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off
+NX-API, SSH or a feature they can see in use, but the switch itself does
+not. Like any local NX-OS account it can also
 sign in over SSH, with a password nobody has seen.
 
 **The admin login.** The switch's admin username and password are typed into
@@ -49,6 +107,11 @@ role` and `show nxapi`, runs `username <name> password <random> role
 network-operator` for NXray's existing account name only (a new password,
 or the account made again), `username <name> role nxray-ports` when port
 changes were on and the account lost the role, and saves the
+configuration. Rolling back on the Config page sends one command with it over
+NX-API, `rollback running-config checkpoint nxray-<n>` (NXray's own
+checkpoints only), and the password is removed from any error shown.
+Restarting the switch on the Config page types `terminal dont-ask` and
+`reload` into an SSH session with it, and nothing else.
 configuration. Changing the switch address needs no admin login: NXray
 signs in at the new address with its own account before storing it.
 
@@ -70,6 +133,16 @@ privileged container. Only admins can press Update now (and every form is
 CSRF-protected); the one outside call is ghcr.io, once a day and on Check
 now. Enable it only on a host where you already trust this image with root.
 
+**Alerts.** Off until an admin sets up e-mail or a webhook on the Alerts
+page; then NXray connects out from the container to that mail server and
+those URLs, and to nothing else. Only admins can set them, so an admin can
+make NXray send a POST to any address the container reaches; what is sent is
+the alert's own words (problems, and the Activity lines when changes are
+asked for, with passwords already masked), never a login. The mail server's
+certificate is checked (STARTTLS or SSL/TLS), a password is never sent over
+a connection without them, and so are the webhooks' HTTPS certificates.
+Redirects are not followed.
+
 **What protects it.** Sign-in accounts with Argon2id password hashes. The
 first one, an admin, comes from a hash in configuration; the app refuses to
 start without one and has no default password. Further accounts get one of
@@ -82,7 +155,10 @@ the six-digit code is accepted once only, wrong codes count towards the same
 throttle, the key is stored AES-GCM encrypted and the ten backup codes only
 as SHA-256 hashes. Pages are sent with a
 strict Content-Security-Policy and may not be framed by other sites. Every
-form that changes something carries a per-session anti-forgery token.
+form that changes something carries a per-session anti-forgery token, which
+also names the switch the page was shown for: with several switches, a page
+left open for one switch cannot change another after a different switch was
+picked in another tab.
 
 **The switch's certificate is not checked.** NX-API uses a self-signed
 certificate generated by the switch. NXray accepts it: the connection is

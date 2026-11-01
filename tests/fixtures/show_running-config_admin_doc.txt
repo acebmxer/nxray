@@ -1,0 +1,53 @@
+
+!Command: show running-config
+!Running configuration last done at: Sat Oct 31 18:40:11 2026
+!Time: Sat Oct 31 18:42:07 2026
+
+version 9.3(16) Bios:version 07.69
+hostname nexus-lab
+banner motd #Authorized access only#
+vdc nexus-lab id 1
+  limit-resource vlan minimum 16 maximum 4094
+
+feature nxapi
+feature lacp
+
+no password strength-check
+username admin password 5 $5$SCRUBBED  role network-admin
+username nxray password 5 $5$SCRUBBED  role network-operator
+no ip domain-lookup
+ip domain-name example.net use-vrf management
+ip name-server 192.0.2.53 192.0.2.54 use-vrf management
+clock timezone EST -5 0
+clock summer-time EDT 2 Sunday March 02:00 1 Sunday November 02:00 60
+snmp-server contact noc@example.net
+snmp-server location Rack 4, room 2
+snmp-server user admin network-admin auth md5 0xSCRUBBED priv 0xSCRUBBED localizedkey
+snmp-server host 192.0.2.162 traps version 2c Scrubbed-Trap-1
+snmp-server host 192.0.2.162 use-vrf management
+rmon event 1 description FATAL(1) owner PMON@FATAL
+snmp-server community Scrubbed-Ro-1 group network-operator
+snmp-server community Scrubbed-Rw-1 group network-admin
+ntp server 192.0.2.123 prefer use-vrf management
+ntp server 192.0.2.124 use-vrf management
+
+vlan 1,10
+vlan 10
+  name Servers
+
+vrf context management
+  ip name-server 198.51.100.53
+  ip route 0.0.0.0/0 203.0.113.254
+
+interface Ethernet1/1
+
+interface mgmt0
+  vrf member management
+  ip address 198.51.100.10/24
+line console
+line vty
+logging logfile messages 6 size 4194304
+logging server 192.0.2.50 5 use-vrf management
+logging timestamp milliseconds
+no logging console
+logging monitor 3

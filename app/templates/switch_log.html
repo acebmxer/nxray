@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Switch log — NXray{% endblock %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<p class="breadcrumb"><a href="/switch-admin">← Switch admin</a></p>
+<h1 class="page-title">Switch log</h1>
+<p class="lead">The newest lines of the switch's own log file, newest first. What it keeps is set under Logging on the <a href="/switch-admin">Switch admin</a> page.</p>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  {% if role == "admin" %}<p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>{% else %}<p class="note">An NXray admin sets it up on the Switch page.</p>{% endif %}
+</div>
+{% elif log is none %}
+<div class="card">
+  <p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p>
+</div>
+{% else %}
+<section class="card">
+  <form method="get" action="/switch-admin/log" class="row-form search-form">
+    <input name="search" aria-label="Search the log" type="text" value="{{ search }}" maxlength="100" spellcheck="false" placeholder="Text, a port, an address">
+    <select name="level" aria-label="Severity">
+      <option value="" {% if not level %}selected{% endif %}>Every level</option>
+      {% for n, word in [("0", "emergencies"), ("1", "alerts"), ("2", "critical"), ("3", "errors"), ("4", "warnings"), ("5", "notifications"), ("6", "informational")] %}
+      <option value="{{ n }}" {% if level == n %}selected{% endif %}>{{ n }} {{ word }} and worse</option>
+      {% endfor %}
+    </select>
+    <select name="lines" aria-label="Lines to read">
+      {% for n in line_choices %}<option value="{{ n }}" {% if lines == n %}selected{% endif %}>last {{ n }} lines</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-quiet">Show</button>
+    {% if search or level %}<a class="btn btn-quiet" href="/switch-admin/log?lines={{ lines }}">Show all</a>{% endif %}
+  </form>
+  {% if log %}
+  <p class="note">{{ log|length }} line{{ "" if log|length == 1 else "s" }}{% if search or level %} match, of the last {{ lines }}{% endif %}.</p>
+  <table class="table table-devices">
+    <thead><tr><th>Level</th><th>Line</th></tr></thead>
+    <tbody>
+      {% for entry in log %}
+      <tr>
+        <td>{% if entry.severity is none %}<span class="badge badge-unknown">—</span>{% elif entry.severity <= 2 %}<span class="badge badge-crit">{{ entry.severity }}</span>{% elif entry.severity <= 4 %}<span class="badge badge-warn">{{ entry.severity }}</span>{% else %}<span class="badge badge-ok">{{ entry.severity }}</span>{% endif %}</td>
+        <td class="wrap mono">{{ entry.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% elif search or level %}
+  <p>No line of the last {{ lines }} matches.</p>
+  {% else %}
+  <p>The switch's log is empty.</p>
+  {% endif %}
+  <p class="note">Levels: 0 emergencies, 1 alerts, 2 critical, 3 errors, 4 warnings, 5 notifications, 6 informational, 7 debugging. Lines without one (such as the log's own header) show —.</p>
+</section>
+{% endif %}
+{% endblock %}

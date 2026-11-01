@@ -155,15 +155,13 @@ def test_existing_account_name_is_refused(logged_in: TestClient, switch: FakeSwi
     assert switch.users["nxray"] == ("Other1Install", "network-operator")
 
 
-def test_a_second_setup_is_refused_while_one_is_stored(
-    logged_in: TestClient, switch: FakeSwitch
-) -> None:
+def test_the_same_switch_cannot_be_added_twice(logged_in: TestClient, switch: FakeSwitch) -> None:
     _set_up(logged_in)
     response = logged_in.post(
         "/switch/setup", data=_setup_form(logged_in, account_name="nxray-two")
     )
     assert response.status_code == 400
-    assert "already set up" in response.text
+    assert "NXray already has the switch at 192.0.2.10, port 443" in response.text
     assert "nxray-two" not in switch.users
 
 

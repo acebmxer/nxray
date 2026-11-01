@@ -1,0 +1,19 @@
+{
+  "TABLE_vrrp_group": {
+    "ROW_vrrp_group": {
+      "sh_if_index": "Ethernet1/54",
+      "sh_group_id": 30,
+      "sh_group_type": "IPV4",
+      "sh_group_state": "Init",
+      "sh_group_preempt": "Enable",
+      "sh_vip_addr": "192.0.2.253",
+      "sh_priority": 120,
+      "sh_cfg_priority": 120,
+      "sh_fwd_thr_lower": 1,
+      "sh_fwd_thr_upper": 120,
+      "sh_adv_interval": 2,
+      "sh_vmac": "0000.5e00.011e",
+      "sh_master_router": "Unknown"
+    }
+  }
+}

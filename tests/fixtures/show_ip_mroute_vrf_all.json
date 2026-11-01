@@ -1,0 +1,39 @@
+{
+  "TABLE_vrf": {
+    "ROW_vrf": {
+      "vrf-name": "default",
+      "TABLE_one_route": {
+        "ROW_one_route": {
+          "mcast-addrs": "(*, 232.0.0.0/8)",
+          "source_addrs": "*",
+          "group_addrs": "232.0.0.0/8",
+          "pending": "false",
+          "bidir": "false",
+          "uptime": "00:00:26",
+          "uptime_detailed": "PT26S",
+          "mofrr": "false",
+          "route-iif": "Null",
+          "rpf-nbr": "0.0.0.0",
+          "mofrr-iif": "Null",
+          "mofrr-nbr": "0.0.0.0",
+          "internal": "false",
+          "oif-count": "0",
+          "fabric-oif": "false",
+          "fabric-loser": "false",
+          "TABLE_mpib": {
+            "ROW_mpib": [
+              {
+                "mpib-name": "pim",
+                "stale-route": "false"
+              },
+              {
+                "mpib-name": "ip",
+                "stale-route": "false"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

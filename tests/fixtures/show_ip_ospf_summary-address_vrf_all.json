@@ -1,0 +1,16 @@
+{
+  "TABLE_ctx": {
+    "ROW_ctx": {
+      "ptag": "nxprobe",
+      "cname": "default",
+      "rid": "192.0.2.1",
+      "TABLE_sum": {
+        "ROW_sum": {
+          "addr": "203.0.113.0",
+          "masklen": 24,
+          "pending": "true"
+        }
+      }
+    }
+  }
+}

@@ -42,6 +42,8 @@ from app.vlans import (
     parse_switchports,
     parse_vlans,
     plan_port_vlans,
+    vlan_grid,
+    vlan_mark,
 )
 from tests.conftest import load_fixture
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
@@ -203,9 +205,51 @@ def test_plan_keeps_only_what_changes() -> None:
         None,
     )
     trunk = plan_port_vlans(
-        access, view, mode="trunk", access_vlan="10", native_vlan="1", allowed="10,20"
+        access, view, mode="trunk", access_vlan="10", native_vlan="1", allowed="1,10,20"
     )
-    assert (trunk.mode, trunk.native_vlan, trunk.allowed_vlans) == ("trunk", None, [10, 20])
+    assert (trunk.mode, trunk.native_vlan, trunk.allowed_vlans) == ("trunk", None, [1, 10, 20])
+    assert trunk.native_added is None
+
+
+def test_plan_adds_the_native_vlan_to_the_vlans_carried() -> None:
+    # A trunk with native VLAN 2 carrying only 253-254 drops VLAN 2's untagged
+    # traffic on NX-OS: the device on the port got no DHCP address (#12).
+    access = _port("Ethernet1/5", "access")
+    view = _view(1, 2, 253, 254)
+    trunk = plan_port_vlans(
+        access, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="253-254"
+    )
+    assert (trunk.native_vlan, trunk.allowed_vlans, trunk.native_added) == (2, [2, 253, 254], 2)
+    lines, _ = describe_port_vlans(access, trunk)
+    assert "VLANs carried: 1-4094 → 2,253-254." in lines
+    assert any(line.startswith("VLAN 2 is the native VLAN, so it is added") for line in lines)
+
+    # "none" still carries the native VLAN.
+    bare = plan_port_vlans(
+        access, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="none"
+    )
+    assert bare.allowed_vlans == [2] and bare.native_added == 2
+
+    # Only the native VLAN changes on a trunk: the carried list gains it.
+    existing = _port("Ethernet1/5", "trunk", native=1, allowed={1, 253, 254})
+    moved = plan_port_vlans(
+        existing, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="1,253-254"
+    )
+    assert (moved.native_vlan, moved.allowed_vlans, moved.native_added) == (2, [1, 2, 253, 254], 2)
+
+    # Already carried as typed, or nothing else changes: nothing to say.
+    carried = _port("Ethernet1/5", "trunk", native=2, allowed={2, 253, 254})
+    same = plan_port_vlans(
+        carried, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="253-254"
+    )
+    assert same.empty
+
+
+def test_native_carried() -> None:
+    assert _port("Ethernet1/5", "trunk", native=2, allowed={253, 254}).native_carried is False
+    assert _port("Ethernet1/5", "trunk", native=2, allowed={2, 253}).native_carried is True
+    assert _port("Ethernet1/5", "trunk", native=2).native_carried is True  # carries every VLAN
+    assert _port("Ethernet1/5", "access", native=2, allowed={253}).native_carried is True
 
 
 def test_plan_refuses_what_the_switch_would_take_badly() -> None:
@@ -339,8 +383,9 @@ def test_role_lines_carry_the_vlan_rules() -> None:
         )
 
 
-def _enable(switch: FakeSwitch):
+def _enable(switch: FakeSwitch, role_version: int = 0):
     return enable_port_changes(
+        role_version=role_version,
         host="192.0.2.10",
         nxapi_port=443,
         ssh_port=22,
@@ -357,7 +402,7 @@ def test_updating_a_role_the_account_has_needs_no_wait() -> None:
     switch.users["nxray"] = (NXRAY_PASSWORD, "network-operator")
     first = _enable(switch)
     assert (first.had_role, first.pause_seconds) == (False, 660)
-    again = _enable(switch)
+    again = _enable(switch, role_version=ROLE_VERSION)
     assert (again.had_role, again.pause_seconds) == (True, 0)
     assert again.config_saved
 
@@ -398,7 +443,7 @@ def _connected(tmp_path: Path) -> Path:
 
 
 def _stored(conn: sqlite3.Connection) -> SwitchConnection:
-    connection = get_connection(conn)
+    connection = get_connection(conn, 1)
     assert connection is not None
     return connection
 
@@ -407,16 +452,16 @@ def test_role_version_is_stored_and_a_running_pause_is_kept(tmp_path: Path) -> N
     db = _connected(tmp_path)
     with open_db(db) as conn:
         assert _stored(conn).role_version == 0
-        set_changes_enabled(conn, pause_seconds=660, role_version=1)
+        set_changes_enabled(conn, 1, pause_seconds=660, role_version=1)
         first = _stored(conn)
         assert first.changes_enabled and not first.vlan_changes_enabled
         # The update needs no wait, but must not cut the first wait short.
-        set_changes_enabled(conn, pause_seconds=0, role_version=ROLE_VERSION)
+        set_changes_enabled(conn, 1, pause_seconds=0, role_version=ROLE_VERSION)
         second = _stored(conn)
         assert second.vlan_changes_enabled
         assert second.paused_until == first.paused_until
         conn.execute("UPDATE switch_connection SET paused_until = ?", (time.time() - 5,))
-        set_changes_enabled(conn, pause_seconds=0, role_version=ROLE_VERSION)
+        set_changes_enabled(conn, 1, pause_seconds=0, role_version=ROLE_VERSION)
         assert _stored(conn).paused_seconds() == 0
 
 
@@ -436,8 +481,42 @@ def test_installs_with_port_changes_on_get_role_version_1(tmp_path: Path) -> Non
     )
     conn.commit()
     assert migrate(conn) == len(_MIGRATIONS)
-    connection = get_connection(conn)
+    connection = get_connection(conn, 1)
     conn.close()
     assert connection is not None
     assert (connection.role_version, connection.changes_enabled) == (1, True)
     assert not connection.vlan_changes_enabled
+
+
+# ---- the VLANs page's grid -------------------------------------------------
+
+
+def test_vlan_marks() -> None:
+    access = PortVlans("Ethernet1/1", True, "access", 10, 1)
+    trunk = PortVlans("Ethernet1/2", True, "trunk", 1, 1, frozenset({1, 10, 20}))
+    routed = PortVlans("Ethernet1/3", False, "access", 10, 1)
+    assert [vlan_mark(access, v) for v in (1, 10, 20)] == ["", "U", ""]
+    assert [vlan_mark(trunk, v) for v in (1, 10, 20, 30)] == ["U", "T", "T", ""]
+    assert vlan_mark(routed, 10) == ""
+    # A native VLAN the trunk does not carry is not marked.
+    dropped = PortVlans("Ethernet1/4", True, "trunk", 1, 99, frozenset({10}))
+    assert vlan_mark(dropped, 99) == ""
+
+
+def test_vlan_grid_orders_ports_like_the_front_panel() -> None:
+    view = VlanView(
+        vlans=[Vlan(1, "default", "active"), Vlan(10, "servers", "active")],
+        ports={
+            "Ethernet1/10": PortVlans("Ethernet1/10", True, "access", 10, 1),
+            "port-channel43": PortVlans("port-channel43", True, "trunk", 1, 1, frozenset({1, 10})),
+            "Ethernet1/2": PortVlans("Ethernet1/2", True, "access", 1, 1),
+            "port-channel5": PortVlans("port-channel5", True, "access", 1, 1),
+            "Ethernet1/3": PortVlans("Ethernet1/3", False, "access", 1, 1),
+        },
+    )
+    columns, rows = vlan_grid(view)
+    assert columns == ["Ethernet1/2", "Ethernet1/10", "port-channel5", "port-channel43"]
+    assert [(vlan.id, marks) for vlan, marks in rows] == [
+        (1, ["U", "", "U", "U"]),
+        (10, ["", "U", "", "T"]),
+    ]

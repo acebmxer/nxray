@@ -1,0 +1,438 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "Ethernet1/1",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/2",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/3",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/4",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/5",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/6",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/7",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/8",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/9",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/10",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/11",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/12",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/13",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/14",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/15",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/16",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/17",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/18",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/19",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/20",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/21",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/22",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/23",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/24",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/25",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/26",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/27",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/28",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/29",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/30",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/31",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/32",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/33",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/34",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/35",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/36",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/37",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/38",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/39",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/40",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/41",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/42",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/43",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/44",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/45",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/46",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/47",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/48",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/49",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/50",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/51",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/52",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/53",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      },
+      {
+        "interface": "Ethernet1/54",
+        "eth_ucast_supp": "100.00",
+        "eth_mcast_supp": "100.00",
+        "eth_bcast_supp": "100.00",
+        "eth_total_supp": 0,
+        "supp_action": "[--]"
+      }
+    ]
+  }
+}

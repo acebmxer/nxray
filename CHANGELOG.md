@@ -9,8 +9,422 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
+**The first stable release of NXray: all 20 stages of the roadmap, from the
+dashboard and the ports to VLANs, layer 3, spanning tree, security, alerts and
+several switches in one NXray.** A new install needs only
+`docker-compose.yml` and `nxray.env` (see `docs/installation.md`). Coming from
+a beta: put `ghcr.io/acebmxer/nxray:latest` (or `:0.1.0`) in the compose
+file's `image:` line in place of `:beta`, then `docker compose pull` and
+`docker compose up -d`; the data volume carries over.
+
 ### Added
 
+- **VLAN grid.** The VLANs page shows every VLAN against every port and
+  port-channel: **U** where the port carries it untagged (its access VLAN, or
+  a trunk's native VLAN) and **T** where a trunk carries it tagged.
+
+- **Change several ports at once.** With port changes on, the Ports page has
+  a tick box on each row for operators and admins, a **Tick every port
+  shown** link (which follows the Up, Down and With errors filters), and a
+  **Change several ports** card that turns the ticked ports off or on or gives
+  them all one description. The confirm page lists every port and what
+  happens to it, warns for each up port about to be turned off, and leaves
+  out ports already as asked. NXray changes the ports one request at a time;
+  if the switch refuses one, it stops there and the page names the ports that
+  changed, the one refused and the ones not tried, with the ticks kept. Each
+  change is in the Activity log. The Ports page now shows the unsaved-changes
+  reminder with a Save config button that stays on the Ports page (#3).
+
+- **Several switches in one NXray.** Once a switch is set up, the Switch page
+  (admins only) has **Add another switch**, the same setup as the first, and
+  lists every switch NXray has. With two or more, the top bar has a switch
+  picker, for every role: every page shows the switch picked there, and every
+  change goes to that switch only. The choice is kept per browser. A page left
+  open for one switch refuses its forms once another switch was picked in
+  another tab (reload it and try again), so a change never lands on a switch
+  the page did not show. Each switch has its own NXray account, port changes,
+  history, port labels, config backups (a backup is never compared with or
+  rolled back onto another switch) and open alerts; history reads every
+  switch each minute, one after the other, and every alert names its switch
+  (also in the alert log on the Alerts page). NXray refuses a second switch
+  at an address it already has, and moving one onto another's address.
+  **Forget this switch** now also deletes the history, port labels, config
+  backups and open alerts NXray kept for that switch. An existing install
+  keeps its switch and everything recorded for it.
+
+- **Restart the switch.** The Config page (admins only) has **Restart the
+  switch**: a confirm page warns that every port goes down for several
+  minutes, says how much of the running configuration is unsaved, offers
+  **Save first** (on by default), and asks for the switch admin login and
+  SSH port. NXray saves with its own account when asked, then types
+  `terminal dont-ask` and `reload` over SSH with the admin login, once; the
+  password is never stored, and NXray's own role has no rule to restart the
+  switch. A restart is in the Activity log. It is also how new TCAM region
+  sizes take effect.
+
+- **ACLs page: MAC ACLs, object groups, VLAN access maps and TCAM regions.**
+  Operators and admins can now also make MAC ACLs (entries matching a source
+  and destination MAC address, an EtherType, a CoS and a VLAN) and apply them
+  in on a switched port (`mac port access-group`); make IPv4 and IPv6
+  address groups and port groups, which an IPv4 or IPv6 entry names as
+  `addrgroup <name>` or `portgroup <name>`; make VLAN access maps whose
+  entries match an IPv4, IPv6 or MAC ACL and then forward or drop, and apply
+  a map to VLANs with a VLAN filter; and size the TCAM regions. The page
+  lists the TCAM regions with their size now and the size set, and which wait
+  for a restart: on a Nexus 9000 port ACLs and VLAN ACLs have no space until
+  their region is given some. These need NXray's role version 14.
+
+- **DHCP and ARP.** A new **DHCP and ARP** page, linked from ACLs and Port
+  security, shows and changes, after a confirm page that shows the lines and
+  warns when devices can be cut off: DHCP snooping (on or off, its VLANs,
+  option 82, checking client MAC addresses), each switched port's trust and
+  DHCP rate limit, the DHCP relay (on or off, option 82, across VRFs) and the
+  DHCP and DHCPv6 servers of each VLAN interface or routed port, dynamic ARP
+  inspection (its VLANs, extra checks, log buffer, trusted ports) and ARP
+  ACLs for hosts with fixed addresses, and IP Source Guard per port with
+  fixed bindings. A table lists the addresses DHCP snooping learned (`show
+  ip dhcp snooping binding`) and the fixed ones. It needs the dhcp feature.
+  NXray's `nxray-ports` role gets rules 191 to 227 (role version 14); an older
+  role gets a **Turn on layer 2 security changes** button, with no wait. The
+  lines and rules follow Cisco's NX-OS 9.3 Security Configuration Guide and
+  have not yet been tried on a switch.
+
+- **Alerts by e-mail and webhook.** A new **Alerts** page (admins only, in
+  the menu) sends an e-mail, a webhook or both when the switch needs
+  attention, and again when the problem is over: NXray cannot reach the
+  switch (two reads in a row), a temperature at its minor or major limit, a
+  fan or power supply that is not OK, and, when turned on, CPU or memory at
+  a limit for three checks in a row, a port that goes down from up while it
+  is turned on (every port, or only those with a description or a label), a
+  number of new errors on a port, and every change made through NXray. Each
+  problem is sent once when it starts and once when it ends, also across a
+  restart, and what one check finds goes out together. It is checked
+  against each history sample, so it asks nothing more of the switch; with
+  history off only changes are sent. E-mail goes through your mail server
+  (STARTTLS, SSL/TLS, or none for a trusted relay, with the certificate
+  checked and a password never sent unencrypted) to up to ten addresses;
+  up to ten webhooks get NXray's own JSON (optionally signed with
+  `X-NXray-Signature`), Slack's or Discord's format. The SMTP password and
+  the webhook URLs and secrets are stored encrypted and never shown again.
+  The page lists the problems open now and the alerts sent in the last 90
+  days with how each delivery went, and has test buttons.
+
+- **Activity log.** A new **Activity** page (admins only, in the menu) lists
+  every change made through NXray, newest first: who made it, on which page,
+  the change in plain words (passwords and SNMP communities masked) and the
+  switch's address. It covers port, VLAN, port-channel, routing, protocol,
+  spanning tree, switch admin, ACL, port security, neighbor and feature
+  changes, Save config, backups and rollbacks, the Switch page's actions, and
+  changes to NXray's own accounts and settings. Filter it by account, page or
+  text, or download it as CSV. Lines are kept for a year.
+
+- **Config: backups, comparing and rollback.** A new **Config** page (admins
+  only) shows whether the running configuration differs from the saved one,
+  line by line, with a Save config button. **Take a backup now** keeps the
+  running configuration in NXray with a note, and the switch keeps a
+  checkpoint of the same moment (`nxray-<number>`). Backups can be downloaded,
+  compared with the running or saved configuration or with each other, and
+  deleted with their checkpoint. **Roll back to this** shows what changes and
+  asks for the switch admin login, used once and never stored: NXray's own
+  account may not roll the switch back. NXray first backs up the
+  configuration it replaces, so a rollback can be undone; NX-OS rolls back all
+  or nothing.
+
+- **ACLs and port security.** A new **Security** menu opens the **ACLs** page:
+  every IPv4 and IPv6 ACL with its entries and where it applies. Operators and
+  admins can, after a confirm page that shows the lines, make and delete ACLs,
+  add and remove entries (permit or deny, protocol, source and destination as
+  any, a network or one address, TCP, UDP and SCTP ports, logging) and
+  remarks, count matches, and apply an ACL in or out on a VLAN interface or
+  routed port, or in on a switched port or port-channel. The **Port
+  security** page sets, for each switched front port, port security on or off,
+  the most addresses, what happens on a violation, sticky learning, known
+  addresses and aging; it needs the port-security feature. NXray's
+  `nxray-ports` role gets rules 171 to 190 (role version 13); an older role
+  gets a **Turn on security and config changes** button, with no wait. The
+  lines follow Cisco's NX-OS 9.3 guides and have not yet been tried on a
+  switch.
+
+- **Switch admin.** A new **Switch admin** page (in the menu) shows the
+  switch's hostname, its time and where it comes from, and the NTP servers it
+  talks to; once switch admin changes are on, also its time zone and summer
+  time, DNS domain, lookups and servers, logging settings and servers, SNMP
+  contact, location, trap receivers and communities (never shown, only
+  whether each is read-only) and login banner. Operators and admins can,
+  after a confirm page that shows the lines, change the hostname (NXray
+  stores the new name too), set a one-line login banner, the time zone,
+  summer time and the time now (`clock set`, which leaves nothing to save),
+  add and delete NTP servers (by address or name, in any VRF, preferred or
+  not), set the DNS domain, turn lookups on and off, add and delete DNS
+  servers (also delete those typed inside a VRF), set the log file's level
+  and size, console and terminal logging and timestamps, add and delete
+  syslog servers, and set the SNMP contact and location, add and remove
+  read-only SNMP communities and SNMP v2c trap receivers. A new **Switch
+  log** page shows the newest 50, 200 or 1000 lines of the switch's own log,
+  newest first, with a search and a severity filter, for every role.
+  NXray's `nxray-ports` role gets rules 135 to 170 (role version 12), which
+  also let it read the running configuration; they allow only read-only SNMP
+  communities and no SNMP users, so NXray's account cannot give itself
+  more. An older role gets a **Turn on switch admin changes** button, with
+  no wait. The lines and the shapes of `show clock` and `show ntp
+  peer-status` follow Cisco's NX-OS 9.3 documentation and have not yet been
+  tried on a switch.
+
+- **Spanning tree.** A new **Spanning tree** page shows the switch's mode,
+  every tree (per VLAN, or per MST instance) with its root bridge, root
+  port, cost, topology changes and timers, every port in each tree with its
+  role, state, cost and priority, the spanning tree settings of every front
+  port and port-channel, and the ports that are blocked, inconsistent or in
+  a dispute. Operators and admins can, after a confirm
+  page that shows the lines and warns when traffic can stop, change the
+  mode, the path cost method, Bridge Assurance, the defaults for ports
+  (edge, network, BPDU guard and filter, loop guard), PVST simulation and
+  the MST timers; each VLAN's priority, root primary or secondary and
+  timers, or turn spanning tree off for it; the MST region's name, revision
+  and VLAN mapping and each instance's priority; and on a front port or
+  port-channel its port type (edge, edge trunk, network, normal), BPDU guard
+  and filter, root or loop guard, cost, port priority (also per VLAN or MST
+  instance) and link type. NXray's `nxray-ports` role gets rules 129 to 134
+  (role version 11), which also let it read the spanning tree lines of the
+  running configuration, the only place a down port's settings show; an
+  older role gets a **Turn on spanning tree changes** button, with no wait.
+  The per-VLAN, MST region and port lines were tried on an N9K-C92160YC-X
+  with NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
+  Spanning tree is in the menu, which now wraps between names on a narrower
+  window instead of splitting them.
+
+- **Routing protocols.** A new **Routing protocols** page (Protocols in the
+  menu) lists every routing protocol the switch has with whether its feature
+  is on, and the switch's whole route table per VRF. Each protocol has its
+  own page: OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM,
+  PIM6, IGMP, MSDP and BFD, plus **Routing policy** for route-maps, IPv4 and
+  IPv6 prefix-lists and key chains. Each page shows the processes,
+  neighbors, interfaces or groups the switch reports, and operators and
+  admins can, after a confirm page that shows the exact lines sent, make and
+  delete processes, VRF parts, address families, neighbors and groups and
+  set or remove each of their settings (router ID, areas, redistribution,
+  summaries, timers, authentication, BFD, interface costs and more).
+  Passwords and keys are never shown back. A protocol whose feature is off
+  links to the Features page. NXray's `nxray-ports` role gets rules 63 to
+  128 (role version 10); an older role gets a **Turn on routing protocol
+  changes** button, with no wait. The rules were tried on an N9K-C92160YC-X
+  with NX-OS 9.3(16) with a throwaway account on an unused port.
+
+- **Routing page: static routes.** The Routing page lists the IPv4 and IPv6
+  static routes of every VRF, with whether the switch uses each IPv4 one.
+  Operators and admins can, after a confirm page, add a static route (a VRF,
+  a destination network and a next-hop address; `0.0.0.0/0` or `::/0` for a
+  default route) and remove one. The confirm page warns for a default route
+  and when no interface in the VRF reaches the next hop. Routes in management
+  are shown but never changed, and a VRF that has static routes cannot be
+  deleted until they are removed. NXray's `nxray-ports` role gets rules 55
+  to 62 (`ip route *`, `ipv6 route *` and their `no` forms, in default and
+  inside `vrf context *`; role version 9); an older role gets a **Turn on
+  static route changes** button, with no wait. The rules were tried on an
+  N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account.
+- **Routing page: VRFs.** The Routing page lists the VRFs (separate routing
+  tables), each with its state and the interfaces in it; default and
+  management (mgmt0) are marked as the switch's own and never changed.
+  Operators and admins can, after a confirm page, make a VRF, delete one
+  (refused while interfaces are in it, naming them), move a VLAN interface
+  or routed port into another VRF or back to default, and make a new VLAN
+  interface straight into a VRF. The switch deletes an interface's addresses
+  when its VRF changes, so the confirm page lists the ones that will go.
+  NXray's `nxray-ports` role gets rules 51 to 54 (`vrf context * ;
+  description *`, so the account may make a VRF, `no vrf context *`, `vrf
+  member *`, `no vrf member *`; role version 8); an older role gets a **Turn
+  on VRF changes** button, with no wait. The rules were tried on an
+  N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway account on an unused
+  port.
+- **Routing page: VLAN interfaces.** A new **Routing** page lists the VLAN
+  interfaces (which give the switch its own address in a VLAN, so devices
+  there can use it as their gateway) and the routed ports, each with its
+  state, VRF and IPv4 and IPv6 addresses. Every role can look, and each VLAN
+  on the VLANs page links to its VLAN interface. Operators and admins can,
+  after a confirm page, make a VLAN interface for a VLAN (with an IPv4 and an
+  IPv6 address, a description, an MTU, on or off), change it, delete it
+  (never Vlan1), and add and remove IPv4 (main or extra) and IPv6 addresses
+  on VLAN interfaces and routed ports. NXray refuses an address in a network
+  another interface in the same VRF has and link-local IPv6 addresses, which
+  the switch makes by itself. The VLANs page refuses to delete a VLAN that
+  has a VLAN interface. VLAN interfaces need the interface-vlan feature; with
+  it off the page says so and points to the Features page. A routed port's
+  page now shows its extra IPv4 and IPv6 addresses and takes them off when
+  the port goes back to switched. NXray's `nxray-ports` role gets rules 48
+  to 50 (`ipv6 address *`, `no ipv6 address *`, `no interface Vlan *`) and
+  `permit interface Vlan1-254` in its port list (role version 7), so NXray
+  makes and changes VLAN interfaces of VLANs 1 to 254 only: the switch stores
+  the range as one line per VLAN interface, and all 4094 took it minutes and
+  stopped NX-API answering (#11); an older
+  role gets a **Turn on VLAN interface and VRF changes** button, with no wait,
+  checked and saved over SSH. The switch takes the VLAN interfaces into the
+  port list only while interface-vlan is on, so with it off NXray leaves
+  that line out and says so; once an admin turns interface-vlan on, **Update
+  the port list** adds it (#10). The rules were tried on an N9K-C92160YC-X with
+  NX-OS 9.3(16) with a throwaway account on an unused port and VLAN.
+- **Port-channels page.** A new **Port-channels** page lists every
+  port-channel with its ports, each port's state and how it joined (LACP
+  active, LACP passive or static) and, while LACP is on, each port's LACP
+  rate and port priority, the device at the other end with its maker, and
+  the switch's own LACP priority. Every role can look; the Ports page and a
+  port's page link a port to its port-channel. Operators and admins can,
+  after a confirm page, make a port-channel from free front ports (with an
+  optional fast LACP rate and description), add and take out ports, delete
+  an empty one (NXray refuses while it still has ports and names them, where
+  the switch would quietly pull them out), set its description and LACP
+  minimum links, set one port's LACP rate and priority, and set the switch's
+  LACP priority, which warns that every LACP port-channel agrees on its ports
+  again. The switch changes a member's LACP rate only while the port is off,
+  so NXray says so instead of sending it. LACP active and passive need LACP
+  on; with it off the page offers static port-channels only. Changes wait for
+  **Save config**, which the page has too. NXray's `nxray-ports` role gets
+  rules 41 to 47 (`channel-group *`, `no channel-group`, `lacp rate *`, `lacp
+  port-priority *`, `lacp min-links *`, `no interface port-channel *`, `lacp
+  system-priority *`) and `permit interface port-channel1-4096` in its port
+  list, which also lets its port rules act on port-channels (role version
+  6). A new install turns everything on with **Turn on port, VLAN, port
+  settings, feature, neighbor and port-channel changes**; an older role gets
+  a button such as **Turn on port-channel changes**, with no wait. Adding the
+  port-channels to the role is checked and saved over SSH rather than NX-API,
+  which once stopped answering for about 15 minutes right after such a
+  change on NX-OS 9.3(16). These rules were tried on an N9K-C92160YC-X with
+  NX-OS 9.3(16) with a throwaway account on two unused ports, except `lacp
+  system-priority`, which touches every port-channel on the switch.
+- **Neighbor changes.** Operators and admins can now change CDP, LLDP and
+  the MAC address table. On a port's page, a **CDP and LLDP** card shows whether the port
+  speaks CDP and, while LLDP is on for the switch, whether it sends and
+  listens for LLDP, each with its own tick box; only what changes is sent,
+  after a confirm page that warns a device stops showing as a neighbor once
+  its hold time runs out. With LLDP off for the switch, the LLDP boxes are
+  left out and the card says to turn LLDP on on the Features page. The
+  port's **Connected devices** card gets a button that clears the addresses
+  learned on that port. The Neighbors page gets a **Static addresses** card
+  listing the entries fixed by hand, each with **Remove**, and a form that
+  adds one: a MAC address in any common form, a VLAN that exists on the
+  switch, and the front port its traffic always goes to, or dropped to block
+  the address. Multicast, broadcast and all-zero addresses are refused, and
+  the confirm page warns when the address was learned on another port. A
+  **Change the MAC address table** card sets how long learned addresses are
+  kept (120 to 918000 seconds in steps of 5, or 0 for never; the switch
+  quietly rounds other values down, so NXray refuses them) and clears
+  learned addresses: all of them, one port's, one VLAN's, or one address.
+  Clearing changes no configuration, so it leaves nothing to save; the other
+  changes wait for **Save config**, which the Neighbors page now has too.
+  NXray's `nxray-ports` role gets rules 30 to 40 (`cdp enable`, `lldp
+  transmit`, `lldp receive` and their `no` forms on the front ports, `mac
+  address-table aging-time *`, `mac address-table static *` and its `no`
+  form, `clear mac address-table dynamic`; role version 5). A new install
+  turns everything on with **Turn on port, VLAN, port settings, feature and
+  neighbor changes** (one wait, as before); an install whose role is older
+  gets a button named for what it lacks, such as **Turn on neighbor
+  changes**, with no wait. The CDP, aging-time, static-address and clearing
+  rules were tried on an N9K-C92160YC-X with NX-OS 9.3(16) with a throwaway
+  account on an unused port; the LLDP lines need LLDP on and have not been
+  tried on a switch yet, nor has the shape of `show lldp interface`, which
+  NXray reads from the field names in Cisco's guides.
+- **Features page.** A new **Features** page lists every feature the switch
+  reports (130 on an N9K-C92160YC-X with NX-OS 9.3), grouped into routing,
+  gateway redundancy, multicast, layer 2, VXLAN and MPLS, management,
+  security, monitoring, programmability and other, each with a one-line
+  description and whether it is on. It shows the command you would type
+  (`ssh`, `hsrp`, `nv overlay`) rather than the switch's internal name. Every
+  role can look; an admin turns a feature on or off after a confirm page, and
+  the change waits for **Save config** like any other. NXray refuses to turn
+  off a feature it can see in use (LACP while an LACP port-channel exists,
+  naming it and its ports; VLAN interfaces while one exists), never turns
+  off NX-API or SSH, which it needs itself, and leaves alone the features
+  that have no `feature` command on the switch (services NX-OS runs itself,
+  and the NX-SDK app slots, shown as one line). Turning one off warns that
+  its settings are deleted. The Neighbors page's "LLDP is off" note now
+  points to the Features page.
+- **Feature changes on the Switch page.** NXray's `nxray-ports` role gets
+  rules 28 and 29 (`conf t ; feature *` and `conf t ; no feature *`, role
+  version 4). A new install turns everything on with one button (one wait,
+  as before; now **Turn on port, VLAN, port settings, feature and neighbor
+  changes**, see neighbor changes above); an install whose role is older
+  gets a button named for what it lacks, with no wait. The Save config button on the Features
+  page answers on that page.
+
+- **Neighbors page.** A new **Neighbors** page, open to every role, lists
+  what the switch knows about the devices around it, read live: the devices
+  that announce themselves over CDP or LLDP (port, name, their port, model,
+  management address, what they can act as, VLAN); the MAC address table
+  (every device address the switch has learned, its VLAN, the port it came in
+  on, its IPv4 address when the ARP table has one, and how long an address is
+  kept without traffic), with a search box for part of a MAC address in any
+  form, a maker, a port or a VLAN; and the ARP table of every VRF. The page
+  says whether CDP and LLDP are on. With LLDP off, only CDP devices can
+  appear, and the page says so; LLDP neighbors appear by themselves once LLDP
+  is turned on.
+- **What is plugged into a port.** Each port's page has a **Connected
+  devices** card with the neighbors on that port and the addresses learned on
+  it, and the front panel's tooltips name the CDP or LLDP neighbor and up to
+  three learned addresses. For a port in a port-channel these are the
+  port-channel's addresses, because the switch learns them on the bundle; the
+  card says so and names the other ports in it. The Ports page and a port's
+  page ask the switch for these in two more requests; if the switch refuses
+  them, the rest of the page still shows.
+- **Device makers from the MAC address.** Every learned address shows the
+  company its block was assigned to, from the IEEE's public MA-L, MA-M and
+  MA-S lists (the smallest matching block wins), downloaded each time the
+  image is built. An address a VM, a container or a phone made up for itself
+  (locally administered) is labelled as such instead. When the build cannot
+  reach the IEEE, the copy in the repository is used.
+- **Port settings.** Each port's page has a **Port settings** card showing
+  the port's layer (switched, or routed with its IPv4 address), speed,
+  duplex, MTU, FEC, flow control and storm control, and **Change settings**
+  sets them after a confirm page that sends only what changed: switched or
+  routed (`no switchport`, with an address typed as `192.0.2.1/24`), the
+  speed (Auto or one the port can run at), the MTU (1500 or 9216 jumbo frames
+  on a switched port, 576 to 9216 on a routed one), the FEC mode, flow control
+  in each direction, and storm-control levels for broadcast, multicast and
+  unknown unicast with the action above them (drop, SNMP trap or turn the port
+  off). Duplex is shown only: the switch offers full duplex alone. The
+  confirm page warns when the link goes down for a moment, when a layer change
+  removes the VLANs or the address, when a smaller MTU drops large frames and
+  when the shutdown action is picked. NXray's account may not read the
+  running configuration, so the settings come from show commands; for a port
+  that is up the switch reports the speed it runs at.
+- **Splitting a 100G port.** Ethernet1/50 and 1/52 can be split into four
+  ports (4 x 10G or 4 x 25G) from their page, and one of the four ports joins
+  them again. The confirm page says the port's settings are removed and the
+  new ports start with the switch's defaults.
+- **Port settings changes on the Switch page.** NXray's `nxray-ports` role
+  gets rules 12 to 27 for those settings and for splitting ports (role
+  version 3), turned on from the Switch page with the other changes (see
+  Feature changes on the Switch page for the button names). **Update the
+  port list** adds the ports a split or join made to the role, which names
+  every port it covers;
+  until then the switch refuses NXray's changes to them and the page says
+  where to go.
+- **Front panel picture on the Ports page.** A drawing of the switch's front
+  panel sits above the port table, with every port in its place: in pairs with
+  the odd number on top, the 48 small SFP cages in blocks of six pairs and the
+  six wide QSFP cages after them. Which cages are wide comes from what the
+  switch reports for each port (40 Gb/s or more), and a QSFP port split into
+  four (breakout) is drawn as one cage cut into four. Buttons above it colour
+  the ports by **State** (up; down with something plugged in; empty; turned
+  off), **Traffic** (the busier direction as a share of the link's speed: under
+  1 %, 1 to 10 %, 10 to 50 %, 50 % or more), **Errors** (errors or discards
+  counted since the counters were cleared) or **VLAN** (one colour per access
+  VLAN, trunks hatched, routed ports grey, ports without a link faded; colours
+  repeat after eight VLANs). A legend under the picture counts the ports in
+  each colour. Hovering over a port shows its name, label, state, speed, VLAN,
+  description, transceiver, traffic and errors; clicking it opens the port's
+  page. The picture is inline SVG drawn on the server with no script, like the
+  History charts. State, Traffic and Errors use the same single request to the
+  switch as before; VLAN adds `show vlan brief` and `show interface
+  switchport` to that request for the VLAN names.
+- **Port labels.** Each port's page has a **Label** card for your own note on
+  the port, such as "Proxmox node 2, NIC 1" (up to 64 characters, one line).
+  Labels are kept in NXray's database only and never sent to the switch, so
+  they can hold any text, need no confirm step and work while port changes are
+  off. They show on the port's page, under the port's name in the Ports table,
+  in the front panel's tooltip, and as a dot on the picture. Operators and
+  admins can set them; viewers see them. Schema version 9 adds the
+  `port_labels` table.
 - **History: graphs of the switch over time.** NXray now reads the switch
   once a minute (`NXRAY_HISTORY_INTERVAL`, 10 to 3600 seconds, `0` for off) and
   keeps 30 days. A background thread runs `show environment`, `show system
@@ -30,7 +444,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   previous sample (the switch's counters only ever grow until cleared), so the
   first sample after NXray starts stores none and a counter that went down
   stores none. The sampler leaves the switch alone while NXray waits for a new
-  role to apply (the pause after **Turn on port changes**), logs a failure
+  role to apply (the pause after **Turn on port, VLAN, port settings, feature and neighbor changes**), logs a failure
   when it starts and when it ends rather than every minute, and deletes rows
   older than 30 days once an hour. Opening the pages reads only the database
   and never contacts the switch. About 7 MB a day is stored with a dozen
@@ -64,15 +478,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   HTTP/2 denial of service, fixed upstream but not yet in a Compose release),
   accepted in `.trivyignore` with the reasoning, since the plugin serves
   nothing.
+
+  The sample's `getent group docker` hint sat on its own commented line
+  directly above `group_add`, so uncommenting the block took the shell command
+  with it and Compose refused the file (`did not find expected '-'
+  indicator`). The command is now part of the comment's sentence, and the two
+  `group_add` lines are the only ones below it to uncomment.
 - **Published image on GitHub Container Registry.** A new workflow,
   `.github/workflows/release.yml`, builds the image and pushes it to
   `ghcr.io/acebmxer/nxray` whenever a version tag is pushed (as `:X.Y.Z`,
   `:X.Y` and `:latest`). A second workflow, `.github/workflows/beta.yml`, is
   run by hand from the Actions tab on the `dev` branch and publishes a beta
-  as `:dev` (the dev channel, which moves with every beta),
-  `:X.Y.Z-beta.N` and `:dev-<short sha>`, never touching `:latest`. A
-  container started from `ghcr.io/acebmxer/nxray:dev` follows the dev channel,
-  and Settings > Updates there compares against `:dev`.
+  as `:beta` (the beta channel, which moves with every beta),
+  `:X.Y.Z-beta.N` and `:dev-<short sha>`, never touching `:latest`, and
+  creates a GitHub pre-release `vX.Y.Z-beta.N` with the `[Unreleased]` notes.
+  A container started from `ghcr.io/acebmxer/nxray:beta` follows the beta
+  channel, and Settings > Updates there compares against `:beta`.
   `docker-compose.yml.example` now pulls
   `ghcr.io/acebmxer/nxray:latest`, so the compose file and `nxray.env` are a
   whole install with no clone and no build; updating is `docker compose pull`
@@ -148,15 +569,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   first). Each port's own page now shows its mode and VLANs and can set
   them: access or trunk, the access or native VLAN, and the VLANs a trunk
   carries, with a confirm step that warns when a port switches between
-  access and trunk, moves to another VLAN or stops carrying VLANs. VLAN
+  access and trunk, moves to another VLAN or stops carrying VLANs. A trunk
+  always carries its native VLAN: NXray adds it to the VLANs carried when
+  the form leaves it out, and the confirm page says so, since NX-OS drops a
+  trunk's untagged traffic when its native VLAN is not carried (native VLAN 2
+  with only 253-254 carried gave the device on the port no DHCP address). A
+  port page flags a trunk already set up that way on the switch (#12). VLAN
   names are checked before they reach the switch, which silently ignores
   names longer than 32 characters. Turning on port changes now also allows
-  these VLAN changes: on a new install, one button (Turn on port and VLAN
-  changes) turns on both, with a single wait of about 11 minutes, and the
-  Switch page says so. An install that turned port changes on before this
-  shows a Turn on VLAN changes button on the Switch page: it asks for the
-  admin login once more to add the VLAN rules to NXray's role, with no wait
-  this time. The unsaved-changes reminder now says NXray changed the
+  these VLAN changes: on a new install, one button turns on both (and the
+  port settings, feature and neighbor changes above), with a single wait of
+  about 11 minutes, and the Switch page says so. An install that turned port
+  changes on before this shows a Turn on VLAN, port settings, feature and
+  neighbor changes button on the Switch page: it asks for the admin login once more to add the rules to NXray's role,
+  with no wait this time. The unsaved-changes reminder now says NXray changed the
   switch, as it also covers VLAN changes.
 - **Port changes.** Each port's own page can now turn the port on or off and
   change or remove its description, with a confirm step that warns when a
@@ -166,8 +592,8 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   Switch page with the switch's admin login: NXray then signs in to the
   switch over SSH once to create a role (`nxray-ports`) that lets its
   account do only that, on the front-panel ports only, and gives it to the
-  account; the switch keeps refusing it everything else, including mgmt0,
-  speeds and accounts. The admin password is never stored. Because
+  account; the switch keeps refusing it everything else, including mgmt0
+  and accounts. The admin password is never stored. Because
   the switch applies a new role only to an account it has not heard from
   for a while, NXray then waits about 11 minutes before contacting the
   switch again and says so on every page. Needs SSH reachable from the
@@ -226,3 +652,39 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   inline scripts.
 - **Health check.** `GET /healthz` answers without a session, for Docker's
   health check.
+
+### Changed
+
+- **A new look for every page.** A menu down the left side, grouped as
+  Monitor, Configure, Switch and Admin, with the current page lit; **Narrow
+  the menu** shrinks it to icons. A strip across the top names the switch
+  shown, its address, model and NX-OS version (stored when the dashboard or
+  Test connection reads them), whether the last connection test worked, and
+  **Unsaved changes** when NXray changed the switch since the last Save
+  config; the switch picker moved into it. Square corners, thin borders,
+  denser tables, and port names, addresses and numbers in a fixed-width
+  font. The colours follow the computer's light or dark setting, or the
+  **Light** or **Dark** button at the foot of the menu; the choice is kept per
+  browser. Still no script and no inline style on any page.
+- **The Ports page is built around the front panel.** The panel is drawn as
+  the switch's metal front across the page, with the model at the left, a
+  light on each port that is lit while it has a link, and the name of the
+  device plugged in (from CDP or LLDP) above or below each port. The small
+  ports are drawn in three blocks of sixteen (1-16, 17-32, 33-48), as on the
+  Nexus 92160YC-X; they were drawn in four blocks of twelve. Two new colour
+  views: **Speed** (1G, 10G, 25G, 40G, 100G) and **Port-channel**. Above the
+  table: the port count, how many are up, down, turned off and with errors,
+  and the traffic now; quick filters for turned-off ports, each speed,
+  trunks and ports in a port-channel, each with its count. The table adds
+  the connected device and small bars showing in and out traffic as a share
+  of the link's speed. Clicking a port, on the panel or in the table, opens
+  a side panel with its traffic graph, what is connected, its settings and
+  transceiver, the description and on/off buttons (operators and admins),
+  arrows to the next and previous port, and a link to the port's own page.
+  **Change several ports** is now a bar under the table.
+- **Pages use the full width of the browser window.** Every page used to sit
+  in a centred column at most 1100 px wide, and intro lines wrapped at about
+  65 characters, so a PC screen had empty space on both sides and tables
+  wrapped. The column now fills the window (with its side padding), and
+  intro lines run the width of their card. The sign-in box and form fields
+  keep their own widths (#9).

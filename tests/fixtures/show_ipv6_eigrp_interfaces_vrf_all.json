@@ -1,0 +1,12 @@
+{
+  "TABLE_asn": {
+    "ROW_asn": {
+      "asn": 0,
+      "TABLE_vrf": {
+        "ROW_vrf": {
+          "vrf": "default"
+        }
+      }
+    }
+  }
+}

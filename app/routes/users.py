@@ -13,6 +13,7 @@ from app.dependencies import (
     admin_required,
     current_account,
     login_required,
+    note_activity,
     require_csrf,
     templates,
 )
@@ -118,6 +119,9 @@ def users_create(
                 status_code=400,
             )
     log.info("%s added the NXray account %s (%s)", username, created.username, created.role)
+    note_activity(
+        request, username, "Users", f"Added the account {created.username} as {created.role}"
+    )
     return _render_users(request, username, notice=f"Added {created.username} as {created.role}.")
 
 
@@ -154,6 +158,7 @@ def users_role(
         except UserError as exc:
             return _render_users(request, username, error=str(exc), status_code=400)
     log.info("%s made %s %s", username, changed.username, changed.role)
+    note_activity(request, username, "Users", f"Made {changed.username} {changed.role}")
     return _render_users(request, username, notice=f"{changed.username} is now {changed.role}.")
 
 
@@ -178,9 +183,11 @@ def users_disable(
             return _render_users(request, username, error=str(exc), status_code=400)
     if disable:
         log.info("%s disabled the NXray account %s", username, changed.username)
+        note_activity(request, username, "Users", f"Disabled the account {changed.username}")
         notice = f"{changed.username} is disabled and was signed out."
     else:
         log.info("%s enabled the NXray account %s", username, changed.username)
+        note_activity(request, username, "Users", f"Enabled the account {changed.username}")
         notice = f"{changed.username} can sign in again."
     return _render_users(request, username, notice=notice)
 
@@ -209,6 +216,7 @@ def users_password(
         except UserError as exc:
             return _render_users(request, username, error=str(exc), status_code=400)
     log.info("%s set a new password for %s", username, target.username)
+    note_activity(request, username, "Users", f"Set a new password for {target.username}")
     return _render_users(
         request,
         username,
@@ -245,6 +253,9 @@ def users_2fa_off(
         except UserError as exc:
             return _render_users(request, username, error=str(exc), status_code=400)
     log.info("%s turned off two-factor sign-in for %s", username, changed.username)
+    note_activity(
+        request, username, "Users", f"Turned off two-factor sign-in for {changed.username}"
+    )
     return _render_users(
         request,
         username,
@@ -355,6 +366,7 @@ def account_password(
             return _render_account(request, username, error=str(exc), status_code=400)
         set_password(conn, account.id, new_password, keep_session=session_id_from_request(request))
     log.info("%s changed their NXray password", username)
+    note_activity(request, username, "Account", "Changed their own password")
     return _render_account(
         request,
         username,
@@ -456,6 +468,7 @@ def account_2fa_confirm(
                 status_code=400,
             )
     log.info("%s turned on two-factor sign-in", username)
+    note_activity(request, username, "Account", "Turned on two-factor sign-in")
     return _render_backup_codes(request, username, codes, turned_on=True)
 
 
@@ -478,6 +491,7 @@ def account_2fa_codes(
         except UserError as exc:
             return _render_account(request, username, error=str(exc), status_code=400)
     log.info("%s made new backup codes", username)
+    note_activity(request, username, "Account", "Made new backup codes")
     return _render_backup_codes(request, username, codes, turned_on=False)
 
 
@@ -497,6 +511,7 @@ def account_2fa_off(
             return refused
         turn_off_two_factor(conn, account.id)
     log.info("%s turned off two-factor sign-in", username)
+    note_activity(request, username, "Account", "Turned off two-factor sign-in")
     return _render_account(
         request,
         username,

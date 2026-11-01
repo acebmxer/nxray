@@ -1,0 +1,49 @@
+{
+  "TABLE_ctx": {
+    "ROW_ctx": [
+      {
+        "ptag": "nxprobe",
+        "cname": "default",
+        "nbrcount": 2,
+        "TABLE_nbr": {
+          "ROW_nbr": [
+            {
+              "rid": "192.0.2.2",
+              "priority": 1,
+              "state": "FULL",
+              "drstate": "BDR",
+              "uptime": "P7DT11H59M45S",
+              "addr": "192.0.2.2",
+              "intf": "Eth1/54"
+            },
+            {
+              "rid": "198.51.100.2",
+              "priority": 1,
+              "state": "FULL",
+              "drstate": " -",
+              "uptime": "PT30S",
+              "addr": "198.51.100.2",
+              "intf": "Vlan20"
+            }
+          ]
+        }
+      },
+      {
+        "ptag": "nxprobe",
+        "cname": "nxprobe-v",
+        "nbrcount": 1,
+        "TABLE_nbr": {
+          "ROW_nbr": {
+            "rid": "203.0.113.2",
+            "priority": 0,
+            "state": "INIT",
+            "drstate": "DROTHER",
+            "uptime": "PT1H2M",
+            "addr": "203.0.113.2",
+            "intf": "Eth1/53"
+          }
+        }
+      }
+    ]
+  }
+}

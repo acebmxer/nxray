@@ -56,9 +56,9 @@ Each NXray account has one of three roles:
 
 | Role | May |
 | --- | --- |
-| admin | Everything: the Switch page (setup, address, Run setup again, turning on port and VLAN changes) and the Users page, plus what an operator may do. |
-| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs, Save config. |
-| viewer | Look only: the dashboard, ports and VLANs. |
+| admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes, updating the port list), turning switch features on and off on the Features page, the Users page, the Config page (configuration backups, comparing them, rolling the switch back and restarting it with the switch admin login) and the Activity page (who changed what through NXray), plus what an operator may do. |
+| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, turn CDP and LLDP on or off on a port, set the MAC address aging time, add and remove static MAC addresses, clear learned ones, make, change and delete port-channels and set their LACP options, make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and on routed ports, make and delete VRFs and move interfaces between them, add and remove static routes, run the routing protocols (OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP, MSDP, BFD) and change their settings, route-maps, prefix-lists and key chains, change spanning tree (mode, VLAN priorities and timers, the MST region, port types, guards and costs), change the switch's hostname, banner, clock, NTP, DNS, logging and SNMP settings on the Switch admin page, make, change, delete and apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, size the TCAM regions, set port security on the front ports, set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard, Save config. Also set the labels NXray keeps on ports. |
+| viewer | Look only: the dashboard, ports, VLANs, port-channels, spanning tree, routing, routing protocols, neighbors, history, features, switch admin, the switch's log, ACLs, port security and DHCP and ARP. |
 
 Admins add accounts, change roles, disable accounts and set new passwords on
 the **Users** page. Everyone changes their own password on the Account page
@@ -186,7 +186,8 @@ out of date.
 ## History
 
 Once a switch is set up, NXray reads it every minute (`NXRAY_HISTORY_INTERVAL`
-changes that, `0` turns it off) with three read-only commands, the same ones
+changes that, `0` turns it off; with several switches it reads each of them,
+one after the other, and keeps their history apart) with three read-only commands, the same ones
 the dashboard runs when it opens: `show environment`, `show system resources`
 and `show interface`. It stores temperatures, total power draw, fan speed, CPU
 and memory use, the traffic of every port that is up and each port's new
@@ -197,11 +198,61 @@ never contacts the switch.
 
 The numbers live in NXray's database on the data volume and take space with
 the number of ports that are up: roughly 7 MB a day with a dozen up, so about
-200 MB once 30 days have built up. Nothing is recorded while NXray cannot
-reach the switch or is waiting for it to apply a new role after **Turn on port
-changes**; the charts show that as a gap. A port's errors are recorded as the
+200 MB once 30 days have built up, for each switch. Nothing is recorded while NXray cannot
+reach the switch or is waiting for it to apply a new role after **Turn on port,
+VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes**; the charts show that as a gap. A port's errors are recorded as the
 increase since the previous sample, so the first sample after NXray starts
 records none.
+
+## Alerts
+
+The **Alerts** page (admins only) sends an e-mail, a webhook or both when a
+switch needs attention, and again when the problem is over. With several
+switches every alert names its switch (`leaf1 (192.0.2.10)`), and the rules
+and destinations are the same for all of them. It is checked
+each time history reads the switch, from the same three commands, so it asks
+nothing more of the switch; with `NXRAY_HISTORY_INTERVAL=0` nothing is
+checked (changes made through NXray are still sent when asked for).
+
+What can be alerted on:
+
+| Alert | When it starts | When it is resolved |
+| --- | --- | --- |
+| Switch unreachable (on) | Two reads in a row fail | The next read works |
+| Temperature (on) | A sensor at or above its minor limit, and again at its major one | It is below the limit |
+| Fans, power supplies (on) | The switch reports one as not OK | It reports OK |
+| CPU, memory (off) | Use at or above the limit you set, three checks in a row | It is below the limit |
+| A port that goes down (off) | A watched port that was up goes down while it is turned on; watch every port, or only those with a description or a label | It is up again, or turned off |
+| Port errors (off) | A port has at least the number you set of new errors and discards in one check | A check with fewer |
+| Changes (off) | Every change made through NXray, as the Activity page lists it | — |
+
+Each problem is sent once when it starts and once when it is resolved, also
+across a restart of NXray. Everything found in one check goes out as one
+e-mail and one POST to each webhook. The page lists what is open now and the
+alerts sent in the last 90 days with how each delivery went; **Send a test**
+buttons send one at once.
+
+**E-mail** needs a mail server (SMTP), the port, the connection's security
+(STARTTLS, SSL/TLS, or none for a relay on a trusted network), optionally a
+username and password, a From address and up to ten addresses to send to.
+The server's certificate is checked, and a password is never sent over an
+unencrypted connection.
+
+**Webhooks**, up to ten, each POST JSON in one of three formats: NXray's own
+(`source`, `switch`, `sent_at`, `text` and an `events` list with each
+event's `kind` (`problem`, `resolved`, `change` or `test`), `key`, `message`
+and `since`), Slack's (`{"text": ...}`) or Discord's (`{"content": ...}`).
+Anything that answers with a 2xx status counts as delivered. NXray's own
+format can be signed: with a signing secret, each POST carries
+`X-NXray-Signature: sha256=<HMAC-SHA256 of the body with the secret>`.
+
+The SMTP password and each webhook's URL and secret are stored encrypted with
+a key derived from `NXRAY_SECRET_KEY`, like the switch login; after a change
+of that key, type the password and add the webhooks again (the page says so
+when an alert cannot be sent for that reason). The page shows only a
+webhook's scheme and host, since a Slack or Discord URL is itself the
+password. NXray reaches the mail server and the webhooks from the container: e-mail
+directly, webhooks through the proxy in `HTTPS_PROXY` when one is set.
 
 ## Building from a clone
 
@@ -221,6 +272,12 @@ published image instead of running your build:
     docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm nxray python -m app.hashpw
     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
+The build downloads the IEEE's list of MAC address makers, which the
+Neighbors page and a port's page use to name the maker of each device. If
+the build cannot reach the IEEE it says so and uses the copy in the
+repository instead. Docker keeps that step in its build cache, so a rebuild
+reuses the list from the last download; `--no-cache` downloads it again.
+
 ## Updating
 
 The sample compose file uses the `:latest` tag, which follows every release,
@@ -233,9 +290,10 @@ To stay on one version until you choose to move, put that version in the
 compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.1.0`) and
 change it when you want to upgrade; then run the same two commands.
 
-To try betas, put `ghcr.io/acebmxer/nxray:dev` in the `image:` line. That tag
-is the dev channel: it moves with every beta published from the `dev` branch,
+To try betas, put `ghcr.io/acebmxer/nxray:beta` in the `image:` line. That tag
+is the beta channel: it moves with every beta published from the `dev` branch,
 so it can change and break between runs, and `:latest` never receives it.
+Each beta is also listed as a pre-release on the GitHub Releases page.
 
 From a clone, run `git pull` and then
 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.
