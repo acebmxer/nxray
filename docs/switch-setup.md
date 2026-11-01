@@ -466,6 +466,19 @@ effect at once but is not saved: press **Save config** (on the port's page or
 the Switch page) to keep it over a restart of the switch. Descriptions are
 up to 254 plain characters; NX-API refuses `?` and `;`.
 
+**Changing several ports at once.** With port changes on, the Ports page has
+a tick box on each row for operators and admins (**Tick every port shown**
+ticks the ports the filter shows, so Down then Tick every port shown picks
+every port without a link). **Change several ports** turns the ticked ports
+off or on, or gives them all one description. The confirm page lists every
+ticked port and what happens to it, warns for each port that is up and about
+to be turned off, and names the ticked ports already as asked, which are
+left alone. NXray then changes the ports one at a time, in front-panel
+order. If the switch refuses one, NXray stops there, and the page names the
+ports that changed, the one refused and why, and the ones not tried; the
+ticks are kept to try again. The Ports page has a **Save config** button
+too.
+
 **A port's VLANs.** The same page shows the port's mode and VLANs. **Change
 VLANs** sets the mode (access: one untagged VLAN; trunk: several tagged
 VLANs plus one native, untagged VLAN), the access or native VLAN (picked

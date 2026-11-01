@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Change several ports at once.** With port changes on, the Ports page has
+  a tick box on each row for operators and admins, a **Tick every port
+  shown** link (which follows the Up, Down and With errors filters), and a
+  **Change several ports** card that turns the ticked ports off or on or gives
+  them all one description. The confirm page lists every port and what
+  happens to it, warns for each up port about to be turned off, and leaves
+  out ports already as asked. NXray changes the ports one request at a time;
+  if the switch refuses one, it stops there and the page names the ports that
+  changed, the one refused and the ones not tried, with the ticks kept. Each
+  change is in the Activity log. The Ports page now shows the unsaved-changes
+  reminder with a Save config button that stays on the Ports page (#3).
+
 - **Several switches in one NXray.** Once a switch is set up, the Switch page
   (admins only) has **Add another switch**, the same setup as the first, and
   lists every switch NXray has. With two or more, the top bar has a switch

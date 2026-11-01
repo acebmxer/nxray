@@ -2,7 +2,15 @@
 {% block title %}Ports — NXray{% endblock %}
 
 {% block content %}
+{% set role = current_role(request) %}
+{% set can_change = role in ("admin", "operator") %}
 <h1 class="page-title">Ports</h1>
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
 
 {% if not connection %}
 <div class="card empty-state">
@@ -21,6 +29,17 @@
   {% if current_role(request) == "admin" %}<p class="note"><a href="/switch">Go to the Switch page</a>.</p>{% endif %}
 </div>
 {% else %}
+{% set bulk_on = can_change and connection.changes_enabled %}
+{% if connection.unsaved_changes and can_change %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="ports">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
 <section class="card">
   <h2 class="card-title">Front panel</h2>
   <nav class="filters" aria-label="Colour the ports by">
@@ -49,10 +68,36 @@
   {% endfor %}
 </nav>
 
+{% if bulk_on %}
+<form method="post" action="/ports/bulk" id="change-several">
+<input type="hidden" name="csrf" value="{{ csrf_token }}">
+<input type="hidden" name="show" value="{{ show }}">
+<input type="hidden" name="color" value="{{ color }}">
+<section class="card">
+  <h2 class="card-title">Change several ports</h2>
+  <p class="lead">Tick the ports in the table, pick a change and press the button. A confirm page lists every ticked port and what happens to it first.
+    <a href="/ports?show={{ show }}&amp;color={{ color }}&amp;select=all#change-several">Tick every port shown</a>{% if ticked %} · <a href="/ports?show={{ show }}&amp;color={{ color }}#change-several">Clear the ticks</a>{% endif %}</p>
+  <div class="form-grid">
+    <fieldset class="choice">
+      <legend>Change</legend>
+      <label class="check"><input type="radio" name="action" value="off" {% if bulk.action == "off" %}checked{% endif %}> Turn them off</label>
+      <label class="check"><input type="radio" name="action" value="on" {% if bulk.action == "on" %}checked{% endif %}> Turn them on</label>
+      <label class="check"><input type="radio" name="action" value="description" {% if bulk.action == "description" %}checked{% endif %}> Give them this description:</label>
+    </fieldset>
+    <div class="stack form-narrow">
+      <label for="bulk_description">Description</label>
+      <input id="bulk_description" name="description" type="text" value="{{ bulk.description }}" maxlength="254" spellcheck="false">
+      <p class="hint">Up to 254 plain characters, no "?" or ";". Leave empty to remove it. Used only with the description change.</p>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">Change the ticked ports</button>
+</section>
+{% endif %}
 <section class="card card-flush">
   <table class="table table-ports">
     <thead>
       <tr>
+        {% if bulk_on %}<th><span class="sr-only">Tick</span></th>{% endif %}
         <th>Port</th><th>Description</th><th>State</th><th>Speed</th><th>VLAN</th>
         <th>Transceiver</th><th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
       </tr>
@@ -60,6 +105,7 @@
     <tbody>
       {% for port in shown %}
       <tr>
+        {% if bulk_on %}<td><input type="checkbox" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
         <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a>{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}{% set pc = neighbors.channel_of(port.name) if neighbors else none %}{% if pc %}<a class="reason" href="/port-channels#{{ pc.name }}">in {{ pc.name }}</a>{% endif %}</td>
         <td>{{ port.description }}</td>
         <td>
@@ -74,11 +120,12 @@
         <td class="num">{% if port.errors %}<span class="badge badge-crit">{{ port.errors }}</span>{% else %}0{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9">No ports match this filter.</td></tr>
+      <tr><td colspan="{{ 10 if bulk_on else 9 }}">No ports match this filter.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
+{% if bulk_on %}</form>{% endif %}
 <p class="note">
   In and Out are the average over the last 30 seconds. Errors adds up input and
   output errors and discards since the counters were last cleared. Read from the

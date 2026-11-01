@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -151,7 +152,29 @@ def ports_page(
     username: str = Depends(login_required),
     show: str = "all",
     color: str = "state",
+    select: str = "",
 ) -> Response:
+    return render_ports_page(request, username, show=show, color=color, tick_all=select == "all")
+
+
+def render_ports_page(
+    request: Request,
+    username: str,
+    *,
+    show: str = "all",
+    color: str = "state",
+    error: str | None = None,
+    notice: str | None = None,
+    tick_all: bool = False,
+    ticked: list[str] | None = None,
+    bulk: dict[str, str] | None = None,
+    status_code: int = 200,
+) -> Response:
+    """Read the switch fresh and show the Ports page, with an optional message.
+
+    ``tick_all`` ticks every port the filter shows; ``ticked`` keeps the ports
+    ticked and ``bulk`` the change picked (action, description) after a refusal.
+    """
     color = color_mode(color)
     vlan_names: dict[int, str] = {}
     if color == "vlan":
@@ -182,7 +205,13 @@ def ports_page(
             "color": color,
             "modes": MODES,
             "neighbors": neighbors,
+            "csrf_token": csrf_token(request),
+            "error": error,
+            "notice": notice,
+            "ticked": {port.name for port in shown} if tick_all else set(ticked or []),
+            "bulk": bulk or {"action": "", "description": ""},
         },
+        status_code=status_code,
     )
 
 
@@ -326,6 +355,51 @@ def change_summary(port: Port, action: str, description: str) -> tuple[str, str 
     return f'Change the description of {port.name} from "{before}" to "{after}".', None
 
 
+def plan_bulk_change(
+    ports: list[Port], names: list[str], action: str, description: str
+) -> tuple[list[Port], list[str], list[str], list[str]]:
+    """Check a change asked for several ports at once.
+
+    Returns (the ports to change, in front-panel order; what happens to each,
+    one line per port; a warning for each up port about to be turned off;
+    one line per ticked port that already is as asked). Raises ValueError
+    with the reason for a change that cannot be made.
+    """
+    if not names:
+        raise ValueError("tick at least one port")
+    if action not in ACTIONS:
+        raise ValueError("pick a change to make")
+    known = {port.name for port in ports}
+    unknown = sorted(set(names) - known)
+    if unknown:
+        raise ValueError(f"the switch has no port called {', '.join(unknown)}")
+    if action == "description":
+        description = validate_description(description)
+    wanted = set(names)
+    changing: list[Port] = []
+    lines: list[str] = []
+    warnings: list[str] = []
+    already: list[str] = []
+    for port in ports:  # already in front-panel order
+        if port.name not in wanted:
+            continue
+        if action == "off" and not port.admin_up:
+            already.append(f"{port.name} is already off.")
+            continue
+        if action == "on" and port.admin_up:
+            already.append(f"{port.name} is already on.")
+            continue
+        if action == "description" and port.description == description:
+            already.append(f"{port.name} already has that description.")
+            continue
+        summary, warning = change_summary(port, action, description)
+        changing.append(port)
+        lines.append(summary)
+        if warning:
+            warnings.append(f"{port.name}: {warning}")
+    return changing, lines, warnings, already
+
+
 def change_refused(exc: NxapiError, target: SwitchTarget) -> str:
     """The message for a port change the switch did not make."""
     text = str(exc).lower()
@@ -450,6 +524,126 @@ def port_change(
         discovery,
         notice=f"Done: {done} Not saved yet: Save config keeps it over a restart of the switch.",
     )
+
+
+def _bulk_done(action: str, description: str, names: list[str]) -> str:
+    """What a change of several ports did, in words, naming the ports."""
+    listed = ", ".join(names)
+    if action == "description":
+        if description:
+            return f'{listed} now have the description "{description}".'
+        return f"{listed} no longer have a description."
+    return f"Turned {action}: {listed}."
+
+
+@router.post("/ports/bulk", response_class=HTMLResponse)
+def ports_bulk_change(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    names: Annotated[list[str] | None, Form()] = None,
+    action: str = Form(""),
+    description: str = Form(""),
+    show: str = Form("all"),
+    color: str = Form("state"),
+    confirm: str = Form(""),
+) -> Response:
+    """Turn several ports off or on, or give them one description.
+
+    Without confirm=yes, shows every port and what would happen to it, and
+    asks. The ports are changed one request at a time; the first refusal
+    stops the rest, and the page names what changed and what did not.
+    """
+    require_csrf(request, csrf)
+    names = list(dict.fromkeys(names or []))
+    bulk = {"action": action, "description": description}
+
+    def again(**kwargs) -> Response:
+        return render_ports_page(
+            request, username, show=show, color=color, ticked=names, bulk=bulk, **kwargs
+        )
+
+    connection, target, status, ports, _ = _read_ports(request)
+    if connection is None or target is None or ports is None:
+        return again()
+    if not connection.changes_enabled:
+        return again(
+            error="Port changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    try:
+        changing, lines, warnings, already = plan_bulk_change(ports, names, action, description)
+    except ValueError as exc:
+        return again(error=f"Not changed: {exc}.", status_code=400)
+    if action == "description":
+        description = validate_description(description)
+    if not changing:
+        return again(notice="Nothing to change: " + " ".join(already))
+
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": "Ports",
+                "back_url": "/ports",
+                "back_label": "All ports",
+                "lines": lines + [f"Unchanged: {line}" for line in already],
+                "warnings": warnings,
+                "action": "/ports/bulk",
+                "fields": {
+                    "names": [port.name for port in changing],
+                    "action": action,
+                    "description": description,
+                    "show": show,
+                    "color": color,
+                },
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    changed: list[Port] = []
+    refusal: str | None = None
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            for port in changing:
+                if action == "description":
+                    client.configure_port(port.name, description=description)
+                else:
+                    client.configure_port(port.name, enabled=action == "on")
+                changed.append(port)
+    except NxapiError as exc:
+        failed = changing[len(changed)].name
+        log.warning("port change on %s refused: %s", failed, exc)
+        refusal = f"{failed} was not changed. {change_refused(exc, target)}"
+
+    if changed:
+        settings = request.app.state.settings
+        with open_db(settings.db_path) as conn:
+            set_unsaved_changes(conn, selected_switch_id(request), True)
+        summary = " ".join(lines[: len(changed)])
+        log.info("port change on %s by %s: %s", connection.host, username, summary)
+        note_activity(request, username, "Ports", summary, connection.host)
+
+    done_names = [port.name for port in changed]
+    not_saved = "Not saved yet: Save config keeps the changes over a restart of the switch."
+    if refusal is None:
+        return render_ports_page(
+            request,
+            username,
+            show=show,
+            color=color,
+            notice=f"Done: {_bulk_done(action, description, done_names)} {not_saved}",
+        )
+    untried = [port.name for port in changing[len(changed) + 1 :]]
+    parts = [f"Changed: {_bulk_done(action, description, done_names)}" if changed else ""]
+    parts.append(refusal)
+    if untried:
+        parts.append(f"Not tried: {', '.join(untried)}.")
+    if changed:
+        parts.append(not_saved)
+    return again(error=" ".join(part for part in parts if part), status_code=400)
 
 
 @router.post("/ports/vlans", response_class=HTMLResponse)

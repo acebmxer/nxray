@@ -31,7 +31,7 @@ from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.port_channels import render_port_channels_page
-from app.routes.ports import render_port_page
+from app.routes.ports import render_port_page, render_ports_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.routing import render_routing_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
@@ -686,8 +686,8 @@ def switch_save(
     """Save config: copy running-config startup-config with NXray's own account.
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
-    ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``, ``protocols``,
-    ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
+    ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
+    ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there.
     Anything else means the
@@ -698,6 +698,8 @@ def switch_save(
     def answer(*, error: str | None = None, notice: str | None = None) -> Response:
         if back == "port" and port:
             return render_port_page(request, username, port, error=error, notice=notice)
+        if back == "ports":
+            return render_ports_page(request, username, error=error, notice=notice)
         if back == "vlans":
             return render_vlans_page(request, username, error=error, notice=notice)
         if back == "features":

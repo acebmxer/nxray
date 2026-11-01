@@ -21,7 +21,7 @@ the front panel coloured by state, traffic, errors or VLAN, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
 each device's maker, ARP), turn CDP and LLDP on or off per port, set the MAC
 address aging time, add static MAC addresses, clear learned ones, label ports, turn
-ports on or off, edit their descriptions, create, rename and delete VLANs, set the
+ports on or off and edit their descriptions (one at a time or several at once), create, rename and delete VLANs, set the
 VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
