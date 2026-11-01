@@ -113,6 +113,15 @@ in the compose file's `image:` line first. Coming from a beta, replace
 
 ### Fixed
 
+- **The bar at the bottom of the Ports page points to the settings.** Its
+  **Change the ticked ports** button looked like the whole form; the settings
+  (VLANs, port settings, CDP and LLDP) are in the **Change several ports** card
+  further down. The bar now has a **Choose what to change** link to it.
+
+- **Ticked ports stay ticked when you switch the front-panel colour, change
+  the filter or press Read again** on the Ports page. They were cleared
+  before, so ticking two ports and then looking at the VLAN colours lost them.
+
 - **The port side panel makes every change to the port.** On the Ports page,
   a port's side panel used to change only its description and turn it off or
   on; everything else needed **All of this port →**, which left the Ports

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
@@ -219,9 +219,16 @@ def ports_page(
     color: str = "state",
     select: str = "",
     port: str = "",
+    tick: Annotated[list[str] | None, Query()] = None,
 ) -> Response:
     return render_ports_page(
-        request, username, show=show, color=color, tick_all=select == "all", selected=port
+        request,
+        username,
+        show=show,
+        color=color,
+        tick_all=select == "all",
+        ticked=tick,
+        selected=port,
     )
 
 

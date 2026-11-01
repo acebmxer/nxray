@@ -345,6 +345,19 @@ def test_tick_every_port_shown(logged_in: TestClient, enabled: FakeSwitch) -> No
     assert 'name="show" value="up"' in page
 
 
+def test_ticks_carried_in_the_address_stay_ticked(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    page = logged_in.get(
+        "/ports", params={"color": "vlan", "tick": ["Ethernet1/5", "Ethernet1/6"]}
+    ).text
+    assert page.count('name="names"') == 54
+    assert 'value="Ethernet1/5" aria-label="Tick Ethernet1/5" checked' in page
+    assert 'value="Ethernet1/6" aria-label="Tick Ethernet1/6" checked' in page
+    assert 'value="Ethernet1/7" aria-label="Tick Ethernet1/7" checked' not in page
+    assert "/static/keep-ticks.js" in page
+
+
 def test_turning_several_ports_off_asks_then_goes_port_by_port(
     logged_in: TestClient, enabled: FakeSwitch
 ) -> None:

@@ -3,6 +3,7 @@
 {% import "_port_forms.html" as pf %}
 {% import "_ports_live.html" as live with context %}
 {% block title %}Ports — NXray{% endblock %}
+{% block head_extra %}<script src="/static/keep-ticks.js" defer></script>{% endblock %}
 
 {% block content %}
 {% set role = current_role(request) %}
@@ -65,11 +66,11 @@
     <h2 class="card-title">Front panel</h2>
     <nav class="seg" aria-label="Colour the ports by">
       {% for key, label in modes.items() %}
-      <a class="{% if color == key %}seg-on{% endif %}" href="{{ ports_link(show, key, selected) }}"{% if color == key %} aria-current="true"{% endif %}>{{ label }}</a>
+      <a data-keep-ticks class="{% if color == key %}seg-on{% endif %}" href="{{ ports_link(show, key, selected) }}"{% if color == key %} aria-current="true"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
     <span class="box-gap"></span>
-    <a class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
+    <a data-keep-ticks class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
   </div>
   {{ live.face_block() }}
 </section>
@@ -86,7 +87,7 @@
       {% for entry in filter_labels %}
       {% if entry is none %}<span class="toolbar-sep"></span>{% else %}
       {% set key, label = entry %}
-      <a class="filter{% if show == key %} filter-on{% endif %}" href="{{ ports_link(key, color) }}">{{ label }} <span class="count">{{ counts[key] }}</span></a>
+      <a data-keep-ticks class="filter{% if show == key %} filter-on{% endif %}" href="{{ ports_link(key, color) }}">{{ label }} <span class="count">{{ counts[key] }}</span></a>
       {% endif %}
       {% endfor %}
     </nav>
@@ -113,7 +114,7 @@
 </section>
 {% if bulk_on %}
 {% set b = bulk %}
-<section class="card bulk-config" aria-labelledby="bulk-title">
+<section class="card bulk-config" id="bulk-config" aria-labelledby="bulk-title">
   <h2 class="card-title" id="bulk-title">Change several ports</h2>
   <p class="lead">Tick the ports above, fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it. The ports do not need to be next to each other.</p>
   <details class="settings-group" {% if b.power or b.set_description or b.clear_macs %}open{% endif %}>
@@ -255,6 +256,7 @@
   <p class="note">Not offered here, because each port needs its own: an IPv4 address, the label, and splitting a 100G port. Set those on each port's page.</p>
 </section>
 <div class="bulk-bar">
+  <a class="btn btn-quiet" href="#bulk-config">Choose what to change ↓</a>
   <button type="submit" class="btn btn-primary">Change the ticked ports</button>
   <span class="toolbar-sep"></span>
   <label for="bulk_start">Start from port</label>
