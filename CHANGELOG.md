@@ -11,6 +11,43 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Restart the switch.** The Config page (admins only) has **Restart the
+  switch**: a confirm page warns that every port goes down for several
+  minutes, says how much of the running configuration is unsaved, offers
+  **Save first** (on by default), and asks for the switch admin login and
+  SSH port. NXray saves with its own account when asked, then types
+  `terminal dont-ask` and `reload` over SSH with the admin login, once; the
+  password is never stored, and NXray's own role has no rule to restart the
+  switch. A restart is in the Activity log. It is also how new TCAM region
+  sizes take effect.
+
+- **ACLs page: MAC ACLs, object groups, VLAN access maps and TCAM regions.**
+  Operators and admins can now also make MAC ACLs (entries matching a source
+  and destination MAC address, an EtherType, a CoS and a VLAN) and apply them
+  in on a switched port (`mac port access-group`); make IPv4 and IPv6
+  address groups and port groups, which an IPv4 or IPv6 entry names as
+  `addrgroup <name>` or `portgroup <name>`; make VLAN access maps whose
+  entries match an IPv4, IPv6 or MAC ACL and then forward or drop, and apply
+  a map to VLANs with a VLAN filter; and size the TCAM regions. The page
+  lists the TCAM regions with their size now and the size set, and which wait
+  for a restart: on a Nexus 9000 port ACLs and VLAN ACLs have no space until
+  their region is given some. These need NXray's role version 14.
+
+- **DHCP and ARP.** A new **DHCP and ARP** page, linked from ACLs and Port
+  security, shows and changes, after a confirm page that shows the lines and
+  warns when devices can be cut off: DHCP snooping (on or off, its VLANs,
+  option 82, checking client MAC addresses), each switched port's trust and
+  DHCP rate limit, the DHCP relay (on or off, option 82, across VRFs) and the
+  DHCP and DHCPv6 servers of each VLAN interface or routed port, dynamic ARP
+  inspection (its VLANs, extra checks, log buffer, trusted ports) and ARP
+  ACLs for hosts with fixed addresses, and IP Source Guard per port with
+  fixed bindings. A table lists the addresses DHCP snooping learned (`show
+  ip dhcp snooping binding`) and the fixed ones. It needs the dhcp feature.
+  NXray's `nxray-ports` role gets rules 191 to 227 (role version 14); an older
+  role gets a **Turn on layer 2 security changes** button, with no wait. The
+  lines and rules follow Cisco's NX-OS 9.3 Security Configuration Guide and
+  have not yet been tried on a switch.
+
 - **Alerts by e-mail and webhook.** A new **Alerts** page (admins only, in
   the menu) sends an e-mail, a webhook or both when the switch needs
   attention, and again when the problem is over: NXray cannot reach the

@@ -128,7 +128,10 @@ class ProtocolSite:
     ``check_place`` refuses an
     identity value the switch does not have; ``send`` sends a checked change;
     ``after``, when given, runs once the switch took one (with the request, to
-    update what NXray stores); ``links`` are related pages shown under the title."""
+    update what NXray stores); ``links`` are related pages shown under the title;
+    ``needs``, when given, gets the connection, scope and setting of a change and
+    returns why NXray's role may not make it yet ("" when it may), for pages whose
+    newer parts need a newer role than the page itself."""
 
     url: str
     back_url: str
@@ -144,6 +147,7 @@ class ProtocolSite:
     send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], None]
     after: Callable[[Request, ProtocolChange], None] | None = None
     links: tuple[tuple[str, str], ...] = ()  # (url, label) of related pages, under the title
+    needs: Callable[[SwitchConnection, str, str], str] | None = None
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:
@@ -321,6 +325,9 @@ def site_change(
         return refuse(problem or "The switch could not be read.")
     if not site.enabled(connection):
         return refuse(site.off_message)
+    if site.needs is not None:
+        if refusal := site.needs(connection, form.get("scope", ""), form.get("setting", "")):
+            return refuse(refusal)
     action = form.get("action", "")
     if action not in ACTIONS:
         return refuse("Not changed: the form named no action.")

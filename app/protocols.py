@@ -91,9 +91,15 @@ KINDS = (
     "usevrf",  # the VRF a server is reached in: default (sent as ""), management or another
     "hhmm",  # a time of day written 02:00
     "hhmmss",  # a time of day written 14:30:00
-    "aclnet4",  # an ACL's IPv4 match: any, a network 192.0.2.0/24, or one address (as /32)
-    "aclnet6",  # an ACL's IPv6 match: any, a network 2001:db8::/32, or one address (as /128)
-    "l4port",  # a TCP or UDP port match: 22, 1024-65535, >1023, <1024 or !=23
+    "aclnet4",  # an ACL's IPv4 match: any, a network 192.0.2.0/24, or one address (as /32);
+    # or an object group: addrgroup <name>
+    "aclnet6",  # an ACL's IPv6 match: any, a network 2001:db8::/32, or one address (as /128);
+    # or addrgroup <name>
+    "l4port",  # a TCP or UDP port match: 22, 1024-65535, >1023, <1024 or !=23; or portgroup <name>
+    "aclmac",  # a MAC ACL's match: any, one address, or an address and a mask (any MAC)
+    "ethertype",  # an EtherType written 0x0800, 0x0600 to 0xffff
+    "arpip",  # an ARP ACL's IPv4 match: any, or one address (as host <address>)
+    "arpmac",  # an ARP ACL's MAC match: any, or one address (as host <address>)
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -339,6 +345,8 @@ def _acl_network(value: str, version: int, label: str) -> str:
     """'any', a network with its length, or one address written as /32 (/128)."""
     if value.lower() == "any":
         return "any"
+    if group := _object_group(value, "addrgroup", label):
+        return group
     example = "192.0.2.0/24" if version == 4 else "2001:db8::/32"
     if "/" not in value:
         try:
@@ -361,6 +369,8 @@ _L4WORDS = {None: "eq", ">": "gt", "<": "lt", "!=": "neq"}
 def _l4port(value: str, label: str) -> str:
     """'22' -> 'eq 22', '1024-65535' -> 'range 1024 65535', '>1023' -> 'gt 1023',
     '<1024' -> 'lt 1024', '!=23' -> 'neq 23'; the words themselves are taken too."""
+    if group := _object_group(value, "portgroup", label):
+        return group
     wrong = f"{label} is a port (22), a range (1024-65535), >1023, <1024 or !=23"
     if match := _L4RANGE.fullmatch(value):
         low, high = (int(g) for g in match.groups())
@@ -375,6 +385,55 @@ def _l4port(value: str, label: str) -> str:
         raise ValueError(f"{label}: ports go from 0 to 65535")
     word = _L4WORDS.get(match.group(1), match.group(1))
     return f"{word} {number}"
+
+
+def _object_group(value: str, word: str, label: str) -> str:
+    """'addrgroup web' -> 'addrgroup web' (the same for portgroup); "" when ``value``
+    does not start with ``word``."""
+    parts = value.split()
+    if not parts or parts[0].lower() != word:
+        return ""
+    if len(parts) != 2 or not _NAME.fullmatch(parts[1]) or len(parts[1]) > 64:
+        raise ValueError(f"{label}: {word} is followed by an object group's name")
+    return f"{word} {parts[1]}"
+
+
+def _any_mac(value: str, label: str) -> str:
+    """Any MAC address, multicast and broadcast too, written 0200.0000.0001."""
+    digits = re.sub(r"[.:-]", "", value.lower())
+    if not _MAC_DIGITS.fullmatch(digits):
+        raise ValueError(f"{label}: {value!r} is not a MAC address such as 0200.0000.0001")
+    return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
+
+
+def _acl_mac(value: str, label: str) -> str:
+    """'any', one address (matched exactly: mask 0000.0000.0000), or an address and
+    a mask whose 1 bits are ignored: '0200.0000.0000 0000.00ff.ffff'."""
+    if value.lower() == "any":
+        return "any"
+    parts = value.split()
+    if len(parts) == 1:
+        return f"{_any_mac(parts[0], label)} 0000.0000.0000"
+    if len(parts) == 2:
+        return f"{_any_mac(parts[0], label)} {_any_mac(parts[1], label + ' mask')}"
+    raise ValueError(f"{label} is any, an address, or an address and a mask")
+
+
+def _ethertype(value: str, label: str) -> str:
+    match = re.fullmatch(r"(?:0x)?([0-9a-fA-F]{1,4})", value)
+    number = int(match.group(1), 16) if match else -1
+    if number < 0x600:
+        raise ValueError(f"{label} is an EtherType from 0x0600 to 0xffff, such as 0x0800")
+    return f"0x{number:04x}"
+
+
+def _arp_match(value: str, kind: str, label: str) -> str:
+    """'any' or one address, sent as 'host <address>'."""
+    if value.lower() == "any":
+        return "any"
+    if kind == "arpmac":
+        return f"host {_any_mac(value, label)}"
+    return f"host {_address(value, 4, label)}"
 
 
 def check_value(spec: Field, raw: str) -> str:
@@ -457,6 +516,12 @@ def check_value(spec: Field, raw: str) -> str:
         return _acl_network(value, 4 if kind == "aclnet4" else 6, spec.label)
     if kind == "l4port":
         return _l4port(value, spec.label)
+    if kind == "aclmac":
+        return _acl_mac(value, spec.label)
+    if kind == "ethertype":
+        return _ethertype(value, spec.label)
+    if kind in ("arpip", "arpmac"):
+        return _arp_match(value, kind, spec.label)
     if kind in ("hhmm", "hhmmss"):
         return _time_of_day(value, spec.label, kind == "hhmmss")
     if kind == "vrf":

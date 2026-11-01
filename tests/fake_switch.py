@@ -59,7 +59,14 @@ ACL lines and the ACL and port security lines of interfaces live in
 ``security_lines``, kept the same way as the protocol lines (``ip access-list
 web ; 10 permit tcp any any eq 22``, ``interface Ethernet1/3 ; switchport
 port-security``); port security lines need the port-security feature on.
-``show running-config`` prints them too. ``checkpoint <name>`` keeps a copy of
+``show running-config`` prints them too. So do the role version 14 lines
+(DHCP snooping and relay, ARP inspection, IP Source Guard, MAC and ARP ACLs,
+object groups, VLAN access maps and filters, TCAM regions): modes the same way,
+top-level lines as typed (``no`` removes one; for the lines on by default,
+``no ip dhcp relay`` is kept as typed), and their DHCP lines need the dhcp
+feature on. ``show hardware access-list tcam region`` prints the regions with
+the sizes set (applied at once, unlike a switch, which waits for a restart);
+``show ip dhcp snooping binding`` prints ``binding_text``. ``checkpoint <name>`` keeps a copy of
 the hostname, the admin and the security lines in ``checkpoints``, and
 ``rollback running-config checkpoint <name>`` puts them back. ``show
 startup-config`` prints what the last save kept (the running configuration as
@@ -222,6 +229,47 @@ _PROTOCOL_SUBMODES = re.compile(
 # Interface lines that open a group's mode (HSRP, VRRP, VRRPv3).
 _GROUP_MODES = re.compile(r"(?:hsrp \d+(?: ipv6)?|vrrp \d+|vrrpv3 \d+ address-family ipv[46])")
 
+# Role version 14 lines (see the module notes): the modes, the top-level lines and
+# the interface lines, and the defaults of the TCAM regions shown.
+_LAYER2_MODES = re.compile(
+    r"(mac access-list|arp access-list|object-group (?:ip|ipv6) address|object-group ip port"
+    r"|vlan access-map) \S+(?: \d+)?"
+)
+_LAYER2_TOP = re.compile(
+    r"(ip dhcp snooping|ip dhcp relay|ipv6 dhcp relay|ip arp inspection|ip source binding"
+    r"|vlan filter|hardware access-list tcam region)(?: |$)"
+)
+_NEEDS_DHCP = {
+    "ip dhcp snooping",
+    "ip dhcp relay",
+    "ipv6 dhcp relay",
+    "ip arp inspection",
+    "ip source binding",
+}
+_LAYER2_DEFAULT_ON = {"ip dhcp relay", "ipv6 dhcp relay", "ip dhcp snooping verify mac-address"}
+_LAYER2_INTERFACE = re.compile(
+    r"(ip dhcp snooping|ip arp inspection|ip verify source|ip dhcp relay address"
+    r"|ipv6 dhcp relay address|mac port access-group) ?"
+)
+_TCAM_NAMES = {
+    "nat": "NAT ACL",
+    "ing-ifacl": "Ingress PACL",
+    "vacl": "VACL",
+    "ing-racl": "Ingress RACL",
+    "ing-l2-qos": "Ingress L2 QOS",
+    "ing-sup": "Ingress SUP",
+    "egr-racl": "Egress RACL",
+}
+_TCAM_DEFAULTS = {
+    "nat": 0,
+    "ing-ifacl": 0,
+    "vacl": 0,
+    "ing-racl": 1536,
+    "ing-l2-qos": 256,
+    "ing-sup": 512,
+    "egr-racl": 1792,
+}
+
 # Switch admin lines: what identifies the line a new one replaces (and its
 # "no" form removes), checked in order.
 _ADMIN_KEYS = tuple(
@@ -356,6 +404,13 @@ class FakeSwitch:
     checkpoints: dict[str, tuple[str, list[str], list[str]]] = field(default_factory=dict)
     # show startup-config; None: the running configuration as at the start.
     startup_text: str | None = None
+    # Restarts over SSH, and whether the configuration was saved at each.
+    reloads: int = 0
+    saved_at_reload: list[bool] = field(default_factory=list)
+    # show ip dhcp snooping binding, as text (after Cisco's guide).
+    binding_text: str = field(
+        default_factory=lambda: FIXTURES.joinpath("show_ip_dhcp_snooping_binding.txt").read_text()
+    )
     # What the switch prints after a rollback; contains "failed" to refuse it.
     rollback_text: str = "Rollback completed successfully.\n"
     _copying: bool = False
@@ -506,6 +561,12 @@ class FakeSwitch:
         the rule for it, and ``show logging last <n>``, which any account may."""
         if any(cmd.startswith(prefix) for prefix in self.reject):
             return _error(ident, f"% Rejected by the fake switch: {cmd}\n")
+        if cmd == "show hardware access-list tcam region":
+            return {"jsonrpc": "2.0", "result": {"msg": self.tcam_regions()}, "id": ident}
+        if cmd == "show ip dhcp snooping binding":
+            if not self._feature_on("dhcp"):
+                return _error(ident, "% Invalid command at '^' marker.\n")
+            return {"jsonrpc": "2.0", "result": {"msg": self.binding_text}, "id": ident}
         if re.fullmatch(r"show logging last \d+", cmd):
             wanted = int(cmd.split()[-1])
             lines = self.log_text.splitlines(keepends=True)[-wanted:]
@@ -658,6 +719,92 @@ class FakeSwitch:
             return _ok(ident, None), context
         return None
 
+    def _layer2(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A role version 14 line (see the module notes), or None when ``cmd`` is not
+        one."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        invalid = _error(ident, "% Invalid command at '^' marker.\n")
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        kind = context[0] if context else None
+        if kind is None and (mode := _LAYER2_MODES.fullmatch(bare)):
+            if mode.group(1) == "arp access-list" and not self._feature_on("dhcp"):
+                return invalid, context
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return denied, context
+            if undo:
+                if bare not in self.security_lines:
+                    return _error(ident, "% Not found\n"), context
+                self._record(cmd, self.security_lines)
+                return _ok(ident, None), None
+            if bare not in self.security_lines:
+                self.security_lines.append(bare)
+            return _ok(ident, None), ("layer2", bare)
+        if kind == "layer2" and context:
+            path = f"{context[1]} ; {cmd}"
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+                return denied, context
+            if undo and not any(
+                p == f"{context[1]} ; {bare}" or p.startswith(f"{context[1]} ; {bare} ")
+                for p in self.security_lines
+            ):
+                return _error(ident, "% Entry not found\n"), context
+            self._record(path, self.security_lines)
+            return _ok(ident, None), context
+        if kind is None and (top := _LAYER2_TOP.match(bare)):
+            if top.group(1) in _NEEDS_DHCP and not self._feature_on("dhcp"):
+                return invalid, context
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return denied, context
+            if bare in _LAYER2_DEFAULT_ON:
+                self.security_lines = [p for p in self.security_lines if p != f"no {bare}"]
+                if undo:
+                    self.security_lines.append(cmd)
+            elif bare.startswith("hardware access-list tcam region "):
+                region = bare.split()[4]
+                self.security_lines = [
+                    p
+                    for p in self.security_lines
+                    if not p.startswith(f"hardware access-list tcam region {region} ")
+                ]
+                if not undo:
+                    self.security_lines.append(bare)
+            elif undo:
+                if bare not in self.security_lines:
+                    return _error(ident, "% Not found\n"), context
+                self.security_lines.remove(bare)
+            elif bare not in self.security_lines:
+                self.security_lines.append(bare)
+            return _ok(ident, None), context
+        if kind == "interface" and context and (line := _LAYER2_INTERFACE.match(bare)):
+            if line.group(1) != "mac port access-group" and not self._feature_on("dhcp"):
+                return invalid, context
+            path = f"interface {context[1]} ; {cmd}"
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", context[1])):
+                return denied, context
+            place = f"interface {context[1]}"
+            if not undo and place not in self.security_lines:
+                self.security_lines.append(place)
+            if undo:
+                self.security_lines = [p for p in self.security_lines if p != f"{place} ; {bare}"]
+            elif f"{place} ; {bare}" not in self.security_lines:
+                self.security_lines.append(f"{place} ; {bare}")
+            return _ok(ident, None), context
+        return None
+
+    def tcam_regions(self) -> str:
+        """``show hardware access-list tcam region``, after the shape Cisco's guide
+        shows, with the sizes set (the fake switch applies them at once)."""
+        sizes = dict(_TCAM_DEFAULTS)
+        for path in self.security_lines:
+            if path.startswith("hardware access-list tcam region "):
+                words = path.split()
+                sizes[words[4]] = int(words[5])
+        names = dict(_TCAM_NAMES)
+        return "".join(f"{names[r]} [{r}] size = {sizes[r]:4}\n" for r in names)
+
     def _admin(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
     ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
@@ -809,6 +956,8 @@ class FakeSwitch:
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):
             return security_reply
+        if layer2_reply := self._layer2(user, is_admin, cmd, ident, context):
+            return layer2_reply
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
@@ -1833,7 +1982,7 @@ class FakeSwitch:
             known = self.users.get(username)
             if not known or known[0] != password:
                 raise SshAuthError("the switch refused the SSH username or password")
-            return FakeShell(self)
+            return FakeShell(self, username)
 
         return opener
 
@@ -1841,8 +1990,10 @@ class FakeSwitch:
 class FakeShell:
     """The pretend switch's command line, for the lines NXray types over SSH."""
 
-    def __init__(self, switch: FakeSwitch) -> None:
+    def __init__(self, switch: FakeSwitch, user: str = "admin") -> None:
         self.switch = switch
+        self.user = user
+        self.dont_ask = False
         self.mode: list[str] = []  # e.g. ["config", "role", "role-interface"]
         self.role: Role | None = None
         self.closed = False
@@ -1852,6 +2003,19 @@ class FakeShell:
         invalid = "% Invalid command at '^' marker."
         if any(line.startswith(prefix) for prefix in self.switch.ssh_reject):
             return invalid
+        if not self.mode and line == "terminal dont-ask":
+            self.dont_ask = True
+            return ""
+        if not self.mode and line == "reload":
+            # As NX-OS: only network-admin may; without terminal dont-ask it asks
+            # first (and the pretend shell, like NXray's, hears no answer).
+            if "network-admin" not in self.switch.roles_of(self.user):
+                return "% Permission denied for the role"
+            if not self.dont_ask:
+                raise SshUnreachable("the switch stopped answering over SSH within 30 seconds")
+            self.switch.reloads += 1
+            self.switch.saved_at_reload.append(self.switch.saved)
+            raise SshUnreachable("the switch closed the SSH session")
         if line == "configure terminal":
             self.mode = ["config"]
             return "Enter configuration commands, one per line.  End with CNTL/Z."

@@ -116,7 +116,9 @@ def test_changes_off_before_role_version_13(
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 12")
     assert "Security and config changes are off" in _text(logged_in.get("/security/acls").text)
-    assert "Turn on security and config changes" in _text(logged_in.get("/switch").text)
+    assert "Turn on security and config and layer 2 security changes" in _text(
+        logged_in.get("/switch").text
+    )
     refused = _change(logged_in, ACL, scope="ipv4_acl", action="create", id_name="web")
     assert refused.status_code == 400
     assert "Security and config changes are off" in _text(refused.text)
@@ -138,7 +140,10 @@ def test_role_version_12_turns_on_security_without_a_wait(
         },
     )
     text = _text(response.text)
-    assert "Security and config changes are on: nxray may now also make and delete" in text
+    assert (
+        "Security and config and layer 2 security changes are on: nxray may now also make and "
+        "delete" in text
+    )
     assert "there is no wait" in text
     assert "rule 188 permit command checkpoint *" in enabled.ssh_lines
     # Rolling back is never in the role.

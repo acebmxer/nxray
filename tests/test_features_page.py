@@ -282,7 +282,7 @@ def test_old_role_offers_feature_changes_without_a_wait(
     page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
-        "protocol, spanning tree, switch admin and security and config changes"
+        "protocol, spanning tree, switch admin, security and config and layer 2 security changes"
         in page
         and "There is no wait this time" in page
     )
@@ -292,7 +292,8 @@ def test_old_role_offers_feature_changes_without_a_wait(
     text = _text(_enable(logged_in).text)
     assert (
         "Feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-        "spanning tree, switch admin and security and config changes are on: nxray may now also "
+        "spanning tree, switch admin, security and config and layer 2 security changes are on: "
+        "nxray may now also "
         "turn switch features on and off on the Features page, turn CDP and LLDP on or off" in text
     )
     assert "The switch applies this at once, so there is no wait." in text
@@ -302,7 +303,8 @@ def test_old_role_offers_feature_changes_without_a_wait(
     assert (
         "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address "
         "table, port-channels, VLAN interfaces, VRFs, static routes, routing protocols, spanning "
-        "tree, switch admin, ACLs, port security and checkpoints" in page
+        "tree, switch admin, ACLs, port security, checkpoints, DHCP snooping and relay, ARP "
+        "inspection, IP Source Guard, MAC and VLAN ACLs, object groups and TCAM regions" in page
     )
     assert "Update the port list" in page
     assert _set(logged_in, "lldp", "on", confirm=True).status_code == 200

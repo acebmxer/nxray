@@ -56,7 +56,9 @@ prose columns; those are a reviewer's job.
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
-| Read, make, change or apply IPv4 and IPv6 ACLs | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
+| Read, make, change or apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, or size the TCAM regions | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
+| Read or change DHCP snooping, the DHCP relay, ARP inspection or IP Source Guard | `app/dhcp_security.py` (`load_dhcp_page`, `build_dhcp_change`); command from `NxapiClient.configure_dhcp` |
+| Restart the switch | `app/switch_ssh.py`, `reload_switch`, with the admin login the Config page asks for |
 | Read or change a port's port security | `app/port_security.py` (`load_port_security_page`, `build_port_security_change`); command from `NxapiClient.configure_port_security` |
 | Keep a backup of the switch's configuration, compare two configurations, or roll back | `app/config_tools.py` (`store_backup`, `config_diff`, `load_configs`); commands from `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` |
 | Split a configuration's text into its top-level lines and the lines under them | `app/config_tools.py`, `config_sections` |
@@ -222,16 +224,18 @@ change on a routing protocol page; the lines come from
 the Spanning tree page; the lines come from `spanning_tree.build_stp_change`),
 `configure_switch_admin(scope, setting, action, ident, values)` (one change on
 the Switch admin page; the lines come from `switch_admin.build_admin_change`),
-`configure_acl(...)` and `configure_port_security(...)` (the same for the ACLs
-and Port security pages, from `acls.build_acl_change` and
-`port_security.build_port_security_change`), `create_checkpoint(name)` and
+`configure_acl(...)`, `configure_port_security(...)` and `configure_dhcp(...)`
+(the same for the ACLs, Port security and DHCP and ARP pages, from
+`acls.build_acl_change`, `port_security.build_port_security_change` and
+`dhcp_security.build_dhcp_change`), `create_checkpoint(name)` and
 `delete_checkpoint(name)` (NXray's own `nxray-<n>` switch checkpoints),
 `rollback_to_checkpoint(name)` (sent only with the switch admin login the
 Config page asks for; NX-OS rolls back all or nothing)
 and `save_config()`; each builds its commands from checked values.
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
-logging last <n>`, through the `cli_ascii` method).
+logging last <n>`, `show hardware access-list tcam region`, `show ip dhcp
+snooping binding`, through the `cli_ascii` method).
 `SwitchTarget` holds the address and login; its `repr` never shows the
 password. Errors are `NxapiUnreachable`, `NxapiAuthError`, `NxapiCommandError`
 and `NxapiProtocolError`, all subclasses of `NxapiError`. The switch's
@@ -338,6 +342,7 @@ only inside `run_repair`.
 | --- | --- | --- | --- | --- |
 | `open_paramiko_shell` | `(host, port, username, password, timeout) -> ParamikoShell` | Signs in over SSH with a password only (no local keys or agent) and opens the NX-OS command line | `run_config` (the default opener) | v0.1.0 |
 | `refused` | `(output: str) -> str \| None` | The switch's complaint in a command's output, or None | `run_config` | v0.1.0 |
+| `reload_switch` | `(*, host, port, username, password, timeout, opener=None) -> None` | Types `terminal dont-ask` and `reload`; the session dropping means the switch is restarting, a prompt coming back raises SshCommandError | `routes/config_page.config_reload` | v0.1.0 |
 | `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving over SSH) | v0.1.0 |
 | `run_config` | `(*, host, port, username, password, lines, timeout, opener=None, then=()) -> list[str]` | Types checked lines between `configure terminal` and `end`, stopping at the first refusal, then the fixed `then` commands in the same session, returning their output | `port_changes.enable_port_changes` | v0.1.0 |
 
@@ -512,12 +517,18 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_security_page` | `(request, username) -> Response` | `GET /security/port-security`: each port's port security, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `port_security_change` | `(request, username, form) -> Response` | `POST /security/port-security/change`: one change, after a confirm page (role version 13, the port-security feature on) | router | v0.1.0 |
 | `check_port_security_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port | `PORT_SECURITY_SITE.check_place` in `routes/security` | v0.1.0 |
+| `render_dhcp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the DHCP and ARP page with a message | `dhcp_page`, `switch_save` | v0.1.0 |
+| `dhcp_page` | `(request, username) -> Response` | `GET /security/dhcp`: DHCP snooping and relay, ARP inspection, IP Source Guard and the bindings, read live; every role looks, operators and admins change | router | v0.1.0 |
+| `dhcp_change` | `(request, username, form) -> Response` | `POST /security/dhcp/change`: one change, after a confirm page showing the lines (role version 14, the dhcp feature on) | router | v0.1.0 |
+| `check_dhcp_place` | `(page, ident) -> None` | Refuses a switched port or layer 3 interface the switch lacks, or of the other kind | `DHCP_SITE.check_place` in `routes/security` | v0.1.0 |
+| `acl_needs` | `(connection, scope, setting) -> str` | Why the ACLs page may not make a change yet: MAC ACLs, object groups, VLAN access maps and TCAM regions need role version 14; "" when it may | `ACL_SITE.needs` in `routes/security` | v0.1.0 |
 | `render_config_page` | `(request, username, *, error=None, notice=None, a="", b="") -> Response` | Reads the switch and shows the Config page: running against saved, the backups with their checkpoints, and a comparison of `a` with `b` | the `routes/config_page` routes, `switch_save` | v0.1.0 |
 | `config_page` | `(request, username, a, b) -> Response` | `GET /config?a=&b=`: the Config page, comparing two of `running`, `startup` and `backup-<n>`; admins only | router | v0.1.0 |
 | `config_download` | `(number, request, username) -> Response` | `GET /config/backup/<n>.txt`: one backup's text as a file; admins only | router | v0.1.0 |
 | `config_backup` | `(request, username, csrf, note) -> Response` | `POST /config/backup`: store the running configuration, and make its `nxray-<n>` checkpoint when the role allows | router | v0.1.0 |
 | `config_backup_delete` | `(request, username, csrf, id, confirm) -> Response` | `POST /config/backup/delete`: delete a backup and its checkpoint on the switch, after a confirm page | router | v0.1.0 |
 | `config_rollback` | `(request, username, csrf, id, admin_user, admin_password, confirm) -> Response` | `POST /config/rollback`: shows what changes and asks for the switch admin login, then takes a backup of the configuration it replaces and rolls back with that login (never stored) | router | v0.1.0 |
+| `config_reload` | `(request, username, csrf, admin_user, admin_password, ssh_port, save, confirm) -> Response` | `POST /config/reload`: shows what is unsaved and asks for the switch admin login and SSH port, then saves first when asked (NXray's account) and restarts the switch over SSH with that login (never stored); admins only | router | v0.1.0 |
 | `activity_page` | `(request, username, user, area, search) -> Response` | `GET /activity?user=&area=&search=`: who changed what through NXray, newest first; admins only | router | v0.1.0 |
 | `activity_download` | `(request, username, user, area, search) -> Response` | `GET /activity.csv`: the same list as a CSV file | router | v0.1.0 |
 | `alerts_page` | `(request, username) -> Response` | `GET /alerts`: the problems open now, the rules, e-mail, webhooks and the alerts sent; admins only | router | v0.1.0 |
@@ -869,25 +880,46 @@ would take them out silently.
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
+| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page` | v0.1.0 |
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
 
-## `app/acls.py` — ACLs: IPv4 and IPv6 access lists and where they apply
+## `app/acls.py` — ACLs: IPv4, IPv6 and MAC access lists, object groups, VLAN access maps, TCAM
 
 Described with the parts of `app/protocols.py`: scopes for each kind of ACL (made
 and deleted from the page, entries as settings) and for applying one to a layer
-3 interface or a switched port. New field kinds in `app/protocols.py`:
-`aclnet4` and `aclnet6` (any, a network, or one address as /32 or /128) and
-`l4port` (22, 1024-65535, >1023, <1024, !=23 as `eq`, `range`, `gt`, `lt`, `neq`).
+3 interface or a switched port; from role version 14 also MAC ACLs, object
+groups, VLAN access maps and filters, and the TCAM regions. New field kinds in
+`app/protocols.py`: `aclnet4` and `aclnet6` (any, a network, one address as /32
+or /128, or `addrgroup <name>`), `l4port` (22, 1024-65535, >1023, <1024, !=23
+as `eq`, `range`, `gt`, `lt`, `neq`, or `portgroup <name>`), `aclmac` (any, an
+address, or an address and mask), `ethertype` (0x0600-0xffff), and `arpip` and
+`arpmac` (any or `host <address>`, for ARP ACLs).
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_acl_config` | `(config) -> AclConfig` | The ACLs, their entry lines, statistics, and the interfaces and ports they apply on, from `show running-config` | `parse_acls` | v0.1.0 |
-| `parse_acls` | `(bodies, config_text=None) -> ProtocolView` | The ACLs page: each ACL with its entries and where it applies, each interface with its ACLs, and a table of every ACL; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
+| `parse_acl_config` | `(config) -> AclConfig` | The IPv4, IPv6 and MAC ACLs, their entry lines and statistics, the object groups, VLAN access maps and filters, the TCAM sizes set, and the interfaces and ports the ACLs apply on, from `show running-config` | `parse_acls` | v0.1.0 |
+| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls` | v0.1.0 |
+| `parse_acls` | `(bodies, config_text=None, tcam_text=None) -> ProtocolView` | The ACLs page: each IPv4, IPv6 and MAC ACL with its entries and where it applies, each object group, VLAN access map entry and VLAN filter, each interface with its ACLs, a table of every ACL, one of the groups and maps, and one of the TCAM regions; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
+| `needs_v14` | `(scope, setting) -> bool` | Whether an ACLs page change needs role version 14 (MAC ACLs, object groups, VLAN access maps and filters, TCAM, MAC port ACLs) | `routes/security.acl_needs` | v0.1.0 |
 | `layer3_names` | `(brief) -> tuple[str, ...]` | VLAN interfaces up to Vlan254 and routed ports and port-channels in `show interface brief` | `load_acls_page` | v0.1.0 |
-| `load_acls_page` | `(client) -> AclPage` | One request for the interfaces, one for the configuration text | `routes/security` | v0.1.0 |
+| `load_acls_page` | `(client) -> AclPage` | One request for the interfaces and VLANs, one for the configuration text, one for the TCAM regions (`show_text`; None when refused) | `routes/security` | v0.1.0 |
 | `build_acl_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the ACLs page | `NxapiClient.configure_acl`, `routes/security` | v0.1.0 |
+
+## `app/dhcp_security.py` — DHCP and ARP: DHCP snooping and relay, ARP inspection, IP Source Guard
+
+Described with the parts of `app/protocols.py`: a switch-wide scope, a switched
+port scope, a layer 3 interface scope for the DHCP servers, and ARP ACLs (made
+and deleted from the page).
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_dhcp_config` | `(config) -> DhcpConfig` | The DHCP snooping, relay, ARP inspection and IP Source Guard lines of `show running-config`, switch-wide and per interface, with NX-OS's defaults for missing lines, and the ARP ACLs | `parse_dhcp` | v0.1.0 |
+| `parse_bindings` | `(text) -> list[tuple[str, ...]]` | `show ip dhcp snooping binding` as text: MAC, IP address, lease, type, VLAN and interface per binding | `parse_dhcp` | v0.1.0 |
+| `parse_dhcp` | `(bodies, config_text=None, binding_text=None) -> ProtocolView` | The DHCP and ARP page: the switch-wide settings, each port, each relaying interface and ARP ACL, and tables of the ports, the relays and the bindings (learned and fixed); a note when the configuration cannot be read | `DHCP.parse`, `load_dhcp_page` | v0.1.0 |
+| `load_dhcp_page` | `(client) -> DhcpPage` | One request for the feature, ports, VLANs and VRFs, one for the configuration text, one for the bindings (while the dhcp feature is on) | `routes/security` | v0.1.0 |
+| `build_dhcp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the DHCP and ARP page | `NxapiClient.configure_dhcp`, `routes/security` | v0.1.0 |
 
 ## `app/port_security.py` — Port security on the switched front ports
 
@@ -903,7 +935,7 @@ and deleted from the page, entries as settings) and for applying one to a layer
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `clean_config` | `(config) -> list[str]` | A configuration's lines without the `!Time:` and similar lines about when it was printed | `config_diff` | v0.1.0 |
-| `config_sections` | `(config) -> list[tuple[str, list[str]]]` | Each top-level line with the indented lines under it, stripped | `acls.parse_acl_config`, `port_security.parse_port_security_config` | v0.1.0 |
+| `config_sections` | `(config) -> list[tuple[str, list[str]]]` | Each top-level line with the indented lines under it, stripped | `acls.parse_acl_config`, `port_security.parse_port_security_config`, `dhcp_security.parse_dhcp_config` | v0.1.0 |
 | `config_diff` | `(first, second, context=3) -> list[DiffLine]` | What changes from one configuration to another, with unchanged lines around each change and gaps between | `routes/config_page` | v0.1.0 |
 | `diff_counts` | `(diff) -> tuple[int, int]` | Lines removed and added in a comparison | `routes/config_page` | v0.1.0 |
 | `parse_checkpoints` | `(output) -> list[str]` | The checkpoint names in `show checkpoint summary` | `load_configs` | v0.1.0 |

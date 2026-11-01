@@ -61,10 +61,15 @@ and servers, logging, SNMP contact and location, read-only SNMP communities
 and SNMP v2c trap receivers) and read the whole running configuration (which
 holds the switch's password hashes and SNMP communities); it may make, change,
 delete and apply IPv4 and IPv6 ACLs, set port security on the permitted ports,
-read the saved configuration and make, list and delete checkpoints; and it may run `copy running-config startup-config`. The switch refuses it anything else,
-including mgmt0, accounts, SNMP users, read-write SNMP communities and rolling
-the switch back to a checkpoint (NXray asks for the admin login each time for
-that). Anyone who takes over NXray can do whatever that account
+read the saved configuration and make, list and delete checkpoints; it may set
+DHCP snooping, the DHCP and DHCPv6 relay (including which servers requests go
+to), dynamic ARP inspection and its ARP ACLs, and IP Source Guard and its
+fixed bindings, make, change, delete and apply MAC ACLs, object groups and
+VLAN access maps (`vlan filter`), and size the TCAM regions (`hardware
+access-list tcam region *`, counted only after a restart); and it may run `copy running-config startup-config`. The switch refuses it anything else,
+including mgmt0, accounts, SNMP users, read-write SNMP communities, rolling
+the switch back to a checkpoint and restarting it (NXray asks for the admin
+login each time for those). Anyone who takes over NXray can do whatever that account
 can, so with port changes on that includes turning ports off, moving them
 to other VLANs, sending a device's traffic to the wrong port or dropping it
 with a static MAC address, pulling ports out of a port-channel or deleting it,
@@ -77,6 +82,9 @@ type, filter or mode can make a loop or stop traffic on every VLAN),
 renaming the switch, pointing its clock, DNS or logging at other servers,
 adding a read-only SNMP community, applying an ACL that drops traffic
 (also NXray's own), turning on port security that shuts a port down,
+turning on DHCP snooping, ARP inspection or IP Source Guard that cuts devices
+off, sending DHCP requests to another server, shrinking a TCAM region so ACLs
+no longer fit after the next restart,
 and turning features on or off: turning off a feature
 deletes its settings (LACP takes its port-channels with it), and turning on
 `telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off
@@ -102,6 +110,8 @@ changes were on and the account lost the role, and saves the
 configuration. Rolling back on the Config page sends one command with it over
 NX-API, `rollback running-config checkpoint nxray-<n>` (NXray's own
 checkpoints only), and the password is removed from any error shown.
+Restarting the switch on the Config page types `terminal dont-ask` and
+`reload` into an SSH session with it, and nothing else.
 configuration. Changing the switch address needs no admin login: NXray
 signs in at the new address with its own account before storing it.
 

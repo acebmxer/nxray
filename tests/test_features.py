@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 13
+    assert ROLE_VERSION == 14
 
 
 @pytest.mark.parametrize(
@@ -148,48 +148,56 @@ def test_role_has_the_feature_rules() -> None:
         (
             1,
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-            "route, routing protocol, spanning tree, switch admin and security and config changes",
+            "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
+            "security changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
-            "routing protocol, spanning tree, switch admin and security and config changes",
+            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
+            "security changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
-            "protocol, spanning tree, switch admin and security and config changes",
+            "protocol, spanning tree, switch admin, security and config and layer 2 security "
+            "changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-            "spanning tree, switch admin and security and config changes",
+            "spanning tree, switch admin, security and config and layer 2 security changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
-            "switch admin and security and config changes",
+            "switch admin, security and config and layer 2 security changes",
         ),
         (
             6,
-            "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin "
-            "and security and config changes",
+            "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
+            "admin, security and config and layer 2 security changes",
         ),
         (
             7,
-            "VRF, static route, routing protocol, spanning tree, switch admin and security and "
-            "config changes",
+            "VRF, static route, routing protocol, spanning tree, switch admin, security and "
+            "config and layer 2 security changes",
         ),
         (
             8,
-            "static route, routing protocol, spanning tree, switch admin and security and config "
-            "changes",
+            "static route, routing protocol, spanning tree, switch admin, security and config "
+            "and layer 2 security changes",
         ),
-        (9, "routing protocol, spanning tree, switch admin and security and config changes"),
-        (10, "spanning tree, switch admin and security and config changes"),
-        (11, "switch admin and security and config changes"),
-        (12, "security and config changes"),
-        (13, ""),
+        (
+            9,
+            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
+            "security changes",
+        ),
+        (10, "spanning tree, switch admin, security and config and layer 2 security changes"),
+        (11, "switch admin, security and config and layer 2 security changes"),
+        (12, "security and config and layer 2 security changes"),
+        (13, "layer 2 security changes"),
+        (14, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

@@ -31,7 +31,7 @@ from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import render_port_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.routing import render_routing_page
-from app.routes.security import render_acls_page, render_port_security_page
+from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.vlans import render_vlans_page
@@ -548,18 +548,23 @@ def switch_enable_changes(
         "on the Port security page, and read the saved configuration and keep checkpoints for "
         "backups on the Config page"
     )
+    layer2_words = (
+        "set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard on the DHCP and "
+        "ARP page, and make MAC ACLs, object groups and VLAN access maps and size the TCAM "
+        "regions on the ACLs page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-            "static route, routing protocol, spanning tree, switch admin and security and config "
-            "changes are on: "
+            "static route, routing protocol, spanning tree, switch admin, security and config and "
+            "layer 2 security changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, and {security_words}. "
+            f"{admin_words}, {security_words}, and {layer2_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -597,7 +602,9 @@ def switch_enable_changes(
             parts.append(stp_words)
         if connection.role_version < 12:
             parts.append(admin_words)
-        parts.append(security_words)
+        if connection.role_version < 13:
+            parts.append(security_words)
+        parts.append(layer2_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -638,7 +645,8 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``, ``protocols``,
     ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``switch-admin``, ``acls``, ``port-security`` or ``config``); the answer is shown there.
+    ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
+    shown there.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -669,6 +677,8 @@ def switch_save(
             return render_acls_page(request, username, error=error, notice=notice)
         if back == "port-security":
             return render_port_security_page(request, username, error=error, notice=notice)
+        if back == "dhcp":
+            return render_dhcp_page(request, username, error=error, notice=notice)
         if back == "config" and current_role(request) == "admin":
             return render_config_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)

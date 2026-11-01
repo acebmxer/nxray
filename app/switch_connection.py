@@ -117,6 +117,13 @@ class SwitchConnection:
         or later): ACLs, port security, the saved configuration and checkpoints."""
         return self.changes_enabled and self.role_version >= 13
 
+    @property
+    def layer2_security_changes_enabled(self) -> bool:
+        """True once that role includes the layer 2 security rules (role version 14 or
+        later): DHCP snooping and relay, ARP inspection, IP Source Guard, MAC ACLs,
+        object groups, VLAN access maps and TCAM regions."""
+        return self.changes_enabled and self.role_version >= 14
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

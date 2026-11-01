@@ -21,11 +21,12 @@ switch's LACP priority; spanning tree; the switch admin settings (hostname,
 banner, clock and NTP, DNS, logging, SNMP contact, location, read-only
 communities and trap receivers) and reading the running configuration; IPv4
 and IPv6 ACLs and where they apply, port security on the ports, reading the
-saved configuration and making and deleting checkpoints; and
-saving the configuration. Everything else (mgmt0, a VLAN's own on/off state,
-accounts, SNMP users and read-write communities, rolling the switch back,
-other switch-wide settings)
-stays refused by the switch itself, not just by NXray.
+saved configuration and making and deleting checkpoints; DHCP snooping, the
+DHCP relay, ARP inspection, IP Source Guard, MAC ACLs, object groups, VLAN
+access maps and the TCAM regions' sizes; and saving the configuration.
+Everything else (mgmt0, a VLAN's own on/off state, accounts, SNMP users and
+read-write communities, rolling the switch back, reloading it, other
+switch-wide settings) stays refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
 the admin login entered on the Switch page (``app/switch_ssh.py``). Checks
@@ -58,7 +59,7 @@ neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
-admin rules, 13 the security and config rules.
+admin rules, 13 the security and config rules, 14 the layer 2 security rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -451,11 +452,61 @@ SECURITY_RULES = (
     "rule 190 permit command show checkpoint *",
 )
 
+# Layer 2 security rules, added in ROLE_VERSION 14: DHCP snooping, the DHCP and
+# DHCPv6 relay, dynamic ARP inspection and its ARP ACLs, IP Source Guard and its
+# fixed bindings, switch-wide and on the ports and interfaces; MAC ACLs and MAC
+# port ACLs; object groups; VLAN access maps and the VLAN filters that apply
+# them; and the TCAM regions' sizes. A bare line ("ip dhcp snooping") gets its
+# own rule next to the "*" one, as rules 183 and 184 do. Reloading the switch is
+# left out on purpose: NXray reloads with the switch admin login typed on the
+# Config page. Written after Cisco's NX-OS 9.3 Security Configuration Guide and
+# the shapes of the rules proven before; not yet tried on a switch. The port list
+# stays as it was, so this needs no SSH save and no wait.
+LAYER2_RULES = (
+    "rule 191 permit command conf t ; ip dhcp snooping",
+    "rule 192 permit command conf t ; ip dhcp snooping *",
+    "rule 193 permit command conf t ; no ip dhcp snooping",
+    "rule 194 permit command conf t ; no ip dhcp snooping *",
+    "rule 195 permit command conf t ; ip dhcp relay",
+    "rule 196 permit command conf t ; ip dhcp relay *",
+    "rule 197 permit command conf t ; no ip dhcp relay",
+    "rule 198 permit command conf t ; no ip dhcp relay *",
+    "rule 199 permit command conf t ; ipv6 dhcp relay",
+    "rule 200 permit command conf t ; no ipv6 dhcp relay",
+    "rule 201 permit command conf t ; interface * ; ip dhcp snooping *",
+    "rule 202 permit command conf t ; interface * ; no ip dhcp snooping *",
+    "rule 203 permit command conf t ; interface * ; ip dhcp relay address *",
+    "rule 204 permit command conf t ; interface * ; no ip dhcp relay address *",
+    "rule 205 permit command conf t ; interface * ; ipv6 dhcp relay address *",
+    "rule 206 permit command conf t ; interface * ; no ipv6 dhcp relay address *",
+    "rule 207 permit command conf t ; ip arp inspection *",
+    "rule 208 permit command conf t ; no ip arp inspection *",
+    "rule 209 permit command conf t ; interface * ; ip arp inspection trust",
+    "rule 210 permit command conf t ; interface * ; no ip arp inspection trust",
+    "rule 211 permit command conf t ; arp access-list *",
+    "rule 212 permit command conf t ; no arp access-list *",
+    "rule 213 permit command conf t ; ip source binding *",
+    "rule 214 permit command conf t ; no ip source binding *",
+    "rule 215 permit command conf t ; interface * ; ip verify source *",
+    "rule 216 permit command conf t ; interface * ; no ip verify source *",
+    "rule 217 permit command conf t ; mac access-list *",
+    "rule 218 permit command conf t ; no mac access-list *",
+    "rule 219 permit command conf t ; interface * ; mac port access-group *",
+    "rule 220 permit command conf t ; interface * ; no mac port access-group *",
+    "rule 221 permit command conf t ; object-group *",
+    "rule 222 permit command conf t ; no object-group *",
+    "rule 223 permit command conf t ; vlan access-map *",
+    "rule 224 permit command conf t ; no vlan access-map *",
+    "rule 225 permit command conf t ; vlan filter *",
+    "rule 226 permit command conf t ; no vlan filter *",
+    "rule 227 permit command conf t ; hardware access-list tcam region *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 13
+ROLE_VERSION = 14
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -471,6 +522,7 @@ _ADDED_BY_VERSION = {
     11: "spanning tree",
     12: "switch admin",
     13: "security and config",
+    14: "layer 2 security",
 }
 
 
@@ -527,7 +579,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         f"role name {ROLE_NAME}",
         # Kept short: NX-OS takes up to 128 characters here.
         "description NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
-        "switch admin, ACLs, port security, checkpoints, save",
+        "switch admin, ACLs, port security, DHCP, ARP, checkpoints",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
@@ -541,6 +593,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *STP_RULES,
         *ADMIN_RULES,
         *SECURITY_RULES,
+        *LAYER2_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

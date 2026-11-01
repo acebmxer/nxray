@@ -8,7 +8,10 @@ saved configuration; ``?a=&b=`` compares two of running, ``startup`` and
 /config/backup/delete`` deletes one (after a confirm page), ``GET
 /config/backup/<n>.txt`` downloads one, and ``POST /config/rollback`` rolls the
 switch back to one, after a confirm page that shows what changes and asks for
-the switch admin login (used once, never stored).
+the switch admin login (used once, never stored). ``POST /config/reload``
+restarts the switch, saving its configuration first when asked, after a confirm
+page that asks for the switch admin login and SSH port (used once, never
+stored).
 """
 
 from __future__ import annotations
@@ -43,9 +46,11 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import NxapiClient, NxapiError, SwitchTarget
+from app.port_changes import SSH_TIMEOUT
 from app.security import csrf_token
 from app.switch_connection import SWITCH_TIMEOUT, SwitchConnection, set_unsaved_changes
 from app.switch_setup import connection_error, read_switch
+from app.switch_ssh import SshAuthError, SshCommandError, SshError, reload_switch
 
 router = APIRouter()
 log = logging.getLogger("nxray.config")
@@ -55,6 +60,13 @@ ROLLBACK_WARNING = (
     "through NXray or not, is undone, and connections that depend on it may drop. "
     "NXray first takes a backup of the configuration it replaces, so this can be undone "
     "the same way."
+)
+
+
+RELOAD_WARNING = (
+    "The switch restarts: every port goes down and all traffic through it stops for "
+    "several minutes, NXray included, until it is back. What is not saved is lost, unless "
+    "Save first is ticked. TCAM region sizes set since the last restart take effect."
 )
 
 
@@ -442,4 +454,122 @@ def config_rollback(
         notice=f"Done: the switch is rolled back to backup {backup.id}. The configuration it "
         f"replaced is backup {before}. Not saved yet: Save config keeps it over a restart of "
         "the switch.",
+    )
+
+
+def _reload_form(
+    request: Request,
+    username: str,
+    unsaved: int | None,
+    *,
+    admin_user: str = "",
+    ssh_port: str = "22",
+    save: bool = True,
+    error: str | None = None,
+) -> Response:
+    return templates.TemplateResponse(
+        request,
+        "config_reload.html",
+        {
+            "username": username,
+            "unsaved": unsaved,
+            "warning": RELOAD_WARNING,
+            "admin_user": admin_user,
+            "ssh_port": ssh_port,
+            "save": save,
+            "error": error,
+            "csrf_token": csrf_token(request),
+        },
+        status_code=400 if error else 200,
+    )
+
+
+@router.post("/config/reload", response_class=HTMLResponse)
+def config_reload(
+    request: Request,
+    username: str = Depends(admin_required),
+    csrf: str = Form(""),
+    admin_user: str = Form(""),
+    admin_password: str = Form(""),
+    ssh_port: str = Form("22"),
+    save: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Restart the switch. Without confirm=yes, shows what is not saved and asks for
+    the switch admin login; with ``save``, saves the configuration first."""
+    require_csrf(request, csrf)
+    connection, target, problem = stored_switch(request)
+    if connection is None or target is None:
+        return render_config_page(
+            request, username, error=f"Not restarted: {problem or 'no switch is set up'}."
+        )
+    transport = request.app.state.nxapi_transport
+    status, configs = read_switch(target, load_configs, transport=transport)
+    unsaved = None
+    if configs is not None and configs.startup is not None:
+        unsaved = sum(diff_counts(config_diff(configs.startup, configs.running)))
+    if confirm != "yes":
+        return _reload_form(request, username, unsaved)
+    admin_user = admin_user.strip()
+    keep = save == "yes"
+
+    def again(message: str) -> Response:
+        return _reload_form(
+            request,
+            username,
+            unsaved,
+            admin_user=admin_user,
+            ssh_port=ssh_port,
+            save=keep,
+            error=message,
+        )
+
+    if not admin_user or not admin_password:
+        return again("Enter the switch's admin username and password.")
+    port = int(ssh_port) if ssh_port.isascii() and ssh_port.isdigit() else 0
+    if not 1 <= port <= 65535:
+        return again("The SSH port is a number from 1 to 65535.")
+    if keep:
+        try:
+            with NxapiClient(target, transport=transport) as client:
+                client.save_config()
+        except NxapiError as exc:
+            return again(
+                f"Not restarted: the configuration could not be saved first: "
+                f"{connection_error(exc, target)}"
+            )
+        with open_db(request.app.state.settings.db_path) as conn:
+            set_unsaved_changes(conn, False)
+    try:
+        reload_switch(
+            host=connection.host,
+            port=port,
+            username=admin_user,
+            password=admin_password,
+            timeout=SSH_TIMEOUT,
+            opener=request.app.state.ssh_opener,
+        )
+    except SshAuthError:
+        return again("Not restarted: the switch refused that admin username or password.")
+    except SshCommandError as exc:
+        message = str(exc).replace(admin_password, "***")
+        log.warning("reload refused: %s", message)
+        return again(f"Not restarted: the switch refused it: {message}")
+    except SshError as exc:
+        message = str(exc).replace(admin_password, "***")
+        return again(f"Not restarted: {message}")
+    log.info("restarted %s by %s", connection.host, username)
+    note_activity(
+        request,
+        username,
+        "Config",
+        "Restarted the switch" + (", after saving its configuration" if keep else ""),
+        connection.host,
+    )
+    return render_config_page(
+        request,
+        username,
+        notice="Done: the switch is restarting"
+        + (", with its configuration saved first" if keep else "")
+        + ". It answers again in several minutes; until then NXray cannot reach it.",
     )

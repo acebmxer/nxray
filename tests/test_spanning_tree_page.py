@@ -124,8 +124,9 @@ def test_changes_off_before_role_version_11(
     _db(settings, "UPDATE switch_connection SET role_version = 10")
     page = logged_in.get("/spanning-tree").text
     assert "Spanning tree changes are off" in _text(page)
-    assert "Turn on spanning tree, switch admin and security and config changes" in _text(
-        logged_in.get("/switch").text
+    assert (
+        "Turn on spanning tree, switch admin, security and config and layer 2 security changes"
+        in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, scope="vlan", setting="priority", action="set",
                       id_vlan="10", v_priority="4096")  # fmt: skip

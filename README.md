@@ -29,8 +29,10 @@ OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set the switch's hostname, banner, clock and NTP, DNS, logging and
-SNMP and read its log, make and apply IPv4 and IPv6 ACLs, set port security,
-keep backups of the switch's configuration, compare them and roll back to one,
+SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
+and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
+the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
+switch's configuration, compare them and roll back to one, restart the switch,
 see who changed what in an activity log, be told by e-mail or webhook
 (JSON, Slack or Discord) when the switch cannot be reached, runs hot, loses a
 fan or power supply, runs out of CPU or memory, or a port goes down or
@@ -138,8 +140,11 @@ default: *(built)*.
 16. **Spanning tree.** *(built)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
-18. **Security and config tools**: ACLs, port security, an activity log of
-    who changed what in NXray, config diff, backup and rollback. *(built)*
+18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,
+    VLAN access maps, TCAM regions), port security, DHCP snooping and relay,
+    dynamic ARP inspection, IP Source Guard, an activity log of who changed
+    what in NXray, config diff, backup, rollback and restarting the switch.
+    *(built)*
 19. **Alerts** by e-mail and webhook. *(built)*
 20. **Several switches** in one NXray. *(planned)*
 

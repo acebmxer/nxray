@@ -110,11 +110,12 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface, VRF, static route, routing protocol, spanning tree, switch admin and
-security and config changes**, tick the box and press **Turn on port, VLAN, port
-settings, feature, neighbor, port-channel, VLAN interface, VRF, static route,
-routing protocol, spanning tree, switch admin and security and config
-changes**. One press turns on all thirteen, with a single wait.
+interface, VRF, static route, routing protocol, spanning tree, switch admin,
+security and config and layer 2 security changes**, tick the box and press
+**Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN
+interface, VRF, static route, routing protocol, spanning tree, switch admin,
+security and config and layer 2 security changes**. One press turns on all
+fourteen, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -314,6 +315,43 @@ NXray then:
          rule 188 permit command checkpoint *
          rule 189 permit command no checkpoint *
          rule 190 permit command show checkpoint *
+         rule 191 permit command conf t ; ip dhcp snooping
+         rule 192 permit command conf t ; ip dhcp snooping *
+         rule 193 permit command conf t ; no ip dhcp snooping
+         rule 194 permit command conf t ; no ip dhcp snooping *
+         rule 195 permit command conf t ; ip dhcp relay
+         rule 196 permit command conf t ; ip dhcp relay *
+         rule 197 permit command conf t ; no ip dhcp relay
+         rule 198 permit command conf t ; no ip dhcp relay *
+         rule 199 permit command conf t ; ipv6 dhcp relay
+         rule 200 permit command conf t ; no ipv6 dhcp relay
+         rule 201 permit command conf t ; interface * ; ip dhcp snooping *
+         rule 202 permit command conf t ; interface * ; no ip dhcp snooping *
+         rule 203 permit command conf t ; interface * ; ip dhcp relay address *
+         rule 204 permit command conf t ; interface * ; no ip dhcp relay address *
+         rule 205 permit command conf t ; interface * ; ipv6 dhcp relay address *
+         rule 206 permit command conf t ; interface * ; no ipv6 dhcp relay address *
+         rule 207 permit command conf t ; ip arp inspection *
+         rule 208 permit command conf t ; no ip arp inspection *
+         rule 209 permit command conf t ; interface * ; ip arp inspection trust
+         rule 210 permit command conf t ; interface * ; no ip arp inspection trust
+         rule 211 permit command conf t ; arp access-list *
+         rule 212 permit command conf t ; no arp access-list *
+         rule 213 permit command conf t ; ip source binding *
+         rule 214 permit command conf t ; no ip source binding *
+         rule 215 permit command conf t ; interface * ; ip verify source *
+         rule 216 permit command conf t ; interface * ; no ip verify source *
+         rule 217 permit command conf t ; mac access-list *
+         rule 218 permit command conf t ; no mac access-list *
+         rule 219 permit command conf t ; interface * ; mac port access-group *
+         rule 220 permit command conf t ; interface * ; no mac port access-group *
+         rule 221 permit command conf t ; object-group *
+         rule 222 permit command conf t ; no object-group *
+         rule 223 permit command conf t ; vlan access-map *
+         rule 224 permit command conf t ; no vlan access-map *
+         rule 225 permit command conf t ; vlan filter *
+         rule 226 permit command conf t ; no vlan filter *
+         rule 227 permit command conf t ; hardware access-list tcam region *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -365,8 +403,8 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol, spanning tree, switch admin and security and config
-changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree, switch admin, security and config and
+layer 2 security changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -750,8 +788,24 @@ interface, routed port or routed port-channel (`ip access-group`, `ipv6
 traffic-filter`), or in on a switched front port or port-channel (`ip port
 access-group`, `ipv6 port traffic-filter`). Every ACL ends with an unwritten
 "deny everything else", so applying one can cut off the session you are
-using; the confirm page says so. MAC ACLs, object groups and VLAN access maps
-are left out.
+using; the confirm page says so.
+
+With layer 2 security changes on (role version 14) the ACLs page also has
+**MAC ACLs** (entries matching a source and destination MAC address, `any`, one
+address or an address and mask, and optionally an EtherType such as `0x0806`,
+a CoS and a VLAN; applied in on a switched port with `mac port access-group`,
+where they check the packets that are not IP); **object groups** of IPv4 or
+IPv6 networks and of ports, which an entry names as `addrgroup <name>` in place
+of a source or destination and `portgroup <name>` in place of a port; **VLAN
+access maps** (numbered entries that match an IPv4, IPv6 or MAC ACL and then
+forward or drop) and the **VLAN filters** that apply a map to VLANs, so every
+packet in them, switched or routed, goes through it; and the **TCAM regions**
+(`show hardware access-list tcam region`, with the size each was set to). On a
+Nexus 9000 a port ACL needs space in the `ing-ifacl` region and a VLAN ACL in
+`vacl`, both 0 by default, and DHCP snooping, ARP inspection and IP Source
+Guard need space too; the space must come from another region, and a new size
+counts only after Save config and a restart (Config page). The table says
+which regions wait for a restart.
 
 **Port security.** The **Port security** page, linked from ACLs, needs the
 port-security feature (turn it on on the Features page). For each switched
@@ -760,6 +814,32 @@ the port accepts (default 1), what happens on a violation (shut the port
 down, the default; restrict; or protect), whether learned addresses are kept
 in the configuration (sticky), known addresses (with a VLAN on trunk ports),
 and when learned addresses are forgotten.
+
+**DHCP and ARP.** The **DHCP and ARP** page, linked from ACLs, needs the dhcp
+feature (turn it on on the Features page) and layer 2 security changes (role
+version 14). It shows, read from the running configuration, and sets after a
+confirm page: **DHCP snooping** on or off, its VLANs, option 82 and whether a
+request's client MAC address must match the frame (on by default); per
+switched port or port-channel, whether it is trusted (the port toward the DHCP
+server, or an uplink) and its DHCP rate limit (a port over it is turned off);
+the **DHCP relay** (on by default with the feature), option 82 and relaying
+across VRFs, and the DHCP and DHCPv6 servers of each VLAN interface or routed
+port, with the VRF the server is reached in; **dynamic ARP inspection**, its
+VLANs, the extra checks (`src-mac`, `dst-mac`, `ip`), its log buffer, which
+ports are trusted, and **ARP ACLs** (entries permitting one sender address and
+MAC, for hosts with fixed addresses) applied to VLANs; and **IP Source Guard**
+per port and its fixed bindings (address, MAC, VLAN and port). The bindings
+table lists what DHCP snooping learned (`show ip dhcp snooping binding`) and
+the fixed ones. Turning on snooping, ARP inspection or IP Source Guard can cut
+devices off at once; each confirm page says how.
+
+**Restarting the switch.** The Config page's **Restart the switch** asks
+whether to save first and for the switch admin login and SSH port, then saves
+with NXray's own account (when asked) and types `terminal dont-ask` and
+`reload` over SSH with the admin login, once; the password is never stored.
+NXray's own role has no rule to restart the switch. The switch dropping the
+SSH session is how NXray knows it went down; it answers again after several
+minutes.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows
@@ -780,13 +860,17 @@ whose role predates this gets a **Turn on security and config changes** card on
 the Switch page; it adds rules 171 to 190 with no wait. Without them the
 Config page still keeps backups (without checkpoints) once switch admin
 changes are on. These rules and lines follow Cisco's NX-OS 9.3 configuration
-guides and have not yet been tried on a switch.
+guides and have not yet been tried on a switch. An install whose role predates
+the DHCP and ARP page gets a **Turn on layer 2 security changes** card; it adds
+rules 191 to 227 with no wait. They also follow Cisco's NX-OS 9.3 Security
+Configuration Guide and have not yet been tried on a switch.
 
 **Activity.** The **Activity** page (admins only) lists every change made
 through NXray, newest first, with the account, the page it was made on, the
 change in plain words (passwords and SNMP communities masked) and the switch's
 address: port, VLAN, routing, protocol, spanning tree, switch admin, ACL, port
-security and feature changes, Save config, backups and rollbacks, the Switch
+security, DHCP and ARP and feature changes, Save config, backups, rollbacks and
+restarts, the Switch
 page's actions, and changes to NXray's own accounts and settings. Filter it by
 account, page or text, or download it as CSV. Lines are kept for a year.
 

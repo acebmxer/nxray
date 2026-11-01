@@ -273,42 +273,46 @@ def test_role_has_the_port_channel_rules_and_names_every_port_channel() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in CHANNEL_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 13
+    assert ROLE_VERSION == 14
     # Inside "interface policy deny", after the front ports: outside it the switch refuses it.
     policy = lines.index("interface policy deny")
     assert lines.index(CHANNEL_PERMIT) > lines.index("permit interface Ethernet1/1") > policy
     assert lines[lines.index(CHANNEL_PERMIT) + 1] == VLAN_INTERFACE_PERMIT
     assert lines[lines.index(CHANNEL_PERMIT) + 2] == "exit"
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 191))
+    assert numbers == list(range(1, 228))
 
 
 def test_missing_changes_names_port_channel_changes() -> None:
     assert missing_changes(5) == (
         "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
-        "switch admin and security and config changes"
+        "switch admin, security and config and layer 2 security changes"
     )
     assert missing_changes(6) == (
-        "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin and "
-        "security and config changes"
+        "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, "
+        "security and config and layer 2 security changes"
     )
     assert (
         missing_changes(7)
-        == "VRF, static route, routing protocol, spanning tree, switch admin and security and "
-        "config changes"
+        == "VRF, static route, routing protocol, spanning tree, switch admin, security and "
+        "config and layer 2 security changes"
     )
     assert (
         missing_changes(8)
-        == "static route, routing protocol, spanning tree, switch admin and security and config "
-        "changes"
+        == "static route, routing protocol, spanning tree, switch admin, security and config "
+        "and layer 2 security changes"
     )
     assert missing_changes(9) == (
-        "routing protocol, spanning tree, switch admin and security and config changes"
+        "routing protocol, spanning tree, switch admin, security and config and layer 2 security "
+        "changes"
     )
-    assert missing_changes(10) == "spanning tree, switch admin and security and config changes"
-    assert missing_changes(11) == "switch admin and security and config changes"
-    assert missing_changes(12) == "security and config changes"
-    assert missing_changes(13) == ""
+    assert missing_changes(10) == (
+        "spanning tree, switch admin, security and config and layer 2 security changes"
+    )
+    assert missing_changes(11) == "switch admin, security and config and layer 2 security changes"
+    assert missing_changes(12) == "security and config and layer 2 security changes"
+    assert missing_changes(13) == "layer 2 security changes"
+    assert missing_changes(14) == ""
 
 
 def _restricted(fake: FakeSwitch, permits: set[str]) -> NxapiClient:

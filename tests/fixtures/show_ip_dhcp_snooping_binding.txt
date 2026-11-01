@@ -1,0 +1,4 @@
+MacAddress         IpAddress        LeaseSec  Type           VLAN  Interface
+-----------------  ---------------  --------  -------------  ----  -------------
+02:00:00:00:00:21  192.0.2.21       6943      dhcp-snoop     10    Ethernet1/3
+02:00:00:00:00:22  192.0.2.22       86400     dhcp-snoop     10    Ethernet1/4

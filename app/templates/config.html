@@ -9,7 +9,7 @@
 
 {% block content %}
 <h1 class="page-title">Config</h1>
-<p class="lead">Backups of the switch's configuration, what differs between two configurations, and rolling the switch back to a backup.</p>
+<p class="lead">Backups of the switch's configuration, what differs between two configurations, rolling the switch back to a backup, and restarting the switch.</p>
 
 {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
 {% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
@@ -110,6 +110,15 @@
   {% endif %}
   {% endif %}
   <p class="note">Lines the switch writes about when it printed the configuration (!Time: ...) are left out.</p>
+</section>
+
+<section class="card" id="restart">
+  <h2 class="card-title">Restart the switch</h2>
+  <p class="lead">Reload NX-OS: needed after TCAM region sizes change (ACLs page), and to start over from the saved configuration. Every port goes down for several minutes. The next page asks for the switch's admin login and whether to save first.</p>
+  <form method="post" action="/config/reload" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-quiet">Restart the switch…</button>
+  </form>
 </section>
 {% endif %}
 {% endblock %}

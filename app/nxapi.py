@@ -1301,8 +1301,9 @@ class NxapiClient:
         ident: dict[str, str],
         values: dict[str, str],
     ) -> None:
-        """One change on the ACLs page: make or delete an IPv4 or IPv6 ACL, add or
-        remove one of its entries, or apply one to an interface or port.
+        """One change on the ACLs page: make or delete an IPv4, IPv6 or MAC ACL, an
+        object group or a VLAN access map entry, add or remove one of their entries,
+        apply one to an interface, port or VLANs, or size a TCAM region.
 
         The lines are built from the page's description and the checked values
         (``acls.build_acl_change``), as for spanning tree.
@@ -1330,6 +1331,27 @@ class NxapiClient:
         from app.port_security import build_port_security_change
 
         change = build_port_security_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_dhcp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the DHCP and ARP page: a DHCP snooping, DHCP relay, ARP
+        inspection or IP Source Guard setting, switch-wide, on a port or on a layer 3
+        interface, or an ARP ACL.
+
+        The lines are built from the page's description and the checked values
+        (``dhcp_security.build_dhcp_change``).
+        """
+        # Imported here: the DHCP description uses this module's checks.
+        from app.dhcp_security import build_dhcp_change
+
+        change = build_dhcp_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
     def create_checkpoint(self, name: str) -> None:

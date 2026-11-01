@@ -905,7 +905,7 @@ class SwitchAdminPage:
     missing: tuple[str, ...] = ()  # needs no feature; kept for the template
 
 
-def _vrfs(vrf_body: dict[str, Any]) -> tuple[str, ...]:
+def vrf_choices(vrf_body: dict[str, Any]) -> tuple[str, ...]:
     """The VRFs in ``show vrf`` (``routing.parse_vrfs``: default, management, then the
     others), with default and management always there."""
     names = [v.name for v in parse_vrfs(vrf_body, {})]
@@ -925,7 +925,7 @@ def load_switch_admin_page(client: NxapiClient) -> SwitchAdminPage:
     except NxapiCommandError:
         config = None  # the role predates the rule that allows it
     view = parse_switch_admin(bodies, ntp_body, config)
-    return SwitchAdminPage(SWITCH_ADMIN, view, _vrfs(bodies[2]))
+    return SwitchAdminPage(SWITCH_ADMIN, view, vrf_choices(bodies[2]))
 
 
 def build_admin_change(

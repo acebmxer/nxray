@@ -306,8 +306,8 @@ def test_old_role_offers_turning_on_vlan_changes(
     assert "On for ports" in text
     assert (
         "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-        "static route, routing protocol, spanning tree, switch admin and security and config "
-        "changes" in text
+        "static route, routing protocol, spanning tree, switch admin, security and config "
+        "and layer 2 security changes" in text
     )
     assert "There is no wait this time" in text
     assert "VLAN changes are off" in _text(logged_in.get("/vlans").text)
@@ -322,7 +322,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     text = _text(response.text)
     assert (
         "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-        "route, routing protocol, spanning tree, switch admin and security and config changes "
+        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
+        "security changes "
         "are on: nxray may now also create, rename and delete VLANs" in text
     )
     assert "no wait" in text and "leaving the switch alone" not in text
@@ -340,7 +341,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     assert (
         "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address "
         "table, port-channels, VLAN interfaces, VRFs, static routes, routing protocols, spanning "
-        "tree, switch admin, ACLs, port security and checkpoints"
+        "tree, switch admin, ACLs, port security, checkpoints, DHCP snooping and relay, ARP "
+        "inspection, IP Source Guard, MAC and VLAN ACLs, object groups and TCAM regions"
         in _text(logged_in.get("/switch").text)
     )
 

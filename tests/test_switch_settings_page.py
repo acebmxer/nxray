@@ -279,7 +279,8 @@ def test_removed_account_is_made_again_and_keeps_port_changes(
     assert (
         "read, plus port changes, VLANs, port settings, features, CDP, LLDP, the MAC address "
         "table, port-channels, VLAN interfaces, VRFs, static routes, routing protocols, spanning "
-        "tree, switch admin, ACLs, port security and checkpoints" in page
+        "tree, switch admin, ACLs, port security, checkpoints, DHCP snooping and relay, ARP "
+        "inspection, IP Source Guard, MAC and VLAN ACLs, object groups and TCAM regions" in page
     )
     assert "leaving the switch alone" not in page
 
@@ -317,8 +318,8 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     assert row["changes_enabled_at"] is None and row["role_version"] == 0
     assert (
         "Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, "
-        "VRF, static route, routing protocol, spanning tree, switch admin and security and "
-        "config changes" in logged_in.get("/switch").text
+        "VRF, static route, routing protocol, spanning tree, switch admin, security and "
+        "config and layer 2 security changes" in logged_in.get("/switch").text
     )
 
 
