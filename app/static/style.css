@@ -775,9 +775,41 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bulk-bar .btn-primary { margin-top: 0; }
 .bulk-bar .hint { flex-basis: 100%; margin: 0; }
 .bulk-bar label { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.bulk-config { margin-top: 14px; }
 .bulk-config .form-grid > .stack { min-width: 12rem; }
 .bulk-config .stack label:not(:first-of-type) { margin-top: 0; }
+.bulk-config .lead { margin-top: 0; }
+
+/* The ticked ports' side panel: shut until a port is ticked, then on the
+   right like a port's own panel, without a shade so the table stays usable.
+   No script: :has() opens it and a CSS counter counts the ticks. */
+#change-several { counter-reset: ticked; }
+#change-several input[name="names"]:checked { counter-increment: ticked; }
+.bulk-count::after { content: counter(ticked); font-family: var(--mono); font-weight: 600; color: var(--text); }
+.drawer.bulk-drawer { display: none; }
+.bulk-drawer .bulk-bar {
+  position: static;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.bulk-drawer .bulk-bar select { max-width: 9rem; }
+#change-several:has(input[name="names"]:checked) .drawer.bulk-drawer { display: flex; }
+/* Keep the table clear of the open panel. */
+.wrap:has(#change-several input[name="names"]:checked) { padding-right: 456px; }
+/* A browser without :has() shows the form as a card under the table. */
+@supports not selector(:has(*)) {
+  .drawer.bulk-drawer {
+    display: flex;
+    position: static;
+    width: auto;
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: none;
+  }
+}
 
 /* The side panel: one port, opened by ?port= on the Ports page. */
 .drawer-shade { position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.25); }

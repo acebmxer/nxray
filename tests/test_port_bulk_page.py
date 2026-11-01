@@ -99,7 +99,7 @@ def test_the_card_offers_every_shared_setting(logged_in: TestClient, enabled: Fa
         assert f'name="{field}"' in page, field
     # Every setting starts at "leave as it is", and no address is offered.
     assert 'name="ip_address"' not in page
-    card = page.split('id="bulk-title"')[1].split('class="bulk-bar"')[0]
+    card = page.split('id="bulk-title"')[1].split('class="drawer-foot bulk-bar"')[0]
     assert " checked" not in card
     assert card.count("Leave as it is</option>") == card.count("<select")
 

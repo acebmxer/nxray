@@ -61,7 +61,9 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   suits better (#17).
 
 - **Change several ports: one whole configuration for every ticked port.**
-  The **Change several ports** card on the Ports page now sets everything a
+  Ticking a port on the Ports page now opens a **Change several ports** side
+  panel on the right, like a port's own panel, which counts the ticked ports
+  and stays open while you tick more. It sets everything a
   port's own page can share, on any set of ticked ports, next to each other
   or not: on or off and a description, VLANs (access or trunk, access VLAN,
   native VLAN, VLANs carried), port settings (switched or routed, speed,

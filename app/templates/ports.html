@@ -25,8 +25,9 @@
 <p class="alert alert-ok" role="status">{{ notice }}</p>
 {% endif %}
 {% endmacro %}
-{# With a port's panel open, its messages are shown in the panel. #}
-{% if not drawer %}{{ messages() }}{% endif %}
+{# With a port's panel, or the ticked ports' panel, open, its messages are shown in the panel. #}
+{% set bulk_open = ticked and can_change and connection and connection.changes_enabled and ports %}
+{% if not drawer and not bulk_open %}{{ messages() }}{% endif %}
 
 {% if not connection %}
 <div class="card empty-state">
@@ -114,9 +115,21 @@
 </section>
 {% if bulk_on %}
 {% set b = bulk %}
-<section class="card bulk-config" id="bulk-config" aria-labelledby="bulk-title">
-  <h2 class="card-title" id="bulk-title">Change several ports</h2>
-  <p class="lead">Tick the ports above, fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it. The ports do not need to be next to each other.</p>
+{# The side panel for the ticked ports: it opens as soon as one port is
+   ticked (CSS :has, no script), like a port's own panel. #}
+<aside class="drawer bulk-drawer" aria-labelledby="bulk-title">
+  <div class="drawer-head">
+    <div class="drawer-top">
+      <h2 id="bulk-title">Change several ports</h2>
+      <span class="box-gap"></span>
+      <a class="icon-btn" href="{{ ports_link(show, color) }}" title="Clear the ticks and close"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
+    </div>
+    <div class="drawer-sub"><span class="bulk-count">Ports ticked: </span></div>
+  </div>
+  <div class="drawer-body">
+    {% if bulk_open and not drawer and (error or notice) %}<div class="drawer-part">{{ messages() }}</div>{% endif %}
+<section class="drawer-part bulk-config">
+  <p class="lead">Fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it. Tick or untick ports in the table while this is open.</p>
   <details class="settings-group" {% if b.power or b.set_description or b.clear_macs %}open{% endif %}>
     <summary>On or off and description</summary>
     <div class="form-grid">
@@ -255,8 +268,8 @@
   {% endif %}
   <p class="note">Not offered here, because each port needs its own: an IPv4 address, the label, and splitting a 100G port. Set those on each port's page.</p>
 </section>
-<div class="bulk-bar">
-  <a class="btn btn-quiet" href="#bulk-config">Choose what to change ↓</a>
+  </div>
+<div class="drawer-foot bulk-bar">
   <button type="submit" class="btn btn-primary">Change the ticked ports</button>
   <span class="toolbar-sep"></span>
   <label for="bulk_start">Start from port</label>
@@ -266,6 +279,7 @@
   <button type="submit" name="fill" value="yes" class="btn btn-quiet">Fill in the form from it</button>
   <p class="hint">A confirm page lists every ticked port and what changes on it first; ports already set as asked are left out. Start from port copies a port's VLANs, settings and CDP/LLDP into the form, so you can copy a known-good port onto others.</p>
 </div>
+</aside>
 </form>
 {% endif %}
 
