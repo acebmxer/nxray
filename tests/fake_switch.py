@@ -1224,6 +1224,31 @@ class FakeSwitch:
             else:
                 self.users[name] = (password, role)
             return _ok(ident, None), context
+        if match := re.fullmatch(r"username (\S+) password (\S+)", cmd):
+            # Shaped after Cisco's NX-OS guides (the role is optional there),
+            # not recorded on cisco-25gb: a new password, the roles kept.
+            name, password = match.groups()
+            if name not in self.users:
+                return _error(ident, f"% User {name} does not exist\n"), context
+            self.users[name] = (password, self.users[name][1])
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"no username (\S+) role (\S+)", cmd):
+            # Shaped after Cisco's NX-OS guides, not recorded on cisco-25gb.
+            name, role = match.groups()
+            if name not in self.users:
+                return _error(ident, f"% User {name} does not exist\n"), context
+            primary = self.users[name][1]
+            extra = self.extra_roles.get(name, set())
+            if role in extra:
+                extra.discard(role)
+            elif role == primary and extra:
+                # The primary role goes; another one takes its place.
+                new_primary = sorted(extra)[0]
+                extra.discard(new_primary)
+                self.users[name] = (self.users[name][0], new_primary)
+            elif role == primary:
+                return _error(ident, "% Cannot remove the last role of a user\n"), context
+            return _ok(ident, None), context
         if match := re.fullmatch(r"username (\S+) role (\S+)", cmd):
             name, role = match.groups()
             if name not in self.users:

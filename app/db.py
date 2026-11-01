@@ -322,6 +322,27 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE update_state ADD COLUMN target_tag TEXT NOT NULL DEFAULT '';
     ALTER TABLE update_state ADD COLUMN target_version TEXT NOT NULL DEFAULT '';
     """,
+    # Switch accounts for NXray users (app/switch_accounts.py): which local
+    # account on which switch belongs to which NXray user, the roles NXray last
+    # gave it, when NXray last set its password (NULL: never, for an account
+    # that was linked as it was) and whether NXray locked it with a random
+    # password. No password is kept. users.password_changed_at is when the
+    # NXray password last changed, so a switch password set before it is out
+    # of step; NULL for accounts older than this.
+    """
+    CREATE TABLE switch_accounts (
+        user_id          INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        switch_id        INTEGER NOT NULL,
+        account_name     TEXT NOT NULL,
+        roles            TEXT NOT NULL,
+        password_set_at  REAL,
+        locked           INTEGER NOT NULL DEFAULT 0,
+        linked_at        REAL NOT NULL,
+        PRIMARY KEY (user_id, switch_id),
+        UNIQUE (switch_id, account_name)
+    );
+    ALTER TABLE users ADD COLUMN password_changed_at REAL;
+    """,
 ]
 
 

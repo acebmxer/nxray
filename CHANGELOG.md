@@ -11,6 +11,24 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Switch accounts for NXray users.** An NXray user still exists only in
+  NXray by default, but an admin can now also give them a local account on a
+  switch with the same name and password, so people who use the command line
+  can sign in over SSH too: tick the switches when adding someone, or use the
+  new **Switch accounts** page of an existing user to make one, link an
+  account already on the switch, set one new password for NXray and the
+  switch, change its role, lock it or remove it. The role follows the NXray
+  role (viewer `network-operator`, operator `network-operator` +
+  `nxray-ports`, admin `network-admin`) and is shown to confirm before
+  anything is sent. The switch admin login is typed on each form and never
+  stored; the switch's password rules are checked first; each change saves
+  the switch configuration so a restart does not undo it. The Users page
+  lists the switch's local accounts and shows when a switch account is out
+  of step (role, password, disabled), and the Account page says when your
+  own switch password no longer matches. NXray's own switch account and the
+  switch's `admin` are never touched. The docs say when TACACS+ or RADIUS
+  suits better (#17).
+
 - **Change several ports: one whole configuration for every ticked port.**
   The **Change several ports** card on the Ports page now sets everything a
   port's own page can share, on any set of ticked ports, next to each other

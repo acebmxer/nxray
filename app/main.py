@@ -40,6 +40,7 @@ from app.routes import (
     security,
     settings_page,
     spanning_tree,
+    switch_accounts,
     switch_admin,
     switch_page,
     users,
@@ -158,6 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(alerts.router)
     app.include_router(features.router)
     app.include_router(users.router)
+    app.include_router(switch_accounts.router)
     app.include_router(settings_page.router)
     app.include_router(preferences.router)
     return app

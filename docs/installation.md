@@ -67,8 +67,74 @@ on that account's next click, and a new password signs it out everywhere.
 NXray always keeps at least one active admin, and an admin can't change
 their own role or disable themselves.
 
-These are NXray's own accounts. They have nothing to do with the accounts on
-the switch.
+An account on the Users page exists only in NXray. Every change it makes
+reaches the switch through NXray's own switch account, so the switch's own
+logs show NXray's account, and NXray's Activity page shows who did it. Such
+an account cannot sign in to the switch over SSH or the console.
+
+### Switch accounts: the same person on the switch's command line
+
+For people who still use the switch's command line, an admin can also give
+them a local account on a switch, with the same name and password:
+
+- **When adding someone**, tick the switches under **Where** (leave them all
+  unticked for NXray only, the default), type the switch admin username and
+  password, and tick the box that confirms the role on the switch.
+- **For someone who already exists**, press **Switch accounts** in their row.
+  That page makes an account on a switch, links an account that is already
+  there, sets one new password for NXray and every switch account, gives a
+  switch account the right role, locks it, or removes it.
+
+The role on the switch follows the NXray role:
+
+| NXray | Switch |
+| --- | --- |
+| viewer | `network-operator` (look only) |
+| operator | `network-operator` plus `nxray-ports`, the role NXray's own account gets when changes are on, so the person may change over SSH what NXray may; `network-operator` only on a switch where changes are off |
+| admin | `network-admin` |
+
+Only these three roles are added or taken off; any other role an account has
+stays. NXray never links, changes or removes its own switch account, nor the
+names NX-OS keeps for itself (`admin`, `root` and others).
+
+Things to know:
+
+- **The switch admin login** is typed on each form, used for that one
+  request, and never stored, logged or shown. NXray's own switch account
+  cannot make accounts and is not given that power.
+- **Passwords.** NXray keeps only a hash of a password, so it sets the switch
+  password while the plain one is in hand: when the account is made, and
+  when an admin sets a new password for NXray and the switch together. The
+  switch takes 8 to 64 letters and digits, with upper case, lower case and
+  digits and no runs like `aaa` or `abc`; NXray checks that before anything
+  is sent and says which side would refuse. A password set for NXray alone
+  (on the Users page, or by someone on their own Account page) leaves the
+  switch account **out of step**: the Users page, the person's Switch accounts
+  page and their Account page say so, and an admin sets a new password for
+  both.
+- **Out of step** also shows when the NXray role changed (press **Change the
+  role** on the Switch accounts page), when an NXray account is disabled but
+  its switch account can still sign in, and when a switch account is locked
+  but the NXray account is enabled again.
+- **Disabling.** NX-OS has no switch to turn a local account off, so **Lock
+  the switch account** gives it a random password nobody knows; the account
+  and its role stay, and SSH sessions already open stay open until they end.
+  A new password for both sides opens it again.
+- **Saving.** Every change to a switch account saves the switch
+  configuration straight away, which also keeps any other unsaved change
+  there. Without that, a restart of the switch would undo it: a lock would
+  open again, a removed account would come back. If the save fails, the page
+  says a restart undoes the change until you press Save config.
+- **Accounts already on the switch** are listed on the Users page, with the
+  NXray user each belongs to, so you can link one instead of making a
+  duplicate. NXray never makes a second account over an existing one.
+
+**Many people or many switches?** Local accounts suit a few people on a few
+switches. Beyond that, TACACS+ or RADIUS is the usual answer: each person has
+one sign-in kept on a server, every switch asks that server, and leaving the
+company means turning off one account, not one per switch. NXray does not set
+up TACACS+ or RADIUS; that is done on the switch (`aaa` commands) and the
+server.
 
 ### Two-factor sign-in
 

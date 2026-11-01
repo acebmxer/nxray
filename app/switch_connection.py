@@ -47,6 +47,11 @@ class SwitchConnection:
     nxos_version: str = ""
 
     @property
+    def label(self) -> str:
+        """The switch in words: its hostname, else its address."""
+        return self.switch_hostname or self.host
+
+    @property
     def changes_enabled(self) -> bool:
         """True once NXray's account has been given the port-changes role."""
         return self.changes_enabled_at is not None
@@ -347,14 +352,15 @@ def set_config_saved(conn: sqlite3.Connection, switch_id: int, saved: bool) -> N
 
 def delete_connection(conn: sqlite3.Connection, switch_id: int) -> bool:
     """Forget a switch: its login, and what NXray kept about it (history, port
-    labels, config backups, open problems). True if one was removed.
+    labels, config backups, open problems, which of its accounts belong to
+    which NXray user). True if one was removed.
 
     The account stays on the switch; only NXray's copy of the login goes. The
     activity log and the alert log keep their lines: they name the switch in
     words.
     """
     cursor = conn.execute("DELETE FROM switch_connection WHERE id = ?", (switch_id,))
-    for table in ("history", "port_labels", "config_backups", "alert_open"):
+    for table in ("history", "port_labels", "config_backups", "alert_open", "switch_accounts"):
         conn.execute(f"DELETE FROM {table} WHERE switch_id = ?", (switch_id,))  # fixed names
     conn.commit()
     return cursor.rowcount > 0

@@ -69,6 +69,10 @@ ALLOWED_ROLES = frozenset({"network-operator"})
 # The only role NXray ever adds to its account afterwards.
 PORT_CHANGES_ROLE = "nxray-ports"
 
+# The roles NXray gives the switch accounts of people (app/switch_accounts.py):
+# viewer, operator (with nxray-ports) and admin. Never NXray's own account.
+PERSON_ROLES = frozenset({"network-operator", "network-admin", PORT_CHANGES_ROLE})
+
 # A front-panel port: Ethernet1/3, or a breakout port such as Ethernet1/49/2.
 _PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
 
@@ -240,6 +244,31 @@ def is_valid_host(value: str) -> bool:
         return True
     except ValueError:
         return bool(_HOSTNAME.match(value))
+
+
+def check_switch_password(password: str) -> str:
+    """Return the password if NXray may send it to the switch, or raise ValueError.
+
+    8 to 64 letters and digits only: nothing the NX-OS command line could read
+    as a separator, a quote or a request for help ("?"). The message never
+    repeats the password.
+    """
+    if not _SAFE_PASSWORD.match(password):
+        raise ValueError(
+            "a switch password is 8 to 64 letters and digits, with no other characters"
+        )
+    return password
+
+
+def _person_roles(roles: Iterable[str], *, allow_empty: bool = False) -> list[str]:
+    """The roles, each one NXray gives people (PERSON_ROLES), in the order given."""
+    found = list(dict.fromkeys(roles))
+    for role in found:
+        if role not in PERSON_ROLES:
+            raise ValueError(f"role {role!r} is not one NXray gives a person's switch account")
+    if not found and not allow_empty:
+        raise ValueError("a switch account needs a role")
+    return found
 
 
 def validate_account_name(name: str) -> str:
@@ -779,6 +808,53 @@ class NxapiClient:
         rest of setup failed, so a retry is not blocked by a leftover. The
         switch refuses it while the account has an NX-API session.
         """
+        validate_account_name(name)
+        command = f"no username {name}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    # ---- people's switch accounts (app/switch_accounts.py) ----------------
+    # Separate from create_user and delete_user, which exist only for NXray's
+    # own account. Each needs an admin login; app/switch_accounts.py refuses
+    # NXray's own account before any of them is called.
+
+    def create_person_account(self, name: str, password: str, roles: Iterable[str]) -> None:
+        """Make a person's local switch account with its roles, in one request:
+        ``username <name> password <pw> role <first>``, then ``username <name>
+        role <r>`` for each other role. The password never appears in an error."""
+        validate_account_name(name)
+        check_switch_password(password)
+        wanted = _person_roles(roles)
+        commands = [f"username {name} password {password} role {wanted[0]}"]
+        labels = [f"username {name} password ... role {wanted[0]}"]
+        for role in wanted[1:]:
+            commands.append(f"username {name} role {role}")
+            labels.append(commands[-1])
+        self._send(commands, labels, self._target.timeout, allow_text=True)
+
+    def set_person_password(self, name: str, password: str) -> None:
+        """``username <name> password <pw>``: a person's switch account gets a new
+        password and keeps its roles."""
+        validate_account_name(name)
+        check_switch_password(password)
+        command = f"username {name} password {password}"
+        label = f"username {name} password ..."
+        self._send([command], [label], self._target.timeout, allow_text=True)
+
+    def set_person_roles(self, name: str, *, add: Iterable[str], remove: Iterable[str]) -> None:
+        """Add and take off roles of a person's switch account, in one request:
+        ``username <name> role <r>`` first, then ``no username <name> role <r>``,
+        so the account never has no role on the way."""
+        validate_account_name(name)
+        added = _person_roles(add, allow_empty=True)
+        removed = _person_roles(remove, allow_empty=True)
+        commands = [f"username {name} role {role}" for role in added]
+        commands += [f"no username {name} role {role}" for role in removed]
+        if not commands:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def remove_person_account(self, name: str) -> None:
+        """``no username <name>``: remove a person's switch account."""
         validate_account_name(name)
         command = f"no username {name}"
         self._send([command], [command], self._target.timeout, allow_text=True)

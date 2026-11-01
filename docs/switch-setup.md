@@ -48,6 +48,32 @@ The admin password is used only during these steps. NXray does not store
 it, log it or show it. The new account's password is stored encrypted in
 NXray's database.
 
+## What NXray users get on the switch
+
+Nothing, unless an admin asks for it. An account on NXray's Users page exists
+only in NXray: everything it changes reaches the switch through NXray's own
+account, and it cannot sign in over SSH. An admin can also give a person a
+local account on the switch with the same name and password (see
+[Switch accounts](installation.md#switch-accounts-the-same-person-on-the-switchs-command-line)).
+NXray then signs in with the switch admin login typed on that form, used for
+that one request and never stored, and runs only these, built from checked
+values:
+
+- `username <name> password <password> role <role>`, then `username <name>
+  role <role>` for a second role, to make an account (after `show
+  user-account`, so an existing account is never overwritten);
+- `username <name> password <password>` for a new password, or a random one
+  nobody knows to lock the account;
+- `username <name> role <role>` and `no username <name> role <role>` to bring
+  its role in step, for the roles `network-operator`, `network-admin` and
+  `nxray-ports` only;
+- `no username <name>` to remove it;
+- then `copy running-config startup-config`, so a restart keeps the change.
+
+NXray's own account and the names NX-OS keeps for itself (`admin` among
+them) are never changed this way. NXray's own role (`nxray-ports`) gains no
+rule for any of this.
+
 ## Test connection and Forget this switch
 
 - **Test connection** signs in with NXray's account and reads the switch's

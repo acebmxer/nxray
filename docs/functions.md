@@ -161,6 +161,7 @@ raises, all handled in `main.create_app`.
 | --- | --- | --- | --- | --- |
 | `breakout_numbers` | `(name: str) -> tuple[int, int]` | Module and port of a port or split port: Ethernet1/50/2 gives (1, 50) | `NxapiClient.breakout_port`, `join_port` | v0.1.0 |
 | `build_payload` | `(commands: list[str], method="cli") -> list[dict]` | The JSON-RPC request body for running commands in order; `method="cli_ascii"` asks for the printed text instead | `NxapiClient._send`, `show_text` | v0.1.0 |
+| `check_switch_password` | `(password: str) -> str` | A password NXray may send to the switch: 8 to 64 letters and digits; the message never repeats it | `NxapiClient.create_person_account`, `set_person_password`, `switch_accounts.check_switch_side_password` | v0.2.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page` (setup, address, repair) | v0.1.0 |
 | `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
@@ -192,7 +193,13 @@ raises, all handled in `main.create_app`.
 `NxapiClient(target).show(*commands)` runs show commands in one request.
 The only configuration methods are `create_user(name, password, role)`
 (letters-and-digits password, role `network-operator` only),
-`give_role(name, role)` (role `nxray-ports` only), `delete_user(name)`,
+`give_role(name, role)` (role `nxray-ports` only), `delete_user(name)`
+(those three for NXray's own account only), `create_person_account(name,
+password, roles)`, `set_person_password(name, password)`,
+`set_person_roles(name, add=, remove=)` and `remove_person_account(name)`
+(a person's switch account; letters-and-digits password, roles from
+`PERSON_ROLES` only; app/switch_accounts.py refuses NXray's own account and
+reserved names before calling them),
 `configure_port(name, description=, enabled=)` (one
 port's description and on/off, nothing else), `configure_vlan(vlan_id,
 name=None)` (create or rename), `delete_vlan(vlan_id)` (never VLAN 1),
@@ -343,6 +350,7 @@ the switch takes only while interface-vlan is on.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
+| `password_strong_enough` | `(password) -> bool` | True when NX-OS's password strength check takes it: upper, lower, digits, no runs like `aaa` or `abc` | `generate_password`, `switch_accounts.check_switch_side_password` | v0.2.0 |
 | `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page Test connection | v0.1.0 |
 | `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `read_switch` | v0.1.0 |
 | `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `connection_error` | v0.1.0 |
@@ -350,6 +358,7 @@ the switch takes only while interface-vlan is on.
 | `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
+| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin` | v0.2.0 |
 | `verify_account` | `(host, port, name, password, transport) -> None` | Signs in with a login NXray just set, retrying briefly; raises the `NxapiError` if it never works | `run_setup`, `switch_repair.run_repair` | v0.1.0 |
 
 `SetupError` carries the message the page shows. The admin login lives only
@@ -606,7 +615,21 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `switch_save` | `(request, username, csrf, back, port, protocol, show, color) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, Ports with its filter, colour mode and open side panel, VLANs, Features, Neighbors, Port-channels, Routing, else Switch) | router | v0.1.0 |
 | `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time: adds a switch (never one at an address already stored) and shows it | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
-| `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
+| `users_create` | `(request, username, csrf, new_username, password, confirm_password, role, switches, admin_user, admin_password, confirm_switch) -> Response` | `POST /users/create`, admin only; with switches ticked ("NXray and the switch") also makes a local account on each with the same name and password, after checking the switch's rules first and asking to confirm the role | router | v0.1.0 |
+| `switch_status` | `(conn, user) -> list[dict]` | The user's switch accounts, each with its connection, link and what is out of step | `_render_users`, `account_page`, `account_password` | v0.2.0 |
+| `user_switch_page` | `(request, user_id, username) -> Response` | `GET /users/switch`: one user's accounts on every switch, with the forms that change them; admin only | router | v0.2.0 |
+| `render_user_switch` | `(request, username, user_id, *, error=None, notice=None, status_code=200) -> Response` | Reads each switch's local accounts with NXray's own account and shows the user's Switch accounts page | the `/users/switch` routes | v0.2.0 |
+| `read_accounts` | `(request, connection) -> tuple[list[SwitchAccount] \| None, str \| None]` | A switch's local accounts read with NXray's own account, or why not | `render_user_switch`, `user_switch_link`, `routes/users._render_users` | v0.2.0 |
+| `user_switch_create` | `(request, username, csrf, user_id, switch_id, password, confirm_password, admin_user, admin_password, confirm_roles) -> Response` | `POST /users/switch/create`: makes an existing user's account on one switch; the password typed becomes the NXray one too | router | v0.2.0 |
+| `user_switch_link` | `(request, username, csrf, user_id, switch_id, account_name) -> Response` | `POST /users/switch/link`: links an account already on the switch; changes nothing there | router | v0.2.0 |
+| `user_switch_password` | `(request, username, csrf, user_id, password, confirm_password, admin_user, admin_password) -> Response` | `POST /users/switch/password`: one new password for NXray and every linked switch account, both sides' rules checked first; opens a locked account; a switch that refuses stays out of step | router | v0.2.0 |
+| `user_switch_roles` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password) -> Response` | `POST /users/switch/roles`: gives the switch account the role its NXray role maps to; other roles stay | router | v0.2.0 |
+| `user_switch_lock` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password, confirm) -> Response` | `POST /users/switch/lock`: a random password nobody knows, saved so a restart keeps it locked | router | v0.2.0 |
+| `user_switch_remove` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password, confirm) -> Response` | `POST /users/switch/remove`: removes the account from the switch and the link; the NXray user stays | router | v0.2.0 |
+| `user_switch_unlink` | `(request, username, csrf, user_id, switch_id) -> Response` | `POST /users/switch/unlink`: forgets the link; the switch is not touched | router | v0.2.0 |
+| `create_with_switches` | `(request, username, user, password, switch_ids, admin_user, admin_password) -> tuple[list[str], list[str]]` | After an NXray user was added with switches ticked: makes its account on each; what was made, and what was not and why | `users_create` | v0.2.0 |
+| `own_session` | `(request, target) -> str \| None` | This session's id when the target is the signed-in account, so a new password leaves it signed in | `routes/users`, `user_switch_create`, `user_switch_password` | v0.1.0 |
+| `switch_ids` | `(values) -> list[int]` | The ticked switches of the Add an account form, as ids | `users_create` | v0.2.0 |
 | `users_2fa_off` | `(request, username, csrf, user_id) -> Response` | `POST /users/2fa-off`: an admin turns off someone else's two-factor, no code needed | router | v0.1.0 |
 | `users_disable` | `(request, username, csrf, user_id, disabled) -> Response` | `POST /users/disable`: disables (signs out) or enables an account; not your own | router | v0.1.0 |
 | `users_page` | `(request, username) -> Response` | `GET /users`, every account, admin only | router | v0.1.0 |
@@ -676,6 +699,36 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 `ROLES` is the three roles, `ROLE_HELP` says what each may do in words, and
 `User.can_change` / `User.is_admin` are what the route guards test.
 `User.backup_codes_left` is how many unused backup codes an account has.
+
+## `app/switch_accounts.py` — switch accounts for NXray users
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `bring_roles_in_step` | `(client, name, wanted) -> tuple[str, ...]` | Adds the wanted roles the account lacks and takes off the other roles NXray gives people; any other role stays | `routes/switch_accounts.user_switch_roles` | v0.2.0 |
+| `check_switch_name` | `(name) -> str` | The NXray username as a switch account name, or `ValueError` naming the switch's rule (format, reserved names) | `routes/users.users_create`, `routes/switch_accounts` | v0.2.0 |
+| `check_switch_side_password` | `(password) -> None` | Raises `ValueError` saying it is the switch's rule: letters and digits only, and its strength check | `routes/users.users_create`, `routes/switch_accounts` | v0.2.0 |
+| `create_on_switch` | `(client, name, password, roles) -> None` | Makes the account, unless the switch already has one by that name (to be linked instead, never overwritten) | `routes/switch_accounts` | v0.2.0 |
+| `get_link` | `(conn, user_id, switch_id) -> AccountLink \| None` | One user's account on one switch, as NXray last left it | `routes/switch_accounts` | v0.2.0 |
+| `guard_account` | `(name, connection) -> None` | Refuses NXray's own account on that switch and the names the switch keeps for itself (its admin among them) | every switch account change | v0.2.0 |
+| `list_links` | `(conn, *, user_id=None) -> list[AccountLink]` | Every link, or one user's | `routes/users`, `routes/switch_accounts` | v0.2.0 |
+| `load_switch_accounts` | `(client) -> list[SwitchAccount]` | The switch's local accounts from `show user-account` | `create_on_switch`, `bring_roles_in_step`, `routes/switch_accounts.read_accounts` | v0.2.0 |
+| `lock_password` | `() -> str` | A random password nobody sees, which locks a switch account | `routes/switch_accounts.user_switch_lock` | v0.2.0 |
+| `out_of_step` | `(user, link, connection) -> list[str]` | What differs between the NXray user and its switch account (role, password, disabled versus locked), in words | `routes/users`, `routes/switch_accounts` | v0.2.0 |
+| `parse_user_accounts` | `(body) -> list[SwitchAccount]` | Every local account and its roles from `show user-account`, by name | `load_switch_accounts` | v0.2.0 |
+| `remove_link` | `(conn, user_id, switch_id) -> None` | Forgets a link; the switch is not touched | `routes/switch_accounts` | v0.2.0 |
+| `reserved` | `(name) -> bool` | True for a name NX-OS keeps for itself, or the switch's own admin account | `check_switch_name`, `guard_account`, the Users pages | v0.2.0 |
+| `run_as_admin` | `(connection, admin_user, admin_password, change, *, secrets=(), transport=None) -> AccountChange` | Signs in with the admin login typed on the form, makes the change, saves the configuration; secrets scrubbed from every message; a failed save is returned, not raised | `routes/switch_accounts` | v0.2.0 |
+| `save_link` | `(conn, user_id, switch_id, account_name, roles, *, password_set) -> None` | Records which switch account belongs to the user; refuses one another user has | `routes/switch_accounts` | v0.2.0 |
+| `save_words` | `(change, connection) -> str` | What the page says about saving the switch configuration after a change (a restart undoes an unsaved one) | `routes/switch_accounts` | v0.2.0 |
+| `switch_roles` | `(role, changes_on) -> tuple[str, ...]` | The switch roles for an NXray role: viewer network-operator, operator network-operator + nxray-ports (where changes are on), admin network-admin | `routes/users`, `routes/switch_accounts`, `out_of_step` | v0.2.0 |
+| `update_link` | `(conn, user_id, switch_id, *, roles=None, password_set=False, locked=None) -> None` | Notes what NXray just changed on a linked account | `routes/switch_accounts` | v0.2.0 |
+
+The commands come from `NxapiClient.create_person_account`,
+`set_person_password`, `set_person_roles` and `remove_person_account`, kept
+apart from `create_user` and `delete_user`, which exist only for NXray's own
+account. Each takes only the roles in `PERSON_ROLES`. No switch password is
+stored: `switch_accounts.password_set_at` and `users.password_changed_at` are
+times, so out of step is worked out without one.
 
 ## `app/resetpw.py` — password reset from the command line
 
