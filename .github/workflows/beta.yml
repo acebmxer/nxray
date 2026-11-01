@@ -17,8 +17,9 @@ run-name: ${{ inputs.description || 'Publish beta' }}
 # bumped for the next release.
 #
 # `:latest` and `:X.Y` are never touched; only a version tag (release.yml)
-# moves those. A container started from `:beta` follows the beta channel, and
-# Settings > Updates there compares against `:beta`.
+# moves those. A container started from `:beta` follows the beta channel.
+# Settings > Updates > Include beta versions moves an install between `:beta`
+# and `:latest` by version, ranked from the GitHub releases list.
 on:
   workflow_dispatch:
     inputs:
@@ -105,8 +106,11 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # New on every run, so the MAC maker list is downloaded again
           # instead of coming from the build cache (see the Dockerfile).
+          # NXRAY_VERSION puts the beta's own name in app/__init__.py, which
+          # self-update ranks against the releases (see the Dockerfile).
           build-args: |
             OUI_REFRESH=${{ github.run_id }}
+            NXRAY_VERSION=${{ needs.prepare.outputs.beta }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

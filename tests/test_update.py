@@ -172,6 +172,155 @@ def test_an_unreachable_registry_keeps_a_pending_update(docker, registry, conn) 
     assert update.current_state(conn).available is True
 
 
+# ---- versions and channels ----------------------------------------------------------------
+
+
+@pytest.fixture
+def releases(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The version names GitHub lists; empty the list's contents to change them."""
+    names = ["v0.1.0", "v0.1.1-beta.1", "v0.1.1-beta.2", "v0.1.1"]
+    monkeypatch.setattr(update, "github_releases", lambda: names)
+    return names
+
+
+def _running(monkeypatch: pytest.MonkeyPatch, version: str) -> None:
+    monkeypatch.setattr(update, "running_version", lambda: version)
+
+
+def test_versions_rank_by_number_then_beta_with_a_release_above_its_betas() -> None:
+    names = ["0.1.1-beta.2", "0.1.0", "v0.1.1", "0.1.1-beta.3", "0.1.1-beta.10", "0.2.0-beta.1"]
+    ranked = sorted(names, key=lambda n: update.parse_version(n) or ())
+    assert ranked == [
+        "0.1.0",
+        "0.1.1-beta.2",
+        "0.1.1-beta.3",
+        "0.1.1-beta.10",
+        "v0.1.1",
+        "0.2.0-beta.1",
+    ]
+    assert update.parse_version("latest") is None
+    assert update.parse_version("0.1") is None
+    assert update.is_beta("0.2.0-beta.1") and not update.is_beta("0.2.0")
+
+
+def test_with_betas_on_a_beta_ahead_of_the_release_is_picked() -> None:
+    target = update.pick_target("0.1.1", ["v0.1.1", "v0.2.0-beta.1", "v0.2.0-beta.2"], True)
+    assert target == update.Target("beta", "0.2.0-beta.2")
+
+
+def test_with_betas_on_a_release_that_caught_up_is_picked_over_its_betas() -> None:
+    target = update.pick_target("0.2.0-beta.2", ["v0.2.0-beta.2", "v0.2.0"], True)
+    assert target == update.Target("latest", "0.2.0")
+
+
+def test_an_older_beta_is_never_offered_after_its_release() -> None:
+    assert update.pick_target("0.1.1", ["v0.1.1-beta.3", "v0.1.1"], True) is None
+
+
+def test_with_betas_off_betas_are_ignored() -> None:
+    assert update.pick_target("0.1.1", ["v0.1.1", "v0.2.0-beta.1"], False) is None
+    target = update.pick_target("0.1.0", ["v0.1.1", "v0.2.0-beta.1"], False)
+    assert target == update.Target("latest", "0.1.1")
+
+
+def test_betas_off_on_a_beta_newer_than_the_release_stays_put() -> None:
+    assert update.pick_target("0.2.0-beta.1", ["v0.1.1", "v0.2.0-beta.1"], False) is None
+    target = update.pick_target("0.2.0-beta.1", ["v0.1.1", "v0.2.0"], False)
+    assert target == update.Target("latest", "0.2.0")
+
+
+def test_betas_on_offers_beta_through_the_check(docker, releases, conn, monkeypatch) -> None:
+    _running(monkeypatch, "0.1.1")
+    releases.append("v0.2.0-beta.1")
+    update.set_include_beta(conn, True)
+    assert update.check_for_updates(conn) == "available"
+    state = update.current_state(conn)
+    assert state.include_beta and state.target_tag == "beta"
+    assert state.target_version == "0.2.0-beta.1"
+
+
+def test_betas_on_with_no_newer_beta_is_up_to_date(docker, releases, conn, monkeypatch) -> None:
+    _running(monkeypatch, "0.1.1")
+    update.set_include_beta(conn, True)
+    assert update.check_for_updates(conn) == "current"
+    state = update.current_state(conn)
+    assert not state.available and state.target_tag == ""
+
+
+def test_a_running_beta_compares_versions_even_with_betas_off(
+    docker, releases, conn, monkeypatch
+) -> None:
+    monkeypatch.setattr(update, "ghcr_digest", lambda tag: pytest.fail("compared digests"))
+    docker.image_ref = "ghcr.io/acebmxer/nxray:beta"
+    _running(monkeypatch, "0.2.0-beta.1")
+    assert update.check_for_updates(conn) == "current"
+    releases.append("v0.2.0")
+    assert update.check_for_updates(conn) == "available"
+    assert update.current_state(conn).target_tag == "latest"
+
+
+def test_github_not_answering_is_said_and_keeps_a_pending_update(
+    docker, releases, conn, monkeypatch
+) -> None:
+    _running(monkeypatch, "0.1.0")
+    update.set_include_beta(conn, True)
+    assert update.check_for_updates(conn) == "available"
+    monkeypatch.setattr(update, "github_releases", lambda: None)
+    assert "api.github.com" in update.check_for_updates(conn)
+    assert update.current_state(conn).available is True
+
+
+def test_changing_the_choice_drops_an_update_found_under_the_old_one(
+    docker, releases, conn, monkeypatch
+) -> None:
+    _running(monkeypatch, "0.1.1")
+    releases.append("v0.2.0-beta.1")
+    update.set_include_beta(conn, True)
+    update.check_for_updates(conn)
+    update.set_include_beta(conn, False)
+    state = update.current_state(conn)
+    assert not state.available and state.target_tag == ""
+
+
+def test_a_dev_build_with_betas_on_is_never_out_of_date(
+    docker, releases, conn, monkeypatch
+) -> None:
+    _running(monkeypatch, "0.1.0")
+    update.set_include_beta(conn, True)
+    assert "built from source" in update.check_for_updates(conn, dev_build=True)
+    assert update.current_state(conn).available is False
+
+
+def test_the_releases_list_leaves_out_drafts(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = json.dumps(
+        [
+            {"tag_name": "v0.2.0-beta.2", "draft": True, "prerelease": True},
+            {"tag_name": "v0.2.0-beta.1", "draft": False, "prerelease": True},
+            {"tag_name": "v0.1.1", "draft": False, "prerelease": False},
+        ]
+    ).encode()
+
+    class Answer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self) -> bytes:
+            return body
+
+    seen: list[str] = []
+
+    def fake_urlopen(req, timeout=0):
+        seen.append(req.full_url)
+        return Answer()
+
+    monkeypatch.setattr(update.urllib.request, "urlopen", fake_urlopen)
+    assert update.github_releases() == ["v0.2.0-beta.1", "v0.1.1"]
+    assert seen == ["https://api.github.com/repos/acebmxer/nxray/releases?per_page=100"]
+
+
 # ---- applying ---------------------------------------------------------------------------
 
 
@@ -208,6 +357,37 @@ def test_the_recreator_runs_compose_for_this_project_in_its_folder(
     assert update.current_state(conn).in_progress is True
 
 
+def _env(cmd: list[str]) -> list[str]:
+    return [cmd[i + 1] for i, a in enumerate(cmd) if a == "-e"]
+
+
+def test_the_recreator_is_told_the_container_s_own_tag_when_digests_are_compared(
+    docker, registry, conn, monkeypatch
+) -> None:
+    update.check_for_updates(conn)
+    seen = _capture_run(monkeypatch)
+    assert update.start_update(conn) is None
+    assert _env(seen[0]) == ["NXRAY_TAG=latest"]
+
+
+def test_the_recreator_is_told_the_tag_betas_chose(docker, releases, conn, monkeypatch) -> None:
+    _running(monkeypatch, "0.1.1")
+    releases.append("v0.2.0-beta.1")
+    update.set_include_beta(conn, True)
+    update.check_for_updates(conn)
+    seen = _capture_run(monkeypatch)
+    assert update.start_update(conn) is None
+    assert _env(seen[0]) == ["NXRAY_TAG=beta"]
+    assert REF in seen[0], "the updater still runs the image this container has"
+
+
+def test_a_tag_that_is_not_a_docker_tag_is_refused(docker, conn, monkeypatch) -> None:
+    update._set(conn, target_tag="beta; rm -rf /")
+    seen = _capture_run(monkeypatch)
+    assert "not a Docker tag" in (update.start_update(conn) or "")
+    assert seen == [] and update.current_state(conn).in_progress is False
+
+
 def test_odd_compose_labels_cannot_inject_shell(docker, conn, monkeypatch) -> None:
     docker.labels["com.docker.compose.project.config_files"] = "/a b/c.yml;touch /x"
     seen = _capture_run(monkeypatch)
@@ -234,6 +414,22 @@ def test_the_replacement_container_records_the_success(conn) -> None:
     update.finish_pending_update(conn)
     state = update.current_state(conn)
     assert state.last_result == "success" and not state.in_progress and not state.available
+
+
+def test_a_replacement_on_another_tag_says_the_compose_file_ignores_it(docker, conn) -> None:
+    update._set(conn, in_progress=1, available=1, started_at=time.time(), target_tag="beta")
+    update.finish_pending_update(conn)
+    state = update.current_state(conn)
+    assert not state.in_progress and state.available, "Update now stays on offer"
+    assert "still on :latest, not :beta" in state.last_result
+    assert "ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}" in state.last_result
+
+
+def test_a_replacement_on_the_chosen_tag_is_a_success(docker, conn) -> None:
+    docker.image_ref = "ghcr.io/acebmxer/nxray:beta"
+    update._set(conn, in_progress=1, available=1, started_at=time.time(), target_tag="beta")
+    update.finish_pending_update(conn)
+    assert update.current_state(conn).last_result == "success"
 
 
 def test_an_old_success_is_hidden_but_a_failure_is_not(conn) -> None:
@@ -299,6 +495,25 @@ def test_a_recreator_with_no_error_lines_shows_its_last_lines(tmp_path, monkeypa
     assert state.last_result == "one | two"
 
 
+def test_a_recreator_that_succeeds_but_leaves_this_tag_says_why(tmp_path, monkeypatch) -> None:
+    from app.db import init_db
+
+    path = tmp_path / "w.db"
+    init_db(path)
+    with open_db(path) as c:
+        update._set(c, in_progress=1, available=1, started_at=time.time(), target_tag="beta")
+    monkeypatch.setattr(
+        subprocess, "run", lambda cmd, **kw: SimpleNamespace(returncode=0, stdout="0", stderr="")
+    )
+    fake = FakeDocker()  # still on :latest: compose pinned it
+    monkeypatch.setattr(update, "_docker", fake)
+    monkeypatch.setattr(update, "own_container", lambda: "abc123")
+    update.watch_update(path)
+    with open_db(path) as c:
+        state = update.current_state(c)
+    assert not state.in_progress and "not :beta" in state.last_result
+
+
 def test_a_recreator_that_succeeds_with_this_container_alive_is_a_success(
     tmp_path, monkeypatch
 ) -> None:
@@ -343,7 +558,7 @@ def test_with_self_update_off_every_update_route_refuses(
     logged_in: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(update, "_docker", lambda *a, **k: pytest.fail("touched docker"))
-    for action in ("check", "apply", "dismiss"):
+    for action in ("check", "apply", "dismiss", "beta"):
         response = logged_in.post(f"/settings/update/{action}", data={"csrf": _csrf(logged_in)})
         assert response.status_code in (200, 400), action
         assert "Self-update is off" in response.text or action == "dismiss"
@@ -398,7 +613,7 @@ def test_a_failure_shows_until_dismissed(admin: TestClient, on: Settings) -> Non
 
 
 def test_the_update_routes_need_a_csrf_token(admin: TestClient) -> None:
-    for action in ("check", "apply", "dismiss"):
+    for action in ("check", "apply", "dismiss", "beta"):
         assert admin.post(f"/settings/update/{action}", data={"csrf": "wrong"}).status_code == 403
 
 
@@ -410,6 +625,61 @@ def test_an_operator_cannot_use_the_update_routes(
     otto = make_client(on)
     otto.post("/login", data={"username": "otto", "password": "another-long-password"})
     token = _csrf(otto)
-    for action in ("check", "apply", "dismiss"):
+    for action in ("check", "apply", "dismiss", "beta"):
         assert otto.post(f"/settings/update/{action}", data={"csrf": token}).status_code == 403
     assert otto.get("/settings").status_code == 403
+
+
+def test_the_card_has_the_beta_switch_off_by_default(admin: TestClient) -> None:
+    page = admin.get("/settings").text
+    assert 'action="/settings/update/beta"' in page
+    assert re.search(r'name="include_beta" value="on"\s+>', page), "unticked by default"
+
+
+def test_turning_betas_on_saves_checks_and_offers_the_beta(
+    admin: TestClient, on: Settings, releases, registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _running(monkeypatch, "0.1.1")
+    releases.append("v0.2.0-beta.1")
+    response = admin.post(
+        "/settings/update/beta", data={"csrf": _csrf(admin), "include_beta": "on"}
+    )
+    text = _text(response)
+    assert response.status_code == 200
+    assert "Beta versions are now included. NXray v0.2.0-beta.1 is available." in text
+    assert "on the :beta tag" in text
+    assert 'action="/settings/update/apply"' in response.text
+    with open_db(on.db_path) as c:
+        assert update.current_state(c).include_beta is True
+        logged = c.execute("SELECT what FROM activity").fetchall()
+    assert any("Include beta versions on" in row[0] for row in logged)
+
+    # Off again on a release: back to comparing :latest's digest, which matches.
+    registry["latest"] = OLD
+    response = admin.post("/settings/update/beta", data={"csrf": _csrf(admin)})
+    assert "Beta versions are now left out. NXray is up to date." in _text(response)
+    assert "/settings/update/apply" not in response.text
+
+
+def test_the_beta_switch_is_refused_while_an_update_runs(
+    admin: TestClient, on: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with open_db(on.db_path) as c:
+        update._set(c, in_progress=1, started_at=time.time())
+    monkeypatch.setattr(update, "check_for_updates", lambda *a, **k: pytest.fail("checked"))
+    response = admin.post(
+        "/settings/update/beta", data={"csrf": _csrf(admin), "include_beta": "on"}
+    )
+    assert response.status_code == 409 and "update is running" in response.text
+    with open_db(on.db_path) as c:
+        assert update.current_state(c).include_beta is False
+
+
+def test_a_running_beta_with_betas_off_says_it_stays(
+    admin: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _running(monkeypatch, "0.2.0-beta.1")
+    from app.routes import settings_page
+
+    monkeypatch.setattr(settings_page, "running_version", lambda: "0.2.0-beta.1")
+    assert "This is a beta." in _text(admin.get("/settings"))

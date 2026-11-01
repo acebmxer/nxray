@@ -79,8 +79,10 @@
   {% elif update.last_result %}
   <p class="alert alert-error" role="alert">The update failed: {{ update.last_result }}</p>
   {% elif update.available %}
-  <p class="alert" role="status">A newer image is available. Applying it pulls the image and
-  restarts NXray; the page is unavailable for a few seconds, and signed-in sessions stay valid.</p>
+  <p class="alert" role="status">{% if update.target_version %}NXray v{{ update.target_version }}
+  is available, on the <code>:{{ update.target_tag }}</code> tag.{% else %}A newer image is
+  available.{% endif %} Applying it pulls the image and restarts NXray; the page is unavailable
+  for a few seconds, and signed-in sessions stay valid.</p>
   {% elif dev_build %}
   <p class="hint">This image was built from source, so it is never compared with the published
   one.</p>
@@ -104,6 +106,27 @@
     </form>
     {% endif %}
   </div>
+
+  <h3>Beta versions</h3>
+  <form method="post" action="/settings/update/beta" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label class="check"><input type="checkbox" name="include_beta" value="on"
+      {% if update.include_beta %}checked{% endif %}
+      {% if update.in_progress %}disabled{% endif %}> Include beta versions</label>
+    <p class="hint">Betas are built from the <code>dev</code> branch to try what comes next; they
+    can change and break between builds. With this on, <b>Update now</b> moves NXray to the
+    <code>:beta</code> tag while a beta is newer than the latest release, and back to
+    <code>:latest</code> once a release has caught up. Saving installs nothing by itself: it
+    checks again. Only a newer version is ever offered, so turning this off on a beta stays on
+    it until a newer release is out. It needs the <code>image:</code> line in
+    <code>docker-compose.yml</code> to read
+    <code>ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}</code>.</p>
+    {% if running_beta and not update.include_beta %}
+    <p class="hint">This is a beta. With beta versions left out, it stays on this version until
+    a release newer than it is out.</p>
+    {% endif %}
+    <button type="submit" class="btn btn-quiet" {% if update.in_progress %}disabled{% endif %}>Save</button>
+  </form>
   {% else %}
   <p><span class="badge">off</span> NXray never contacts ghcr.io or Docker. Update by hand with
   <code>docker compose pull</code> then <code>docker compose up -d</code>.</p>

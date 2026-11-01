@@ -92,6 +92,16 @@ RUN python -m pip uninstall --yes pip 2>/dev/null || true \
 
 COPY --from=build /opt/venv /opt/venv
 COPY app/ ./app/
+
+# A beta's own name (0.2.0-beta.1), passed by beta.yml, so the page footer,
+# /healthz and the self-update check report the beta rather than the release
+# it leads to. Empty everywhere else: a release's version is already in
+# app/__init__.py.
+ARG NXRAY_VERSION=""
+RUN if [ -n "$NXRAY_VERSION" ]; then \
+        echo "$NXRAY_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' \
+        && sed -i "s/^__version__ = .*/__version__ = \"$NXRAY_VERSION\"/" app/__init__.py; \
+    fi
 COPY --from=build /tmp/oui/oui.tsv.gz ./app/oui.tsv.gz
 COPY docker/nginx.conf.template /etc/nxray/nginx.conf.template
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/nxray-entrypoint

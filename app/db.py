@@ -314,6 +314,14 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN switch_model TEXT NOT NULL DEFAULT '';
     ALTER TABLE switch_connection ADD COLUMN nxos_version TEXT NOT NULL DEFAULT '';
     """,
+    # Self-update channels (app/update.py): include_beta is the Settings switch,
+    # target_tag and target_version say where Update now goes (:latest or :beta,
+    # or the container's own tag when digests are compared).
+    """
+    ALTER TABLE update_state ADD COLUMN include_beta INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE update_state ADD COLUMN target_tag TEXT NOT NULL DEFAULT '';
+    ALTER TABLE update_state ADD COLUMN target_version TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 

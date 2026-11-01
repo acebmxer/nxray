@@ -13,11 +13,15 @@ from app.dependencies import admin_required, note_activity, require_csrf, templa
 from app.security import csrf_token
 from app.tls import MAX_PEM_BYTES, CertificateError, current_certificate, install_certificate
 from app.update import (
+    UpdateState,
     apply_update,
     check_for_updates,
     clear_result,
     current_state,
+    is_beta,
     reap_stalled_update,
+    running_version,
+    set_include_beta,
 )
 
 router = APIRouter()
@@ -57,6 +61,7 @@ def _render(
             "dev_build": settings.dev_build,
             "update": update,
             "update_checked_at": checked_at,
+            "running_beta": is_beta(running_version()),
             "enable_https": settings.enable_https,
             "https_port": settings.https_port,
             "certificate": current_certificate(settings.tls_dir) if settings.enable_https else None,
@@ -123,11 +128,53 @@ def settings_update_check(
     with open_db(settings.db_path) as conn:
         reap_stalled_update(conn)
         outcome = check_for_updates(conn, dev_build=settings.dev_build)
-    if outcome == "available":
-        return _render(request, username, notice="A newer image is available.")
-    if outcome == "current":
-        return _render(request, username, notice="NXray is up to date.")
+        state = current_state(conn)
+    if outcome in ("available", "current"):
+        return _render(request, username, notice=_outcome_notice(outcome, state))
     return _render(request, username, error=outcome)
+
+
+def _outcome_notice(outcome: str, state: UpdateState) -> str:
+    """What a check that worked found, in a sentence."""
+    if outcome == "current":
+        return "NXray is up to date."
+    if state.target_version:
+        return f"NXray v{state.target_version} is available."
+    return "A newer image is available."
+
+
+@router.post("/settings/update/beta", response_class=HTMLResponse)
+def settings_update_beta(
+    request: Request,
+    username: str = Depends(admin_required),
+    csrf: str = Form(""),
+    include_beta: str = Form(""),
+) -> Response:
+    """Turn Include beta versions on or off, then check again. Installs nothing."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    if not settings.enable_self_update:
+        return _render(request, username, error="Self-update is off.", status_code=400)
+    include = include_beta == "on"
+    with open_db(settings.db_path) as conn:
+        reap_stalled_update(conn)
+        if current_state(conn).in_progress:
+            return _render(
+                request,
+                username,
+                error="An update is running. Change this once it has finished.",
+                status_code=409,
+            )
+        set_include_beta(conn, include)
+        outcome = check_for_updates(conn, dev_build=settings.dev_build)
+        state = current_state(conn)
+    choice = "on" if include else "off"
+    log.info("%s turned beta versions %s", username, choice)
+    note_activity(request, username, "Settings", f"Turned Include beta versions {choice}")
+    saved = f"Beta versions are now {'included' if include else 'left out'}."
+    if outcome in ("available", "current"):
+        return _render(request, username, notice=f"{saved} {_outcome_notice(outcome, state)}")
+    return _render(request, username, notice=saved, error=outcome)
 
 
 @router.post("/settings/update/apply", response_class=HTMLResponse)
@@ -145,8 +192,9 @@ def settings_update_apply(
         return _render(request, username, error="An update is already running.", status_code=409)
     if not state.available:
         return _render(request, username, error="No update is available.", status_code=409)
-    log.info("%s started an update to %s", username, state.latest_digest[:19])
-    note_activity(request, username, "Settings", f"Started an update to {state.latest_digest[:19]}")
+    goal = f"v{state.target_version}" if state.target_version else state.latest_digest[:19]
+    log.info("%s started an update to %s", username, goal)
+    note_activity(request, username, "Settings", f"Started an update to {goal}")
     error = apply_update(settings.db_path)
     if error:
         return _render(request, username, error=f"Could not start the update: {error}")

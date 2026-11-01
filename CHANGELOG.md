@@ -9,6 +9,33 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Added
+
+- **Include beta versions, from the Settings page.** With self-update on,
+  **Settings → Updates** has an **Include beta versions** switch (admin
+  only) that moves NXray onto the beta channel and back without editing
+  `docker-compose.yml` on the host. Saving it installs nothing: it checks
+  again, and **Update now** does the move. With betas on, NXray goes to
+  `:beta` while the newest beta is ahead of the latest release and back to
+  `:latest` once a release has caught up; with betas off it follows
+  `:latest` as before. Versions are ranked from the GitHub releases list, a
+  release above every beta of its version, and only a newer version is ever
+  offered: an older beta is never offered after its release, and turning
+  betas off on a beta that is newer than the latest release stays on it
+  until a newer release is out. A beta image now reports its own name
+  (`0.2.0-beta.1`) in the page footer and `/healthz`. If the compose file
+  names a fixed tag and so ignores the choice, the Updates card says so and
+  shows the line to change instead of reporting success.
+
+  **Upgrading from 0.1.x: edit `docker-compose.yml` once.** Your compose file
+  is your own and no update changes it. For the switch to work, change its
+  `image:` line from `ghcr.io/acebmxer/nxray:latest` (or `:beta`, or a pinned
+  `:0.1.0`) to `ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}`, then run
+  `docker compose pull` and `docker compose up -d`. Without the edit NXray
+  still updates and runs as before; only the beta switch cannot move it. New
+  installs copy `docker-compose.yml.example`, which already has the line.
+  `nxray.env` and the data volume carry over either way.
+
 ## [0.1.1] - 2026-11-01
 
 **A fix release: every port change can now be made from the port's side

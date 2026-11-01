@@ -183,6 +183,37 @@ It works only for a container started by `docker compose` from the published
 image. A copy built from a clone (`docker-compose.dev.yml`) is never reported
 out of date.
 
+### Beta versions
+
+Under **Settings → Updates**, an admin can tick **Include beta versions** and
+press **Save**. Betas are built from the `dev` branch to try what comes next,
+and can change and break between builds. Saving installs nothing: it runs the
+check again, and **Update now** does the move.
+
+- With betas on, NXray goes to the `:beta` tag while the newest beta is ahead
+  of the latest release, and back to `:latest` once a release has caught up.
+- With betas off, it follows `:latest`.
+- Only a newer version is ever offered. Versions are ranked from the GitHub
+  releases list: version numbers first, and a release above every beta of
+  its version (0.2.0 is newer than 0.2.0-beta.3, which is newer than
+  0.2.0-beta.2). Turning betas off on a beta that is newer than the latest
+  release stays on it until a newer release is out, so an install never runs
+  an older build against a database a beta already changed.
+
+With betas on, or a beta running, the check also asks `api.github.com` for
+the list of releases. With self-update off, NXray contacts neither.
+
+**Update now** hands the chosen tag to the short-lived updater as `NXRAY_TAG`,
+and the sample compose file's `image:` line reads it:
+
+    image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}
+
+Nothing on the host is edited. A compose file whose `image:` line names a
+fixed tag (`:latest`, `:beta` or a pinned `:0.1.0`) ignores `NXRAY_TAG`; after
+the update the Updates card then says the container is still on the old tag
+and shows the line to change, instead of reporting success. See **Updating
+from 0.1.x** under Updating.
+
 ## History
 
 Once a switch is set up, NXray reads it every minute (`NXRAY_HISTORY_INTERVAL`
@@ -280,20 +311,50 @@ reuses the list from the last download; `--no-cache` downloads it again.
 
 ## Updating
 
-The sample compose file uses the `:latest` tag, which follows every release,
-so in the `nxray` folder:
+The sample compose file uses the `:latest` tag unless `NXRAY_TAG` says
+otherwise, and `:latest` follows every release, so in the `nxray` folder:
 
     docker compose pull
     docker compose up -d
 
 To stay on one version until you choose to move, put that version in the
-compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.1.0`) and
+compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.2.0`) and
 change it when you want to upgrade; then run the same two commands.
 
-To try betas, put `ghcr.io/acebmxer/nxray:beta` in the `image:` line. That tag
-is the beta channel: it moves with every beta published from the `dev` branch,
-so it can change and break between runs, and `:latest` never receives it.
-Each beta is also listed as a pre-release on the GitHub Releases page.
+To try betas, use the `:beta` tag. It is the beta channel: it moves with every
+beta published from the `dev` branch, so it can change and break between
+runs, and `:latest` never receives it. Each beta is also listed as a
+pre-release on the GitHub Releases page. With self-update on, tick **Include
+beta versions** on the Settings page (see [Beta versions](#beta-versions)).
+Without it, put a file named `.env` beside `docker-compose.yml` holding only
+this line:
+
+    NXRAY_TAG=beta
+
+A plain `docker compose up -d` on the host uses whatever the compose file and
+`.env` say. Keep the password hash in `nxray.env`, never in `.env`: compose
+reads `.env` to fill in `$` variables, and the hash is full of them. Delete
+`.env` (or set `NXRAY_TAG=latest`) to go back to releases.
+
+### Updating from 0.1.x
+
+Every install keeps its own `docker-compose.yml`, and an update never changes
+it. Installs set up on 0.1.x (or an earlier beta) have the tag written into
+the `image:` line, so edit it once for **Include beta versions** to work:
+
+1. In the `nxray` folder, change the `image:` line from
+
+       image: ghcr.io/acebmxer/nxray:latest
+
+   (or `:beta`, or a pinned `:0.1.0`) to
+
+       image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}
+
+2. Run `docker compose pull`, then `docker compose up -d`.
+
+Without the edit, 0.2.0 still installs and runs (a `:latest` compose file
+pulls it as usual), but the beta switch cannot move the install: the Updates
+card says so and shows the line to change.
 
 From a clone, run `git pull` and then
 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.

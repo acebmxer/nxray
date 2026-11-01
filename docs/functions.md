@@ -73,6 +73,7 @@ prose columns; those are a reviewer's job.
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
 | Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
+| Rank NXray versions, or pick between the `:beta` and `:latest` tags | `app/update.py`, `parse_version` / `pick_target` |
 
 ---
 
@@ -497,6 +498,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
 | `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
+| `settings_update_beta` | `(request, username, csrf, include_beta) -> Response` | `POST /settings/update/beta`: stores **Include beta versions** and checks again; refused while an update runs | router | v0.2.0 |
 | `settings_update_apply` | `(request, username, csrf) -> Response` | `POST /settings/update/apply`: refuses unless an update is waiting and none is running, then starts it | router | v0.1.0 |
 | `settings_update_check` | `(request, username, csrf) -> Response` | `POST /settings/update/check`: compares ghcr.io with this container now | router | v0.1.0 |
 | `settings_update_dismiss` | `(request, username, csrf) -> Response` | `POST /settings/update/dismiss`: hides the last update result | router | v0.1.0 |
@@ -693,17 +695,23 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `apply_update` | `(db_path) -> str \| None` | Marks an update running, starts the throwaway container that pulls and recreates, and watches it on a thread; an error text or `None` | `routes/settings_page.settings_update_apply` | v0.1.0 |
-| `check_for_updates` | `(conn, *, dev_build=False) -> str` | Compares ghcr.io's digest for this container's tag with what runs; `"available"`, `"current"` or why nothing was compared | `routes/settings_page.settings_update_check`, `start_background_checker` | v0.1.0 |
+| `check_for_updates` | `(conn, *, dev_build=False) -> str` | Compares ghcr.io's digest for this container's tag with what runs, or, with betas on or a beta running, ranks the GitHub releases with `pick_target`; `"available"`, `"current"` or why nothing was compared | `routes/settings_page.settings_update_check`, `settings_update_beta`, `start_background_checker` | v0.1.0 |
 | `clear_result` | `(conn) -> None` | Forgets the last update result | `routes/settings_page.settings_update_dismiss` | v0.1.0 |
 | `current_state` | `(conn) -> UpdateState` | The update row, with an old success hidden | `routes/settings_page`, `watch_update` | v0.1.0 |
 | `deployed_digests` | `(image_id) -> set[str] \| None` | Registry digests of the image the container runs; `None` for an image built locally | `check_for_updates` | v0.1.0 |
 | `deployment` | `() -> Deployment \| None` | Asks Docker what this container was made from and which compose project owns it | `check_for_updates`, `start_update` | v0.1.0 |
 | `finish_pending_update` | `(conn) -> None` | At start: an update still running means this is its replacement, so record success | `main.lifespan` | v0.1.0 |
+| `github_releases` | `() -> list[str] \| None` | The version names of NXray's published releases and betas from api.github.com, drafts left out; `None` on any failure | `check_for_updates` | v0.2.0 |
 | `ghcr_digest` | `(tag) -> str \| None` | The digest ghcr.io has for a tag; `None` on any failure | `check_for_updates` | v0.1.0 |
+| `is_beta` | `(text) -> bool` | Whether a version names a beta (`0.2.0-beta.1`) | `check_for_updates`, `routes/settings_page` | v0.2.0 |
 | `own_container` | `() -> str` | The name Docker knows this container by (its hostname) | `deployment` | v0.1.0 |
+| `parse_version` | `(text) -> Version \| None` | A sortable key for `0.2.0`, `v0.2.0` or `0.2.0-beta.3`: numbers first, a release above its betas; `None` for anything else | `pick_target`, `is_beta` | v0.2.0 |
+| `pick_target` | `(running, releases, include_beta) -> Target \| None` | The tag to move to (`:beta` while a beta is ahead of the latest release and betas are on, else `:latest`) and its version; `None` unless it is newer than `running` | `check_for_updates` | v0.2.0 |
 | `reap_stalled_update` | `(conn) -> None` | Fails an update that never replaced the container | `routes/settings_page` | v0.1.0 |
+| `running_version` | `() -> str` | The version of the code in this container (`app.__version__`, which a beta image carries with its beta name) | `check_for_updates`, `routes/settings_page` | v0.2.0 |
+| `set_include_beta` | `(conn, include) -> None` | Stores the **Include beta versions** choice; installs nothing | `routes/settings_page.settings_update_beta` | v0.2.0 |
 | `start_background_checker` | `(settings) -> None` | Checks once a day on a thread; does nothing with self-update off | `main.lifespan` | v0.1.0 |
-| `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator | `apply_update` | v0.1.0 |
+| `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator with the chosen tag as `NXRAY_TAG` | `apply_update` | v0.1.0 |
 | `watch_update` | `(db_path) -> None` | Waits for the recreator; records a failure (or a no-op success) if this container is still alive | `apply_update` | v0.1.0 |
 
 ## `app/history.py` — history

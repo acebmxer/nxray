@@ -12,7 +12,17 @@ How it works, and why:
   ``docker compose pull && up -d`` on the host cannot make the two disagree.
   Image digests are compared, never version strings.
 - The tag watched is the one the container was started from (a ``:latest``
-  install follows every release, a pinned ``:0.1.0`` stays put).
+  install follows every release, a pinned ``:0.1.0`` stays put), unless
+  **Include beta versions** is on or a beta is running. Then versions are
+  compared instead, ranked from GitHub's list of releases
+  (``pick_target``): a beta is only ever offered while it is ahead of the
+  latest release, and nothing older than what runs is ever offered, so no
+  install runs an older build against a database a newer one migrated.
+- The tag chosen reaches compose as ``NXRAY_TAG`` in the throwaway
+  container's environment, which the sample compose file's
+  ``image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}`` line reads. Nothing
+  on the host is edited; a compose file that names a fixed tag ignores it,
+  and the result says so (``_off_target``).
 - A container cannot reliably replace itself, so the pull and recreation are
   handed to a throwaway container outside the compose project. It is told the
   project name, directory and compose files from the labels compose put on
@@ -28,6 +38,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shlex
 import socket
 import sqlite3
@@ -38,6 +49,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import app
 from app.config import Settings
 
 log = logging.getLogger("nxray.update")
@@ -45,6 +57,15 @@ log = logging.getLogger("nxray.update")
 _OWNER = "acebmxer"
 _IMAGE = "nxray"
 _REGISTRY_REPO = f"ghcr.io/{_OWNER}/{_IMAGE}"
+_RELEASES_URL = f"https://api.github.com/repos/{_OWNER}/{_IMAGE}/releases?per_page=100"
+# The two channels: every release moves :latest (release.yml), every beta
+# moves :beta (beta.yml).
+RELEASE_TAG = "latest"
+BETA_TAG = "beta"
+# 0.2.0, v0.2.0, 0.2.0-beta.3, v0.2.0-beta.3: what release.yml and beta.yml name.
+_VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?$")
+# A Docker tag, which is what NXRAY_TAG may hold.
+_TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 _CHECK_INTERVAL = 86400  # once a day
 # "Update applied" stays on the page this long. Failures do not expire: they
 # describe something that is still true.
@@ -88,6 +109,83 @@ class UpdateState:
     available: bool
     in_progress: bool
     last_result: str
+    include_beta: bool = False
+    target_tag: str = ""  # the tag Update now moves to
+    target_version: str = ""  # the version on it, when versions were compared
+
+
+@dataclass(frozen=True)
+class Target:
+    """Where an update goes: a tag, and the version it holds."""
+
+    tag: str
+    version: str
+
+
+Version = tuple[int, int, int, int, int]
+
+
+def parse_version(text: str) -> Version | None:
+    """A sortable key for an NXray version, or None for anything else.
+
+    Version numbers first, then a release above every beta of its version:
+    0.1.1 > 0.1.1-beta.3 > 0.1.1-beta.2 > 0.1.0.
+    """
+    match = _VERSION_RE.match(text.strip())
+    if not match:
+        return None
+    major, minor, patch, beta = match.groups()
+    if beta is None:
+        return (int(major), int(minor), int(patch), 1, 0)
+    return (int(major), int(minor), int(patch), 0, int(beta))
+
+
+def is_beta(text: str) -> bool:
+    """Whether a version names a beta."""
+    key = parse_version(text)
+    return key is not None and key[3] == 0
+
+
+def running_version() -> str:
+    """The version of the code in this container.
+
+    Comes from the image itself: a beta image is built with its beta name
+    (beta.yml passes it to the Dockerfile), so it cannot disagree with what
+    is deployed.
+    """
+    return app.__version__
+
+
+def pick_target(running: str, releases: list[str], include_beta: bool) -> Target | None:
+    """The tag to move to, or None when nothing newer than ``running`` is out.
+
+    ``releases`` are the published version names (betas included). With
+    betas on, :beta while the newest beta is ahead of the latest release,
+    else :latest. Only a newer version is ever offered.
+    """
+    current = parse_version(running)
+    if current is None:
+        return None
+    newest_release: tuple[Version, str] | None = None
+    newest_beta: tuple[Version, str] | None = None
+    for name in releases:
+        key = parse_version(name)
+        if key is None:
+            continue
+        entry = (key, name.strip().removeprefix("v"))
+        if key[3] == 0:
+            newest_beta = max(newest_beta or entry, entry)
+        else:
+            newest_release = max(newest_release or entry, entry)
+    choice: Target | None = None
+    choice_key: Version | None = None
+    if newest_release:
+        choice_key, choice = newest_release[0], Target(RELEASE_TAG, newest_release[1])
+    if include_beta and newest_beta and (choice_key is None or newest_beta[0] > choice_key):
+        choice_key, choice = newest_beta[0], Target(BETA_TAG, newest_beta[1])
+    if choice is None or choice_key is None or choice_key <= current:
+        return None
+    return choice
 
 
 def _row(conn: sqlite3.Connection) -> sqlite3.Row:
@@ -121,7 +219,19 @@ def current_state(conn: sqlite3.Connection) -> UpdateState:
         available=bool(row["available"]),
         in_progress=bool(row["in_progress"]),
         last_result=last_result,
+        include_beta=bool(row["include_beta"]),
+        target_tag=row["target_tag"] or "",
+        target_version=row["target_version"] or "",
     )
+
+
+def set_include_beta(conn: sqlite3.Connection, include: bool) -> None:
+    """Store the Include beta versions choice. It installs nothing by itself.
+
+    Any update found under the old choice is dropped, so a check that then
+    cannot reach GitHub does not leave it on offer.
+    """
+    _set(conn, include_beta=1 if include else 0, available=0, target_tag="", target_version="")
 
 
 def clear_result(conn: sqlite3.Connection) -> None:
@@ -217,6 +327,28 @@ def ghcr_digest(tag: str) -> str | None:
         return None
 
 
+def github_releases() -> list[str] | None:
+    """The version names of NXray's published releases and betas, or None on any error.
+
+    Drafts are left out; they are not published.
+    """
+    try:
+        req = urllib.request.Request(
+            _RELEASES_URL,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "nxray-update-check"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            entries = json.loads(r.read())
+        return [
+            str(e["tag_name"])
+            for e in entries
+            if isinstance(e, dict) and not e.get("draft") and e.get("tag_name")
+        ]
+    except Exception as exc:
+        log.debug("GitHub releases check failed: %s", exc)
+        return None
+
+
 def check_for_updates(conn: sqlite3.Connection, *, dev_build: bool = False) -> str:
     """Compare GHCR with what runs, record it, and say what happened.
 
@@ -226,6 +358,9 @@ def check_for_updates(conn: sqlite3.Connection, *, dev_build: bool = False) -> s
 
     A dev build never reports an update: it is built from source, so its
     digest differs from the published one whether it is behind or ahead.
+
+    With betas on, or a beta running, versions are compared (``pick_target``)
+    instead of the digest of this container's own tag.
     """
     _set(conn, latest_checked_at=time.time())
 
@@ -239,6 +374,10 @@ def check_for_updates(conn: sqlite3.Connection, *, dev_build: bool = False) -> s
             f"{_REGISTRY_REPO}, so there is nothing to compare it with."
         )
 
+    include_beta = bool(_row(conn)["include_beta"])
+    if include_beta or is_beta(running_version()):
+        return _check_by_version(conn, current, include_beta, dev_build=dev_build)
+
     digest = ghcr_digest(tag)
     if digest is None:
         return "Could not reach ghcr.io, or no image has been published there yet."
@@ -246,11 +385,61 @@ def check_for_updates(conn: sqlite3.Connection, *, dev_build: bool = False) -> s
 
     deployed = deployed_digests(current.image_id)
     if dev_build or deployed is None:
-        return "This is an image built from source, so it is never compared with the published one."
+        return _SOURCE_BUILD
 
     available = digest not in deployed
-    _set(conn, available=1 if available else 0)
+    _set(
+        conn,
+        available=1 if available else 0,
+        target_tag=tag if available else "",
+        target_version="",
+    )
     return "available" if available else "current"
+
+
+_SOURCE_BUILD = (
+    "This is an image built from source, so it is never compared with the published one."
+)
+
+
+def _check_by_version(
+    conn: sqlite3.Connection, current: Deployment, include_beta: bool, *, dev_build: bool
+) -> str:
+    """The check with betas in the picture: rank versions, never digests."""
+    running = running_version()
+    if parse_version(running) is None:
+        return f"NXray cannot read its own version ({running}), so it cannot rank the releases."
+    if dev_build or deployed_digests(current.image_id) is None:
+        return _SOURCE_BUILD
+    releases = github_releases()
+    if releases is None:
+        return "Could not reach api.github.com to read the list of NXray releases."
+    target = pick_target(running, releases, include_beta)
+    if target is None:
+        _set(conn, available=0, target_tag="", target_version="")
+        return "current"
+    _set(conn, available=1, target_tag=target.tag, target_version=target.version)
+    return "available"
+
+
+def _off_target(conn: sqlite3.Connection) -> str | None:
+    """Why the container is not on the tag the update chose, or None when it is.
+
+    A compose file that names a fixed tag ignores NXRAY_TAG, so the pull and
+    recreation can succeed without moving the container anywhere.
+    """
+    wanted = _row(conn)["target_tag"] or ""
+    if not wanted:
+        return None
+    now = deployment()
+    if now is None or now.tag is None or now.tag == wanted:
+        return None
+    return (
+        f"NXray is still on :{now.tag}, not :{wanted}. The image: line in "
+        "docker-compose.yml names a fixed tag, so it ignores the one chosen here. "
+        f"Change that line to image: {_REGISTRY_REPO}:${{NXRAY_TAG:-latest}} on the host, "
+        "then press Update now again."
+    )
 
 
 def _recreate_script(current: Deployment) -> str:
@@ -261,7 +450,7 @@ def _recreate_script(current: Deployment) -> str:
     return f"{shlex.join([*base, 'pull'])} && {shlex.join([*base, 'up', '-d'])}"
 
 
-def _spawn_recreator(current: Deployment) -> str | None:
+def _spawn_recreator(current: Deployment, tag: str) -> str | None:
     """Start the throwaway container that pulls and recreates. None, or an error.
 
     It runs the image being updated (it carries the docker CLI and compose
@@ -269,6 +458,8 @@ def _spawn_recreator(current: Deployment) -> str | None:
     compose finds the same files and relative paths the original ``up`` did.
     It is not root: it gets this process's supplementary groups, which is how
     the socket's docker group reaches it (see docker-compose.yml.example).
+    ``tag`` reaches compose as NXRAY_TAG, which takes priority over a .env on
+    the host.
     """
     _docker(["rm", "-f", _UPDATER_NAME])
     group_args: list[str] = []
@@ -289,6 +480,8 @@ def _spawn_recreator(current: Deployment) -> str | None:
                 f"{current.workdir}:{current.workdir}",
                 "-w",
                 current.workdir,
+                "-e",
+                f"NXRAY_TAG={tag}",
                 "--entrypoint",
                 "sh",
                 current.image_ref,
@@ -313,6 +506,12 @@ def finish_pending_update(conn: sqlite3.Connection) -> None:
     running, the only trustworthy confirmation there is.
     """
     if not current_state(conn).in_progress:
+        return
+    wrong_tag = _off_target(conn)
+    if wrong_tag:
+        _set(conn, in_progress=0)
+        _set_result(conn, wrong_tag)
+        log.warning("update recreated the container, but not on the tag chosen")
         return
     _set(conn, available=0, in_progress=0)
     _set_result(conn, "success")
@@ -356,10 +555,13 @@ def start_update(conn: sqlite3.Connection) -> str | None:
         )
     if not Path(current.workdir).is_absolute():
         return "Docker reported a project directory that is not an absolute path."
+    tag = _row(conn)["target_tag"] or current.tag
+    if not _TAG_RE.match(tag):
+        return f"{tag!r} is not a Docker tag."
 
-    _set(conn, in_progress=1, started_at=time.time())
+    _set(conn, in_progress=1, started_at=time.time(), target_tag=tag)
     _set_result(conn, "")
-    error = _spawn_recreator(current)
+    error = _spawn_recreator(current, tag)
     if error:
         _set(conn, in_progress=0)
         _set_result(conn, f"could not start the update: {error}")
@@ -410,6 +612,11 @@ def watch_update(db_path: Path) -> None:
         code = (wait.stdout or "").strip()
         if wait.returncode == 0 and code == "0":
             _docker(["rm", _UPDATER_NAME])
+            wrong_tag = _off_target(conn)
+            if wrong_tag:
+                _set(conn, in_progress=0)
+                _set_result(conn, wrong_tag)
+                return
             _set(conn, available=0, in_progress=0)
             _set_result(conn, "success")
             return
