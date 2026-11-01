@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -34,7 +33,13 @@ from app.neighbors import NeighborView, filter_macs, load_neighbors
 from app.nxapi import MAC_AGING_MAX, MAC_AGING_MIN, NxapiClient, NxapiError, validate_port_name
 from app.oui import format_mac
 from app.ports import port_sort_key
-from app.routes.ports import change_refused, render_port_page
+from app.routes.ports import (
+    answer_port_change,
+    change_back,
+    change_refused,
+    ports_origin,
+    render_port_page,
+)
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
@@ -369,19 +374,28 @@ def learned_macs_clear(
     vlan: str = Form(""),
     mac: str = Form(""),
     back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Clear learned addresses: all, one port, one VLAN or one address. Asks first.
 
     ``back=port`` (from a port's page, with ``port`` set) answers on that
-    port's page; anything else on the Neighbors page, so the field can never
-    send the browser elsewhere.
+    port's page, and ``back=ports`` (from its side panel, with ``show`` and
+    ``color``) on the Ports page with that panel open; anything else on the
+    Neighbors page, so the field can never send the browser elsewhere.
     """
     require_csrf(request, csrf)
     form = {"scope": scope, "port": port, "vlan": vlan, "mac": mac}
-    on_port = back == "port" and bool(port)
+    origin = ports_origin(back, show, color) if port else None
+    on_port = (back == "port" and bool(port)) or origin is not None
 
     def answer(*, error: str | None = None, notice: str | None = None) -> Response:
+        if origin is not None:
+            code = 400 if error else 200
+            return answer_port_change(
+                request, username, port, origin, error=error, notice=notice, status_code=code
+            )
         if on_port:
             return render_port_page(request, username, port, error=error, notice=notice)
         code = 400 if error else 200
@@ -400,9 +414,9 @@ def learned_macs_clear(
     except ValueError as exc:
         return answer(error=f"Not cleared: {exc}.")
     if confirm != "yes":
-        fields = {**form, "back": "port" if on_port else ""}
+        fields = {**form, **(origin.fields if origin else {"back": "port" if on_port else ""})}
         if on_port:
-            back_url = f"/ports/detail?name={quote(port, safe='')}"
+            back_url, back_label = change_back(origin, port)
             return _confirm(
                 request,
                 username,
@@ -411,7 +425,7 @@ def learned_macs_clear(
                 warnings=warnings,
                 fields=fields,
                 back_url=back_url,
-                back_label=port,
+                back_label=back_label,
                 not_config=True,
             )
         return _confirm(

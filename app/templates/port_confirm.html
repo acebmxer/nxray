@@ -2,7 +2,7 @@
 {% block title %}Confirm — {{ port.name }} — NXray{% endblock %}
 
 {% block content %}
-<p class="breadcrumb"><a href="/ports/detail?name={{ port.name|urlencode }}">← {{ port.name }}</a></p>
+<p class="breadcrumb"><a href="{{ back_url }}">← {{ back_label }}</a></p>
 <h1 class="page-title">Confirm the change</h1>
 
 <section class="card">
@@ -21,10 +21,13 @@
       <input type="hidden" name="name" value="{{ port.name }}">
       <input type="hidden" name="action" value="{{ action }}">
       <input type="hidden" name="description" value="{{ description }}">
+      {% for key, value in origin.items() %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+      {% endfor %}
       <input type="hidden" name="confirm" value="yes">
       <button type="submit" class="btn btn-primary">Yes, make the change</button>
     </form>
-    <a class="btn btn-quiet" href="/ports/detail?name={{ port.name|urlencode }}">Cancel</a>
+    <a class="btn btn-quiet" href="{{ back_url }}">Cancel</a>
   </div>
 </section>
 {% endblock %}

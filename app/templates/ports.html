@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% import "_port_forms.html" as pf %}
 {% block title %}Ports — NXray{% endblock %}
 
 {% block content %}
@@ -21,12 +22,16 @@
   </dl>
   {% endif %}
 </div>
+{% macro messages() %}
 {% if error %}
 <p class="alert alert-error" role="alert">{{ error }}</p>
 {% endif %}
 {% if notice %}
 <p class="alert alert-ok" role="status">{{ notice }}</p>
 {% endif %}
+{% endmacro %}
+{# With a port's panel open, its messages are shown in the panel. #}
+{% if not drawer %}{{ messages() }}{% endif %}
 
 {% if not connection %}
 <div class="card empty-state">
@@ -52,6 +57,9 @@
   <form method="post" action="/switch/save" class="inline">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="back" value="ports">
+    <input type="hidden" name="show" value="{{ show }}">
+    <input type="hidden" name="color" value="{{ color }}">
+    <input type="hidden" name="port" value="{{ selected }}">
     <button type="submit" class="btn btn-quiet">Save config</button>
   </form>
 </div>
@@ -172,6 +180,8 @@
 {% if drawer %}
 {% set port = drawer.port %}
 {% set devices = drawer.devices %}
+{% set forms = drawer.forms %}
+{% set ctx = {"csrf": csrf_token, "role": role, "can_change": can_change, "connection": connection, "back": drawer.back, "id": "drawer_"} %}
 <a class="drawer-shade" href="{{ drawer.close }}" aria-label="Close the port panel"></a>
 <aside class="drawer" aria-label="{{ port.name }}">
   <div class="drawer-head">
@@ -192,6 +202,22 @@
     </div>
   </div>
   <div class="drawer-body">
+    {% if error or notice %}<div class="drawer-part">{{ messages() }}</div>{% endif %}
+    {% if connection.unsaved_changes and can_change %}
+    <div class="drawer-part">
+      <div class="warning warning-row">
+        <span>NXray changed the switch since its configuration was last saved.</span>
+        <form method="post" action="/switch/save" class="inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="back" value="ports">
+          <input type="hidden" name="show" value="{{ show }}">
+          <input type="hidden" name="color" value="{{ color }}">
+          <input type="hidden" name="port" value="{{ port.name }}">
+          <button type="submit" class="btn btn-quiet">Save config</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
     {% if drawer.chart and drawer.chart.svg %}
     <section class="drawer-part">
       <h3>{{ drawer.chart.title }}</h3>
@@ -240,6 +266,7 @@
       </table>
       {% if learned|length > 6 %}<p class="dim">and {{ learned|length - 6 }} more</p>{% endif %}
       {% endif %}
+      {{ pf.clear_macs_form(forms, ctx) }}
       {% endif %}
     </section>
     <section class="drawer-part">
@@ -265,36 +292,41 @@
       <p class="dim">Nothing plugged in.</p>
       {% endif %}
     </section>
-    {% if bulk_on %}
+    {% if can_change %}
     <section class="drawer-part">
       <h3>Description</h3>
-      <form method="post" action="/ports/change" class="row-form">
-        <input type="hidden" name="csrf" value="{{ csrf_token }}">
-        <input type="hidden" name="name" value="{{ port.name }}">
-        <input type="hidden" name="action" value="description">
-        <label for="drawer_description" class="sr-only">Description</label>
-        <input id="drawer_description" name="description" type="text" value="{{ port.description }}" maxlength="254" spellcheck="false">
-        <button type="submit" class="btn btn-quiet">Change</button>
-      </form>
+      {% if connection.changes_enabled %}{{ pf.description_form(forms, ctx) }}{% else %}{{ pf.changes_off(ctx) }}{% endif %}
     </section>
     {% endif %}
+    <section class="drawer-part">
+      <h3>Label</h3>
+      {{ pf.label_form(forms, ctx) }}
+    </section>
+    {% if forms.vlans %}
+    <section class="drawer-part">
+      <h3>VLANs</h3>
+      {{ pf.vlans_part(forms, ctx) }}
+    </section>
+    {% endif %}
+    <section class="drawer-part">
+      <h3>Settings</h3>
+      {{ pf.settings_part(forms, ctx) }}
+    </section>
+    {% if forms.settings and (forms.settings.breakout_capable or forms.settings.is_breakout_port) %}
+    <section class="drawer-part">
+      <h3>Split port</h3>
+      {{ pf.breakout_part(forms, ctx) }}
+    </section>
+    {% endif %}
+    <section class="drawer-part">
+      <h3>CDP and LLDP</h3>
+      {{ pf.discovery_part(forms, ctx) }}
+    </section>
   </div>
   <div class="drawer-foot">
-    {% if bulk_on %}
-    <form method="post" action="/ports/change" class="inline">
-      <input type="hidden" name="csrf" value="{{ csrf_token }}">
-      <input type="hidden" name="name" value="{{ port.name }}">
-      {% if port.admin_up %}
-      <input type="hidden" name="action" value="off">
-      <button type="submit" class="btn btn-danger">Turn off</button>
-      {% else %}
-      <input type="hidden" name="action" value="on">
-      <button type="submit" class="btn">Turn on</button>
-      {% endif %}
-    </form>
-    {% endif %}
+    {% if bulk_on %}{{ pf.power_form(forms, ctx, css="inline", button="btn", off_button="btn btn-danger", words="") }}{% endif %}
     <span class="box-gap"></span>
-    <a class="btn" href="/ports/detail?name={{ port.name|urlencode }}">All of this port →</a>
+    <a class="btn" href="/ports/detail?name={{ port.name|urlencode }}" title="Charts, counters and every device seen">All of this port →</a>
   </div>
 </aside>
 {% endif %}

@@ -31,7 +31,7 @@ from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.port_channels import render_port_channels_page
-from app.routes.ports import render_port_page, render_ports_page
+from app.routes.ports import ports_origin, render_port_page, render_ports_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.routing import render_routing_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
@@ -686,6 +686,8 @@ def switch_save(
     back: str = Form(""),
     port: str = Form(""),
     protocol: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
 ) -> Response:
     """Save config: copy running-config startup-config with NXray's own account.
 
@@ -693,7 +695,8 @@ def switch_save(
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
-    shown there.
+    shown there. From the Ports page, ``show``, ``color`` and ``port`` keep its
+    filter, colour mode and open side panel.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -703,7 +706,17 @@ def switch_save(
         if back == "port" and port:
             return render_port_page(request, username, port, error=error, notice=notice)
         if back == "ports":
-            return render_ports_page(request, username, error=error, notice=notice)
+            origin = ports_origin(back, show, color)
+            assert origin is not None
+            return render_ports_page(
+                request,
+                username,
+                show=origin.show,
+                color=origin.color,
+                selected=port,
+                error=error,
+                notice=notice,
+            )
         if back == "vlans":
             return render_vlans_page(request, username, error=error, notice=notice)
         if back == "features":

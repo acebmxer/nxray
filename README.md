@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-2539%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-2553%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -139,7 +139,8 @@ default: *(built)*.
    errors over time, as graphs. *(built)*
 10. **Switch face**: a picture of the front panel with every port colored by
     state, speed, VLAN, port-channel, traffic or errors; hover for details,
-    click to open the port's side panel; your own labels on ports. *(built)*
+    click to open the port's side panel, which makes every change to the port;
+    your own labels on ports. *(built)*
 11. **Port settings**: speed, duplex, MTU and jumbo frames, FEC, breakout,
     storm control, flow control, layer 2 or layer 3 per port. *(built)*
 12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,
