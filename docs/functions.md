@@ -424,12 +424,14 @@ interfaces). `ON_WARNINGS` and `OFF_WARNING` go on the confirm page.
 | `load_vlans` | `(client) -> VlanView` | The VLAN list and every port's VLAN settings, from one request | `routes/neighbors` | v0.1.0 |
 | `parse_switchports` | `(body) -> dict[str, PortVlans]` | Each Ethernet port's mode, access, native and carried VLANs from `show interface switchport` | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
 | `parse_vlans` | `(body) -> list[Vlan]` | Every VLAN from `show vlan brief`, lowest first | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
-| `plan_port_vlans` | `(current, view, *, mode, access_vlan, native_vlan, allowed) -> PortVlanChange` | Checks a port's VLAN form against the switch (VLANs must exist) and keeps only what changes | `routes/ports.port_vlans_change` | v0.1.0 |
+| `plan_port_vlans` | `(current, view, *, mode, access_vlan, native_vlan, allowed) -> PortVlanChange` | Checks a port's VLAN form against the switch (VLANs must exist), adds a trunk's native VLAN to the VLANs it carries (`PortVlanChange.native_added`) and keeps only what changes | `routes/ports.port_vlans_change` | v0.1.0 |
 | `vlan_interface_ids` | `(brief_body) -> frozenset[int]` | The VLANs that have a VLAN interface, from `show interface brief` | `load_vlan_page` | v0.1.0 |
 
 `PortVlans.uses(vlan_id)` says whether deleting a VLAN would cut a port off
 (access VLAN, native VLAN, or a trunk naming it; a trunk carrying every VLAN
 does not count); `VlanView.ports_using(vlan_id)` lists those ports.
+`PortVlans.native_carried` is False for a trunk whose native VLAN is not
+among the VLANs it carries, so the switch drops its untagged traffic.
 
 ## `app/port_settings.py` — port settings and breakout
 

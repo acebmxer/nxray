@@ -203,9 +203,51 @@ def test_plan_keeps_only_what_changes() -> None:
         None,
     )
     trunk = plan_port_vlans(
-        access, view, mode="trunk", access_vlan="10", native_vlan="1", allowed="10,20"
+        access, view, mode="trunk", access_vlan="10", native_vlan="1", allowed="1,10,20"
     )
-    assert (trunk.mode, trunk.native_vlan, trunk.allowed_vlans) == ("trunk", None, [10, 20])
+    assert (trunk.mode, trunk.native_vlan, trunk.allowed_vlans) == ("trunk", None, [1, 10, 20])
+    assert trunk.native_added is None
+
+
+def test_plan_adds_the_native_vlan_to_the_vlans_carried() -> None:
+    # A trunk with native VLAN 2 carrying only 253-254 drops VLAN 2's untagged
+    # traffic on NX-OS: the device on the port got no DHCP address (#12).
+    access = _port("Ethernet1/5", "access")
+    view = _view(1, 2, 253, 254)
+    trunk = plan_port_vlans(
+        access, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="253-254"
+    )
+    assert (trunk.native_vlan, trunk.allowed_vlans, trunk.native_added) == (2, [2, 253, 254], 2)
+    lines, _ = describe_port_vlans(access, trunk)
+    assert "VLANs carried: 1-4094 → 2,253-254." in lines
+    assert any(line.startswith("VLAN 2 is the native VLAN, so it is added") for line in lines)
+
+    # "none" still carries the native VLAN.
+    bare = plan_port_vlans(
+        access, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="none"
+    )
+    assert bare.allowed_vlans == [2] and bare.native_added == 2
+
+    # Only the native VLAN changes on a trunk: the carried list gains it.
+    existing = _port("Ethernet1/5", "trunk", native=1, allowed={1, 253, 254})
+    moved = plan_port_vlans(
+        existing, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="1,253-254"
+    )
+    assert (moved.native_vlan, moved.allowed_vlans, moved.native_added) == (2, [1, 2, 253, 254], 2)
+
+    # Already carried as typed, or nothing else changes: nothing to say.
+    carried = _port("Ethernet1/5", "trunk", native=2, allowed={2, 253, 254})
+    same = plan_port_vlans(
+        carried, view, mode="trunk", access_vlan="1", native_vlan="2", allowed="253-254"
+    )
+    assert same.empty
+
+
+def test_native_carried() -> None:
+    assert _port("Ethernet1/5", "trunk", native=2, allowed={253, 254}).native_carried is False
+    assert _port("Ethernet1/5", "trunk", native=2, allowed={2, 253}).native_carried is True
+    assert _port("Ethernet1/5", "trunk", native=2).native_carried is True  # carries every VLAN
+    assert _port("Ethernet1/5", "access", native=2, allowed={253}).native_carried is True
 
 
 def test_plan_refuses_what_the_switch_would_take_badly() -> None:

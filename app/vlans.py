@@ -56,6 +56,12 @@ class PortVlans:
         """The trunk's VLANs as the switch writes them: "1-4094", "1,10-12"."""
         return format_vlan_list(self.allowed)
 
+    @property
+    def native_carried(self) -> bool:
+        """False for a trunk whose native VLAN is not among the VLANs it carries:
+        the switch then drops the port's untagged traffic."""
+        return self.mode != "trunk" or self.native_vlan in self.allowed
+
     def uses(self, vlan_id: int) -> bool:
         """True when deleting the VLAN would cut this port off from traffic it carries.
 
@@ -186,6 +192,8 @@ class PortVlanChange:
     access_vlan: int | None = None
     native_vlan: int | None = None
     allowed_vlans: list[int] | None = None
+    # The native VLAN, when the form's VLANs carried left it out and NXray added it.
+    native_added: int | None = None
 
     @property
     def empty(self) -> bool:
@@ -211,7 +219,10 @@ def plan_port_vlans(
     Only the settings of the chosen mode count: an access port's form leaves
     the trunk settings alone and the other way round. Access and native
     VLANs must exist (the switch would accept a missing one and leave the
-    port passing no traffic). Raises ValueError with the reason.
+    port passing no traffic). A trunk's native VLAN is added to the VLANs it
+    carries when the form leaves it out: NX-OS forwards untagged traffic only
+    in a native VLAN the trunk carries, so the device on the port would get
+    nothing, not even DHCP. Raises ValueError with the reason.
     """
     if not current.switchport:
         raise ValueError(f"{current.name} is a routed port, which has no VLANs")
@@ -235,11 +246,14 @@ def plan_port_vlans(
             access_vlan=access if access != current.access_vlan or new_mode else None,
         )
     native = existing(native_vlan, "native VLAN")
-    wanted = frozenset(parse_vlan_list(allowed))
+    typed = frozenset(parse_vlan_list(allowed))
+    wanted = typed | {native}
+    changed = wanted != current.allowed
     return PortVlanChange(
         mode=new_mode,
         native_vlan=native if native != current.native_vlan else None,
-        allowed_vlans=sorted(wanted) if wanted != current.allowed else None,
+        allowed_vlans=sorted(wanted) if changed else None,
+        native_added=native if changed and native not in typed else None,
     )
 
 
@@ -268,6 +282,11 @@ def describe_port_vlans(current: PortVlans, change: PortVlanChange) -> tuple[lis
         lines.append(
             f"VLANs carried: {current.allowed_text} → {format_vlan_list(change.allowed_vlans)}."
         )
+        if change.native_added is not None:
+            lines.append(
+                f"VLAN {change.native_added} is the native VLAN, so it is added to the VLANs "
+                "carried: a trunk passes untagged traffic only in a native VLAN it carries."
+            )
         removed = current.allowed - new
         if removed and (change.mode is None and current.mode == "trunk"):
             warnings.append(

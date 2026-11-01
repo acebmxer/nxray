@@ -248,6 +248,36 @@ def test_switching_to_trunk_warns(logged_in: TestClient, enabled: FakeSwitch) ->
     assert "still used by Ethernet1/3" in _post(logged_in, "/vlans/delete", vlan_id="20").text
 
 
+def test_trunk_carries_its_native_vlan(logged_in: TestClient, enabled: FakeSwitch) -> None:
+    # Native VLAN 2 with only 253-254 carried passed no untagged traffic (#12).
+    for vlan in (2, 253, 254):
+        enabled.vlans[vlan] = f"v{vlan}"
+    fields = {"mode": "trunk", "native_vlan": "2", "allowed": "253-254"}
+    ask = _text(_port_vlans(logged_in, **fields).text)
+    assert "VLANs carried: 1-4094 → 2,253-254." in ask
+    assert "VLAN 2 is the native VLAN, so it is added to the VLANs carried" in ask
+    _port_vlans(logged_in, confirm="yes", **fields)
+    assert _config_requests(enabled) == [
+        [
+            "interface Ethernet1/3",
+            "switchport mode trunk",
+            "switchport trunk native vlan 2",
+            "switchport trunk allowed vlan 2,253-254",
+        ]
+    ]
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
+    assert "VLANs carried 2,253-254" in text and "leaves out native VLAN" not in text
+
+
+def test_port_page_flags_a_trunk_without_its_native_vlan(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.vlans[2] = "v2"
+    enabled.port_state["Ethernet1/3"] = {"mode": "trunk", "native": "2", "allowed": "253-254"}
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/3"}).text)
+    assert "leaves out native VLAN 2: untagged traffic on this port is dropped" in text
+
+
 @pytest.mark.parametrize(
     ("fields", "message"),
     [

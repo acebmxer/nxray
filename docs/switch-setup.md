@@ -470,8 +470,13 @@ up to 254 plain characters; NX-API refuses `?` and `;`.
 VLANs** sets the mode (access: one untagged VLAN; trunk: several tagged
 VLANs plus one native, untagged VLAN), the access or native VLAN (picked
 from the VLANs on the switch) and the VLANs a trunk carries (typed as
-`10,20-30`, `all` or `none`; this replaces the whole list). Only the
-settings of the chosen mode are sent, and only those that change. The
+`10,20-30`, `all` or `none`; this replaces the whole list). NXray always
+adds the native VLAN to that list, and the confirm page says so when it
+does: NX-OS forwards untagged traffic only in a native VLAN the trunk
+carries, so with native VLAN 2 and `253-254` the device on the port would
+get nothing, not even DHCP. The port page flags a trunk set up that way on
+the switch. Only the settings of the chosen mode are sent, and only those
+that change. The
 confirm page warns when the port switches between access and trunk (the
 device on it may lose its connection for a moment), when an access port
 moves to another VLAN, and when a trunk stops carrying VLANs.

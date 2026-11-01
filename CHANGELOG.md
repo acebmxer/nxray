@@ -543,7 +543,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   first). Each port's own page now shows its mode and VLANs and can set
   them: access or trunk, the access or native VLAN, and the VLANs a trunk
   carries, with a confirm step that warns when a port switches between
-  access and trunk, moves to another VLAN or stops carrying VLANs. VLAN
+  access and trunk, moves to another VLAN or stops carrying VLANs. A trunk
+  always carries its native VLAN: NXray adds it to the VLANs carried when
+  the form leaves it out, and the confirm page says so, since NX-OS drops a
+  trunk's untagged traffic when its native VLAN is not carried (native VLAN 2
+  with only 253-254 carried gave the device on the port no DHCP address). A
+  port page flags a trunk already set up that way on the switch (#12). VLAN
   names are checked before they reach the switch, which silently ignores
   names longer than 32 characters. Turning on port changes now also allows
   these VLAN changes: on a new install, one button turns on both (and the
