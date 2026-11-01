@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Activity — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Activity</h1>
+<p class="lead">Who changed what through NXray: the switch, NXray's accounts and settings, and configuration backups. Newest first; kept for {{ keep_days }} days. Sign-ins and pages that only read are not listed.</p>
+
+<section class="card">
+  <form method="get" action="/activity" class="row-form search-form">
+    <select name="user" aria-label="Account">
+      <option value="" {% if not user %}selected{% endif %}>Every account</option>
+      {% for u in users %}<option value="{{ u }}" {% if user == u %}selected{% endif %}>{{ u }}</option>{% endfor %}
+    </select>
+    <select name="area" aria-label="Area">
+      <option value="" {% if not area %}selected{% endif %}>Every area</option>
+      {% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+    </select>
+    <input name="search" aria-label="Search" type="text" value="{{ search }}" maxlength="100" spellcheck="false" placeholder="A port, a VLAN, an address">
+    <button type="submit" class="btn btn-quiet">Show</button>
+    {% if user or area or search %}<a class="btn btn-quiet" href="/activity">Show all</a>{% endif %}
+    <a class="btn btn-quiet" href="/activity.csv?user={{ user|urlencode }}&amp;area={{ area|urlencode }}&amp;search={{ search|urlencode }}">Download CSV</a>
+  </form>
+  {% if entries %}
+  <p class="note">{{ entries|length }} change{{ "" if entries|length == 1 else "s" }}{% if entries|length == limit %} (the newest {{ limit }}; narrow the list to see older ones){% endif %}.</p>
+  <table class="table table-devices">
+    <thead><tr><th>When</th><th>Account</th><th>Area</th><th>Change</th><th>Switch</th></tr></thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td class="mono">{{ e.at|utc }}</td>
+        <td>{{ e.username }}</td>
+        <td>{{ e.area }}</td>
+        <td class="wrap">{{ e.what }}</td>
+        <td>{{ e.switch or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% elif user or area or search %}
+  <p>No change matches.</p>
+  {% else %}
+  <p>Nothing has been changed through NXray yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

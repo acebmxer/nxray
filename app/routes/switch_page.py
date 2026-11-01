@@ -12,6 +12,8 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import (
     admin_required,
+    current_role,
+    note_activity,
     operator_required,
     paused_message,
     redirect,
@@ -21,12 +23,14 @@ from app.dependencies import (
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
 from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes, missing_changes
+from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import render_port_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.routing import render_routing_page
+from app.routes.security import render_acls_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.vlans import render_vlans_page
@@ -189,6 +193,13 @@ def switch_setup(
     with open_db(settings.db_path) as conn:
         set_config_saved(conn, result.config_saved)
         record_test_result(conn, ok=True, message="Setup signed in with the new account.")
+    note_activity(
+        request,
+        username,
+        "Switch",
+        f"Set up the switch {result.switch_hostname} with the account {account_name}",
+        host,
+    )
 
     if result.config_saved:
         notice = (
@@ -294,6 +305,13 @@ def switch_address(
         _setup_lock.release()
 
     log.info("switch address changed from %s to %s", connection.host, host)
+    note_activity(
+        request,
+        username,
+        "Switch",
+        f"Changed the switch address from {connection.host} to {host}",
+        host,
+    )
     notice = f"NXray now uses {host}, port {port_number}. {status.message}"
     if status.system.hostname != connection.switch_hostname:
         notice += (
@@ -408,6 +426,7 @@ def switch_repair(
     if (host, port_number) != (connection.host, connection.port):
         done += f" NXray now uses {host}, port {port_number}."
     log.info("ran setup again for switch account %s on %s", name, host)
+    note_activity(request, username, "Switch", f"Ran setup again for the account {name}", host)
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
     return _render(
@@ -481,6 +500,13 @@ def switch_enable_changes(
             role_version=ROLE_VERSION,
             vlan_interfaces=result.vlan_interfaces,
         )
+    note_activity(
+        request,
+        username,
+        "Switch",
+        f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION}",
+        connection.host,
+    )
     account = connection.username
     count = result.port_count
     settings_words = (
@@ -516,17 +542,23 @@ def switch_enable_changes(
         "change the switch's hostname, banner, clock, NTP, DNS, logging and SNMP settings and "
         "read its configuration on the Switch admin page"
     )
+    security_words = (
+        "make and delete IPv4 and IPv6 ACLs and apply them on the ACLs page, set port security "
+        "on the Port security page, and read the saved configuration and keep checkpoints for "
+        "backups on the Config page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-            "static route, routing protocol, spanning tree and switch admin changes are on: "
+            "static route, routing protocol, spanning tree, switch admin and security and config "
+            "changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
-            f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, and "
-            f"{admin_words}. "
+            f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
+            f"{admin_words}, and {security_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -562,7 +594,9 @@ def switch_enable_changes(
             parts.append(protocol_words)
         if connection.role_version < 11:
             parts.append(stp_words)
-        parts.append(admin_words)
+        if connection.role_version < 12:
+            parts.append(admin_words)
+        parts.append(security_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -602,8 +636,8 @@ def switch_save(
 
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``, ``protocols``,
-    ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree`` or
-    ``switch-admin``); the answer is shown there.
+    ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
+    ``switch-admin``, ``acls``, ``port-security`` or ``config``); the answer is shown there.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -630,6 +664,12 @@ def switch_save(
             return render_spanning_tree_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
+        if back == "acls":
+            return render_acls_page(request, username, error=error, notice=notice)
+        if back == "port-security":
+            return render_port_security_page(request, username, error=error, notice=notice)
+        if back == "config" and current_role(request) == "admin":
+            return render_config_page(request, username, error=error, notice=notice)
         return _render(request, username, error=error, notice=notice)
 
     connection, target, error = stored_switch(request)
@@ -649,6 +689,7 @@ def switch_save(
     with open_db(settings.db_path) as conn:
         set_unsaved_changes(conn, False)
     log.info("saved the switch configuration on %s", connection.host)
+    note_activity(request, username, "Switch", "Saved the configuration", connection.host)
     return answer(notice="Saved: the switch keeps its current configuration on restart.")
 
 
@@ -664,6 +705,7 @@ def switch_forget(
     if connection is None:
         return redirect("/switch")
     log.info("forgot the switch %s (account %s)", connection.host, connection.username)
+    note_activity(request, username, "Switch", "Forgot the switch", connection.host)
     return _render(
         request,
         username,

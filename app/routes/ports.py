@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import (
     login_required,
+    note_activity,
     operator_required,
     require_csrf,
     stored_switch,
@@ -421,6 +422,7 @@ def port_change(
     with open_db(settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("port change on %s by %s: %s", connection.host, username, summary)
+    note_activity(request, username, "Ports", summary, connection.host)
 
     # Read the port back so the page shows what the switch now reports.
     connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
@@ -548,6 +550,7 @@ def port_vlans_change(
     with open_db(settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
+    note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
     connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
         request, name
@@ -608,6 +611,12 @@ def port_label(
     except ValueError as exc:
         return again(error=f"Label not saved: {exc}.", label=label, status_code=400)
     log.info("port label on %s by %s: %r", name, username, stored)
+    note_activity(
+        request,
+        username,
+        "Ports",
+        f"{name}: label set to {stored!r}" if stored else f"{name}: label removed",
+    )
     done = f'{name} now has the label "{stored}".' if stored else f"{name} no longer has a label."
     return again(notice=f"Done: {done} Labels are kept in NXray only; the switch is not changed.")
 
@@ -754,6 +763,7 @@ def port_settings_change(
     with open_db(request.app.state.settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
+    note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
     connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
         request, name
@@ -852,6 +862,13 @@ def port_breakout(
     with open_db(request.app.state.settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("%s of %s by %s (%s)", plan.action, plan.port, username, plan.mapping)
+    note_activity(
+        request,
+        username,
+        "Ports",
+        f"{plan.action} of {plan.port} ({plan.mapping})",
+        connection.host,
+    )
 
     # The port this page was for is gone now; show the one that replaced it.
     shown = f"{plan.port}/1" if plan.action == "split" else plan.port
@@ -977,6 +994,7 @@ def port_discovery_change(
     with open_db(request.app.state.settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("CDP/LLDP change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
+    note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
     connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
         request, name

@@ -23,6 +23,7 @@
 </select>
 {% elif f.kind == "vlan" %}
 <select id="{{ uid }}" name="{{ name }}">
+  {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
   {% for v in page.vlans %}<option value="{{ v }}" {% if value == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
 </select>
 {% elif f.kind == "vrf" %}

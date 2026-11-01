@@ -8,7 +8,14 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
-from app.dependencies import admin_required, login_required, require_csrf, stored_switch, templates
+from app.dependencies import (
+    admin_required,
+    login_required,
+    note_activity,
+    require_csrf,
+    stored_switch,
+    templates,
+)
 from app.features import OFF_WARNING, ON_WARNINGS, FeatureView, load_features
 from app.nxapi import NxapiClient, NxapiError
 from app.routes.ports import change_refused
@@ -150,6 +157,9 @@ def feature_set(
         username,
         state,
         feature.command,
+    )
+    note_activity(
+        request, username, "Features", f"Turned {state} {feature.command}", connection.host
     )
     notice = f"Done: {feature.label} is {state}. {NOT_SAVED}"
     if feature.name == "interface-vlan" and turn_on and not connection.role_vlan_interfaces:

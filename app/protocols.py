@@ -91,6 +91,9 @@ KINDS = (
     "usevrf",  # the VRF a server is reached in: default (sent as ""), management or another
     "hhmm",  # a time of day written 02:00
     "hhmmss",  # a time of day written 14:30:00
+    "aclnet4",  # an ACL's IPv4 match: any, a network 192.0.2.0/24, or one address (as /32)
+    "aclnet6",  # an ACL's IPv6 match: any, a network 2001:db8::/32, or one address (as /128)
+    "l4port",  # a TCP or UDP port match: 22, 1024-65535, >1023, <1024 or !=23
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -332,6 +335,48 @@ def _multicast_address(value: str, label: str) -> str:
     return str(address)
 
 
+def _acl_network(value: str, version: int, label: str) -> str:
+    """'any', a network with its length, or one address written as /32 (/128)."""
+    if value.lower() == "any":
+        return "any"
+    example = "192.0.2.0/24" if version == 4 else "2001:db8::/32"
+    if "/" not in value:
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{label} is any, a network such as {example}, or one address"
+            ) from exc
+        if address.version != version:
+            raise ValueError(f"{label} must be an IPv{version} address")
+        return f"{address}/{address.max_prefixlen}"
+    return _network(value, version, label)
+
+
+_L4PORT = re.compile(r"^(eq|gt|lt|neq|>|<|!=)?\s*([0-9]{1,5})$")
+_L4RANGE = re.compile(r"^(?:range\s+)?([0-9]{1,5})\s*[- ]\s*([0-9]{1,5})$")
+_L4WORDS = {None: "eq", ">": "gt", "<": "lt", "!=": "neq"}
+
+
+def _l4port(value: str, label: str) -> str:
+    """'22' -> 'eq 22', '1024-65535' -> 'range 1024 65535', '>1023' -> 'gt 1023',
+    '<1024' -> 'lt 1024', '!=23' -> 'neq 23'; the words themselves are taken too."""
+    wrong = f"{label} is a port (22), a range (1024-65535), >1023, <1024 or !=23"
+    if match := _L4RANGE.fullmatch(value):
+        low, high = (int(g) for g in match.groups())
+        if high > 65535 or low >= high:
+            raise ValueError(f"{label}: a range is two ports from 0 to 65535, lower first")
+        return f"range {low} {high}"
+    match = _L4PORT.fullmatch(value)
+    if not match:
+        raise ValueError(wrong)
+    number = int(match.group(2))
+    if number > 65535:
+        raise ValueError(f"{label}: ports go from 0 to 65535")
+    word = _L4WORDS.get(match.group(1), match.group(1))
+    return f"{word} {number}"
+
+
 def check_value(spec: Field, raw: str) -> str:
     """``raw`` as the switch should get it, or "" for an empty optional field.
 
@@ -408,6 +453,10 @@ def check_value(spec: Field, raw: str) -> str:
         return _domain(value, spec.label)
     if kind == "usevrf":
         return _use_vrf(value, spec.label)
+    if kind in ("aclnet4", "aclnet6"):
+        return _acl_network(value, 4 if kind == "aclnet4" else 6, spec.label)
+    if kind == "l4port":
+        return _l4port(value, spec.label)
     if kind in ("hhmm", "hhmmss"):
         return _time_of_day(value, spec.label, kind == "hhmmss")
     if kind == "vrf":

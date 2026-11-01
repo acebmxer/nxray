@@ -122,7 +122,9 @@ def test_changes_off_before_role_version_12(
     _db(settings, "UPDATE switch_connection SET role_version = 11")
     page = logged_in.get("/switch-admin").text
     assert "Switch admin changes are off" in _text(page)
-    assert "Turn on switch admin changes" in _text(logged_in.get("/switch").text)
+    assert "Turn on switch admin and security and config changes" in _text(
+        logged_in.get("/switch").text
+    )
     refused = _change(logged_in, scope="system", setting="hostname", action="set",
                       v_name="core-1")  # fmt: skip
     assert refused.status_code == 400
@@ -145,7 +147,10 @@ def test_role_version_11_turns_on_switch_admin_without_a_wait(
         },
     )
     text = _text(response.text)
-    assert "Switch admin changes are on: nxray may now also change the switch's hostname" in text
+    assert (
+        "Switch admin and security and config changes are on: nxray may now also change the "
+        "switch's hostname" in text
+    )
     assert "there is no wait" in text
     assert "rule 164 permit command conf t ; snmp-server community * group network-operator" in (
         enabled.ssh_lines

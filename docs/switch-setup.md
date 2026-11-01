@@ -110,11 +110,11 @@ new role, because signing in would make the wait start over.
 Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
-interface, VRF, static route, routing protocol, spanning tree and switch admin
-changes**, tick the box and press **Turn on port, VLAN, port settings, feature,
-neighbor, port-channel, VLAN interface, VRF, static route, routing protocol,
-spanning tree and switch admin changes**. One press turns on all twelve, with a
-single wait.
+interface, VRF, static route, routing protocol, spanning tree, switch admin and
+security and config changes**, tick the box and press **Turn on port, VLAN, port
+settings, feature, neighbor, port-channel, VLAN interface, VRF, static route,
+routing protocol, spanning tree, switch admin and security and config
+changes**. One press turns on all thirteen, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -294,6 +294,26 @@ NXray then:
          rule 168 permit command conf t ; snmp-server host * use-vrf *
          rule 169 permit command conf t ; no snmp-server host * use-vrf *
          rule 170 permit command show running-config
+         rule 171 permit command conf t ; ip access-list *
+         rule 172 permit command conf t ; no ip access-list *
+         rule 173 permit command conf t ; ipv6 access-list *
+         rule 174 permit command conf t ; no ipv6 access-list *
+         rule 175 permit command conf t ; interface * ; ip access-group *
+         rule 176 permit command conf t ; interface * ; no ip access-group *
+         rule 177 permit command conf t ; interface * ; ip port access-group *
+         rule 178 permit command conf t ; interface * ; no ip port access-group *
+         rule 179 permit command conf t ; interface * ; ipv6 traffic-filter *
+         rule 180 permit command conf t ; interface * ; no ipv6 traffic-filter *
+         rule 181 permit command conf t ; interface * ; ipv6 port traffic-filter *
+         rule 182 permit command conf t ; interface * ; no ipv6 port traffic-filter *
+         rule 183 permit command conf t ; interface * ; switchport port-security
+         rule 184 permit command conf t ; interface * ; switchport port-security *
+         rule 185 permit command conf t ; interface * ; no switchport port-security
+         rule 186 permit command conf t ; interface * ; no switchport port-security *
+         rule 187 permit command show startup-config
+         rule 188 permit command checkpoint *
+         rule 189 permit command no checkpoint *
+         rule 190 permit command show checkpoint *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -329,11 +349,14 @@ port-channels, and read the spanning tree lines of the running configuration;
 change the switch's hostname, login banner, time zone, summer time and clock,
 NTP servers, DNS domain, lookups and servers, logging (servers, log file,
 console, terminal, timestamps), SNMP contact and location, read-only SNMP
-communities and trap receivers, and read the running configuration; and save
-the configuration. The switch
+communities and trap receivers, and read the running configuration; make,
+change and delete IPv4 and IPv6 ACLs and apply them to those interfaces and
+ports; set port security on the front ports; read the saved configuration and
+make, list and delete checkpoints; and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
-accounts, SNMP users and read-write SNMP communities, and other switch-wide
-settings. Every NXray install
+accounts, SNMP users and read-write SNMP communities, rolling the switch back
+(the Config page asks for the admin login each time for that), and other
+switch-wide settings. Every NXray install
 on a switch uses the same `nxray-ports` role.
 
 **The wait.** The switch keeps an account's permissions in its NX-API
@@ -342,7 +365,8 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol, spanning tree and switch admin changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree, switch admin and security and config
+changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -351,11 +375,11 @@ went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
-routing protocol, spanning tree or switch admin changes existed.** Their role
-has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1 to 47, 1 to 50, 1 to
-54, 1 to 62, 1 to 128 or 1 to 134. The Switch page then shows a card named for
-what is missing (for example **Spanning tree and switch admin changes** or
-**Switch admin changes**): type the
+routing protocol, spanning tree, switch admin or security and config changes
+existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
+to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134 or 1 to 170. The Switch
+page then shows a card named for what is missing (for example **Switch admin
+and security and config changes** or **Security and config changes**): type the
 admin login,
 tick the box and press its **Turn on** button. NXray types the same lines as above (adding the missing
 rules) and saves the configuration. There is no wait this time: the switch
@@ -712,6 +736,59 @@ role predates this gets a **Turn on switch admin changes** card on the Switch
 page; it adds rules 135 to 170 with no wait. These rules and lines follow
 Cisco's NX-OS 9.3 configuration guides and have not yet been tried on a
 switch.
+
+**ACLs.** The **Security** menu opens the **ACLs** page: every IPv4 and IPv6
+ACL with its numbered entries, where each applies, and a table of them all,
+read from the running configuration. Operators and admins can, each after a
+confirm page that shows the lines, make and delete an ACL, add an entry
+(number, permit or deny, protocol, source and destination as `any`, a network
+or one address, TCP, UDP or SCTP ports as `22`, `1024-65535`, `>1023`, `<1024`
+or `!=23`, and logging) or a remark, remove one by its number (the switch
+refuses a number in use, so changing an entry is removing it and adding it
+again), count matches per entry, and apply an ACL: in or out on a VLAN
+interface, routed port or routed port-channel (`ip access-group`, `ipv6
+traffic-filter`), or in on a switched front port or port-channel (`ip port
+access-group`, `ipv6 port traffic-filter`). Every ACL ends with an unwritten
+"deny everything else", so applying one can cut off the session you are
+using; the confirm page says so. MAC ACLs, object groups and VLAN access maps
+are left out.
+
+**Port security.** The **Port security** page, linked from ACLs, needs the
+port-security feature (turn it on on the Features page). For each switched
+front port it shows and sets whether port security is on, the most addresses
+the port accepts (default 1), what happens on a violation (shut the port
+down, the default; restrict; or protect), whether learned addresses are kept
+in the configuration (sticky), known addresses (with a VLAN on trunk ports),
+and when learned addresses are forgotten.
+
+**Config.** The **Config** page (admins only: a configuration holds every
+setting of the switch, SNMP communities and password hashes included) shows
+whether the running configuration differs from the saved one, line by line,
+with a Save config button. **Take a backup now** stores the running
+configuration in NXray, with who took it and an optional note, and makes a
+switch checkpoint of the same moment named `nxray-<number>`. Backups can be
+downloaded as text, compared with the running or saved configuration or with
+each other, and deleted (their checkpoint with them). **Roll back to this**
+shows what would change and asks for the switch admin login: NXray's own
+account has no rule to roll back, so a stolen NXray cannot undo the switch's
+configuration wholesale. NXray then takes a backup of the configuration it is
+about to replace, and sends `rollback running-config checkpoint nxray-<n>`
+with the admin login, once; the password is never stored. NX-OS rolls back all
+or nothing: if a line fails, nothing changes. The switch loses its checkpoints
+when its configuration is erased; the backup's text stays in NXray. An install
+whose role predates this gets a **Turn on security and config changes** card on
+the Switch page; it adds rules 171 to 190 with no wait. Without them the
+Config page still keeps backups (without checkpoints) once switch admin
+changes are on. These rules and lines follow Cisco's NX-OS 9.3 configuration
+guides and have not yet been tried on a switch.
+
+**Activity.** The **Activity** page (admins only) lists every change made
+through NXray, newest first, with the account, the page it was made on, the
+change in plain words (passwords and SNMP communities masked) and the switch's
+address: port, VLAN, routing, protocol, spanning tree, switch admin, ACL, port
+security and feature changes, Save config, backups and rollbacks, the Switch
+page's actions, and changes to NXray's own accounts and settings. Filter it by
+account, page or text, or download it as CSV. Lines are kept for a year.
 
 **Taking port changes away.** In an SSH session on the switch as admin:
 

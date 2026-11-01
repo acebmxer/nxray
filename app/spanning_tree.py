@@ -865,7 +865,7 @@ def parse_spanning_tree(
 
     trees = _trees(detail)
     by_vlan = {text(t.get("tree_id")): t for t in trees if text(t.get("tree_tree_type")) == "vlan"}
-    vlan_numbers = _vlan_numbers(vlan_brief)
+    vlan_numbers = stp_vlan_numbers(vlan_brief)
     tree_rows: list[tuple[str, ...]] = []
     port_rows: list[tuple[str, ...]] = []
     problem_rows: list[tuple[str, ...]] = []
@@ -1099,7 +1099,9 @@ def parse_spanning_tree(
     return ProtocolView(tuple(instances), tables, tuple(notes))
 
 
-def _vlan_numbers(vlan_brief: dict[str, Any]) -> list[int]:
+def stp_vlan_numbers(vlan_brief: dict[str, Any]) -> list[int]:
+    """The VLAN numbers in ``show vlan brief`` up to 3967 (the switch keeps the rest
+    for itself), lowest first."""
     numbers = []
     for row in table_rows(vlan_brief, "TABLE_vlanbriefxbrief", "ROW_vlanbriefxbrief"):
         value = text(row.get("vlanshowbr-vlanid"))
@@ -1160,7 +1162,7 @@ def load_spanning_tree_page(client: NxapiClient) -> SpanningTreePage:
     except NxapiCommandError:
         config = None  # the role predates the rule that allows it
     view = parse_spanning_tree(bodies, config)
-    vlans = tuple(str(n) for n in _vlan_numbers(bodies[3]))
+    vlans = tuple(str(n) for n in stp_vlan_numbers(bodies[3]))
     return SpanningTreePage(SPANNING_TREE, view, tuple(switch_port_names(bodies[4])), vlans)
 
 

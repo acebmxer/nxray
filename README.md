@@ -29,7 +29,9 @@ OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set the switch's hostname, banner, clock and NTP, DNS, logging and
-SNMP and read its log, turn switch features
+SNMP and read its log, make and apply IPv4 and IPv6 ACLs, set port security,
+keep backups of the switch's configuration, compare them and roll back to one,
+see who changed what in an activity log, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
@@ -134,7 +136,7 @@ default: *(built)*.
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs, port security, an activity log of
-    who changed what in NXray, config diff, backup and rollback. *(planned)*
+    who changed what in NXray, config diff, backup and rollback. *(built)*
 19. **Alerts** by e-mail and webhook. *(planned)*
 20. **Several switches** in one NXray. *(planned)*
 

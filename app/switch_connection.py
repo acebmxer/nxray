@@ -111,6 +111,12 @@ class SwitchConnection:
         later)."""
         return self.changes_enabled and self.role_version >= 12
 
+    @property
+    def security_changes_enabled(self) -> bool:
+        """True once that role includes the security and config rules (role version 13
+        or later): ACLs, port security, the saved configuration and checkpoints."""
+        return self.changes_enabled and self.role_version >= 13
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

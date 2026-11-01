@@ -14,6 +14,7 @@ from app.db import open_db
 from app.dependencies import (
     current_role,
     login_required,
+    note_activity,
     operator_required,
     require_csrf,
     stored_switch,
@@ -249,6 +250,7 @@ def mac_aging_change(
     with open_db(request.app.state.settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("MAC aging time on %s set to %d by %s", connection.host, seconds, username)
+    note_activity(request, username, "Neighbors", lines[0], connection.host)
     return _render(request, username, notice=f"Done: {lines[0]} {NOT_SAVED}")
 
 
@@ -299,6 +301,7 @@ def static_mac_add(
         connection.host,
         username,
     )
+    note_activity(request, username, "Neighbors", lines[0], connection.host)
     return _render(request, username, notice=f"Done: {lines[0]} {NOT_SAVED}")
 
 
@@ -343,6 +346,13 @@ def static_mac_remove(
         entry.vlan,
         connection.host,
         username,
+    )
+    note_activity(
+        request,
+        username,
+        "Neighbors",
+        f"Removed the static entry for {format_mac(entry.mac)} in VLAN {entry.vlan}",
+        connection.host,
     )
     done = f"the static entry for {format_mac(entry.mac)} in VLAN {entry.vlan} is removed."
     return _render(request, username, notice=f"Done: {done} {NOT_SAVED}")
@@ -419,4 +429,5 @@ def learned_macs_clear(
         log.warning("clearing learned addresses refused: %s", refused)
         return answer(error=refused)
     log.info("cleared learned addresses on %s by %s: %s", connection.host, username, lines[0])
+    note_activity(request, username, "Neighbors", lines[0], connection.host)
     return answer(notice=f"Done: {clear.done} Static entries stay; there is nothing to save.")

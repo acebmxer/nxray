@@ -54,6 +54,17 @@ servers typed inside a VRF in ``context_name_servers``. ``show running-config``
 ``clock_sets``. ``show logging last <n>`` prints ``log_text``. ``show clock``
 and ``show ntp peer-status`` answer from bodies shaped after Cisco's NX-API
 reference, never recorded on cisco-25gb.
+
+ACL lines and the ACL and port security lines of interfaces live in
+``security_lines``, kept the same way as the protocol lines (``ip access-list
+web ; 10 permit tcp any any eq 22``, ``interface Ethernet1/3 ; switchport
+port-security``); port security lines need the port-security feature on.
+``show running-config`` prints them too. ``checkpoint <name>`` keeps a copy of
+the hostname, the admin and the security lines in ``checkpoints``, and
+``rollback running-config checkpoint <name>`` puts them back. ``show
+startup-config`` prints what the last save kept (the running configuration as
+it was at the start until then); ``show checkpoint summary`` lists the
+checkpoints. Their shapes follow Cisco's guides, never recorded on cisco-25gb.
 """
 
 from __future__ import annotations
@@ -339,6 +350,14 @@ class FakeSwitch:
     log_text: str = field(
         default_factory=lambda: FIXTURES.joinpath("show_logging_last_doc.txt").read_text()
     )
+    # ACL and port security lines (see the module notes).
+    security_lines: list[str] = field(default_factory=list)
+    # Checkpoints: name -> (hostname, admin lines, security lines).
+    checkpoints: dict[str, tuple[str, list[str], list[str]]] = field(default_factory=dict)
+    # show startup-config; None: the running configuration as at the start.
+    startup_text: str | None = None
+    # What the switch prints after a rollback; contains "failed" to refuse it.
+    rollback_text: str = "Rollback completed successfully.\n"
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -491,23 +510,153 @@ class FakeSwitch:
             wanted = int(cmd.split()[-1])
             lines = self.log_text.splitlines(keepends=True)[-wanted:]
             return {"jsonrpc": "2.0", "result": {"msg": "".join(lines)}, "id": ident}
-        if cmd not in ("show running-config spanning-tree", "show running-config"):
+        known = (
+            "show running-config spanning-tree",
+            "show running-config",
+            "show startup-config",
+            "show checkpoint summary",
+        )
+        if cmd not in known:
             return _error(ident, f"% Not recorded by the fake switch: {cmd}\n")
         if "network-admin" not in self.roles_of(user) and not self._role_matches(user, cmd, None):
             return _error(ident, "% Permission denied for the role\n")
-        text = self.stp_config() if cmd.endswith("spanning-tree") else self.running_config()
+        if cmd == "show startup-config":
+            text = self.startup_text if self.startup_text is not None else self._start_config
+        elif cmd == "show checkpoint summary":
+            text = self.checkpoint_summary()
+        else:
+            text = self.stp_config() if cmd.endswith("spanning-tree") else self.running_config()
         return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
 
     def running_config(self) -> str:
         """``show running-config``, with only what the fake switch keeps: the hostname,
         the switch admin lines, the VRFs and their name servers."""
-        out = [f"hostname {self.hostname}", *self.admin_lines]
+        out = [
+            "!Command: show running-config",
+            "!Time: Sun Nov  1 10:00:00 2026",
+            f"hostname {self.hostname}",
+            *self.admin_lines,
+        ]
         contexts = ["management", *self.vrfs]
         for vrf in contexts:
             servers = [a for a, v in self.context_name_servers if v == vrf]
             out.append(f"vrf context {vrf}")
             out += [f"  ip name-server {a}" for a in servers]
+        places: dict[str, list[str]] = {}
+        for path in self.security_lines:
+            place, _, line = path.partition(" ; ")
+            lines = places.setdefault(place, [])
+            if line:
+                lines.append(line)
+        for place, lines in places.items():
+            out += [place, *(f"  {line}" for line in lines)]
         return "\n".join(out) + "\n"
+
+    def __post_init__(self) -> None:
+        self._start_config = self.running_config()
+
+    def checkpoint_summary(self) -> str:
+        """``show checkpoint summary``, as Cisco's guide shows it."""
+        out = ["User Checkpoint Summary", "-" * 80]
+        for number, name in enumerate(self.checkpoints, start=1):
+            out += [
+                f"{number}) {name}:",
+                "Created by nxray",
+                "Created at Sun, 10:00:00 01 Nov 2026",
+                "Size is 1,234 bytes",
+                "Description: None",
+                "",
+            ]
+        return "\n".join(out) + "\n"
+
+    def _security(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """An ACL, port security, checkpoint or rollback line, or None when ``cmd`` is
+        not one."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        kind = context[0] if context else None
+        if kind is None and (m := re.fullmatch(r"(no )?checkpoint (\S+)", cmd)):
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            name = m.group(2)
+            if m.group(1):
+                if name not in self.checkpoints:
+                    return _error(ident, f"% Checkpoint {name} does not exist\n"), context
+                del self.checkpoints[name]
+                return _ok(ident, None), context
+            if name in self.checkpoints:
+                return _error(ident, f"% Checkpoint {name} already exists\n"), context
+            self.checkpoints[name] = (
+                self.hostname,
+                list(self.admin_lines),
+                list(self.security_lines),
+            )
+            return _ok(ident, {"msg": "Done\n"}), context
+        if kind is None and (m := re.fullmatch(r"rollback running-config checkpoint (\S+)", cmd)):
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            if m.group(1) not in self.checkpoints:
+                return _error(ident, f"% Checkpoint {m.group(1)} does not exist\n"), context
+            if "fail" in self.rollback_text.lower():
+                return _ok(ident, self.rollback_text), context
+            hostname, admin, security = self.checkpoints[m.group(1)]
+            self.hostname, self.admin_lines, self.security_lines = (
+                hostname,
+                list(admin),
+                list(security),
+            )
+            return _ok(ident, self.rollback_text), context
+        if kind is None and (m := re.fullmatch(r"(no )?(ip|ipv6) access-list (\S+)", cmd)):
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return denied, context
+            place = f"{m.group(2)} access-list {m.group(3)}"
+            if m.group(1):
+                if place not in self.security_lines:
+                    return _error(ident, "% ACL not found\n"), context
+                self._record(cmd, self.security_lines)
+                return _ok(ident, None), None
+            if place not in self.security_lines:
+                self.security_lines.append(place)
+            return _ok(ident, None), ("acl", place)
+        if kind == "acl" and context:
+            path = f"{context[1]} ; {cmd}"
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+                return denied, context
+            words = cmd.split()
+            if words[0] == "no" and len(words) == 2:
+                if not any(
+                    p.startswith(f"{context[1]} ; {words[1]} ") for p in self.security_lines
+                ):
+                    return _error(ident, "% Entry not found\n"), context
+            elif words[0].isdigit() and any(
+                p.startswith(f"{context[1]} ; {words[0]} ") for p in self.security_lines
+            ):
+                return _error(ident, "% Duplicate sequence number\n"), context
+            self._record(path, self.security_lines)
+            return _ok(ident, None), context
+        if kind == "interface" and context:
+            bare = cmd.removeprefix("no ")
+            acl = re.fullmatch(
+                r"(?:ip (?:port )?access-group|ipv6 (?:port )?traffic-filter) \S+ (?:in|out)", bare
+            )
+            port_security = bare == "switchport port-security" or bare.startswith(
+                "switchport port-security "
+            )
+            if not (acl or port_security):
+                return None
+            if port_security and not self._feature_on("eth-port-sec"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            path = f"interface {context[1]} ; {cmd}"
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", context[1])):
+                return denied, context
+            if not cmd.startswith("no "):
+                place = f"interface {context[1]}"
+                if place not in self.security_lines:
+                    self.security_lines.append(place)
+            self._record(path, self.security_lines)
+            return _ok(ident, None), context
+        return None
 
     def _admin(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -658,6 +807,8 @@ class FakeSwitch:
             return stp_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
+        if security_reply := self._security(user, is_admin, cmd, ident, context):
+            return security_reply
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
@@ -908,6 +1059,7 @@ class FakeSwitch:
             finally:
                 self._copying = False
             self.saved = True
+            self.startup_text = self.running_config()
             return _ok(ident, None), context
         if not is_admin:
             return denied, context

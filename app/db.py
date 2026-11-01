@@ -148,6 +148,30 @@ _MIGRATIONS: list[str] = [
     """
     ALTER TABLE switch_connection ADD COLUMN role_vlan_interfaces INTEGER NOT NULL DEFAULT 0;
     """,
+    # 10 -> 11: the activity log (app/activity.py): who changed what through NXray,
+    # and backups of the switch's configuration (app/config_tools.py). checkpoint
+    # names the switch checkpoint made with a backup, "" for none.
+    """
+    CREATE TABLE activity (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        at        REAL NOT NULL,
+        username  TEXT NOT NULL,
+        area      TEXT NOT NULL,
+        what      TEXT NOT NULL,
+        switch    TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX idx_activity_at ON activity (at);
+
+    CREATE TABLE config_backups (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at  REAL NOT NULL,
+        created_by  TEXT NOT NULL,
+        switch      TEXT NOT NULL,
+        note        TEXT NOT NULL DEFAULT '',
+        checkpoint  TEXT NOT NULL DEFAULT '',
+        config      TEXT NOT NULL
+    );
+    """,
 ]
 
 

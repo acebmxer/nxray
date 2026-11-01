@@ -23,7 +23,9 @@ from app.dependencies import (
 from app.history import start_sampler
 from app.logging_conf import configure_logging
 from app.routes import (
+    activity,
     auth,
+    config_page,
     dashboard,
     features,
     health,
@@ -33,6 +35,7 @@ from app.routes import (
     ports,
     protocols,
     routing,
+    security,
     settings_page,
     spanning_tree,
     switch_admin,
@@ -141,6 +144,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(protocols.router)
     app.include_router(spanning_tree.router)
     app.include_router(switch_admin.router)
+    app.include_router(security.router)
+    app.include_router(config_page.router)
+    app.include_router(activity.router)
     app.include_router(features.router)
     app.include_router(users.router)
     app.include_router(settings_page.router)

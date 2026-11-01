@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
+from app.activity import record_activity, utc_time
 from app.db import open_db
 from app.nxapi import SwitchTarget
 from app.ports import human_bytes, human_rate
@@ -31,6 +32,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["app_version"] = __version__
 templates.env.filters["bytes"] = human_bytes
 templates.env.filters["rate"] = human_rate
+templates.env.filters["utc"] = utc_time
 
 # Sent on every response. The pages use no inline script, no inline style and
 # nothing from another site, so the policy can be strict. frame-ancestors and
@@ -183,6 +185,15 @@ def stored_switch(
             return connection, load_target(conn, settings.secret_key), None
         except DecryptionError:
             return connection, None, KEY_CHANGED_MESSAGE
+
+
+def note_activity(request: Request, username: str, area: str, what: str, switch: str = "") -> None:
+    """Record a change in the activity log (``app/activity.py``), after it worked.
+
+    ``switch`` is the switch's address when the switch itself was changed.
+    """
+    with open_db(request.app.state.settings.db_path) as conn:
+        record_activity(conn, username, area, what, switch)
 
 
 def safe_next(target: str) -> str:

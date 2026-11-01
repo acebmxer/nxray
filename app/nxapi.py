@@ -582,6 +582,23 @@ def _address_commands(
     return [f"no {address_line(a, s)}" for a, s in remove] + [address_line(a, s) for a, s in add]
 
 
+# NXray's own switch checkpoints (Config page): "nxray-" and the backup's number.
+CHECKPOINT_PREFIX = "nxray-"
+_CHECKPOINT_NAME = re.compile(r"^nxray-[0-9]{1,9}$")
+
+# How long a rollback may take: the switch compares and applies the whole
+# configuration.
+ROLLBACK_TIMEOUT = 300.0
+
+
+def validate_checkpoint_name(name: str) -> str:
+    """Return ``name`` if it is one of NXray's checkpoints (``nxray-<n>``), else raise
+    ValueError: NXray never makes, deletes or rolls back to another one."""
+    if not _CHECKPOINT_NAME.fullmatch(name):
+        raise ValueError(f"{name!r} is not one of NXray's checkpoints (nxray-<number>)")
+    return name
+
+
 def validate_show_command(command: str) -> str:
     """Return the command stripped, or raise ValueError if it is not a lone show."""
     cleaned = command.strip()
@@ -1275,6 +1292,74 @@ class NxapiClient:
 
         change = build_admin_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_acl(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the ACLs page: make or delete an IPv4 or IPv6 ACL, add or
+        remove one of its entries, or apply one to an interface or port.
+
+        The lines are built from the page's description and the checked values
+        (``acls.build_acl_change``), as for spanning tree.
+        """
+        # Imported here: the ACL description uses this module's checks.
+        from app.acls import build_acl_change
+
+        change = build_acl_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_port_security(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Port security page: one port's port security setting.
+
+        The lines are built from the page's description and the checked values
+        (``port_security.build_port_security_change``).
+        """
+        # Imported here: the port security description uses this module's checks.
+        from app.port_security import build_port_security_change
+
+        change = build_port_security_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def create_checkpoint(self, name: str) -> None:
+        """``checkpoint nxray-<n>``: the switch keeps a copy of its running
+        configuration under that name, to roll back to later."""
+        self._checkpoint_command(f"checkpoint {validate_checkpoint_name(name)}")
+
+    def delete_checkpoint(self, name: str) -> None:
+        """``no checkpoint nxray-<n>``: delete one of NXray's checkpoints."""
+        self._checkpoint_command(f"no checkpoint {validate_checkpoint_name(name)}")
+
+    def rollback_to_checkpoint(self, name: str) -> str:
+        """``rollback running-config checkpoint nxray-<n>``: make the running
+        configuration that checkpoint again. NX-OS rolls back atomically: when a
+        line fails, nothing changes. Sent with the switch admin login (the Config
+        page asks for it each time); NXray's own role has no rule for it. Returns
+        what the switch printed."""
+        command = f"rollback running-config checkpoint {validate_checkpoint_name(name)}"
+        timeout = max(self._target.timeout, ROLLBACK_TIMEOUT)
+        (body,) = self._send([command], [command], timeout, allow_text=True)
+        text = str(body.get("text", body.get("msg", "")))
+        if "fail" in text.lower() or "error" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
+        return text
+
+    def _checkpoint_command(self, command: str) -> None:
+        (body,) = self._send([command], [command], self._target.timeout, allow_text=True)
+        text = str(body.get("text", body.get("msg", "")))
+        if "fail" in text.lower() or "error" in text.lower() or "invalid" in text.lower():
+            raise NxapiCommandError(f"{command!r}: {text.strip()}")
 
     def save_config(self) -> None:
         """``copy running-config startup-config``: keep changes over a reboot.

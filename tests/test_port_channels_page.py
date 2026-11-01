@@ -167,19 +167,16 @@ def test_role_version_5_offers_port_channel_changes_without_a_wait(
     assert "Port-channel changes are off." in page and "Make port-channel" not in page
     switch_page = _text(logged_in.get("/switch").text)
     assert (
-        "Turn on port-channel, VLAN interface, VRF, static route, routing protocol, "
-        "spanning tree and switch admin changes"
+        "Turn on port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
+        "tree, switch admin and security and config changes"
     ) in switch_page
     assert "make, change and delete port-channels" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
     assert (
-        "Port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree and "
-        "switch admin "
-        "changes are on: "
-        "nxray may now also "
-        "make, "
-        "change and delete" in text
+        "Port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
+        "switch admin and security and config changes are on: nxray may now also make, change "
+        "and delete" in text
     )
     assert "there is no wait" in text
     assert "rule 47 permit command conf t ; lacp system-priority *" in enabled.ssh_lines

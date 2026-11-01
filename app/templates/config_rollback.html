@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Confirm the rollback — NXray{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/config">← Config</a></p>
+<h1 class="page-title">Roll back to backup {{ backup.id }}</h1>
+
+<section class="card">
+  {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+  <p class="lead confirm-summary">The switch makes its running configuration the one it kept as {{ backup.checkpoint }}{% if backup.note %} ({{ backup.note }}){% endif %}, taken {{ backup.created_at|utc }} by {{ backup.created_by }}.</p>
+  <p class="warning">{{ warning }}</p>
+  {% if diff %}
+  <p>What changes: {{ counts[0] }} line{{ "" if counts[0] == 1 else "s" }} of the running configuration go (-), {{ counts[1] }} come back (+).</p>
+  {% with diff = diff %}{% include "_diff.html" %}{% endwith %}
+  {% else %}
+  <p>The running configuration is the same as the backup: the rollback changes nothing.</p>
+  {% endif %}
+  <p class="note">NXray's own account may not roll the switch back, so this uses the switch's admin login, once, over NX-API. The password is never stored. The switch rolls back all or nothing: if a line fails, nothing changes. The rollback is not saved until you press Save config.</p>
+  <form method="post" action="/config/rollback" class="stack form-narrow" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="id" value="{{ backup.id }}">
+    <input type="hidden" name="confirm" value="yes">
+    <label for="admin_user">Switch admin username</label>
+    <input id="admin_user" name="admin_user" type="text" value="{{ admin_user }}" spellcheck="false" autocomplete="off">
+    <label for="admin_password">Password</label>
+    <input id="admin_password" name="admin_password" type="password" autocomplete="off">
+    <div class="button-row">
+      <button type="submit" class="btn btn-primary">Yes, roll back</button>
+      <a class="btn btn-quiet" href="/config">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

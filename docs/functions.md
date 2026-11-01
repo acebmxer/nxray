@@ -56,6 +56,11 @@ prose columns; those are a reviewer's job.
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
+| Read, make, change or apply IPv4 and IPv6 ACLs | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
+| Read or change a port's port security | `app/port_security.py` (`load_port_security_page`, `build_port_security_change`); command from `NxapiClient.configure_port_security` |
+| Keep a backup of the switch's configuration, compare two configurations, or roll back | `app/config_tools.py` (`store_backup`, `config_diff`, `load_configs`); commands from `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` |
+| Split a configuration's text into its top-level lines and the lines under them | `app/config_tools.py`, `config_sections` |
+| Record a change in the activity log, or list the log | `dependencies.note_activity` from a route; `app/activity.py` (`record_activity`, `list_activity`) |
 | Read the switch's route table | `app/routing_protocols.py`, `load_overview` / `parse_routes` |
 | Read, add or remove static routes | `app/routing.py` (`load_routing`, `plan_add_static_route`, `plan_remove_static_route`); command from `NxapiClient.set_static_route` |
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
@@ -123,10 +128,11 @@ really invalidates rather than merely asking the browser to forget.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `add_security_headers` | `(request, call_next) -> Response` | HTTP middleware adding `SECURITY_HEADERS` to every response | `main.create_app` | v0.1.0 |
-| `admin_required` | `(request) -> str` | FastAPI dependency for the Switch and Users pages; raises `Forbidden` for other roles | `routes/switch_page`, `routes/users` | v0.1.0 |
+| `admin_required` | `(request) -> str` | FastAPI dependency for the Switch, Users, Config and Activity pages; raises `Forbidden` for other roles | `routes/switch_page`, `routes/users`, `routes/config_page`, `routes/activity` | v0.1.0 |
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
+| `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
@@ -164,6 +170,7 @@ raises, all handled in `main.create_app`.
 | `validate_routed_interface` | `(name: str) -> str` | A name an address can go on: `Vlan1`-`Vlan4094`, a front port or a port-channel; never mgmt0 | `NxapiClient.set_interface_addresses`, `routing` | v0.1.0 |
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
+| `validate_checkpoint_name` | `(name: str) -> str` | Refuses any checkpoint name but NXray's own, `nxray-<number>` | `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` | v0.1.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
 | `validate_vlan_id` | `(value: int \| str) -> int` | A VLAN number 1-4094, else `ValueError` | VLAN client methods, `vlans`, `routes/vlans` | v0.1.0 |
 | `validate_vlan_name` | `(name: str) -> str` | A VLAN name the switch stores: 1-32 letters, digits, `.`, `-`, `_` | `NxapiClient.configure_vlan`, `routes/vlans` | v0.1.0 |
@@ -213,7 +220,13 @@ change on a routing protocol page; the lines come from
 `configure_spanning_tree(scope, setting, action, ident, values)` (one change on
 the Spanning tree page; the lines come from `spanning_tree.build_stp_change`),
 `configure_switch_admin(scope, setting, action, ident, values)` (one change on
-the Switch admin page; the lines come from `switch_admin.build_admin_change`)
+the Switch admin page; the lines come from `switch_admin.build_admin_change`),
+`configure_acl(...)` and `configure_port_security(...)` (the same for the ACLs
+and Port security pages, from `acls.build_acl_change` and
+`port_security.build_port_security_change`), `create_checkpoint(name)` and
+`delete_checkpoint(name)` (NXray's own `nxray-<n>` switch checkpoints),
+`rollback_to_checkpoint(name)` (sent only with the switch admin login the
+Config page asks for; NX-OS rolls back all or nothing)
 and `save_config()`; each builds its commands from checked values.
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
@@ -352,7 +365,9 @@ install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
 VLANs, 3 also port settings, 4 also features, 5 also CDP and LLDP per port and
 the MAC address table, 6 also port-channels and LACP, 7 also VLAN interfaces
 and IPv4 and IPv6 addresses, with `VLAN_INTERFACE_PERMIT` in the port list, 8
-also VRFs, 9 also static routes). `EnableResult.had_role`
+also VRFs, 9 also static routes, 10 also routing protocols, 11 also spanning
+tree, 12 also switch admin and reading the running configuration, 13 also ACLs,
+port security, reading the saved configuration and NXray's checkpoints). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -488,6 +503,22 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `switch_admin_change` | `(request, username, form) -> Response` | `POST /switch-admin/change`: one change, after a confirm page showing the lines (role version 12); a new hostname is stored too | router | v0.1.0 |
 | `check_admin_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, and the default VRF where a VRF's own configuration is meant | `SITE.check_place` in `routes/switch_admin` | v0.1.0 |
 | `switch_log_page` | `(request, username, lines, search, level) -> Response` | `GET /switch-admin/log?lines=&search=&level=`: the newest 50, 200 or 1000 lines of the switch's log, newest first, kept to those containing `search` and of `level` or worse; every role | router | v0.1.0 |
+| `render_acls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the ACLs page with a message | `acls_page`, `switch_save` | v0.1.0 |
+| `acls_page` | `(request, username) -> Response` | `GET /security/acls`: the IPv4 and IPv6 ACLs, their entries and where they apply, read live; every role looks, operators and admins change | router | v0.1.0 |
+| `acls_change` | `(request, username, form) -> Response` | `POST /security/acls/change`: one change, after a confirm page showing the lines (role version 13) | router | v0.1.0 |
+| `check_acl_place` | `(page, ident) -> None` | Refuses a layer 3 interface or switched port the switch lacks, or of the other kind | `ACL_SITE.check_place` in `routes/security` | v0.1.0 |
+| `render_port_security_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Port security page with a message | `port_security_page`, `switch_save` | v0.1.0 |
+| `port_security_page` | `(request, username) -> Response` | `GET /security/port-security`: each port's port security, read live; every role looks, operators and admins change | router | v0.1.0 |
+| `port_security_change` | `(request, username, form) -> Response` | `POST /security/port-security/change`: one change, after a confirm page (role version 13, the port-security feature on) | router | v0.1.0 |
+| `check_port_security_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port | `PORT_SECURITY_SITE.check_place` in `routes/security` | v0.1.0 |
+| `render_config_page` | `(request, username, *, error=None, notice=None, a="", b="") -> Response` | Reads the switch and shows the Config page: running against saved, the backups with their checkpoints, and a comparison of `a` with `b` | the `routes/config_page` routes, `switch_save` | v0.1.0 |
+| `config_page` | `(request, username, a, b) -> Response` | `GET /config?a=&b=`: the Config page, comparing two of `running`, `startup` and `backup-<n>`; admins only | router | v0.1.0 |
+| `config_download` | `(number, request, username) -> Response` | `GET /config/backup/<n>.txt`: one backup's text as a file; admins only | router | v0.1.0 |
+| `config_backup` | `(request, username, csrf, note) -> Response` | `POST /config/backup`: store the running configuration, and make its `nxray-<n>` checkpoint when the role allows | router | v0.1.0 |
+| `config_backup_delete` | `(request, username, csrf, id, confirm) -> Response` | `POST /config/backup/delete`: delete a backup and its checkpoint on the switch, after a confirm page | router | v0.1.0 |
+| `config_rollback` | `(request, username, csrf, id, admin_user, admin_password, confirm) -> Response` | `POST /config/rollback`: shows what changes and asks for the switch admin login, then takes a backup of the configuration it replaces and rolls back with that login (never stored) | router | v0.1.0 |
+| `activity_page` | `(request, username, user, area, search) -> Response` | `GET /activity?user=&area=&search=`: who changed what through NXray, newest first; admins only | router | v0.1.0 |
+| `activity_download` | `(request, username, user, area, search) -> Response` | `GET /activity.csv`: the same list as a CSV file | router | v0.1.0 |
 | `check_stp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel on the switch, or a VLAN the switch lacks | `SITE.check_place` | v0.1.0 |
 | `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
 | `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, the VRFs and the static routes, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
@@ -815,6 +846,7 @@ would take them out silently.
 | `parse_stp_config` | `(config: str) -> StpConfig` | `show running-config spanning-tree` text sorted by where each line applies: switch-wide lines, per-VLAN values, VLANs with spanning tree off, the MST region, MST instance priorities, each port's lines | `parse_spanning_tree` | v0.1.0 |
 | `parse_spanning_tree` | `(bodies, config_text=None) -> ProtocolView` | The page from the five reads and the configuration text (None when the role may not read it): the switch, each VLAN, the MST region and instances, each port in a tree or with settings, with values prefilled; trees, ports and problem ports tables | `SPANNING_TREE.parse`, `load_spanning_tree_page` | v0.1.0 |
 | `switch_port_names` | `(brief) -> list[str]` | The front ports and port-channels in `show interface brief` that are not routed | `parse_spanning_tree`, `load_spanning_tree_page` | v0.1.0 |
+| `stp_vlan_numbers` | `(vlan_brief) -> list[int]` | The VLAN numbers in `show vlan brief` up to 3967, lowest first | `parse_spanning_tree`, `load_spanning_tree_page`, `port_security.load_port_security_page` | v0.1.0 |
 | `load_spanning_tree_page` | `(client) -> SpanningTreePage` | One request for the reads, then the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/spanning_tree` | v0.1.0 |
 | `build_stp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Spanning tree page | `NxapiClient.configure_spanning_tree`, `routes/spanning_tree` | v0.1.0 |
 
@@ -831,6 +863,60 @@ would take them out silently.
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
+
+## `app/acls.py` — ACLs: IPv4 and IPv6 access lists and where they apply
+
+Described with the parts of `app/protocols.py`: scopes for each kind of ACL (made
+and deleted from the page, entries as settings) and for applying one to a layer
+3 interface or a switched port. New field kinds in `app/protocols.py`:
+`aclnet4` and `aclnet6` (any, a network, or one address as /32 or /128) and
+`l4port` (22, 1024-65535, >1023, <1024, !=23 as `eq`, `range`, `gt`, `lt`, `neq`).
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_acl_config` | `(config) -> AclConfig` | The ACLs, their entry lines, statistics, and the interfaces and ports they apply on, from `show running-config` | `parse_acls` | v0.1.0 |
+| `parse_acls` | `(bodies, config_text=None) -> ProtocolView` | The ACLs page: each ACL with its entries and where it applies, each interface with its ACLs, and a table of every ACL; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
+| `layer3_names` | `(brief) -> tuple[str, ...]` | VLAN interfaces up to Vlan254 and routed ports and port-channels in `show interface brief` | `load_acls_page` | v0.1.0 |
+| `load_acls_page` | `(client) -> AclPage` | One request for the interfaces, one for the configuration text | `routes/security` | v0.1.0 |
+| `build_acl_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the ACLs page | `NxapiClient.configure_acl`, `routes/security` | v0.1.0 |
+
+## `app/port_security.py` — Port security on the switched front ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_port_security_config` | `(config) -> dict[str, PortSecurity]` | Every port with a `switchport port-security` line, and its settings and known addresses | `parse_port_security` | v0.1.0 |
+| `parse_port_security` | `(bodies, config_text=None) -> ProtocolView` | The Port security page: each port's settings with NX-OS's defaults filled in, and a table | `PORT_SECURITY.parse`, `load_port_security_page` | v0.1.0 |
+| `load_port_security_page` | `(client) -> PortSecurityPage` | One request for the feature, ports and VLANs, one for the configuration text; the page names the port-security feature when it is off | `routes/security` | v0.1.0 |
+| `build_port_security_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Port security page | `NxapiClient.configure_port_security`, `routes/security` | v0.1.0 |
+
+## `app/config_tools.py` — backups, checkpoints, comparing and rolling back
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `clean_config` | `(config) -> list[str]` | A configuration's lines without the `!Time:` and similar lines about when it was printed | `config_diff` | v0.1.0 |
+| `config_sections` | `(config) -> list[tuple[str, list[str]]]` | Each top-level line with the indented lines under it, stripped | `acls.parse_acl_config`, `port_security.parse_port_security_config` | v0.1.0 |
+| `config_diff` | `(first, second, context=3) -> list[DiffLine]` | What changes from one configuration to another, with unchanged lines around each change and gaps between | `routes/config_page` | v0.1.0 |
+| `diff_counts` | `(diff) -> tuple[int, int]` | Lines removed and added in a comparison | `routes/config_page` | v0.1.0 |
+| `parse_checkpoints` | `(output) -> list[str]` | The checkpoint names in `show checkpoint summary` | `load_configs` | v0.1.0 |
+| `checkpoint_name` | `(backup_id) -> str` | `nxray-<id>`, the switch checkpoint of a backup | `routes/config_page` | v0.1.0 |
+| `validate_note` | `(note) -> str` | A backup's note: one printable line of at most 200 characters | `store_backup`, `routes/config_page` | v0.1.0 |
+| `store_backup` | `(conn, *, config, created_by, switch, note="", now=None) -> int` | Stores a configuration; its backup number | `routes/config_page` | v0.1.0 |
+| `set_backup_checkpoint` | `(conn, backup_id, checkpoint) -> None` | Notes the switch checkpoint made with a backup | `routes/config_page` | v0.1.0 |
+| `list_backups` | `(conn, limit=200) -> list[Backup]` | The backups, newest first, without their text | `routes/config_page` | v0.1.0 |
+| `get_backup` | `(conn, backup_id) -> tuple[Backup, str] \| None` | One backup and its text | `routes/config_page` | v0.1.0 |
+| `delete_backup` | `(conn, backup_id) -> bool` | Deletes a backup from NXray | `routes/config_page` | v0.1.0 |
+| `load_configs` | `(client) -> SwitchConfigs` | The running and saved configurations and the checkpoints, as text; None for what the role may not read | `routes/config_page` | v0.1.0 |
+| `load_running` | `(client) -> str` | `show running-config` as text | `routes/config_page` | v0.1.0 |
+
+## `app/activity.py` — the activity log
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `record_activity` | `(conn, username, area, what, switch="", now=None) -> None` | Records one change and deletes lines older than `KEEP_DAYS` | `dependencies.note_activity` | v0.1.0 |
+| `list_activity` | `(conn, *, username="", area="", search="", limit=500) -> list[Activity]` | The changes newest first, filtered by account, area and text (taken literally) | `routes/activity` | v0.1.0 |
+| `activity_choices` | `(conn) -> tuple[list[str], list[str]]` | The accounts and areas in the log, for the filters | `routes/activity` | v0.1.0 |
+| `utc_time` | `(at) -> str` | A stored time as `2026-11-01 14:30:05 UTC`; the `utc` template filter | `dependencies` (the filter) | v0.1.0 |
+| `activity_csv` | `(entries) -> str` | The entries as CSV, with cells that start like a formula made inert | `routes/activity` | v0.1.0 |
 
 ## `app/routing.py` — VLAN interfaces, routed ports, their addresses, VRFs and static routes
 

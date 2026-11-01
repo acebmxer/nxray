@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import (
     login_required,
+    note_activity,
     operator_required,
     require_csrf,
     stored_switch,
@@ -108,6 +109,7 @@ def _changed(request: Request, connection, username: str, what: str) -> None:
     with open_db(settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("VLAN change on %s by %s: %s", connection.host, username, what)
+    note_activity(request, username, "VLANs", what, connection.host)
 
 
 @router.post("/vlans/create", response_class=HTMLResponse)

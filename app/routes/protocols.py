@@ -24,6 +24,7 @@ from app.db import open_db
 from app.dependencies import (
     current_role,
     login_required,
+    note_activity,
     operator_required,
     require_csrf,
     stored_switch,
@@ -364,6 +365,7 @@ def site_change(
     if site.after is not None:
         site.after(request, change)
     log.info("%s on %s by %s", change.describe, connection.host, username)
+    note_activity(request, username, proto.name, change.describe, connection.host)
     done = f"Done: {change.describe}" + (f" {NOT_SAVED}" if change.config else "")
     return render_site_page(request, username, proto, site, notice=done)
 

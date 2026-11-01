@@ -11,6 +11,42 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Activity log.** A new **Activity** page (admins only, in the menu) lists
+  every change made through NXray, newest first: who made it, on which page,
+  the change in plain words (passwords and SNMP communities masked) and the
+  switch's address. It covers port, VLAN, port-channel, routing, protocol,
+  spanning tree, switch admin, ACL, port security, neighbor and feature
+  changes, Save config, backups and rollbacks, the Switch page's actions, and
+  changes to NXray's own accounts and settings. Filter it by account, page or
+  text, or download it as CSV. Lines are kept for a year.
+
+- **Config: backups, comparing and rollback.** A new **Config** page (admins
+  only) shows whether the running configuration differs from the saved one,
+  line by line, with a Save config button. **Take a backup now** keeps the
+  running configuration in NXray with a note, and the switch keeps a
+  checkpoint of the same moment (`nxray-<number>`). Backups can be downloaded,
+  compared with the running or saved configuration or with each other, and
+  deleted with their checkpoint. **Roll back to this** shows what changes and
+  asks for the switch admin login, used once and never stored: NXray's own
+  account may not roll the switch back. NXray first backs up the
+  configuration it replaces, so a rollback can be undone; NX-OS rolls back all
+  or nothing.
+
+- **ACLs and port security.** A new **Security** menu opens the **ACLs** page:
+  every IPv4 and IPv6 ACL with its entries and where it applies. Operators and
+  admins can, after a confirm page that shows the lines, make and delete ACLs,
+  add and remove entries (permit or deny, protocol, source and destination as
+  any, a network or one address, TCP, UDP and SCTP ports, logging) and
+  remarks, count matches, and apply an ACL in or out on a VLAN interface or
+  routed port, or in on a switched port or port-channel. The **Port
+  security** page sets, for each switched front port, port security on or off,
+  the most addresses, what happens on a violation, sticky learning, known
+  addresses and aging; it needs the port-security feature. NXray's
+  `nxray-ports` role gets rules 171 to 190 (role version 13); an older role
+  gets a **Turn on security and config changes** button, with no wait. The
+  lines follow Cisco's NX-OS 9.3 guides and have not yet been tried on a
+  switch.
+
 - **Switch admin.** A new **Switch admin** page (in the menu) shows the
   switch's hostname, its time and where it comes from, and the NTP servers it
   talks to; once switch admin changes are on, also its time zone and summer

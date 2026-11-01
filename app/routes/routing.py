@@ -15,6 +15,7 @@ from app.db import open_db
 from app.dependencies import (
     current_role,
     login_required,
+    note_activity,
     operator_required,
     require_csrf,
     stored_switch,
@@ -213,6 +214,7 @@ def _done(request: Request, username: str, lines: list[str], what: str, connecti
     with open_db(request.app.state.settings.db_path) as conn:
         set_unsaved_changes(conn, True)
     log.info("%s on %s by %s", what, connection.host, username)
+    note_activity(request, username, "Routing", what, connection.host)
     return _render(request, username, notice=f"Done: {' '.join(lines)} {NOT_SAVED}")
 
 

@@ -55,8 +55,12 @@ configuration; it may change the switch admin settings (hostname, login
 banner, time zone, summer time, `clock set`, NTP servers, DNS domain, lookups
 and servers, logging, SNMP contact and location, read-only SNMP communities
 and SNMP v2c trap receivers) and read the whole running configuration (which
-holds the switch's password hashes and SNMP communities); and it may run `copy running-config startup-config`. The switch refuses it anything else,
-including mgmt0, accounts, SNMP users and read-write SNMP communities. Anyone who takes over NXray can do whatever that account
+holds the switch's password hashes and SNMP communities); it may make, change,
+delete and apply IPv4 and IPv6 ACLs, set port security on the permitted ports,
+read the saved configuration and make, list and delete checkpoints; and it may run `copy running-config startup-config`. The switch refuses it anything else,
+including mgmt0, accounts, SNMP users, read-write SNMP communities and rolling
+the switch back to a checkpoint (NXray asks for the admin login each time for
+that). Anyone who takes over NXray can do whatever that account
 can, so with port changes on that includes turning ports off, moving them
 to other VLANs, sending a device's traffic to the wrong port or dropping it
 with a static MAC address, pulling ports out of a port-channel or deleting it,
@@ -67,7 +71,8 @@ routing protocol (and telling other routers about it), taking over a shared
 gateway address with HSRP or VRRP, changing spanning tree (a wrong port
 type, filter or mode can make a loop or stop traffic on every VLAN),
 renaming the switch, pointing its clock, DNS or logging at other servers,
-adding a read-only SNMP community,
+adding a read-only SNMP community, applying an ACL that drops traffic
+(also NXray's own), turning on port security that shuts a port down,
 and turning features on or off: turning off a feature
 deletes its settings (LACP takes its port-channels with it), and turning on
 `telnet` opens an unencrypted sign-in. NXray's own pages refuse to turn off
@@ -90,6 +95,9 @@ role` and `show nxapi`, runs `username <name> password <random> role
 network-operator` for NXray's existing account name only (a new password,
 or the account made again), `username <name> role nxray-ports` when port
 changes were on and the account lost the role, and saves the
+configuration. Rolling back on the Config page sends one command with it over
+NX-API, `rollback running-config checkpoint nxray-<n>` (NXray's own
+checkpoints only), and the password is removed from any error shown.
 configuration. Changing the switch address needs no admin login: NXray
 signs in at the new address with its own account before storing it.
 

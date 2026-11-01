@@ -19,9 +19,12 @@ again, turning switch features on and off, setting how long learned MAC addresse
 adding and removing static MAC addresses, clearing learned ones, and the
 switch's LACP priority; spanning tree; the switch admin settings (hostname,
 banner, clock and NTP, DNS, logging, SNMP contact, location, read-only
-communities and trap receivers) and reading the running configuration; and
+communities and trap receivers) and reading the running configuration; IPv4
+and IPv6 ACLs and where they apply, port security on the ports, reading the
+saved configuration and making and deleting checkpoints; and
 saving the configuration. Everything else (mgmt0, a VLAN's own on/off state,
-accounts, SNMP users and read-write communities, other switch-wide settings)
+accounts, SNMP users and read-write communities, rolling the switch back,
+other switch-wide settings)
 stays refused by the switch itself, not just by NXray.
 
 NX-API refuses the ";" these rules need, so the role is typed over SSH with
@@ -55,7 +58,7 @@ neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
-admin rules.
+admin rules, 13 the security and config rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -413,11 +416,46 @@ ADMIN_RULES = (
     "rule 170 permit command show running-config",
 )
 
+# Security and config rules, added in ROLE_VERSION 13: IPv4 and IPv6 ACLs (a
+# rule naming the ACL's mode covers its entries, as rule 63 does a router's
+# lines), applying them to interfaces (routed and VLAN interfaces with
+# "ip access-group" and "ipv6 traffic-filter", switched ports with their "port"
+# forms), port security on the ports, reading the saved configuration for the
+# Config page's comparison, and making, listing and deleting checkpoints. NXray
+# names its checkpoints nxray-<n> (nxapi.validate_checkpoint_name). Rolling back
+# is left out on purpose: NXray rolls back with the switch admin login typed on
+# the Config page, never with its own account. Written after Cisco's NX-OS 9.3
+# Security and System Management Configuration Guides and the shapes of the
+# rules proven before; not yet tried on a switch. The port list stays as it
+# was, so this needs no SSH save and no wait.
+SECURITY_RULES = (
+    "rule 171 permit command conf t ; ip access-list *",
+    "rule 172 permit command conf t ; no ip access-list *",
+    "rule 173 permit command conf t ; ipv6 access-list *",
+    "rule 174 permit command conf t ; no ipv6 access-list *",
+    "rule 175 permit command conf t ; interface * ; ip access-group *",
+    "rule 176 permit command conf t ; interface * ; no ip access-group *",
+    "rule 177 permit command conf t ; interface * ; ip port access-group *",
+    "rule 178 permit command conf t ; interface * ; no ip port access-group *",
+    "rule 179 permit command conf t ; interface * ; ipv6 traffic-filter *",
+    "rule 180 permit command conf t ; interface * ; no ipv6 traffic-filter *",
+    "rule 181 permit command conf t ; interface * ; ipv6 port traffic-filter *",
+    "rule 182 permit command conf t ; interface * ; no ipv6 port traffic-filter *",
+    "rule 183 permit command conf t ; interface * ; switchport port-security",
+    "rule 184 permit command conf t ; interface * ; switchport port-security *",
+    "rule 185 permit command conf t ; interface * ; no switchport port-security",
+    "rule 186 permit command conf t ; interface * ; no switchport port-security *",
+    "rule 187 permit command show startup-config",
+    "rule 188 permit command checkpoint *",
+    "rule 189 permit command no checkpoint *",
+    "rule 190 permit command show checkpoint *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 12
+ROLE_VERSION = 13
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -432,6 +470,7 @@ _ADDED_BY_VERSION = {
     10: "routing protocol",
     11: "spanning tree",
     12: "switch admin",
+    13: "security and config",
 }
 
 
@@ -486,8 +525,9 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     return [
         f"role name {ROLE_NAME}",
-        "description NXray: ports, port-channels, VLANs, layer 3, spanning tree, features, "
-        "MAC, switch admin, save",
+        # Kept short: NX-OS takes up to 128 characters here.
+        "description NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
+        "switch admin, ACLs, port security, checkpoints, save",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
@@ -500,6 +540,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *PROTOCOL_RULES,
         *STP_RULES,
         *ADMIN_RULES,
+        *SECURITY_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,
