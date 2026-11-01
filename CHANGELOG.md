@@ -9,6 +9,16 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
+**The first stable release of NXray: all 20 stages of the roadmap, from the
+dashboard and the ports to VLANs, layer 3, spanning tree, security, alerts and
+several switches in one NXray.** A new install needs only
+`docker-compose.yml` and `nxray.env` (see `docs/installation.md`). Coming from
+a beta: put `ghcr.io/acebmxer/nxray:latest` (or `:0.1.0`) in the compose
+file's `image:` line in place of `:beta`, then `docker compose pull` and
+`docker compose up -d`; the data volume carries over.
+
 ### Added
 
 - **VLAN grid.** The VLANs page shows every VLAN against every port and
