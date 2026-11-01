@@ -70,6 +70,7 @@ from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, connection_error, read_switch
+from app.traffic import device_traffic, port_device
 from app.vlans import VlanView, describe_port_vlans, load_ports_with_vlans, plan_port_vlans
 
 router = APIRouter()
@@ -322,6 +323,7 @@ def render_ports_page(
             ),
             "back": PortsOrigin(show, color).fields,
             "devices": neighbors.for_port(open_port.name) if neighbors else None,
+            "device_traffic": device_traffic([open_port], neighbors) if neighbors else {},
             "chart": charts[0] if charts else None,
             "previous": ports_link(show, color, names[at - 1]),
             "next": ports_link(show, color, names[(at + 1) % len(names)]),
@@ -451,6 +453,9 @@ def _render_port(
     if status_code is None:
         status_code = 404 if ports is not None and port is None else 200
     devices = neighbors.for_port(name) if neighbors and port else None
+    # The port's traffic is a device's own only when it is alone on an access port.
+    traffic_reason = port_device(port, devices)[1] if port and devices else ""
+    port_traffic = device_traffic([port], neighbors) if port and neighbors else {}
     period = range_key(request.query_params.get("range"))
     charts = []
     if port:
@@ -475,6 +480,8 @@ def _render_port(
             "range": period,
             "ranges": RANGE_LABELS,
             "devices": devices,
+            "port_traffic": port_traffic,
+            "traffic_reason": traffic_reason,
             "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
             if neighbors and devices
             else {},

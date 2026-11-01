@@ -405,6 +405,9 @@
         </tbody>
       </table>
       {% if learned|length > 6 %}<p class="dim">and {{ learned|length - 6 }} more</p>{% endif %}
+      {% for item in drawer.device_traffic.values() %}
+      <p class="dim">Its traffic now (estimate): sends {{ item.sends_bits|rate }}, receives {{ item.receives_bits|rate }}.</p>
+      {% endfor %}
       {% endif %}
       {{ pf.clear_macs_form(forms, ctx) }}
       {% endif %}

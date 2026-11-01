@@ -11,6 +11,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Traffic per VLAN and per device, estimated.** The switch counts traffic
+  per port only, so NXray now works out two estimates from the port figures
+  it already reads, and labels them as such. A device alone on an access
+  port gets that port's traffic as its own (sends and receives): on the new
+  **Busiest devices** card and a **Traffic now** column of the MAC address
+  table on the Neighbors page, on a port's Connected devices card and in its
+  side panel. Each VLAN's access ports that are up are added up: a **Traffic
+  now** column on the VLANs page, from history's newest sample, and two
+  **Traffic per VLAN** charts on the History page. Trunks, port-channels and
+  ports with several devices behind them are left out, and the pages say so;
+  [Traffic per VLAN and per device](docs/traffic.md) explains each figure and
+  lists the read-only checks for measuring it instead (VLAN interface and
+  VLAN counters, sFlow). History now reads `show interface status` as well,
+  four read-only commands a sample instead of three, and the Neighbors page
+  reads `show interface` once more (#18).
+
 - **Switch accounts for NXray users.** An NXray user still exists only in
   NXray by default, but an admin can now also give them a local account on a
   switch with the same name and password, so people who use the command line

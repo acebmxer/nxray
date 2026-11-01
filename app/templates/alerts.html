@@ -16,7 +16,7 @@ again when the problem is over. Each problem is sent once when it starts, not ev
 
 {% if interval %}
 <p class="hint">The switch is checked each time history reads it, every {{ interval }} seconds,
-with the same three read-only commands; nothing more is asked of the switch.</p>
+with the same four read-only commands; nothing more is asked of the switch.</p>
 {% else %}
 <p class="warning">History is off (<code>NXRAY_HISTORY_INTERVAL=0</code>), so NXray never reads the
 switch on its own and no problem is noticed. Changes made through NXray are still sent when that is

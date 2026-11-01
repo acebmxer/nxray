@@ -194,7 +194,7 @@ def test_the_sampler_stores_one_sample_with_one_request(
 ) -> None:
     sampler = history.Sampler(settings, switch.transport)
     assert sampler.sample_once() is None
-    assert len(switch.requests) == 1  # all three commands in one NX-API request
+    assert len(switch.requests) == 1  # all four commands in one NX-API request
     assert {metric for metric, _, _ in _rows(settings)} >= {history.CPU, history.TEMPERATURE}
 
 
@@ -334,3 +334,145 @@ def test_numbers_in_the_legend_have_at_most_one_decimal() -> None:
 def test_axis_rates_drop_a_needless_decimal() -> None:
     assert history._rate(500_000_000) == "500 Mb/s"
     assert history._rate(1_500_000_000) == "1.5 Gb/s"
+
+
+# ---- each VLAN's traffic, estimated from its access ports ----
+
+
+def _parsed_with_vlans(up: dict[str, tuple[str, int, int]]):
+    """The recorded sample with ports up as {port: (VLAN, in, out)}."""
+    interfaces = load_fixture("show_interface")
+    for row in interfaces["TABLE_interface"]["ROW_interface"]:
+        if row["interface"] in up:
+            _, inward, outward = up[row["interface"]]
+            row.update(state="up", eth_inrate1_bits=str(inward), eth_outrate1_bits=str(outward))
+    statuses = load_fixture("show_interface_status")
+    for row in statuses["TABLE_interface"]["ROW_interface"]:
+        if row["interface"] in up:
+            row["vlan"] = up[row["interface"]][0]
+    return (
+        parse_environment(load_fixture("show_environment")),
+        parse_resources(load_fixture("show_system_resources")),
+        parse_ports(interfaces, statuses, {}),
+    )
+
+
+def test_a_sample_adds_up_each_vlans_access_ports() -> None:
+    data = _parsed_with_vlans(
+        {
+            "Ethernet1/1": ("10", 100, 10),
+            "Ethernet1/2": ("10", 200, 20),
+            "Ethernet1/3": ("20", 5, 6),
+        }
+    )
+    found = _by_metric(history.build_rows(*data, {})[0])
+    assert found[history.VLAN_IN] == [("10", 300.0), ("20", 5.0)]
+    assert found[history.VLAN_OUT] == [("10", 30.0), ("20", 6.0)]
+
+
+def test_the_sampler_reads_each_ports_vlan(settings: Settings, switch: FakeSwitch) -> None:
+    sampler = history.Sampler(settings, switch.transport)
+    assert sampler.sample_once() is None
+    sent = switch.requests[0]
+    assert "show interface status" in str(sent)
+
+
+def _record_vlans(settings: Settings, now: float, vlans: dict[str, tuple[float, float]]) -> None:
+    with open_db(settings.db_path) as conn:
+        for minute in range(10):
+            rows = [(history.CPU, "", 1.0)]
+            for vlan, (inward, outward) in vlans.items():
+                rows += [(history.VLAN_IN, vlan, inward), (history.VLAN_OUT, vlan, outward)]
+            history.record(conn, 1, now - minute * 60, rows)
+
+
+def test_vlan_charts_draw_both_directions_in_the_same_colours(settings: Settings) -> None:
+    init_db(settings.db_path)
+    now = time.time()
+    _record_vlans(settings, now, {"10": (1000.0, 0.0), "20": (0.0, 2000.0)})
+    with open_db(settings.db_path) as conn:
+        sent, received = history.vlan_charts(conn, 1, "1h", now)
+    assert sent.anchor == "vlan-traffic"
+    for chart in (sent, received):
+        assert chart.svg is not None
+        assert [(entry.label, entry.colour) for entry in chart.legend] == [
+            ("VLAN 10", 0),
+            ("VLAN 20", 1),
+        ]
+        assert "An estimate" in chart.note and "not drawn" not in chart.note
+
+
+def test_vlan_charts_draw_only_the_busiest(settings: Settings) -> None:
+    init_db(settings.db_path)
+    now = time.time()
+    vlans = {str(vlan): (float(vlan), 0.0) for vlan in range(1, history.MAX_VLAN_LINES + 3)}
+    _record_vlans(settings, now, vlans)
+    with open_db(settings.db_path) as conn:
+        sent, _ = history.vlan_charts(conn, 1, "1h", now)
+    labels = [entry.label for entry in sent.legend]
+    assert len(labels) == history.MAX_VLAN_LINES
+    assert "VLAN 1" not in labels and "VLAN 2" not in labels  # the quietest two
+    assert "2 quieter VLANs are not drawn." in sent.note
+
+
+def test_vlan_charts_say_when_nothing_was_recorded(settings: Settings) -> None:
+    init_db(settings.db_path)
+    with open_db(settings.db_path) as conn:
+        charts = history.vlan_charts(conn, 1, "24h", time.time())
+    assert all(chart.svg is None for chart in charts)
+    assert "access ports is up" in charts[0].empty
+
+
+def test_latest_vlan_traffic_is_the_newest_sample(settings: Settings) -> None:
+    init_db(settings.db_path)
+    now = time.time()
+    with open_db(settings.db_path) as conn:
+        history.record(conn, 1, now - 120, [(history.VLAN_IN, "10", 5.0)])
+        history.record(
+            conn,
+            1,
+            now - 60,
+            [(history.CPU, "", 1.0), (history.VLAN_IN, "20", 7.0), (history.VLAN_OUT, "20", 8.0)],
+        )
+        # VLAN 10 had no access port up in the newest sample, so it is not given.
+        assert history.latest_vlan_traffic(conn, 1, now=now, max_age=180) == {20: (7.0, 8.0)}
+        # An old sample is not shown as today's.
+        assert history.latest_vlan_traffic(conn, 1, now=now, max_age=30) == {}
+        assert history.latest_vlan_traffic(conn, 2, now=now, max_age=180) == {}
+
+
+def test_the_history_page_draws_each_vlans_traffic(
+    settings: Settings, logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    _record_vlans(settings, time.time(), {"10": (1000.0, 500.0)})
+    body = logged_in.get("/history").text
+    assert 'id="vlan-traffic"' in body
+    assert "Traffic per VLAN: sent by its devices" in body
+    assert "Traffic per VLAN: sent to its devices" in body
+
+
+def test_the_vlans_page_shows_each_vlans_traffic_now(
+    settings: Settings, logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    logged_in.app.state.settings = dataclasses.replace(settings, history_interval=60)  # type: ignore[attr-defined]
+    with open_db(settings.db_path) as conn:
+        history.record(
+            conn,
+            1,
+            time.time() - 30,
+            [(history.VLAN_IN, "1", 8_000_000.0), (history.VLAN_OUT, "1", 2_000_000.0)],
+        )
+    body = logged_in.get("/vlans").text
+    assert "Traffic now" in body
+    assert "8.0 Mb/s in, 2.0 Mb/s out" in body
+    assert "last history sample" in body
+
+
+def test_the_vlans_page_shows_no_traffic_with_history_off(
+    settings: Settings, logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    with open_db(settings.db_path) as conn:
+        history.record(conn, 1, time.time() - 30, [(history.VLAN_IN, "1", 8_000_000.0)])
+    body = logged_in.get("/vlans").text
+    assert "8.0 Mb/s in" not in body
+    assert "history, which is turned off" in body

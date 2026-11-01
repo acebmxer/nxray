@@ -232,3 +232,77 @@ def test_tooltip_without_neighbor_data_is_unchanged() -> None:
     port = next(p for p in ports if p.name == "Ethernet1/1")
     empty = _view().for_port("Ethernet1/1")
     assert tooltip(port) == tooltip(port, devices=empty)
+
+
+# ---- traffic per device, estimated ----
+
+
+def _interfaces_with_up(**rates: tuple[int, int]) -> dict:
+    """``show interface`` with ports up at (in, out) bits per second;
+    the keyword is the port number on module 1 (``p46`` is Ethernet1/46)."""
+    body = load_fixture("show_interface")
+    wanted = {f"Ethernet1/{key[1:]}": value for key, value in rates.items()}
+    for row in body["TABLE_interface"]["ROW_interface"]:
+        if row["interface"] in wanted:
+            inward, outward = wanted[row["interface"]]
+            row.update(state="up", eth_inrate1_bits=str(inward), eth_outrate1_bits=str(outward))
+    return body
+
+
+def test_neighbors_page_lists_the_busiest_devices(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    # Ethernet1/46 has one device; Ethernet1/47 has many, so it gets no figure.
+    switch.bodies["show interface"] = _interfaces_with_up(
+        p46=(8_000_000, 2_000_000), p47=(900_000_000, 900_000_000)
+    )
+    page = logged_in.get("/neighbors").text
+    busiest = page[page.index('id="busiest"') : page.index("MAC address table")]
+    text = _text(busiest)
+    assert "98:03:9b:00:00:0c" in text
+    assert "8.0 Mb/s 2.0 Mb/s" in text
+    assert "Ethernet1/47" not in text
+    # The MAC address table gets the same figure, and — for the rest.
+    assert "sends 8.0 Mb/s, receives 2.0 Mb/s" in _text(page)
+
+
+def test_neighbors_page_says_when_no_device_can_be_measured(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    page = _text(logged_in.get("/neighbors").text)
+    assert "No device can be measured right now" in page
+    assert "Traffic now" not in page  # no column when nobody has a figure
+
+
+def test_neighbors_page_keeps_working_when_show_interface_is_refused(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    switch.reject = {"show interface"}
+    page = logged_in.get("/neighbors")
+    assert page.status_code == 200
+    assert "No device can be measured right now" in _text(page.text)
+
+
+def test_port_page_gives_a_lone_device_its_ports_traffic(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    switch.bodies["show interface"] = _interfaces_with_up(p46=(3_000_000, 1_000_000))
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/46"}).text)
+    assert "sends 3.0 Mb/s, receives 1.0 Mb/s" in text
+    assert "This port's traffic is that device's own" in text
+
+
+def test_port_page_says_why_several_devices_get_no_figure(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    switch.bodies["show interface"] = _interfaces_with_up(p37=(3_000_000, 1_000_000))
+    text = _text(logged_in.get("/ports/detail", params={"name": "Ethernet1/37"}).text)
+    assert "No device gets a traffic figure here. 2 devices are behind this port" in text
+
+
+def test_port_panel_gives_a_lone_device_its_ports_traffic(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    switch.bodies["show interface"] = _interfaces_with_up(p46=(3_000_000, 1_000_000))
+    text = _text(logged_in.get("/ports", params={"port": "Ethernet1/46"}).text)
+    assert "Its traffic now (estimate): sends 3.0 Mb/s, receives 1.0 Mb/s." in text

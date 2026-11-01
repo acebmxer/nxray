@@ -50,6 +50,35 @@
   {{ protocol_notes(view) }}
 </section>
 
+<section class="card" id="busiest">
+  <h2 class="card-title">Busiest devices</h2>
+  <p class="lead">The devices with the most traffic right now, for each device that is alone on an access port: that port's traffic is the device's own. Sends is what came in on the port, receives what went out of it, averaged over the last 30 seconds.</p>
+  {% if busiest %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>MAC address</th><th>Maker</th><th>IPv4 address</th><th>VLAN</th><th>Port</th><th>Sends</th><th>Receives</th></tr>
+    </thead>
+    <tbody>
+      {% for item in busiest %}
+      <tr>
+        <td class="mono">{{ item.mac }}</td>
+        <td class="wrap">{{ makers.get(item.mac) or "—" }}</td>
+        <td>{{ ips.get(item.mac, [])|join(", ") or "—" }}</td>
+        <td>{{ item.vlan or "—" }}</td>
+        <td>{{ port_link(item.port) }}</td>
+        <td>{{ item.sends_bits|rate }}</td>
+        <td>{{ item.receives_bits|rate }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">A device's traffic over time is its port's: open the port to see its chart.</p>
+  {% else %}
+  <p>No device can be measured right now: none is alone on an access port that is up and carrying traffic.</p>
+  {% endif %}
+  <p class="note">An estimate. Devices on a trunk, on a port-channel, or behind a port with several addresses on it (another switch, a hypervisor, a phone with a computer behind it) get no figure: the switch counts traffic per port and cannot split it between them.</p>
+</section>
+
 <section class="card">
   <h2 class="card-title">MAC address table</h2>
   <p class="lead">Every device address the switch has learned from traffic, and the port it came in on: this is how a device that announces nothing is found.{% if view.aging_text %} {{ view.aging_text }}{% endif %}</p>
@@ -61,7 +90,7 @@
   <p class="hint">Part of a MAC address in any form (0cea, 0c:ea:14), part of a maker's name, a port (Ethernet1/3 or 1/3) or a VLAN number.</p>
   {% if macs %}
   <p class="note">{% if query %}{{ macs|length }} of {{ view.macs|length }} entries match.{% else %}{{ view.macs|length }} entries.{% endif %}</p>
-  {{ mac_table(macs, ips) }}
+  {{ mac_table(macs, ips, traffic=traffic) }}
   {% elif query %}
   <p>No entry matches "{{ query }}".</p>
   {% else %}

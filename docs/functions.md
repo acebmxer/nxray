@@ -71,7 +71,8 @@ prose columns; those are a reviewer's job.
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
-| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
+| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`, `vlan_charts`); the SVG itself is `app/charts.py`, `line_chart` |
+| Estimate a device's or a VLAN's traffic from the ports' | `app/traffic.py` (`device_traffic`, `port_device`, `vlan_traffic`); each VLAN's over time is stored by `history.build_rows` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
 | Rank NXray versions, or pick between the `:beta` and `:latest` tags | `app/update.py`, `parse_version` / `pick_target` |
 
@@ -773,7 +774,8 @@ times, so out of step is worked out without one.
 | `bucket_seconds` | `(span: int) -> int` | How wide one chart point is: a minute at least, and at most 500 points | `system_charts`, `port_charts` | v0.1.0 |
 | `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_switch` | v0.1.0 |
 | `fill_zeros` | `(points, start, end, bucket) -> list` | Every bucket of a range, 0 where there is no point | `port_charts` | v0.1.0 |
-| `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page` | v0.1.0 |
+| `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page`, `latest_vlan_traffic` | v0.1.0 |
+| `latest_vlan_traffic` | `(conn, switch_id, *, now, max_age) -> dict[int, (in, out)]` | Each VLAN's estimated traffic in a switch's newest sample; empty when that sample is older than `max_age` | `routes/vlans._vlan_traffic` | v0.2.0 |
 | `port_charts` | `(conn, switch_id, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
 | `purge` | `(conn, now, keep_days=30) -> int` | Deletes every switch's rows older than the retention; how many went | `start_sampler` | v0.1.0 |
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
@@ -781,11 +783,26 @@ times, so out of step is worked out without one.
 | `record` | `(conn, switch_id, moment, rows) -> None` | Stores one sample's rows for a switch | `Sampler.sample_switch` | v0.1.0 |
 | `start_sampler` | `(settings, transport, alert_transport=lambda: None) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, checking the alerts against each sample and purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
 | `system_charts` | `(conn, switch_id, key, now) -> list[ChartView]` | The History page's charts of a switch for a range | `routes/history.history_page` | v0.1.0 |
+| `vlan_charts` | `(conn, switch_id, key, now) -> list[ChartView]` | Each VLAN's estimated traffic in and out for a range, the busiest `MAX_VLAN_LINES` VLANs in the same colours on both charts | `routes/history.history_page` | v0.2.0 |
 
 `Sampler` (class) samples every switch in turn: `sample_once(now=None)` reads
 each one and returns what failed in words (None when all went well), and
 `sample_switch(switch_id, now=None)` reads one. It keeps each switch's error
 totals and `alerts.AlertMonitor` apart.
+
+## `app/traffic.py` — traffic per device and per VLAN, estimated
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `busiest_devices` | `(traffic, limit=10) -> list[DeviceTraffic]` | The devices with the most traffic, busiest first; idle ones left out | `routes/neighbors._render` | v0.2.0 |
+| `device_traffic` | `(ports, neighbors) -> dict[str, DeviceTraffic]` | By MAC address: every device alone on an access port that is up, with that port's rates as its own | `load_device_traffic`, `routes/ports` | v0.2.0 |
+| `load_device_traffic` | `(client, neighbors) -> dict[str, DeviceTraffic]` | `device_traffic` with the ports read fresh (`show interface` only); empty when the switch refuses it | `routes/neighbors._read` | v0.2.0 |
+| `port_device` | `(port, devices) -> (MacEntry \| None, str)` | The one device a port's traffic belongs to, or why there is none (trunk, port-channel, several addresses) in words | `device_traffic`, `routes/ports._render_port` | v0.2.0 |
+| `vlan_traffic` | `(ports) -> dict[int, VlanTraffic]` | By VLAN: the access ports that are up, added up; trunks and routed ports left out | `history.build_rows` | v0.2.0 |
+
+These are estimates from per-port counters; what each leaves out is in
+[Traffic per VLAN and per device](traffic.md). `DeviceTraffic` names the rates
+from the device's side (it *sends* what comes in on the port).
 
 ## `app/charts.py` — SVG line charts
 

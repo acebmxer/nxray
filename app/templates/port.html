@@ -122,7 +122,9 @@
     <p class="note">{{ name }} is part of {{ port_link(devices.channel.name) }}{% if others %}, with {{ port_list(others) }}{% endif %}. The switch learns addresses on the port-channel as a whole, so these are the devices behind all of its ports.</p>
     {% endif %}
     {% if devices.macs %}
-    {{ mac_table(devices.macs, device_ips, show_port=False) }}
+    {{ mac_table(devices.macs, device_ips, show_port=False, traffic=port_traffic) }}
+    {% if port_traffic %}<p class="note">This port's traffic is that device's own, since it is alone on an access port: an estimate, and the port's traffic chart is its traffic over time for as long as it was here.</p>
+    {% elif traffic_reason %}<p class="note">No device gets a traffic figure here. {{ traffic_reason }}</p>{% endif %}
     {% else %}
     <p>The switch has learned no MAC addresses on this port.</p>
     {% endif %}

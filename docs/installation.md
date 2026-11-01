@@ -284,17 +284,18 @@ from 0.1.x** under Updating.
 
 Once a switch is set up, NXray reads it every minute (`NXRAY_HISTORY_INTERVAL`
 changes that, `0` turns it off; with several switches it reads each of them,
-one after the other, and keeps their history apart) with three read-only commands, the same ones
-the dashboard runs when it opens: `show environment`, `show system resources`
-and `show interface`. It stores temperatures, total power draw, fan speed, CPU
+one after the other, and keeps their history apart) with four read-only commands, the same ones
+the dashboard and the Ports page run when they open: `show environment`, `show system resources`,
+`show interface` and `show interface status`. It stores temperatures, total power draw, fan speed, CPU
 and memory use, the traffic of every port that is up and each port's new
-errors and discards, and deletes anything older than 30 days. The History page
+errors and discards, each VLAN's traffic estimated from its access ports (see
+[Traffic per VLAN and per device](traffic.md)), and deletes anything older than 30 days. The History page
 draws them for the last hour, 6 hours, 24 hours, 7 days or 30 days, and each
 port's page draws its own traffic and errors. Times are UTC. Opening the pages
 never contacts the switch.
 
 The numbers live in NXray's database on the data volume and take space with
-the number of ports that are up: roughly 7 MB a day with a dozen up, so about
+the number of ports that are up (and, a little, with the number of VLANs that have an access port up): roughly 7 MB a day with a dozen up, so about
 200 MB once 30 days have built up, for each switch. Nothing is recorded while NXray cannot
 reach the switch or is waiting for it to apply a new role after **Turn on port,
 VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes**; the charts show that as a gap. A port's errors are recorded as the
@@ -307,7 +308,7 @@ The **Alerts** page (admins only) sends an e-mail, a webhook or both when a
 switch needs attention, and again when the problem is over. With several
 switches every alert names its switch (`leaf1 (192.0.2.10)`), and the rules
 and destinations are the same for all of them. It is checked
-each time history reads the switch, from the same three commands, so it asks
+each time history reads the switch, from the same four commands, so it asks
 nothing more of the switch; with `NXRAY_HISTORY_INTERVAL=0` nothing is
 checked (changes made through NXray are still sent when asked for).
 

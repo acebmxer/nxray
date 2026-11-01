@@ -2,13 +2,14 @@
 
 A background thread asks each switch NXray has, one after the other, for
 temperatures, power, fans, CPU, memory and every port's traffic and errors,
-and stores the numbers in the ``history`` table under the switch's id. Rows
+and stores the numbers in the ``history`` table under the switch's id, with
+each VLAN's traffic estimated from its access ports (``app/traffic.py``). Rows
 older than ``KEEP_DAYS`` are deleted. The pages read only that table;
 opening them costs the switch nothing.
 
-The three show commands per sample are the ones the dashboard already runs
-on every page load. Each sample is also what alerts are checked against
-(``app/alerts.py``).
+The four show commands per sample are the ones the dashboard and the Ports
+page already run when they open. Each sample is also what alerts are checked
+against (``app/alerts.py``).
 """
 
 from __future__ import annotations
@@ -39,11 +40,18 @@ from app.switch_connection import (
     load_target,
 )
 from app.switch_setup import KEY_CHANGED_MESSAGE, read_switch
+from app.traffic import vlan_traffic
 
 log = logging.getLogger("nxray.history")
 
 KEEP_DAYS = 30
-HISTORY_COMMANDS = ("show environment", "show system resources", "show interface")
+HISTORY_COMMANDS = (
+    "show environment",
+    "show system resources",
+    "show interface",
+    # Each access port's VLAN, for the VLAN traffic estimate.
+    "show interface status",
+)
 
 # What is stored. A row is (metric, item, value); item names the sensor or
 # port and is empty for whole-switch numbers.
@@ -57,6 +65,10 @@ TRAFFIC_OUT = "traffic_out"
 PORT_IN = "port_in"  # item: port name, bits per second; only while the port is up
 PORT_OUT = "port_out"
 PORT_ERRORS = "port_errors"  # item: port name, errors since the previous sample; only when above 0
+# item: VLAN number, bits per second; its access ports that are up added up
+# (app/traffic.py), only for VLANs that have one. An estimate: trunks are left out.
+VLAN_IN = "vlan_in"
+VLAN_OUT = "vlan_out"
 
 Row = tuple[str, str, float]
 
@@ -78,11 +90,11 @@ _PURGE_EVERY_SECONDS = 3600
 
 
 def _read(client: NxapiClient) -> tuple[Environment, Resources, list[Port]]:
-    environment, resources, interfaces = client.show(*HISTORY_COMMANDS)
+    environment, resources, interfaces, statuses = client.show(*HISTORY_COMMANDS)
     return (
         parse_environment(environment),
         parse_resources(resources),
-        parse_ports(interfaces, {}, {}),
+        parse_ports(interfaces, statuses, {}),
     )
 
 
@@ -122,6 +134,9 @@ def build_rows(
         before = previous_errors.get(port.name)
         if before is not None and port.errors > before:
             rows.append((PORT_ERRORS, port.name, float(port.errors - before)))
+    for vlan in vlan_traffic(ports).values():
+        rows.append((VLAN_IN, str(vlan.vlan), float(vlan.in_bits)))
+        rows.append((VLAN_OUT, str(vlan.vlan), float(vlan.out_bits)))
     return rows, errors
 
 
@@ -374,6 +389,8 @@ class ChartView:
     # Shown under a chart that has data / in place of one that has none.
     note: str = ""
     empty: str = "No data in this range yet."
+    # The id of the chart's card, for a link to it ("" for none).
+    anchor: str = ""
 
 
 def _latest_and_highest(fmt: Callable[[float], str]) -> Callable[[Sequence[Point]], str]:
@@ -396,10 +413,11 @@ def _chart(
     empty: str = "No data in this range yet.",
     zero_based: bool = True,
     y_max: float | None = None,
+    anchor: str = "",
 ) -> ChartView:
     lines = [line for line in lines if line.points]
     if not lines:
-        return ChartView(title, None, [], note, empty)
+        return ChartView(title, None, [], note, empty, anchor)
     summarize = summarize or _latest_and_highest(fmt)
     svg = line_chart(
         lines,
@@ -415,7 +433,7 @@ def _chart(
         LegendEntry(line.label, number % SERIES_COLOURS, summarize(line.points))
         for number, line in enumerate(lines)
     ]
-    return ChartView(title, svg, legend, note, empty)
+    return ChartView(title, svg, legend, note, empty, anchor)
 
 
 def _short(value: float) -> str:
@@ -518,3 +536,100 @@ def port_charts(
             **common,
         ),
     ]
+
+
+# At most this many VLANs on a chart, one colour each; the busiest are drawn.
+MAX_VLAN_LINES = SERIES_COLOURS
+VLAN_ESTIMATE_NOTE = (
+    "An estimate: each VLAN's access ports added up. Trunks are left out, since "
+    "their counters cannot be split by VLAN, so traffic that reaches a VLAN over a "
+    "trunk (from another switch or a hypervisor, for example) is missing."
+)
+
+
+def _mean(points: Sequence[Point]) -> float:
+    return sum(value for _, value in points) / len(points) if points else 0.0
+
+
+def _vlan_number(item: str) -> int:
+    return int(item) if item.isdigit() else 0
+
+
+def vlan_charts(conn: sqlite3.Connection, switch_id: int, key: str, now: float) -> list[ChartView]:
+    """Each VLAN's estimated traffic on a switch for the range named ``key``,
+    in both directions: the busiest ``MAX_VLAN_LINES`` VLANs, in the same
+    colours on both charts."""
+    span = RANGES[key]
+    start, end, bucket = now - span, now, bucket_seconds(span)
+    common = {"start": start, "end": end, "bucket": bucket}
+    found = {
+        metric: read_series(conn, switch_id, metric, start=start, end=end, bucket=bucket)
+        for metric in (VLAN_IN, VLAN_OUT)
+    }
+    items = set(found[VLAN_IN]) | set(found[VLAN_OUT])
+    ranked = sorted(
+        items,
+        key=lambda item: (
+            -(_mean(found[VLAN_IN].get(item, [])) + _mean(found[VLAN_OUT].get(item, []))),
+            _vlan_number(item),
+        ),
+    )
+    shown = sorted(ranked[:MAX_VLAN_LINES], key=_vlan_number)
+    note = VLAN_ESTIMATE_NOTE
+    left = len(ranked) - len(shown)
+    if left == 1:
+        note += " 1 quieter VLAN is not drawn."
+    elif left:
+        note += f" {left} quieter VLANs are not drawn."
+    empty = (
+        "No VLAN traffic was recorded in this range. A VLAN is counted once one of "
+        "its access ports is up."
+    )
+
+    def lines(metric: str) -> list[Line]:
+        # Every shown VLAN gets a line on both charts, so its colour is the same on each.
+        return [Line(f"VLAN {item}", found[metric].get(item, [])) for item in shown]
+
+    return [
+        _chart(
+            "Traffic per VLAN: sent by its devices",
+            lines(VLAN_IN),
+            fmt=_rate,
+            note=note,
+            empty=empty,
+            anchor="vlan-traffic",
+            **common,
+        ),
+        _chart(
+            "Traffic per VLAN: sent to its devices",
+            lines(VLAN_OUT),
+            fmt=_rate,
+            note=note,
+            empty=empty,
+            **common,
+        ),
+    ]
+
+
+def latest_vlan_traffic(
+    conn: sqlite3.Connection, switch_id: int, *, now: float, max_age: float
+) -> dict[int, tuple[float, float]]:
+    """Each VLAN's estimated (in, out) bits per second in a switch's newest sample.
+
+    Empty when nothing has been stored, or the newest sample is more than
+    ``max_age`` seconds old: an old figure is not shown as today's.
+    """
+    newest = last_sample_time(conn, switch_id)
+    if newest is None or now - newest > max_age:
+        return {}
+    found: dict[int, list[float]] = {}
+    for row in conn.execute(
+        "SELECT metric, item, value FROM history "
+        "WHERE switch_id = ? AND ts = ? AND metric IN (?, ?)",
+        (switch_id, newest, VLAN_IN, VLAN_OUT),
+    ):
+        if not row["item"].isdigit():
+            continue
+        pair = found.setdefault(int(row["item"]), [0.0, 0.0])
+        pair[0 if row["metric"] == VLAN_IN else 1] = row["value"]
+    return {vlan: (pair[0], pair[1]) for vlan, pair in sorted(found.items())}

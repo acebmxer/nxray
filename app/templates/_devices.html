@@ -37,13 +37,18 @@
 </table>
 {% endmacro %}
 
-{% macro mac_table(macs, ips, show_port=True) %}
+{% macro device_rates(item) -%}
+sends {{ item.sends_bits|rate }}, receives {{ item.receives_bits|rate }}
+{%- endmacro %}
+
+{% macro mac_table(macs, ips, show_port=True, traffic=none) %}
 <table class="table table-devices">
   <thead>
     <tr>
       <th>MAC address</th><th>Maker</th><th>VLAN</th>
       {% if show_port %}<th>Port</th>{% endif %}
       <th>IPv4 address</th><th>Learned</th>
+      {% if traffic %}<th>Traffic now <span class="dim">(estimate)</span></th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -55,6 +60,7 @@
       {% if show_port %}<td>{% if m.switch_own %}the switch itself{% else %}{{ port_link(m.port) }}{% endif %}</td>{% endif %}
       <td>{{ ips.get(m.mac, [])|join(", ") or "—" }}</td>
       <td>{{ m.kind }}{% if m.secure %} (port security){% endif %}</td>
+      {% if traffic %}<td>{% if m.mac in traffic %}{{ device_rates(traffic[m.mac]) }}{% else %}<span class="dim">—</span>{% endif %}</td>{% endif %}
     </tr>
     {% endfor %}
   </tbody>

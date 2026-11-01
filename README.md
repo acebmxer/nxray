@@ -64,6 +64,7 @@ Taken against the test suite's pretend switch, with made-up devices.
 | [Installation](docs/installation.md) | Getting the container running |
 | [Configuration](docs/configuration.md) | Every setting, its default and what it does |
 | [Switch setup](docs/switch-setup.md) | What setup does on the switch, and how to undo it |
+| [Traffic per VLAN and per device](docs/traffic.md) | What the estimates mean, what they leave out, and what would measure them |
 | [Function index](docs/functions.md) | Every function in the codebase, in one place |
 | [Contributing](CONTRIBUTING.md) | Development setup and conventions |
 | [Security](SECURITY.md) | Threat model and reporting a vulnerability |
@@ -100,7 +101,7 @@ login once, creates that account with a long random password, saves the
 switch configuration, and keeps only that account's login. The admin
 password is never stored. See [Switch setup](docs/switch-setup.md).
 
-Once a switch is set up, NXray also reads it every minute (three read-only
+Once a switch is set up, NXray also reads it every minute (four read-only
 commands) to record history; see [Installation](docs/installation.md#history).
 
 Turning on port changes is the one step that uses SSH: NX-API cannot create
@@ -136,7 +137,9 @@ along the way that no stage below covers is added to the stage it fits best.
    default: *(built)*. Published images on GHCR: *(built)*. Self-update, off by
 default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
-   errors over time, as graphs. *(built)*
+   errors over time, as graphs. *(built)* Traffic per VLAN and per device,
+   estimated from the ports' own counters: *(built)*. Measured per VLAN and
+   per device, trunks included, with NXray as an sFlow collector: *(planned)*.
 10. **Switch face**: a picture of the front panel with every port colored by
     state, speed, VLAN, port-channel, traffic or errors; hover for details,
     click to open the port's side panel, which makes every change to the port;

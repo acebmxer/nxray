@@ -1,4 +1,5 @@
-"""The History page: temperatures, power, fans, CPU, memory and traffic over time.
+"""The History page: temperatures, power, fans, CPU, memory and traffic over time,
+and each VLAN's traffic estimated from its access ports.
 
 Reads what app/history.py recorded; it never calls the switch.
 """
@@ -18,6 +19,7 @@ from app.history import (
     last_sample_time,
     range_key,
     system_charts,
+    vlan_charts,
 )
 from app.switch_choice import selected_switch_id
 from app.switch_connection import get_connection
@@ -36,7 +38,10 @@ def history_page(
     now = time.time()
     with open_db(settings.db_path) as conn:
         connection = get_connection(conn, selected_switch_id(request))
-        charts = system_charts(conn, connection.id, key, now) if connection else []
+        charts = []
+        if connection:
+            charts = system_charts(conn, connection.id, key, now)
+            charts += vlan_charts(conn, connection.id, key, now)
         last_sample = last_sample_time(conn, connection.id) if connection else None
     return templates.TemplateResponse(
         request,

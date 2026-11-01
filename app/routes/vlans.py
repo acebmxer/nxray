@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -16,6 +17,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
+from app.history import latest_vlan_traffic
 from app.nxapi import (
     VLAN_INTERFACE_MAX,
     VLAN_NAME_MAX,
@@ -58,6 +60,7 @@ def _render(
     elif problem:
         status = ConnectionStatus(False, problem)
     usage = {vlan.id: view.ports_using(vlan.id) for vlan in view.vlans} if view else {}
+    traffic = _vlan_traffic(request, connection.id) if connection else {}
     return templates.TemplateResponse(
         request,
         "vlans.html",
@@ -67,6 +70,8 @@ def _render(
             "status": status,
             "view": view,
             "usage": usage,
+            "traffic": traffic,
+            "history_on": bool(request.app.state.settings.history_interval),
             "grid": vlan_grid(view) if view else None,
             "error": error,
             "notice": notice,
@@ -77,6 +82,16 @@ def _render(
         },
         status_code=status_code,
     )
+
+
+def _vlan_traffic(request: Request, switch_id: int) -> dict[int, tuple[float, float]]:
+    """Each VLAN's estimated traffic from history's newest sample, if it is recent:
+    no older than three sampling intervals. Costs the switch nothing."""
+    interval = request.app.state.settings.history_interval
+    if not interval:
+        return {}
+    with open_db(request.app.state.settings.db_path) as conn:
+        return latest_vlan_traffic(conn, switch_id, now=time.time(), max_age=3 * interval)
 
 
 @router.get("/vlans", response_class=HTMLResponse)
