@@ -9,6 +9,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-01
+
+**A fix release: every port change can now be made from the port's side
+panel on the Ports page.** Coming from 0.1.0 on `:latest`, run
+`docker compose pull` and `docker compose up -d`; on `:0.1.0`, put `:0.1.1`
+in the compose file's `image:` line first. Coming from a beta, replace
+`:beta` with `:latest` or `:0.1.1`. The data volume carries over.
+
 ### Fixed
 
 - **The port side panel makes every change to the port.** On the Ports page,
