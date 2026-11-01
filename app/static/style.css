@@ -276,6 +276,12 @@ code {
 }
 .switch-picker { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .switch-picker select { max-width: 18rem; }
+.live-picker { display: inline-flex; align-items: center; gap: 6px; margin: 0 12px 0 0; }
+.live-label { font-size: 12px; color: var(--text-2); }
+.live-stamp { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.live-stamp.live-warn { color: var(--crit); }
+.live-pause[hidden] { display: none; }
+.live-picker.live-js .live-set { display: none; }
 
 /* ---- page layout ---- */
 

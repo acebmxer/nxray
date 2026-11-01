@@ -1,0 +1,8 @@
+{#- What /live/neighbors sends: only the regions of the Neighbors page that change. -#}
+{% import "_neighbors_live.html" as live with context %}
+{{ live.banner() }}
+{% if view %}
+{{ live.announced() }}
+{{ live.busiest_devices() }}
+{{ live.macs_table() }}
+{% endif %}

@@ -23,6 +23,7 @@ from app.dependencies import (
 )
 from app.face import MODES, color_mode, draw_face, short_device_name, speed_class
 from app.history import RANGE_LABELS, port_charts, range_key
+from app.live import PORTS
 from app.neighbor_changes import (
     PortDiscovery,
     describe_port_discovery,
@@ -224,11 +225,40 @@ def ports_page(
     )
 
 
+def live_ports_link(show: str, color: str, port: str = "") -> str:
+    """The address of the Ports page's refreshing figures, for the same filter,
+    colour mode and open panel as ``ports_link``."""
+    return ports_link(show, color, port).replace("/ports?", "/live/ports?", 1)
+
+
 def ports_link(show: str, color: str, port: str = "") -> str:
     """The Ports page's address with a filter, a colour mode and, optionally,
     the port whose side panel is open."""
     link = f"/ports?show={quote(show)}&color={quote(color)}"
     return link + (f"&port={quote(port, safe='/')}" if port else "")
+
+
+def ports_summary(
+    ports: list[Port] | None, neighbors: NeighborView | None, show: str
+) -> tuple[dict[str, str], list[Port], dict[str, int]]:
+    """(channels, shown, counts) for the Ports page: each port's port-channel
+    name ("" for none), the ports the filter ``show`` keeps, and how many ports
+    each filter would keep."""
+    channels = (
+        {
+            port.name: (pc.name if (pc := neighbors.channel_of(port.name)) else "")
+            for port in ports or []
+        }
+        if neighbors
+        else {}
+    )
+
+    def keeps(name: str, port: Port) -> bool:
+        return FILTERS[name](port, channels.get(port.name, ""))
+
+    shown = [port for port in ports or [] if keeps(show, port)]
+    counts = {name: sum(1 for port in ports or [] if keeps(name, port)) for name in FILTERS}
+    return channels, shown, counts
 
 
 def render_ports_page(
@@ -274,20 +304,7 @@ def render_ports_page(
     if show not in FILTERS:
         show = "all"
     labels = _labels(request)
-    channels = (
-        {
-            port.name: (pc.name if (pc := neighbors.channel_of(port.name)) else "")
-            for port in ports or []
-        }
-        if neighbors
-        else {}
-    )
-
-    def keeps(name: str, port: Port) -> bool:
-        return FILTERS[name](port, channels.get(port.name, ""))
-
-    shown: list[Port] = [port for port in ports or [] if keeps(show, port)]
-    counts = {name: sum(1 for port in ports or [] if keeps(name, port)) for name in FILTERS}
+    channels, shown, counts = ports_summary(ports, neighbors, show)
     open_port = next((port for port in ports or [] if port.name == selected), None)
     face = (
         draw_face(
@@ -362,6 +379,21 @@ def render_ports_page(
             "short_device_name": short_device_name,
             "throughput": sum(
                 port.in_bits_per_second + port.out_bits_per_second for port in ports or []
+            ),
+            # Figures that refresh themselves (app/live.py), only on the plain
+            # view: never on a result, a refusal or a form being filled in.
+            **(
+                {
+                    "live_page": PORTS,
+                    "live_url": live_ports_link(show, color, open_port.name if open_port else ""),
+                    "live_at": int(time.time()),
+                    "live_problem": "",
+                    "rates_window": 0,
+                }
+                if ports
+                and status_code == 200
+                and not (error or notice or tick_all or ticked or bulk or form_values)
+                else {"live_at": 0, "live_problem": "", "rates_window": 0}
             ),
         },
         status_code=status_code,
@@ -485,6 +517,15 @@ def _render_port(
             "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
             if neighbors and devices
             else {},
+            "live_at": int(time.time()),
+            "live_problem": "",
+            "rates_window": 0,
+            # Figures that refresh themselves, only on the plain view.
+            **(
+                {"live_page": PORTS, "live_url": f"/live/port?name={quote(name, safe='')}"}
+                if port and status_code == 200 and not (error or notice or form_values)
+                else {}
+            ),
         },
         status_code=status_code,
     )

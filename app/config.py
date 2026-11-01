@@ -73,6 +73,11 @@ class Settings:
     dev_build: bool = False
     # Seconds between history samples (app/history.py); 0 turns history off.
     history_interval: int = 60
+    # Live figures (app/live.py): the fewest seconds between two reads of a
+    # switch for the pages that refresh themselves. Ports and switch health
+    # are cheap; the MAC and ARP tables cost the switch more.
+    live_min_interval: int = 2
+    live_clients_min_interval: int = 10
 
     # Derived paths. Kept here so no other module builds a path by hand.
     db_path: Path = field(init=False)
@@ -151,6 +156,9 @@ def load_settings() -> Settings:
             f"got {history_interval}"
         )
 
+    live_min_interval = _env_int("NXRAY_LIVE_MIN_INTERVAL", 2, 1, 60)
+    live_clients_min_interval = _env_int("NXRAY_LIVE_CLIENTS_MIN_INTERVAL", 10, 1, 300)
+
     return Settings(
         data_dir=data_dir,
         admin_user=_env_str("NXRAY_ADMIN_USER", "admin") or "admin",
@@ -166,4 +174,6 @@ def load_settings() -> Settings:
         enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
         dev_build=_env_bool("NXRAY_DEV_BUILD", False),
         history_interval=history_interval,
+        live_min_interval=live_min_interval,
+        live_clients_min_interval=live_clients_min_interval,
     )

@@ -4,7 +4,9 @@ and the MAC address table's changes (aging time, static entries, clearing)."""
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -19,6 +21,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
+from app.live import CLIENTS
 from app.neighbor_changes import (
     CLEAR_SCOPES,
     DROP,
@@ -157,6 +160,14 @@ def _render(
             "aging_min": MAC_AGING_MIN,
             "aging_max": MAC_AGING_MAX,
             "drop": DROP,
+            "live_at": int(time.time()),
+            "live_problem": "",
+            # Figures that refresh themselves, only on the plain view.
+            **(
+                {"live_page": CLIENTS, "live_url": "/live/neighbors?" + urlencode({"q": query})}
+                if view and status_code == 200 and not (error or notice or form)
+                else {}
+            ),
         },
         status_code=status_code,
     )

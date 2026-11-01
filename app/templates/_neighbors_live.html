@@ -1,0 +1,71 @@
+{#- The figures of the Neighbors page that refresh themselves. Drawn with the
+    page and again, alone, by /live/neighbors (app/routes/live.py), from these
+    macros. -#}
+{% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_link, port_list %}
+
+{% macro banner() %}
+<div data-live-region="banner" data-live-at="{{ live_at }}"{% if live_problem %} data-live-problem="1"{% endif %}>
+  {% if live_problem %}<p class="alert alert-error" role="alert">{{ live_problem }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro announced() %}
+<section class="card" data-live-region="announced">
+  <h2 class="card-title">Devices that announce themselves</h2>
+  <p class="lead">Switches, routers, servers and phones next to the switch that say who they are over CDP or LLDP. CDP is {{ "on" if view.cdp_enabled else "off" }} and LLDP is {{ "on" if view.lldp_enabled else "off" }} on the switch.</p>
+  {% if view.neighbors %}
+  {{ neighbor_table(view.neighbors) }}
+  {% else %}
+  <p>No device has announced itself.</p>
+  {% endif %}
+  {{ protocol_notes(view) }}
+</section>
+{% endmacro %}
+
+{% macro busiest_devices() %}
+<section class="card" id="busiest" data-live-region="busiest">
+  <h2 class="card-title">Busiest devices</h2>
+  <p class="lead">The devices with the most traffic right now, for each device that is alone on an access port: that port's traffic is the device's own. Sends is what came in on the port, receives what went out of it, averaged over the last 30 seconds.</p>
+  {% if busiest %}
+  <table class="table table-devices">
+    <thead>
+      <tr><th>MAC address</th><th>Maker</th><th>IPv4 address</th><th>VLAN</th><th>Port</th><th>Sends</th><th>Receives</th></tr>
+    </thead>
+    <tbody>
+      {% for item in busiest %}
+      <tr>
+        <td class="mono">{{ item.mac }}</td>
+        <td class="wrap">{{ makers.get(item.mac) or "—" }}</td>
+        <td>{{ ips.get(item.mac, [])|join(", ") or "—" }}</td>
+        <td>{{ item.vlan or "—" }}</td>
+        <td>{{ port_link(item.port) }}</td>
+        <td>{{ item.sends_bits|rate }}</td>
+        <td>{{ item.receives_bits|rate }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">A device's traffic over time is its port's: open the port to see its chart.</p>
+  {% else %}
+  <p>No device can be measured right now: none is alone on an access port that is up and carrying traffic.</p>
+  {% endif %}
+  <p class="note">An estimate. Devices on a trunk, on a port-channel, or behind a port with several addresses on it (another switch, a hypervisor, a phone with a computer behind it) get no figure: the switch counts traffic per port and cannot split it between them.</p>
+</section>
+{% endmacro %}
+
+{% macro macs_table() %}
+<div data-live-region="macs">
+  {% if macs %}
+  <p class="note">{% if query %}{{ macs|length }} of {{ view.macs|length }} entries match.{% else %}{{ view.macs|length }} entries.{% endif %}</p>
+  {{ mac_table(macs, ips, traffic=traffic) }}
+  {% elif query %}
+  <p>No entry matches "{{ query }}".</p>
+  {% else %}
+  <p>The switch has learned no MAC addresses.</p>
+  {% endif %}
+  {% if view.port_channels %}
+  <p class="note">The switch learns addresses on a port-channel as a whole, not on its ports:
+    {%- for pc in view.port_channels %} {{ pc.name }} is {{ port_list(pc.members) }}{{ "." if loop.last else ";" }}{% endfor %}</p>
+  {% endif %}
+</div>
+{% endmacro %}

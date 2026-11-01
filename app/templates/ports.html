@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% import "_port_forms.html" as pf %}
+{% import "_ports_live.html" as live with context %}
 {% block title %}Ports — NXray{% endblock %}
 
 {% block content %}
@@ -12,14 +13,7 @@
     <h1 class="page-title">Ports</h1>
   </div>
   {% if ports %}
-  <dl class="kpis">
-    <div><dt>Ports</dt><dd>{{ ports|length }}</dd></div>
-    <div><dt>Up</dt><dd class="kpi-ok">{{ counts.up }}</dd></div>
-    <div><dt>Down</dt><dd>{{ counts.down - counts.off }}</dd></div>
-    <div><dt>Turned off</dt><dd>{{ counts.off }}</dd></div>
-    <div><dt>With errors</dt><dd{% if counts.errors %} class="kpi-crit"{% endif %}>{{ counts.errors }}</dd></div>
-    <div><dt>Traffic now</dt><dd>{{ throughput|rate }}</dd></div>
-  </dl>
+  {{ live.kpis() }}
   {% endif %}
 </div>
 {% macro messages() %}
@@ -65,6 +59,7 @@
 </div>
 {% endif %}
 
+{{ live.banner() }}
 <section class="card">
   <div class="box-head">
     <h2 class="card-title">Front panel</h2>
@@ -76,16 +71,7 @@
     <span class="box-gap"></span>
     <a class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
   </div>
-  <div class="faceplate">{{ face.svg }}</div>
-  <ul class="legend face-legend">
-    {% for entry in face.legend %}
-    <li><span class="swatch {{ entry.css }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.count }}</span></li>
-    {% endfor %}
-    {% if labels %}<li><span class="swatch swatch-mark"></span>Has a label</li>{% endif %}
-  </ul>
-  {% if color == "traffic" %}<p class="note">The busier direction over the last 30 seconds, as a share of the link's speed.</p>{% endif %}
-  {% if color == "errors" %}<p class="note">Errors and discards since the switch's counters were last cleared.</p>{% endif %}
-  {% if color in ("vlan", "channel") %}<p class="note">Ports without a link are drawn faded. Colours repeat after eight; hover over a port to be sure.</p>{% endif %}
+  {{ live.face_block() }}
 </section>
 
 {% if bulk_on %}
@@ -119,47 +105,11 @@
         <th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
       </tr>
     </thead>
-    <tbody>
-      {% for port in shown %}
-      {% set devices = neighbors.for_port(port.name) if neighbors else none %}
-      {% set speed_css, speed_words = speed_class(port) %}
-      <tr{% if port.name == selected %} class="row-sel"{% endif %}>
-        {% if bulk_on %}<td><input type="checkbox" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
-        <td><a class="port-name" href="{{ ports_link(show, color, port.name) }}">{{ port.name }}</a>{% if channels.get(port.name) %} <a class="reason" href="/port-channels#{{ channels[port.name] }}">in {{ channels[port.name] }}</a>{% endif %}{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
-        <td class="cell-desc" title="{{ port.description }}">{{ port.description }}</td>
-        <td>
-          <span class="state {{ 'state-up' if port.up else ('state-off' if not port.admin_up else ('state-err' if 'disabled' in port.reason|lower else 'state-down')) }}">{{ port.state_label }}</span>
-          {% if port.reason and not port.up and port.admin_up %}<span class="reason">{{ port.reason }}</span>{% endif %}
-        </td>
-        <td>{% if port.up %}<span class="speed {{ speed_css }}">{{ speed_words }}</span>{% else %}<span class="dim">{{ port.speed }}</span>{% endif %}</td>
-        <td><span class="mono">{{ port.vlan }}</span></td>
-        <td>
-          {% if devices and devices.neighbors %}
-          {% set n = devices.neighbors[0] %}
-          <span class="device" title="{{ n.protocol }}: {{ n.name }}{% if n.platform %}, {{ n.platform }}{% endif %}">{{ icon("neighbors") }}{{ short_device_name(n.name) }}{% if n.remote_port %} <small>{{ n.remote_port }}</small>{% endif %}</span>
-          {% elif devices and devices.macs %}
-          {% set m = devices.macs|rejectattr("switch_own")|list %}
-          {% if m %}<span class="device">{{ icon("account") }}{{ m[0].maker or m[0].mac }}{% if m|length > 1 %} <small>+{{ m|length - 1 }}</small>{% endif %}</span>{% endif %}
-          {% endif %}
-        </td>
-        <td class="mono">{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
-        <td>
-          {% if port.up and port.bandwidth_bits %}
-          {% set in_share = [port.in_bits_per_second / port.bandwidth_bits, 1]|min %}
-          {% set out_share = [port.out_bits_per_second / port.bandwidth_bits, 1]|min %}
-          <svg class="bars" viewBox="0 0 84 10" aria-hidden="true"><rect class="bar-bg" width="84" height="4" rx="1"/><rect class="bar-in" width="{{ [in_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/><rect class="bar-bg" y="6" width="84" height="4" rx="1"/><rect class="bar-out" y="6" width="{{ [out_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/></svg>
-          {% endif %}
-        </td>
-        <td class="num">{% if port.up %}{{ port.in_bits_per_second|rate }}{% endif %}</td>
-        <td class="num">{% if port.up %}{{ port.out_bits_per_second|rate }}{% endif %}</td>
-        <td class="num">{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>{% else %}<span class="dim">0</span>{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="{{ 12 if bulk_on else 11 }}">No ports match this filter.</td></tr>
-      {% endfor %}
+    <tbody data-live-region="rows">
+      {{ live.rows(bulk_on) }}
     </tbody>
   </table>
-  <p class="note">In and Out are the average over the last 30 seconds; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
+  {{ live.ratenote() }}
 </section>
 {% if bulk_on %}
 {% set b = bulk %}

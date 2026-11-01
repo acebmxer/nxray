@@ -6,11 +6,14 @@ account each time the page opens.
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import login_required, stored_switch, templates
+from app.live import HEALTH
 from app.switch import Dashboard, health_problems
 from app.switch_connection import set_switch_identity
 from app.switch_setup import ConnectionStatus, load_dashboard_status
@@ -39,5 +42,9 @@ def dashboard(request: Request, username: str = Depends(login_required)) -> Resp
             "status": status,
             "data": data,
             "problems": health_problems(data) if data else [],
+            "live_page": HEALTH,
+            "live_url": "/live/dashboard",
+            "live_at": int(time.time()),
+            "live_problem": "",
         },
     )

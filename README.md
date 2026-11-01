@@ -64,6 +64,7 @@ Taken against the test suite's pretend switch, with made-up devices.
 | [Installation](docs/installation.md) | Getting the container running |
 | [Configuration](docs/configuration.md) | Every setting, its default and what it does |
 | [Switch setup](docs/switch-setup.md) | What setup does on the switch, and how to undo it |
+| [Live figures](docs/live.md) | Pages that refresh themselves: the intervals, what it costs the switch, what Live measures |
 | [Traffic per VLAN and per device](docs/traffic.md) | What the estimates mean, what they leave out, and what would measure them |
 | [Function index](docs/functions.md) | Every function in the codebase, in one place |
 | [Contributing](CONTRIBUTING.md) | Development setup and conventions |

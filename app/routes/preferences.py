@@ -1,4 +1,4 @@
-"""The theme and menu-width buttons at the foot of the menu."""
+"""The theme and menu-width buttons at the foot of the menu, and the refresh picker."""
 
 from __future__ import annotations
 
@@ -21,9 +21,10 @@ def preferences(
     csrf: str = Form(""),
     theme: str = Form(""),
     menu: str = Form(""),
+    live: str = Form(""),
     next: str = Form("/"),
 ) -> Response:
-    """Keep this browser's theme or menu width, then go back to the page it was on.
+    """Keep this browser's theme, menu width or refresh interval, then go back.
 
     Changes nothing on a switch, so like the switch picker it takes a form
     shown for any switch.
@@ -32,4 +33,5 @@ def preferences(
         known = [connection.id for connection in list_connections(conn)]
     if not csrf_valid_any_switch(request, csrf, known):
         raise CsrfFailed()
-    return remember_preferences(request, redirect(safe_next(next)), theme=theme, menu=menu)
+    response = redirect(safe_next(next))
+    return remember_preferences(request, response, theme=theme, menu=menu, live=live)

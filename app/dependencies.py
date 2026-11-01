@@ -17,6 +17,7 @@ from app import __version__
 from app.activity import record_activity, utc_time
 from app.alerts import notify_change, switch_label
 from app.db import open_db
+from app.live import LIVE_CHOICES
 from app.nxapi import SwitchTarget
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
@@ -100,6 +101,17 @@ def require_csrf(request: Request, token: str) -> None:
 def login_required(request: Request) -> str:
     """Return the logged-in username, or send an anonymous caller to /login."""
     username = current_user(request)
+    if username is None:
+        raise RedirectToLogin(request.url.path)
+    return username
+
+
+def live_login_required(request: Request) -> str:
+    """Like ``login_required`` for the self-refreshing figures: it does not
+    slide the session's expiry. Signed out, it redirects to the sign-in page
+    like any other route, and the page's script, seeing the redirect, stops
+    asking."""
+    username = current_user(request, touch=False)
     if username is None:
         raise RedirectToLogin(request.url.path)
     return username
@@ -216,6 +228,7 @@ def switch_picker(request: Request) -> tuple[list[SwitchConnection], int | None]
 templates.env.globals["switch_picker"] = switch_picker
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
+templates.env.globals["live_choices"] = LIVE_CHOICES
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 

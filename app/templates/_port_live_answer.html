@@ -1,0 +1,11 @@
+{#- What /live/port sends: only the regions of a port's page that change. -#}
+{% import "_port_live.html" as live with context %}
+{{ live.banner() }}
+{{ live.port_state() }}
+{{ live.traffic() }}
+{{ live.counters() }}
+{% if devices is not none %}
+{{ live.devices_announced() }}
+{{ live.devices_macs() }}
+{% endif %}
+{{ live.ratenote() }}

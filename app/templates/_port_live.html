@@ -1,0 +1,87 @@
+{#- The figures of a port's own page that refresh themselves. Drawn with the page
+    and again, alone, by /live/port (app/routes/live.py), from these macros. -#}
+{% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_link, port_list %}
+
+{% macro banner() %}
+<div data-live-region="banner" data-live-at="{{ live_at }}"{% if live_problem %} data-live-problem="1"{% endif %}>
+  {% if live_problem %}<p class="alert alert-error" role="alert">{{ live_problem }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro port_state() %}
+  <section class="card" data-live-region="port-state">
+    <h2 class="card-title">Port</h2>
+    <dl class="facts">
+      <dt>State</dt>
+      <dd><span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
+        {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}</dd>
+      <dt>Label</dt><dd>{{ stored_label or "none" }}</dd>
+      <dt>Description</dt><dd>{{ port.description or "none" }}</dd>
+      <dt>Speed</dt><dd>{{ port.speed }}</dd>
+      <dt>VLAN</dt><dd>{{ port.vlan }}{% if port.mode %} ({{ port.mode }}){% endif %}</dd>
+      <dt>MTU</dt><dd>{{ port.mtu }}</dd>
+      <dt>Hardware</dt><dd>{{ port.hardware }}</dd>
+      <dt>MAC address</dt><dd>{{ port.mac }}</dd>
+      <dt>Last link change</dt><dd>{{ port.last_flap }}</dd>
+    </dl>
+  </section>
+{% endmacro %}
+
+{% macro traffic() %}
+  <section class="card" data-live-region="traffic">
+    <h2 class="card-title">Traffic</h2>
+    <dl class="facts">
+      <dt>In now</dt><dd>{{ port.in_bits_per_second|rate }}</dd>
+      <dt>Out now</dt><dd>{{ port.out_bits_per_second|rate }}</dd>
+      <dt>Received</dt><dd>{{ port.in_bytes|bytes }} in {{ "{:,}".format(port.in_packets) }} packets</dd>
+      <dt>Sent</dt><dd>{{ port.out_bytes|bytes }} in {{ "{:,}".format(port.out_packets) }} packets</dd>
+    </dl>
+  </section>
+{% endmacro %}
+
+{% macro counters() %}
+  <section class="card" data-live-region="counters">
+    <h2 class="card-title">Counters</h2>
+    <table class="table">
+      <tbody>
+        {% for key, label in counter_labels.items() %}
+        <tr><td>{{ label }}</td><td class="num">{{ "{:,}".format(port.counters.get(key, 0)) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endmacro %}
+
+{% macro devices_announced() %}
+  <div class="devices-part" data-live-region="devices-announced">
+    <h3>Devices that announce themselves</h3>
+    {% if devices.neighbors %}
+    {{ neighbor_table(devices.neighbors, show_port=False) }}
+    {% else %}
+    <p>No device on this port has announced itself.</p>
+    {% endif %}
+    {{ protocol_notes(neighbors) }}
+  </div>
+{% endmacro %}
+
+{% macro devices_macs() %}
+<div data-live-region="devices-macs">
+    <h3>Addresses learned on this port</h3>
+    {% if devices.channel %}
+    {% set others = devices.channel.members|reject("equalto", name)|list %}
+    <p class="note">{{ name }} is part of {{ port_link(devices.channel.name) }}{% if others %}, with {{ port_list(others) }}{% endif %}. The switch learns addresses on the port-channel as a whole, so these are the devices behind all of its ports.</p>
+    {% endif %}
+    {% if devices.macs %}
+    {{ mac_table(devices.macs, device_ips, show_port=False, traffic=port_traffic) }}
+    {% if port_traffic %}<p class="note">This port's traffic is that device's own, since it is alone on an access port: an estimate, and the port's traffic chart is its traffic over time for as long as it was here.</p>
+    {% elif traffic_reason %}<p class="note">No device gets a traffic figure here. {{ traffic_reason }}</p>{% endif %}
+    {% else %}
+    <p>The switch has learned no MAC addresses on this port.</p>
+    {% endif %}
+    <p class="note">From the switch's MAC address table: every device whose traffic came in on this port. <a href="/neighbors">See the whole table</a>.</p>
+</div>
+{% endmacro %}
+
+{% macro ratenote() %}
+<p class="note" data-live-region="ratenote">"Now" is {% if rates_window %}the rate measured over the last {{ rates_window|round|int }} s from the byte counters{% else %}the average over the last 30 seconds{% endif %}. Totals count since the counters were last cleared.</p>
+{% endmacro %}

@@ -21,6 +21,7 @@ from app.dependencies import (
     templates,
 )
 from app.history import start_sampler
+from app.live import LiveCache
 from app.logging_conf import configure_logging
 from app.routes import (
     activity,
@@ -31,6 +32,7 @@ from app.routes import (
     features,
     health,
     history,
+    live,
     neighbors,
     port_channels,
     ports,
@@ -109,6 +111,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings or load_settings()
     # Tests put an httpx.MockTransport here so no request reaches a real switch.
     app.state.nxapi_transport = None
+    # The newest switch readings the self-refreshing pages share (app/live.py).
+    app.state.live_cache = LiveCache()
     # ...and a pretend SSH shell opener here (app/switch_ssh.py).
     app.state.ssh_opener = None
     # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
@@ -143,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(dashboard.router)
+    app.include_router(live.router)
     app.include_router(ports.router)
     app.include_router(history.router)
     app.include_router(switch_page.router)

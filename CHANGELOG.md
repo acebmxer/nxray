@@ -11,6 +11,21 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Live figures.** The dashboard, the Ports page, a port's page and the
+  Neighbors page can refresh their figures by themselves: pick **Live, 3 s, 5 s,
+  10 s, 15 s, 30 s, 60 s** or **Off** (the default) in the top bar, kept per
+  browser. Only the numbers, bars, front panel and table rows change, so an
+  open side panel, scroll position and what you are typing stay; it pauses in a
+  background tab, while a field has the cursor or unsent input, and on
+  **Pause**, and shows when it last updated. NXray reads each switch once per
+  floor however many browsers watch (`NXRAY_LIVE_MIN_INTERVAL`, 2 s;
+  `NXRAY_LIVE_CLIENTS_MIN_INTERVAL`, 10 s for the MAC, ARP and neighbour
+  tables), only with `show` commands, and backs off and says so when the switch
+  does not answer. **Live** works In and Out out from the byte counters
+  between two readings instead of the switch's 30-second average, and labels
+  it. Refreshing does not keep a sign-in alive. See
+  [Live figures](docs/live.md) (#19).
+
 - **Traffic per VLAN and per device, estimated.** The switch counts traffic
   per port only, so NXray now works out two estimates from the port figures
   it already reads, and labels them as such. A device alone on an access

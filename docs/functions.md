@@ -49,6 +49,7 @@ prose columns; those are a reviewer's job.
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
 | Draw the front panel, or colour a port by state, speed, VLAN, port-channel, traffic or errors | `app/face.py`, `draw_face` |
+| Refresh figures on a page by themselves, or share one switch reading between browsers | `app/live.py`, `LiveCache.get`; the answers are in `app/routes/live.py`; `app/static/live.js` is the browser side ([Live figures](live.md)) |
 | Know a browser's theme (system, light, dark) or menu width | `app/preferences.py`, `ui_preferences` (a template global) |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
@@ -109,7 +110,7 @@ behind.
 | `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id and the switch the page is for (`switch_choice.selected_switch_id`), so a form shown for one switch is refused once another is picked | routes rendering forms | v0.1.0 |
 | `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token for the switch this request is for | `dependencies.require_csrf` | v0.1.0 |
 | `csrf_valid_any_switch` | `(request, token, switch_ids) -> bool` | True when the token is this session's for any of those switches or none; only for forms that change no switch (the switch picker, the theme and menu buttons) | `routes/switch_page.switches_select`, `routes/preferences.preferences` | v0.1.0 |
-| `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
+| `current_user` | `(request, *, touch=True) -> str \| None` | Resolves the cookie to a username and slides the expiry (not with `touch=False`) | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
 | `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user` | v0.1.0 |
 | `destroy_user_sessions` | `(conn, username, *, keep=None) -> int` | Signs an account out everywhere except one session | `users.set_password`, `users.set_disabled` | v0.1.0 |
 | `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends one that expired or whose account is gone or disabled | `security.current_user` | v0.1.0 |
@@ -140,6 +141,7 @@ really invalidates rather than merely asking the browser to forget.
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
+| `live_login_required` | `(request) -> str` | Like `login_required` for self-refreshing figures: does not slide the session | `routes/live` | v0.2.0 |
 | `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`), and sends it as an alert when the Alerts page asks for changes (`alerts.notify_change`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
@@ -343,8 +345,8 @@ the switch takes only while interface-vlan is on.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `remember_preferences` | `(request, response, *, theme="", menu="") -> Response` | Sets the `nxray_theme` / `nxray_menu` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
-| `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`) and menu width (`wide`, `narrow`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
+| `remember_preferences` | `(request, response, *, theme="", menu="", live="") -> Response` | Sets the `nxray_theme` / `nxray_menu` / `nxray_live` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
+| `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`), menu width (`wide`, `narrow`) and refresh interval (`LIVE_CHOICES`, default `off`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -539,9 +541,11 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_forms` | `(request, name, ports, view, port_settings, neighbors, discovery, *, description=None, vlan_form=None, settings_form=None, label=None) -> dict` | What the forms that change one port need (`_port_forms.html`), for its own page and its side panel alike; the keyword values keep what was typed after a refusal | `_render_port`, `render_ports_page` | v0.1.1 |
 | `answer_port_change` | `(request, username, name, origin, found=None, **kwargs) -> Response` | The page a change of one port answers on: its own page, or the Ports page with its side panel open when `origin` is set | the `routes/ports` change routes, `learned_macs_clear` | v0.1.1 |
 | `change_back` | `(origin, name) -> tuple[str, str]` | Where a confirm page's Cancel goes for a change of one port, and its words: the side panel or the port's page | the `routes/ports` change routes, `learned_macs_clear` | v0.1.1 |
+| `live_ports_link` | `(show, color, port="") -> str` | The address of the Ports page's refreshing figures for the same filter, colour and open panel | `render_ports_page` | v0.2.0 |
+| `ports_summary` | `(ports, neighbors, show) -> (channels, shown, counts)` | Each port's port-channel, the ports a filter keeps and how many each filter keeps | `render_ports_page`, `routes/live.live_ports` | v0.2.0 |
 | `ports_link` | `(show, color, port="") -> str` | The Ports page's address with a filter, a colour mode and the port whose side panel is open | `render_ports_page`, `ports.html` | v0.1.0 |
 | `ports_page` | `(request, username, show, color, select, port) -> Response` | `GET /ports?show=<filter>&color=state\|speed\|vlan\|channel\|traffic\|errors&select=all&port=<name>`: the front panel and the table (`select=all` ticks every port shown; `port` opens that port's side panel); only `vlan` and an open side panel also read the VLANs (the panel also its port's settings and CDP/LLDP); every mode reads the neighbors and MAC address table | router | v0.1.0 |
-| `preferences` | `(request, username, csrf, theme, menu, next) -> Response` | `POST /preferences`, the theme and menu-width buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
+| `preferences` | `(request, username, csrf, theme, menu, live, next) -> Response` | `POST /preferences`, the theme, menu-width and refresh buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
 | `ports_bulk_change` | `(request, username, csrf, names, power, set_description, description, mode, access_vlan, native_vlan, allowed, layer, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, cdp, lldp_transmit, lldp_receive, clear_macs, start, fill, show, color, confirm) -> Response` | `POST /ports/bulk`: applies one shared configuration (see `app/port_bulk.py`) to every ticked port; each kind of change needs its own switch on the Switch page; asks to confirm, listing every port with old → new, then sends each port's changes one request per kind, through the same `NxapiClient` methods as a single port; the first refusal stops the rest and the page names what changed (in part, too), what was refused and what was not tried. With `fill=yes`, fills the form from the port named in `start` and changes nothing | router | v0.2.0 |
 | `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", form_values=None, found=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and what the shared form holds after a refusal or a fill from one port; with `selected`, that port's side panel is open with every change form, `form_values` keeping what was typed in one after a refusal | `ports_page`, `ports_bulk_change`, `answer_port_change`, `switch_save` | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
@@ -766,6 +770,33 @@ times, so out of step is worked out without one.
 | `start_background_checker` | `(settings) -> None` | Checks once a day on a thread; does nothing with self-update off | `main.lifespan` | v0.1.0 |
 | `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator with the chosen tag as `NXRAY_TAG` | `apply_update` | v0.1.0 |
 | `watch_update` | `(db_path) -> None` | Waits for the recreator; records a failure (or a no-op success) if this container is still alive | `apply_update` | v0.1.0 |
+
+## `app/live.py` — figures that refresh themselves
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `measure_rates` | `(previous, ports, now) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over 120 s | `routes/live.shared_readings` | v0.2.0 |
+| `pick_interval` | `(choice, floor) -> int` | Seconds between refreshes for a picked choice, never below the floor; 0 for Off or anything unknown | tests; `live.js` repeats the rule in the browser | v0.2.0 |
+
+`PortReading` (class) is one reading: `ports` (the switch's 30 s averages), `live` (counter-based rates), `window` seconds between the two readings, `at`.
+
+`LiveCache` (class) keeps the newest reading per (switch id, kind):
+`get(switch_id, kind, floor, reader)` runs `reader(previous)` only when the
+reading is older than `floor`, one read at a time per key, keeps the last good
+value and waits longer after each failure. `LIVE_CHOICES` is the list shown in
+the top bar. Held in `app.state.live_cache`.
+
+## `app/routes/live.py` — the refresh answers
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `live_neighbors` | `(request, username, q) -> Response` | `GET /live/neighbors`: who announces themselves, the busiest devices and the MAC table narrowed by `q`; ports and tables read at the slower clients pace | router, `live.js` | v0.2.0 |
+| `live_port` | `(request, username, name, rates) -> Response` | `GET /live/port`: one port's state, rates, counters and devices; 204 for an unknown port | router, `live.js` | v0.2.0 |
+| `live_ports` | `(request, username, show, color, port, rates) -> Response` | `GET /live/ports`: the Ports page's counts, front panel and port rows (no VLAN colouring) | router, `live.js` | v0.2.0 |
+| `live_dashboard` | `(request, username) -> Response` | `GET /live/dashboard`: the dashboard's figures alone, read through the cache; 204 with no switch | router, `live.js` | v0.2.0 |
+| `live_problem_message` | `(answer) -> str` | The banner for a failed read, saying the figures shown are older and when NXray tries again | `live_dashboard` | v0.2.0 |
+| `shared_readings` | `(request, switch_id, target, ports_floor=None) -> (LiveAnswer, NeighborView \| None)` | The newest port reading and neighbour/MAC reading through the cache, shared by every live page; `ports_floor` slows the port read for pages that need it less often | `live_ports`, `live_port`, `live_neighbors` | v0.2.0 |
+| `no_cache` | `(response) -> Response` | Marks a response not to be stored by the browser | `live_dashboard` | v0.2.0 |
 
 ## `app/history.py` — history
 
