@@ -11,6 +11,24 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Change several ports: one whole configuration for every ticked port.**
+  The **Change several ports** card on the Ports page now sets everything a
+  port's own page can share, on any set of ticked ports, next to each other
+  or not: on or off and a description, VLANs (access or trunk, access VLAN,
+  native VLAN, VLANs carried), port settings (switched or routed, speed,
+  MTU, FEC, flow control, storm-control levels and action), CDP and LLDP,
+  and clearing the learned MAC addresses. Every setting starts at "Leave as
+  it is" and only what you fill in is sent, so changing the MTU leaves the
+  VLANs alone. Each port is checked as on its own page, including the
+  trunk-carries-its-native-VLAN rule; if one cannot take it, nothing is sent
+  and NXray names it and why. The confirm page lists each port's old → new
+  values, leaves out ports already set as asked and warns about anything that
+  cuts traffic; the result names what changed, what was refused and what was
+  not tried. **Start from port** fills the form from an existing port, to copy
+  a known-good one. An IPv4 address, the label and breakout stay per port.
+  The form's fields changed: `action` is now `power` and `set_description`
+  (#16).
+
 - **Include beta versions, from the Settings page.** With self-update on,
   **Settings → Updates** has an **Include beta versions** switch (admin
   only) that moves NXray onto the beta channel and back without editing

@@ -768,6 +768,10 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bulk-bar input[type="text"] { width: 18rem; }
 .bulk-bar .btn-primary { margin-top: 0; }
 .bulk-bar .hint { flex-basis: 100%; margin: 0; }
+.bulk-bar label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.bulk-config { margin-top: 14px; }
+.bulk-config .form-grid > .stack { min-width: 12rem; }
+.bulk-config .stack label:not(:first-of-type) { margin-top: 0; }
 
 /* The side panel: one port, opened by ?port= on the Ports page. */
 .drawer-shade { position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.25); }

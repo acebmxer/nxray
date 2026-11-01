@@ -44,7 +44,7 @@ prose columns; those are a reviewer's job.
 | Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports), `app/neighbors.py` (neighbors and tables) |
 | Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
 | Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
-| Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`); several at once: `routes/ports.plan_bulk_change` |
+| Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`); several at once, with one shared configuration: `app/port_bulk.py`, `plan_bulk` |
 | Read or change a port's speed, MTU, FEC, flow control, storm control, layer, or split it | `app/port_settings.py` (`plan_port_settings`, `plan_breakout`); commands from `NxapiClient.configure_port_settings`, `breakout_port`, `join_port` |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
@@ -456,6 +456,7 @@ among the VLANs it carries, so the switch drops its untagged traffic.
 | `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body, ipv6_body=None) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, addresses (main and extra IPv4, IPv6) and breakout | `load_port_settings` | v0.1.0 |
 | `plan_breakout` | `(settings, action, mapping) -> BreakoutPlan` | Checks a split or join against the port, with its lines and warnings for the confirm page | `routes/ports.port_breakout` | v0.1.0 |
 | `plan_port_settings` | `(current, form) -> SettingsChange` | Checks the settings form against the port (speeds it can run, MTU for its layer, FEC, levels) and keeps only what changes | `routes/ports.port_settings_change` | v0.1.0 |
+| `settings_form` | `(current) -> dict[str, str]` | The settings form filled with what the switch reports now (empty storm level = no limit), as `plan_port_settings` takes it | `routes/ports.port_forms`, `port_bulk.plan_port` | v0.2.0 |
 | `settings_commands` | `(name: str) -> tuple[str, ...]` | The per-port show commands a port's settings need | `load_port_settings` | v0.1.0 |
 | `speed_label` | `(mbps: str) -> str` | `10000` -> `10 Gb/s`, `auto` -> `Auto` | `describe_port_settings`, port page | v0.1.0 |
 | `speed_mbps` | `(text: str) -> str` | The switch's speed words as the `speed` command takes them: `10G` -> `10000` | `parse_port_settings`, `guess_breakout_map` | v0.1.0 |
@@ -491,8 +492,6 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
 | `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `ports_bulk_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `port_discovery_change`, `routes/vlans`, `routes/features`, `routes/neighbors` | v0.1.0 |
-| `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change`, `plan_bulk_change` | v0.1.0 |
-| `plan_bulk_change` | `(ports, names, action, description) -> tuple[list[Port], list[str], list[str], list[str]]` | Checks a change asked for several ports (known ports, an action, a valid description): the ports to change in front-panel order, a line for each, a warning for each up port being turned off, and the ticked ports already as asked | `ports_bulk_change` | v0.1.0 |
 | `feature_set` | `(request, username, csrf, name, state, confirm) -> Response` | `POST /features/set`: asks to confirm, then turns one feature on or off; admin only; refuses what `Feature.refusal` names | router | v0.1.0 |
 | `features_page` | `(request, username) -> Response` | `GET /features`: every switch feature by group with its state, read live; every role looks, admins change | router | v0.1.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
@@ -533,8 +532,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `ports_link` | `(show, color, port="") -> str` | The Ports page's address with a filter, a colour mode and the port whose side panel is open | `render_ports_page`, `ports.html` | v0.1.0 |
 | `ports_page` | `(request, username, show, color, select, port) -> Response` | `GET /ports?show=<filter>&color=state\|speed\|vlan\|channel\|traffic\|errors&select=all&port=<name>`: the front panel and the table (`select=all` ticks every port shown; `port` opens that port's side panel); only `vlan` and an open side panel also read the VLANs (the panel also its port's settings and CDP/LLDP); every mode reads the neighbors and MAC address table | router | v0.1.0 |
 | `preferences` | `(request, username, csrf, theme, menu, next) -> Response` | `POST /preferences`, the theme and menu-width buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
-| `ports_bulk_change` | `(request, username, csrf, names, action, description, show, color, confirm) -> Response` | `POST /ports/bulk`: asks to confirm, listing every ticked port, then turns them off or on or sets one description, one request per port; the first refusal stops the rest and the page names what changed, what was refused and what was not tried | router | v0.1.0 |
-| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", form_values=None, found=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and the picked change after a refusal; with `selected`, that port's side panel is open with every change form, `form_values` keeping what was typed in one after a refusal | `ports_page`, `ports_bulk_change`, `answer_port_change`, `switch_save` | v0.1.0 |
+| `ports_bulk_change` | `(request, username, csrf, names, power, set_description, description, mode, access_vlan, native_vlan, allowed, layer, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, cdp, lldp_transmit, lldp_receive, clear_macs, start, fill, show, color, confirm) -> Response` | `POST /ports/bulk`: applies one shared configuration (see `app/port_bulk.py`) to every ticked port; each kind of change needs its own switch on the Switch page; asks to confirm, listing every port with old → new, then sends each port's changes one request per kind, through the same `NxapiClient` methods as a single port; the first refusal stops the rest and the page names what changed (in part, too), what was refused and what was not tried. With `fill=yes`, fills the form from the port named in `start` and changes nothing | router | v0.2.0 |
+| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", form_values=None, found=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and what the shared form holds after a refusal or a fill from one port; with `selected`, that port's side panel is open with every change form, `form_values` keeping what was typed in one after a refusal | `ports_page`, `ports_bulk_change`, `answer_port_change`, `switch_save` | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
@@ -763,6 +762,26 @@ totals and `alerts.AlertMonitor` apart.
 The colours are CSS classes (`f-up`, `f-t2`, `f-vlan s3`, ...) in
 `static/style.css`; the SVG carries no inline style, so the strict
 Content-Security-Policy holds.
+
+## `app/port_bulk.py` — one shared configuration for several ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `bulk_kinds` | `(form) -> set[str]` | Which kinds of change the shared form asks for: `port` (on/off, description), `vlans`, `settings`, `discovery`, `macs`; each needs its own switch on the Switch page | `check_bulk_form`, `plan_port`, `routes/ports.ports_bulk_change` | v0.2.0 |
+| `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A change of one port's on/off or description in words, and a warning when turning off an up port | `plan_port`, `routes/ports.port_change` | v0.1.0 |
+| `check_bulk_form` | `(form) -> dict[str, str]` | Checks what does not depend on the port (choices offered, description, VLAN numbers and list, storm levels, no VLANs with routed) and returns the form cleaned up; empty means leave as it is | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `empty_bulk_form` | `() -> dict[str, str]` | The shared form with every setting at "leave as it is" | `routes/ports.render_ports_page`, `form_from_port` | v0.2.0 |
+| `form_from_port` | `(port, settings, vlans, discovery) -> dict[str, str]` | The shared form filled with one port's VLANs, settings and CDP/LLDP ("Start from port"); never on/off, description, address, or the speed of an up port | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `group_warnings` | `(plans) -> list[str]` | Each confirm-page warning once, naming the ports it is about | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `plan_bulk` | `(ports, names, form, *, view, settings, discovery, neighbors) -> tuple[list[PortPlan], list[str]]` | Plans the shared form for every ticked port, in front-panel order, and the ports already as asked; raises naming every port that cannot take it, so nothing is sent | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `plan_port` | `(port, form, *, view, settings, discovery, neighbors, port_names) -> PortPlan` | Plans the shared form for one port with the single-port planners (`plan_port_settings`, `plan_port_vlans`, `plan_port_discovery`, `plan_clear`): its steps (one request each, settings first so a layer change sets what the VLANs start from), lines, warnings and notes | `plan_bulk` | v0.2.0 |
+
+Each `PortPlan.steps` entry is a `BulkStep` that calls one of the existing
+`NxapiClient` methods (`configure_port_settings`, `configure_port_vlans`,
+`set_port_discovery`, `configure_port`, `clear_learned_macs`), so the bulk
+form sends nothing a port's own page could not, and the role NXray's
+account is given already allows all of it. Not offered for several ports:
+an IPv4 address (two ports cannot share one), the label and breakout.
 
 ## `app/port_labels.py` — port labels
 

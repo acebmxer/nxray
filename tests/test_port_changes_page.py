@@ -317,17 +317,8 @@ def test_switch_refusal_is_explained(logged_in: TestClient, enabled: FakeSwitch)
 # ---- several ports at once --------------------------------------------------
 
 
-def _bulk(client: TestClient, names: list[str], action: str, description: str = "", **extra):
-    return client.post(
-        "/ports/bulk",
-        data={
-            "csrf": _csrf(client),
-            "names": names,
-            "action": action,
-            "description": description,
-            **extra,
-        },
-    )
+def _bulk(client: TestClient, names: list[str], **form):
+    return client.post("/ports/bulk", data={"csrf": _csrf(client), "names": names, **form})
 
 
 def test_ports_page_offers_ticks_once_changes_are_on(
@@ -359,17 +350,22 @@ def test_turning_several_ports_off_asks_then_goes_port_by_port(
 ) -> None:
     enabled.bodies["show interface"] = _with_port_up("Ethernet1/3")
     names = ["Ethernet1/10", "Ethernet1/3", "Ethernet1/4", "Ethernet1/3"]
-    ask = _text(_bulk(logged_in, names, "off").text)
+    ask = _text(_bulk(logged_in, names, power="off").text)
     # Every port, in front-panel order, once; a warning for the one that is up.
-    assert "Turn off Ethernet1/3. Turn off Ethernet1/4. Turn off Ethernet1/10." in ask
+    assert (
+        "Ethernet1/3: Turn off Ethernet1/3. Ethernet1/4: Turn off Ethernet1/4. "
+        "Ethernet1/10: Turn off Ethernet1/10." in ask
+    )
     assert "Ethernet1/3: This port is up now" in ask
     assert "Ethernet1/4: This port is up now" not in ask
     assert _config_requests(enabled) == []
 
-    done = _bulk(logged_in, ["Ethernet1/3", "Ethernet1/4", "Ethernet1/10"], "off", confirm="yes")
+    names = ["Ethernet1/3", "Ethernet1/4", "Ethernet1/10"]
+    done = _bulk(logged_in, names, power="off", confirm="yes")
     text = _text(done.text)
     assert done.status_code == 200
-    assert "Done: Turned off: Ethernet1/3, Ethernet1/4, Ethernet1/10." in text
+    assert "Done: changed Ethernet1/3, Ethernet1/4, Ethernet1/10." in text
+    assert "Not saved yet" in text
     assert "changed the switch since its configuration was last saved" in text
     assert 'name="back" value="ports"' in done.text
     assert _config_requests(enabled) == [
@@ -378,39 +374,44 @@ def test_turning_several_ports_off_asks_then_goes_port_by_port(
         ["interface Ethernet1/10", "shutdown"],
     ]
     activity = _text(logged_in.get("/activity").text)
-    assert "Turn off Ethernet1/3. Turn off Ethernet1/4. Turn off Ethernet1/10." in activity
+    assert "Ethernet1/3: Turn off Ethernet1/3. Ethernet1/4: Turn off Ethernet1/4." in activity
 
 
 def test_ports_already_as_asked_are_left_alone(logged_in: TestClient, enabled: FakeSwitch) -> None:
     enabled.port_state["Ethernet1/4"] = {"admin_up": False}
-    ask = _text(_bulk(logged_in, ["Ethernet1/3", "Ethernet1/4"], "off").text)
-    assert "Turn off Ethernet1/3." in ask
-    assert "Unchanged: Ethernet1/4 is already off." in ask
-    assert (
-        'name="names" value="Ethernet1/4"'
-        not in _bulk(logged_in, ["Ethernet1/3", "Ethernet1/4"], "off").text
-    )
-    nothing = _bulk(logged_in, ["Ethernet1/4"], "off", confirm="yes")
-    assert "Nothing to change: Ethernet1/4 is already off." in _text(nothing.text)
+    ask = _bulk(logged_in, ["Ethernet1/3", "Ethernet1/4"], power="off")
+    assert "Ethernet1/3: Turn off Ethernet1/3." in _text(ask.text)
+    assert "Unchanged: Ethernet1/4 is already set as asked." in _text(ask.text)
+    assert 'name="names" value="Ethernet1/4"' not in ask.text
+    nothing = _bulk(logged_in, ["Ethernet1/4"], power="off", confirm="yes")
+    assert "Nothing to change: Ethernet1/4 is already set as asked." in _text(nothing.text)
     assert _config_requests(enabled) == []
 
 
 def test_one_description_for_several_ports(logged_in: TestClient, enabled: FakeSwitch) -> None:
     names = ["Ethernet1/5", "Ethernet1/6"]
-    ask = _text(_bulk(logged_in, names, "description", "lab rack 4").text)
-    assert 'Change the description of Ethernet1/5 from "none" to "lab rack 4".' in ask.replace(
-        "&#34;", '"'
-    )
-    done = _text(_bulk(logged_in, names, "description", "lab rack 4", confirm="yes").text)
-    assert 'Ethernet1/5, Ethernet1/6 now have the description "lab rack 4".' in done.replace(
-        "&#34;", '"'
-    )
+    form = {"set_description": "yes", "description": "lab rack 4"}
+    ask = _text(_bulk(logged_in, names, **form).text).replace("&#34;", '"')
+    assert 'Change the description of Ethernet1/5 from "none" to "lab rack 4".' in ask
+    done = _text(_bulk(logged_in, names, confirm="yes", **form).text).replace("&#34;", '"')
+    assert "Done: changed Ethernet1/5, Ethernet1/6." in done
     assert _config_requests(enabled) == [
         ["interface Ethernet1/5", "description lab rack 4"],
         ["interface Ethernet1/6", "description lab rack 4"],
     ]
-    cleared = _text(_bulk(logged_in, names, "description", "", confirm="yes").text)
-    assert "Ethernet1/5, Ethernet1/6 no longer have a description." in cleared
+    cleared = _bulk(logged_in, names, set_description="yes", description="", confirm="yes")
+    assert 'from "lab rack 4" to "none"' in _text(cleared.text).replace("&#34;", '"')
+    assert _config_requests(enabled)[-1] == ["interface Ethernet1/6", "no description"]
+
+
+def test_a_description_is_left_alone_unless_its_box_is_ticked(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    response = _bulk(logged_in, ["Ethernet1/5"], description="typed but not ticked")
+    assert response.status_code == 400
+    assert "fill in at least one setting to change" in response.text
+    _bulk(logged_in, ["Ethernet1/5"], description="not ticked", power="off", confirm="yes")
+    assert _config_requests(enabled) == [["interface Ethernet1/5", "shutdown"]]
 
 
 def test_a_refusal_partway_names_what_changed_and_what_did_not(
@@ -418,10 +419,10 @@ def test_a_refusal_partway_names_what_changed_and_what_did_not(
 ) -> None:
     enabled.reject.add("interface Ethernet1/5")
     names = ["Ethernet1/4", "Ethernet1/5", "Ethernet1/6", "Ethernet1/7"]
-    response = _bulk(logged_in, names, "off", confirm="yes")
+    response = _bulk(logged_in, names, power="off", confirm="yes")
     text = _text(response.text)
     assert response.status_code == 400
-    assert "Changed: Turned off: Ethernet1/4." in text
+    assert "Changed: Ethernet1/4: Turn off Ethernet1/4." in text
     assert "Ethernet1/5 was not changed. The switch refused a command" in text
     assert "Not tried: Ethernet1/6, Ethernet1/7." in text
     assert "Not saved yet" in text
@@ -431,17 +432,17 @@ def test_a_refusal_partway_names_what_changed_and_what_did_not(
         ["interface Ethernet1/5", "shutdown"],
     ]
     assert "Ethernet1/5" not in enabled.port_state
-    # The ticks and the change are kept, to try again.
+    # The ticks and the form are kept, to try again.
     for name in names:
         assert f'value="{name}" aria-label="Tick {name}" checked' in response.text
-    assert 'name="action" value="off" checked' in response.text
+    assert '<option value="off" selected>Turn off</option>' in response.text
 
 
 def test_a_refusal_at_the_first_port_changes_nothing(
     logged_in: TestClient, enabled: FakeSwitch
 ) -> None:
     enabled.extra_roles.clear()  # as before the switch applied the role
-    response = _bulk(logged_in, ["Ethernet1/3", "Ethernet1/4"], "off", confirm="yes")
+    response = _bulk(logged_in, ["Ethernet1/3", "Ethernet1/4"], power="off", confirm="yes")
     text = _text(response.text).replace("&#39;", "'")
     assert "Changed:" not in text and "Not saved yet" not in text
     assert "Ethernet1/3 was not changed. The switch refused: NXray's account may not" in text
@@ -450,35 +451,34 @@ def test_a_refusal_at_the_first_port_changes_nothing(
 
 
 @pytest.mark.parametrize(
-    ("names", "action", "description", "message"),
+    ("names", "form", "message"),
     [
-        ([], "off", "", "tick at least one port"),
-        (["Ethernet1/3"], "speed", "", "pick a change to make"),
-        (["Ethernet1/3"], "", "", "pick a change to make"),
-        (["Ethernet1/3", "Ethernet9/99"], "off", "", "no port called Ethernet9/99"),
-        (["mgmt0"], "off", "", "no port called mgmt0"),
-        (["Ethernet1/3; reload"], "off", "", "no port called"),
-        (["Ethernet1/3"], "description", "why?", "cannot contain"),
-        (["Ethernet1/3"], "description", "x" * 255, "at most 254"),
+        ([], {"power": "off"}, "tick at least one port"),
+        (["Ethernet1/3"], {"power": "speed"}, "turn the ports on or off"),
+        (["Ethernet1/3"], {}, "fill in at least one setting to change"),
+        (["Ethernet1/3", "Ethernet9/99"], {"power": "off"}, "no port called Ethernet9/99"),
+        (["mgmt0"], {"power": "off"}, "no port called mgmt0"),
+        (["Ethernet1/3; reload"], {"power": "off"}, "no port called"),
+        (["Ethernet1/3"], {"set_description": "yes", "description": "why?"}, "cannot contain"),
+        (["Ethernet1/3"], {"set_description": "yes", "description": "x" * 255}, "at most 254"),
     ],
 )
 def test_bad_bulk_changes_send_nothing(
     logged_in: TestClient,
     enabled: FakeSwitch,
     names: list[str],
-    action: str,
-    description: str,
+    form: dict[str, str],
     message: str,
 ) -> None:
     for confirm in ("", "yes"):
-        response = _bulk(logged_in, names, action, description, confirm=confirm)
+        response = _bulk(logged_in, names, confirm=confirm, **form)
         assert response.status_code == 400
         assert message in response.text
     assert _config_requests(enabled) == []
 
 
 def test_bulk_changes_are_refused_while_off(logged_in: TestClient, switch: FakeSwitch) -> None:
-    response = _bulk(logged_in, ["Ethernet1/3"], "off", confirm="yes")
+    response = _bulk(logged_in, ["Ethernet1/3"], power="off", confirm="yes")
     assert response.status_code == 400
     assert "Port changes are off" in response.text
     assert _config_requests(switch) == []
@@ -531,7 +531,7 @@ def test_save_from_a_port_page_stays_on_that_port(
 
 
 def test_save_from_the_ports_page_stays_there(logged_in: TestClient, enabled: FakeSwitch) -> None:
-    _bulk(logged_in, ["Ethernet1/3"], "off", confirm="yes")
+    _bulk(logged_in, ["Ethernet1/3"], power="off", confirm="yes")
     saved = logged_in.post("/switch/save", data={"csrf": _csrf(logged_in), "back": "ports"})
     assert _page_title(saved.text) == "Ports"
     assert "Saved: the switch keeps its current configuration" in saved.text

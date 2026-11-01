@@ -469,15 +469,59 @@ up to 254 plain characters; NX-API refuses `?` and `;`.
 **Changing several ports at once.** With port changes on, the Ports page has
 a tick box on each row for operators and admins (**Tick every port shown**
 ticks the ports the filter shows, so Down then Tick every port shown picks
-every port without a link). **Change several ports** turns the ticked ports
-off or on, or gives them all one description. The confirm page lists every
-ticked port and what happens to it, warns for each port that is up and about
-to be turned off, and names the ticked ports already as asked, which are
-left alone. NXray then changes the ports one at a time, in front-panel
-order. If the switch refuses one, NXray stops there, and the page names the
-ports that changed, the one refused and why, and the ones not tried; the
-ticks are kept to try again. The Ports page has a **Save config** button
-too.
+every port without a link). The ticked ports do not need to be next to each
+other: `Ethernet1/3`, `Ethernet1/7`, `Ethernet1/12` and `Ethernet1/40` work
+as well as a row of four. The **Change several ports** card under the table
+is one configuration that every ticked port gets:
+
+- **On or off and description**: turn them on or off; tick **Change the
+  description to** to give them one description (left empty, it removes
+  theirs); **Clear the addresses learned on them** (with neighbor changes on).
+- **VLANs** (with VLAN changes on): access or trunk, the access VLAN, the
+  native VLAN and the VLANs a trunk carries. The native VLAN is always added
+  to the VLANs carried, as on a port's own page.
+- **Port settings** (with port settings changes on): switched or routed,
+  speed, MTU, FEC, flow control (receive and send), the storm-control levels
+  (broadcast, multicast, unknown unicast; `none` for no limit) and the
+  storm-control action.
+- **CDP and LLDP** (with neighbor changes on): CDP, LLDP sending, LLDP
+  listening. LLDP needs the lldp feature on for the whole switch.
+
+Every setting starts at **Leave as it is**, and only what you fill in is
+sent: changing the MTU of six ports leaves their VLANs alone. A setting that
+only applies to one mode is left alone on the other (a native VLAN on an
+access port, storm control on a routed port), and the confirm page says so.
+Not offered for several ports, because each port needs its own: an IPv4
+address on a routed port (a port made routed here has none; set it on the
+port's page), the label, and splitting a 100G port, which the switch allows
+only on some ports.
+
+Every value is checked for each ticked port exactly as on that port's own
+page (the speeds the port can run at, the MTU for its layer, VLANs that
+exist), and if any ticked port cannot take the configuration, nothing is
+sent and the page names each such port and why. The confirm page lists
+every port that changes with each setting's old and new value, and leaves
+out the ports already set as asked. It warns about anything that cuts
+traffic: turning off a port that is up, moving a port to another VLAN,
+switching between access and trunk, changing the layer, a speed or FEC
+change on an up port, a smaller MTU, and the storm-control shutdown action;
+each warning names the ports it is about.
+
+NXray then changes the ports one at a time, in front-panel order, each kind
+of change (settings, VLANs, CDP and LLDP, description and on/off, clearing
+addresses) in its own request, with the same commands as a port's own page,
+so the role NXray's account was given already allows them all. If the switch
+refuses one, NXray stops there, and the page names the ports that changed,
+what was already made on the port it stopped at, what was refused and why,
+and the ports not tried; the ticks and the form are kept to try again. The
+Ports page has a **Save config** button too.
+
+**Start from port** fills the form with one port's VLANs, settings and CDP
+and LLDP, to copy a known-good port onto others. It changes nothing on the
+switch; you check the form, tick the ports and press **Change the ticked
+ports**. It never copies on or off, the description or an address, nor the
+speed of a port that is up (the switch then reports the speed it runs at,
+which may come from auto).
 
 **A port's VLANs.** The same page shows the port's mode and VLANs. **Change
 VLANs** sets the mode (access: one untagged VLAN; trunk: several tagged

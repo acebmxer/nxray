@@ -269,6 +269,24 @@ def try_load_port_settings(
         return None
 
 
+def settings_form(current: PortSettings) -> dict[str, str]:
+    """The settings form filled with what the switch reports now (an empty
+    storm-control level is no limit), as ``plan_port_settings`` takes it."""
+    return {
+        "layer": current.layer,
+        "ip_address": current.ip_address,
+        "speed": current.speed,
+        "mtu": str(current.mtu),
+        "fec": current.fec,
+        "flow_receive": current.flow_receive,
+        "flow_send": current.flow_send,
+        "storm_broadcast": current.storm_field("broadcast"),
+        "storm_multicast": current.storm_field("multicast"),
+        "storm_unicast": current.storm_field("unicast"),
+        "storm_action": current.storm_action,
+    }
+
+
 @dataclass(frozen=True)
 class SettingsChange:
     """What the settings form asks for, checked. Only the changed values are set."""
