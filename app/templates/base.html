@@ -15,6 +15,23 @@
     <a class="brand" href="/">
       <span class="brand-mark">◈</span> NXray
     </a>
+    {% set picker_switches, picker_selected = switch_picker(request) %}
+    {% if picker_switches|length > 1 %}
+    <form method="post" action="/switches/select" class="switch-picker">
+      <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+      {# After a form was sent the address is that form's; go to the dashboard then. #}
+      <input type="hidden" name="next" value="{% if request.method == 'GET' %}{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}{% else %}/{% endif %}">
+      <label for="picker_switch" class="sr-only">Switch</label>
+      <select id="picker_switch" name="switch_id">
+        {% for s in picker_switches %}
+        <option value="{{ s.id }}"{% if s.id == picker_selected %} selected{% endif %}>{{ s.switch_hostname or s.host }} ({{ s.host }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-quiet">Show</button>
+    </form>
+    {% elif picker_switches %}
+    <span class="switch-picker who">{{ picker_switches[0].switch_hostname or picker_switches[0].host }}</span>
+    {% endif %}
     <nav class="topnav">
       <a class="navlink" href="/">Dashboard</a>
       <a class="navlink" href="/ports">Ports</a>

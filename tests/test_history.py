@@ -102,8 +102,8 @@ def test_rows_older_than_thirty_days_are_deleted(settings: Settings) -> None:
     init_db(settings.db_path)
     now = 1_700_000_000.0
     with open_db(settings.db_path) as conn:
-        history.record(conn, now - 31 * 86400, [(history.CPU, "", 1.0)])
-        history.record(conn, now - 29 * 86400, [(history.CPU, "", 2.0)])
+        history.record(conn, 1, now - 31 * 86400, [(history.CPU, "", 1.0)])
+        history.record(conn, 1, now - 29 * 86400, [(history.CPU, "", 2.0)])
         assert history.purge(conn, now) == 1
         left = conn.execute("SELECT value FROM history").fetchall()
     assert [row["value"] for row in left] == [2.0]
@@ -114,8 +114,8 @@ def test_read_series_averages_each_bucket(settings: Settings) -> None:
     start = 1_700_000_000.0
     with open_db(settings.db_path) as conn:
         for offset, value in ((10, 10.0), (20, 30.0), (70, 50.0)):
-            history.record(conn, start + offset, [(history.CPU, "", value)])
-        series = history.read_series(conn, history.CPU, start=start, end=start + 120, bucket=60)
+            history.record(conn, 1, start + offset, [(history.CPU, "", value)])
+        series = history.read_series(conn, 1, history.CPU, start=start, end=start + 120, bucket=60)
     assert series[""] == [(start + 30, 20.0), (start + 90, 50.0)]
 
 
@@ -124,10 +124,11 @@ def test_read_series_can_add_each_bucket_up(settings: Settings) -> None:
     start = 1_700_000_000.0
     with open_db(settings.db_path) as conn:
         for offset in (10, 20):
-            history.record(conn, start + offset, [(history.PORT_ERRORS, "Ethernet1/3", 3.0)])
-        history.record(conn, start + 20, [(history.PORT_ERRORS, "Ethernet1/4", 7.0)])
+            history.record(conn, 1, start + offset, [(history.PORT_ERRORS, "Ethernet1/3", 3.0)])
+        history.record(conn, 1, start + 20, [(history.PORT_ERRORS, "Ethernet1/4", 7.0)])
         series = history.read_series(
             conn,
+            1,
             history.PORT_ERRORS,
             start=start,
             end=start + 60,
@@ -230,7 +231,7 @@ def test_an_unreachable_switch_is_reported_and_nothing_is_stored(
 def test_a_failed_sample_keeps_the_error_baseline(settings: Settings, switch: FakeSwitch) -> None:
     sampler = history.Sampler(settings, switch.transport)
     sampler.sample_once()
-    before = dict(sampler._errors)
+    before = dict(sampler._errors[1])
     assert before
 
     def refuse(request: httpx.Request) -> httpx.Response:
@@ -238,7 +239,7 @@ def test_a_failed_sample_keeps_the_error_baseline(settings: Settings, switch: Fa
 
     sampler._transport = lambda: httpx.MockTransport(refuse)
     assert sampler.sample_once()
-    assert sampler._errors == before
+    assert sampler._errors[1] == before
 
 
 def test_history_off_starts_no_thread(settings: Settings) -> None:
@@ -275,7 +276,7 @@ def test_the_history_page_has_a_chart_for_each_recorded_kind(
     with open_db(settings.db_path) as conn:
         for minute in range(30):
             rows, _ = history.build_rows(*_parsed(), {})
-            history.record(conn, now - minute * 60, rows)
+            history.record(conn, 1, now - minute * 60, rows)
     body = logged_in.get("/history").text
     for title in ("Temperatures", "CPU and memory", "Power draw", "Fan speed", "Traffic through"):
         assert title in body
@@ -307,8 +308,8 @@ def test_the_port_page_draws_that_ports_traffic_and_errors(
     with open_db(settings.db_path) as conn:
         for minute in range(30):
             rows, _ = history.build_rows(*_parsed(), {})
-            history.record(conn, now - minute * 60, rows)
-        history.record(conn, now - 120, [(history.PORT_ERRORS, "Ethernet1/3", 4.0)])
+            history.record(conn, 1, now - minute * 60, rows)
+        history.record(conn, 1, now - 120, [(history.PORT_ERRORS, "Ethernet1/3", 4.0)])
     page = logged_in.get("/ports/detail?name=Ethernet1/3&range=6h").text
     assert "Traffic over time" in page
     assert "Errors and discards over time" in page

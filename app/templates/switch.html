@@ -14,6 +14,83 @@
 <p class="alert alert-warn" role="status">{{ paused }}</p>
 {% endif %}
 
+{% macro setup_form(f, p) %}
+  <form method="post" action="/switch/setup" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+    <label for="{{ p }}host">Switch address</label>
+    <input id="{{ p }}host" name="host" type="text" value="{{ f.host }}" required
+           spellcheck="false" placeholder="IP address or hostname">
+
+    <label for="{{ p }}port">NX-API port</label>
+    <input id="{{ p }}port" name="port" type="text" inputmode="numeric" value="{{ f.port }}" required>
+
+    <label for="{{ p }}admin_user">Switch admin username</label>
+    <input id="{{ p }}admin_user" name="admin_user" type="text" value="admin" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="{{ p }}admin_password">Switch admin password</label>
+    <input id="{{ p }}admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="{{ p }}account_name">Name for NXray's account on the switch</label>
+    <input id="{{ p }}account_name" name="account_name" type="text" value="{{ f.account_name }}"
+           required spellcheck="false" maxlength="28">
+    <p class="hint">
+      Each NXray install needs its own name, for example nxray on the production
+      machine and nxray-dev on a test machine. Setup stops if the name already
+      exists on the switch.
+    </p>
+
+    <p class="warning">
+      When the account is made, NXray runs <code>copy running-config startup-config</code>
+      so the account survives a restart of the switch. That also saves any other
+      changes on the switch that have not been saved yet.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration after creating the account.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Create the account and connect</button>
+  </form>
+{% endmacro %}
+
+{% if switches|length > 1 %}
+<section class="card">
+  <h2 class="card-title">Switches</h2>
+  <p class="lead">
+    NXray has {{ switches|length }} switches. Every page shows the one picked in
+    the top bar; this page is about {{ connection.switch_hostname if connection else "none" }}.
+  </p>
+  <table class="table">
+    <thead><tr><th>Switch</th><th>Address</th><th>NXray's account</th><th>Last test</th><th></th></tr></thead>
+    <tbody>
+      {% for s in switches %}
+      <tr>
+        <td>{{ s.switch_hostname }}</td>
+        <td class="mono">{{ s.host }}:{{ s.port }}</td>
+        <td>{{ s.username }}</td>
+        <td>{% if s.last_tested_at is none %}never{% elif s.last_test_ok %}worked{% else %}failed{% endif %}</td>
+        <td>
+          {% if connection and s.id == connection.id %}
+          <span class="badge">shown</span>
+          {% else %}
+          <form method="post" action="/switches/select" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="switch_id" value="{{ s.id }}">
+            <input type="hidden" name="next" value="/switch">
+            <button type="submit" class="btn btn-quiet">Show</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 {% if connection %}
 <section class="card">
   <h2 class="card-title">Connected switch</h2>
@@ -39,7 +116,10 @@
   </div>
 
   <p class="note">
-    Forget this switch removes NXray's copy of the login only. The account
+    Forget this switch removes NXray's copy of the login, and what NXray kept
+    about this switch: its history, port labels, config backups and open
+    alerts. The activity log keeps its lines. NXray's other switches stay as
+    they are. The account
     {{ connection.username }} stays on the switch. To remove it, sign in to the
     switch over SSH as admin and run <code>configure terminal</code>,
     <code>no username {{ connection.username }}</code>, <code>end</code>,
@@ -333,6 +413,18 @@
     <button type="submit" class="btn btn-primary">Run setup again</button>
   </form>
 </section>
+<section class="card">
+  <h2 class="card-title">Add another switch</h2>
+  <p class="lead">
+    NXray can look after several switches. It signs in to the new switch's
+    NX-API once with an admin login, creates its own read-only account there
+    (role network-operator) with a long random password, and from then on uses
+    only that account. The admin password is used for this setup only and is
+    never stored. Afterwards the pages show the new switch; pick another in the
+    top bar.
+  </p>
+  {{ setup_form(add_form, "add_") }}
+</section>
 {% else %}
 <section class="card">
   <h2 class="card-title">Set up the switch</h2>
@@ -343,45 +435,7 @@
     this setup only and is never stored.
   </p>
 
-  <form method="post" action="/switch/setup" class="stack form-narrow">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-
-    <label for="host">Switch address</label>
-    <input id="host" name="host" type="text" value="{{ form.host }}" required
-           spellcheck="false" placeholder="IP address or hostname">
-
-    <label for="port">NX-API port</label>
-    <input id="port" name="port" type="text" inputmode="numeric" value="{{ form.port }}" required>
-
-    <label for="admin_user">Switch admin username</label>
-    <input id="admin_user" name="admin_user" type="text" value="admin" required
-           autocomplete="off" spellcheck="false">
-
-    <label for="admin_password">Switch admin password</label>
-    <input id="admin_password" name="admin_password" type="password" required
-           autocomplete="off">
-
-    <label for="account_name">Name for NXray's account on the switch</label>
-    <input id="account_name" name="account_name" type="text" value="{{ form.account_name }}"
-           required spellcheck="false" maxlength="28">
-    <p class="hint">
-      Each NXray install needs its own name, for example nxray on the production
-      machine and nxray-dev on a test machine. Setup stops if the name already
-      exists on the switch.
-    </p>
-
-    <p class="warning">
-      When the account is made, NXray runs <code>copy running-config startup-config</code>
-      so the account survives a restart of the switch. That also saves any other
-      changes on the switch that have not been saved yet.
-    </p>
-    <label class="check">
-      <input type="checkbox" name="confirm_save" value="yes" required>
-      I understand: save the switch configuration after creating the account.
-    </label>
-
-    <button type="submit" class="btn btn-primary">Create the account and connect</button>
-  </form>
+  {{ setup_form(form, "") }}
 </section>
 {% endif %}
 {% endblock %}

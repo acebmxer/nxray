@@ -20,6 +20,7 @@ from app.features import OFF_WARNING, ON_WARNINGS, FeatureView, load_features
 from app.nxapi import NxapiClient, NxapiError
 from app.routes.ports import change_refused
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
 
@@ -150,7 +151,7 @@ def feature_set(
         return fail(f"Not turned {state}: {change_refused(exc, target)}")
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info(
         "feature change on %s by %s: turned %s %s",
         connection.host,

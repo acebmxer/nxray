@@ -399,7 +399,7 @@ def _connected(tmp_path: Path) -> Path:
 
 
 def _stored(conn: sqlite3.Connection) -> SwitchConnection:
-    connection = get_connection(conn)
+    connection = get_connection(conn, 1)
     assert connection is not None
     return connection
 
@@ -408,16 +408,16 @@ def test_role_version_is_stored_and_a_running_pause_is_kept(tmp_path: Path) -> N
     db = _connected(tmp_path)
     with open_db(db) as conn:
         assert _stored(conn).role_version == 0
-        set_changes_enabled(conn, pause_seconds=660, role_version=1)
+        set_changes_enabled(conn, 1, pause_seconds=660, role_version=1)
         first = _stored(conn)
         assert first.changes_enabled and not first.vlan_changes_enabled
         # The update needs no wait, but must not cut the first wait short.
-        set_changes_enabled(conn, pause_seconds=0, role_version=ROLE_VERSION)
+        set_changes_enabled(conn, 1, pause_seconds=0, role_version=ROLE_VERSION)
         second = _stored(conn)
         assert second.vlan_changes_enabled
         assert second.paused_until == first.paused_until
         conn.execute("UPDATE switch_connection SET paused_until = ?", (time.time() - 5,))
-        set_changes_enabled(conn, pause_seconds=0, role_version=ROLE_VERSION)
+        set_changes_enabled(conn, 1, pause_seconds=0, role_version=ROLE_VERSION)
         assert _stored(conn).paused_seconds() == 0
 
 
@@ -437,7 +437,7 @@ def test_installs_with_port_changes_on_get_role_version_1(tmp_path: Path) -> Non
     )
     conn.commit()
     assert migrate(conn) == len(_MIGRATIONS)
-    connection = get_connection(conn)
+    connection = get_connection(conn, 1)
     conn.close()
     assert connection is not None
     assert (connection.role_version, connection.changes_enabled) == (1, True)

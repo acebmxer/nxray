@@ -36,6 +36,7 @@ prose columns; those are a reviewer's job.
 | Add a route | `app/routes/`, one module per area |
 | Run a command on the switch | `app/nxapi.py`, `NxapiClient.show` (and the guarded config methods) |
 | Get NXray's stored switch login | `app/switch_connection.py`, `load_target` |
+| Know which of NXray's switches a page is for | `app/switch_choice.py`, `selected_switch_id`; every per-switch table (history, port labels, backups, open problems) is keyed by that id |
 | Check NXray can reach the switch | `app/switch_setup.py`, `check_connection` |
 | Give NXray's account a new password, or make it again | `app/switch_repair.py`, `run_repair` |
 | Encrypt a secret for the database | `app/crypto.py` |
@@ -102,8 +103,9 @@ behind.
 | `clear_login_failures` | `(conn, ip: str) -> None` | Forgets an address's failures after success | `routes/auth.login_submit` | v0.1.0 |
 | `client_ip` | `(request) -> str` | The peer address login throttling counts against | `routes/auth.login_submit` | v0.1.0 |
 | `create_session` | `(conn, username: str, session_hours: int) -> str` | Records a session, returns its id | `routes/auth.login_submit` | v0.1.0 |
-| `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id | routes rendering forms | v0.1.0 |
-| `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token | `dependencies.require_csrf` | v0.1.0 |
+| `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id and the switch the page is for (`switch_choice.selected_switch_id`), so a form shown for one switch is refused once another is picked | routes rendering forms | v0.1.0 |
+| `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token for the switch this request is for | `dependencies.require_csrf` | v0.1.0 |
+| `csrf_valid_any_switch` | `(request, token, switch_ids) -> bool` | True when the token is this session's for any of those switches or none; only for the switch picker, which changes no switch | `routes/switch_page.switches_select` | v0.1.0 |
 | `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
 | `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user` | v0.1.0 |
 | `destroy_user_sessions` | `(conn, username, *, keep=None) -> int` | Signs an account out everywhere except one session | `users.set_password`, `users.set_disabled` | v0.1.0 |
@@ -139,11 +141,14 @@ really invalidates rather than merely asking the browser to forget.
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
-| `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The stored switch, its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
+| `selected_connection` | `(request) -> SwitchConnection \| None` | The switch this request is for, without its login | `routes/alerts` | v0.1.0 |
+| `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The switch this request is for (`switch_choice.selected_switch_id`), its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
+| `switch_picker` | `(request) -> tuple[list[SwitchConnection], int \| None]` | Every switch and the one this page is for; a template global for the top bar's picker | `base.html` | v0.1.0 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
-`templates` is the shared Jinja environment; `RedirectToLogin` is the
+`templates` is the shared Jinja environment (its global `form_token` is
+`security.csrf_token`, for the top bar's own form); `RedirectToLogin` is the
 exception `login_required` raises, `Forbidden` the one the role guards raise
 (a 403 page naming the role needed) and `CsrfFailed` the one `require_csrf`
 raises, all handled in `main.create_app`.
@@ -280,22 +285,27 @@ port's own page shows.
 | `decrypt` | `(stored: str, secret_key: str) -> str` | Recovers a secret; raises `DecryptionError` for a changed key or tampering | `switch_connection.load_target` | v0.1.0 |
 | `encrypt` | `(plaintext: str, secret_key: str) -> str` | AES-GCM with a key derived from the secret key | `switch_connection.save_connection`, `replace_login` | v0.1.0 |
 
-## `app/switch_connection.py` — the stored switch
+## `app/switch_connection.py` — the stored switches
+
+Each switch is a row named by its `id`; every function takes that id, so
+none reads or changes "the" switch by default.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `delete_connection` | `(conn) -> bool` | Forgets the stored login; the switch account stays | `routes/switch_page.switch_forget` | v0.1.0 |
-| `get_connection` | `(conn) -> SwitchConnection \| None` | The stored connection without its password | Switch page, dashboard | v0.1.0 |
-| `load_target` | `(conn, secret_key) -> SwitchTarget` | The stored login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
-| `record_test_result` | `(conn, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
-| `replace_login` | `(conn, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
-| `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> None` | Stores the connection, password encrypted; refuses a second one | `routes/switch_page.switch_setup` | v0.1.0 |
-| `set_address` | `(conn, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
-| `set_switch_hostname` | `(conn, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
-| `set_changes_enabled` | `(conn, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
-| `set_changes_off` | `(conn) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
-| `set_config_saved` | `(conn, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
-| `set_unsaved_changes` | `(conn, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
+| `delete_connection` | `(conn, switch_id) -> bool` | Forgets a switch: its login, history, port labels, config backups and open problems; the switch account stays | `routes/switch_page.switch_forget` | v0.1.0 |
+| `find_by_address` | `(conn, host, port) -> int \| None` | The id of the switch stored at that address and NX-API port (host in any case) | `save_connection`, `routes/switch_page` (setup, address, repair) | v0.1.0 |
+| `get_connection` | `(conn, switch_id) -> SwitchConnection \| None` | One stored switch without its password; None for no such switch (or `None`) | Switch page, dashboard | v0.1.0 |
+| `list_connections` | `(conn) -> list[SwitchConnection]` | Every stored switch, in the order they were added | `history.Sampler`, the switch picker, Switch page | v0.1.0 |
+| `load_target` | `(conn, switch_id, secret_key) -> SwitchTarget` | A switch's login, decrypted; `LookupError` / `DecryptionError` | Switch page test, dashboard | v0.1.0 |
+| `record_test_result` | `(conn, switch_id, *, ok, message) -> None` | Remembers the last connection test | Switch page | v0.1.0 |
+| `replace_login` | `(conn, switch_id, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
+| `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> int` | Stores a new switch, password encrypted; its id. Refuses one at an address already stored | `routes/switch_page.switch_setup` | v0.1.0 |
+| `set_address` | `(conn, switch_id, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
+| `set_switch_hostname` | `(conn, switch_id, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
+| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
+| `set_config_saved` | `(conn, switch_id, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
+| `set_unsaved_changes` | `(conn, switch_id, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
 changes are on and how long NXray still waits before calling the switch;
@@ -306,6 +316,17 @@ changes are on and how long NXray still waits before calling the switch;
 `route_changes_enabled` the later rule sets (3, 4, 5, 6, 7, 8 and 9). `vlan_interface_changes_enabled` also needs
 `role_vlan_interfaces`: the role's port list names the VLAN interfaces, which
 the switch takes only while interface-vlan is on.
+
+## `app/switch_choice.py` — which switch a browser is looking at
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `choose_switch` | `(request, switch_id) -> None` | Makes that switch the one for the rest of this request (after adding, forgetting or picking one) | `routes/switch_page` | v0.1.0 |
+| `remember_switch` | `(request, response) -> Response` | Sets the `nxray_switch` cookie to the switch the request ended on (deletes it with none) | `routes/switch_page` | v0.1.0 |
+| `resolve_switch_id` | `(conn, wanted) -> int \| None` | `wanted` when that switch exists, else the first one added; None with none | `selected_switch_id`, `routes/switch_page.switch_forget` | v0.1.0 |
+| `selected_switch_id` | `(request) -> int \| None` | The switch this request is for, from the cookie; looked up once per request | `dependencies.stored_switch`, `security.csrf_token`, every route that stores something per switch | v0.1.0 |
+
+`SWITCH_COOKIE` is the cookie's name.
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -555,11 +576,12 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_vlans_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the VLANs page with a message | `switch_save` | v0.1.0 |
 | `switch_address` | `(request, username, csrf, host, port) -> Response` | `POST /switch/address`: signs in at the new address with NXray's account, then stores it; keeps the old one on failure | router | v0.1.0 |
 | `switch_enable_changes` | `(request, username, csrf, admin_user, admin_password, ssh_port, confirm_save) -> Response` | `POST /switch/enable-changes`, the Turn on port, VLAN, port settings, feature and neighbor changes button, the Turn on button for whatever an older role lacks (for example Turn on neighbor changes), and Update the port list | router | v0.1.0 |
-| `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget` | router | v0.1.0 |
-| `switch_page` | `(request, username) -> Response` | `GET /switch`, setup form or the stored connection | router | v0.1.0 |
+| `switch_forget` | `(request, username, csrf) -> Response` | `POST /switch/forget`: forgets the switch shown, with what NXray kept about it; the pages then show the first switch left | router | v0.1.0 |
+| `switch_page` | `(request, username) -> Response` | `GET /switch`, the setup form, or the switch shown with every switch listed and a form to add another | router | v0.1.0 |
+| `switches_select` | `(request, username, csrf, switch_id, next) -> Response` | `POST /switches/select`, the top bar's switch picker (any role): remembers the switch and goes back to `next` | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
 | `switch_save` | `(request, username, csrf, back, port) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, VLANs, Features, Neighbors, Port-channels, Routing, else Switch) | router | v0.1.0 |
-| `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time | router | v0.1.0 |
+| `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time: adds a switch (never one at an address already stored) and shows it | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
 | `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
 | `users_2fa_off` | `(request, username, csrf, user_id) -> Response` | `POST /users/2fa-off`: an admin turns off someone else's two-factor, no code needed | router | v0.1.0 |
@@ -667,16 +689,21 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `bucket_seconds` | `(span: int) -> int` | How wide one chart point is: a minute at least, and at most 500 points | `system_charts`, `port_charts` | v0.1.0 |
-| `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_once` | v0.1.0 |
+| `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_switch` | v0.1.0 |
 | `fill_zeros` | `(points, start, end, bucket) -> list` | Every bucket of a range, 0 where there is no point | `port_charts` | v0.1.0 |
-| `last_sample_time` | `(conn) -> float \| None` | When the newest row was stored | `routes/history.history_page` | v0.1.0 |
-| `port_charts` | `(conn, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
-| `purge` | `(conn, now, keep_days=30) -> int` | Deletes rows older than the retention; how many went | `start_sampler` | v0.1.0 |
+| `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page` | v0.1.0 |
+| `port_charts` | `(conn, switch_id, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
+| `purge` | `(conn, now, keep_days=30) -> int` | Deletes every switch's rows older than the retention; how many went | `start_sampler` | v0.1.0 |
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
-| `read_series` | `(conn, metric, *, start, end, bucket, item=None, total=False) -> dict` | A metric's rows averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
-| `record` | `(conn, moment, rows) -> None` | Stores one sample's rows | `Sampler.sample_once` | v0.1.0 |
+| `read_series` | `(conn, switch_id, metric, *, start, end, bucket, item=None, total=False) -> dict` | A switch's rows of a metric averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
+| `record` | `(conn, switch_id, moment, rows) -> None` | Stores one sample's rows for a switch | `Sampler.sample_switch` | v0.1.0 |
 | `start_sampler` | `(settings, transport, alert_transport=lambda: None) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, checking the alerts against each sample and purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
-| `system_charts` | `(conn, key, now) -> list[ChartView]` | The History page's charts for a range | `routes/history.history_page` | v0.1.0 |
+| `system_charts` | `(conn, switch_id, key, now) -> list[ChartView]` | The History page's charts of a switch for a range | `routes/history.history_page` | v0.1.0 |
+
+`Sampler` (class) samples every switch in turn: `sample_once(now=None)` reads
+each one and returns what failed in words (None when all went well), and
+`sample_switch(switch_id, now=None)` reads one. It keeps each switch's error
+totals and `alerts.AlertMonitor` apart.
 
 ## `app/charts.py` — SVG line charts
 
@@ -707,8 +734,8 @@ Content-Security-Policy holds.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `get_labels` | `(conn) -> dict[str, str]` | Every port's label, by port name | `routes/ports` | v0.1.0 |
-| `set_label` | `(conn, port, label, username) -> str` | Checks and stores a label (empty removes it); returns what was stored | `routes/ports.port_label` | v0.1.0 |
+| `get_labels` | `(conn, switch_id) -> dict[str, str]` | Every port's label on a switch, by port name | `routes/ports`, `history.Sampler` | v0.1.0 |
+| `set_label` | `(conn, switch_id, port, label, username) -> str` | Checks and stores a label (empty removes it); returns what was stored | `routes/ports.port_label` | v0.1.0 |
 | `validate_label` | `(text: str) -> str` | Trims a label; refuses over 64 characters or control characters (any other text is fine, the switch never sees it) | `set_label` | v0.1.0 |
 
 ## `app/neighbors.py` — neighbors, the MAC address table and ARP
@@ -941,11 +968,11 @@ and deleted from the page).
 | `parse_checkpoints` | `(output) -> list[str]` | The checkpoint names in `show checkpoint summary` | `load_configs` | v0.1.0 |
 | `checkpoint_name` | `(backup_id) -> str` | `nxray-<id>`, the switch checkpoint of a backup | `routes/config_page` | v0.1.0 |
 | `validate_note` | `(note) -> str` | A backup's note: one printable line of at most 200 characters | `store_backup`, `routes/config_page` | v0.1.0 |
-| `store_backup` | `(conn, *, config, created_by, switch, note="", now=None) -> int` | Stores a configuration; its backup number | `routes/config_page` | v0.1.0 |
-| `set_backup_checkpoint` | `(conn, backup_id, checkpoint) -> None` | Notes the switch checkpoint made with a backup | `routes/config_page` | v0.1.0 |
-| `list_backups` | `(conn, limit=200) -> list[Backup]` | The backups, newest first, without their text | `routes/config_page` | v0.1.0 |
-| `get_backup` | `(conn, backup_id) -> tuple[Backup, str] \| None` | One backup and its text | `routes/config_page` | v0.1.0 |
-| `delete_backup` | `(conn, backup_id) -> bool` | Deletes a backup from NXray | `routes/config_page` | v0.1.0 |
+| `store_backup` | `(conn, switch_id, *, config, created_by, switch, note="", now=None) -> int` | Stores a configuration of a switch; its backup number | `routes/config_page` | v0.1.0 |
+| `set_backup_checkpoint` | `(conn, switch_id, backup_id, checkpoint) -> None` | Notes the switch checkpoint made with a backup | `routes/config_page` | v0.1.0 |
+| `list_backups` | `(conn, switch_id, limit=200) -> list[Backup]` | A switch's backups, newest first, without their text | `routes/config_page` | v0.1.0 |
+| `get_backup` | `(conn, switch_id, backup_id) -> tuple[Backup, str] \| None` | One backup of that switch and its text; None for another switch's, so it is never compared with or rolled back onto the wrong one | `routes/config_page` | v0.1.0 |
+| `delete_backup` | `(conn, switch_id, backup_id) -> bool` | Deletes a backup of that switch from NXray | `routes/config_page` | v0.1.0 |
 | `load_configs` | `(client) -> SwitchConfigs` | The running and saved configurations and the checkpoints, as text; None for what the role may not read | `routes/config_page` | v0.1.0 |
 | `load_running` | `(client) -> str` | `show running-config` as text | `routes/config_page` | v0.1.0 |
 
@@ -976,10 +1003,9 @@ and deleted from the page).
 | `add_webhook` | `(conn, name, url, fmt, secret, secret_key) -> int` | Stores a webhook with its URL and secret encrypted, at most `MAX_WEBHOOKS` | `routes/alerts.alerts_webhook_add` | v0.1.0 |
 | `list_webhooks` | `(conn) -> list[Webhook]` | The webhooks without their URLs and secrets | `routes/alerts` | v0.1.0 |
 | `delete_webhook` | `(conn, webhook_id) -> Webhook \| None` | Deletes one webhook | `routes/alerts.alerts_webhook_delete` | v0.1.0 |
-| `list_open` | `(conn) -> list[OpenProblem]` | The problems open now, oldest first | `AlertMonitor`, `save_rules`, `routes/alerts` | v0.1.0 |
-| `clear_open` | `(conn) -> None` | Forgets every open problem without alerts | `routes/switch_page.switch_forget` | v0.1.0 |
-| `update_open` | `(conn, now, found) -> list[AlertEvent]` | Stores the problems found now: new ones are alerts, open ones not found are resolved | `AlertMonitor` | v0.1.0 |
-| `log_alerts` | `(conn, now, events, delivery) -> list[int]` | Keeps events in the alert log and deletes lines older than `KEEP_DAYS` | `dispatch`, `send_test` | v0.1.0 |
+| `list_open` | `(conn, switch_id=None) -> list[OpenProblem]` | The problems open now on one switch or (None) every switch, oldest first; each names its switch when there are several | `AlertMonitor`, `save_rules`, `routes/alerts` | v0.1.0 |
+| `update_open` | `(conn, switch_id, now, found) -> list[AlertEvent]` | Stores the problems found now on a switch: new ones are alerts, open ones not found are resolved | `AlertMonitor` | v0.1.0 |
+| `log_alerts` | `(conn, now, events, delivery, switch="") -> list[int]` | Keeps events in the alert log with the switch they name, and deletes lines older than `KEEP_DAYS` | `dispatch`, `send_test` | v0.1.0 |
 | `set_delivery` | `(conn, ids, delivery) -> None` | Notes how logged alerts were delivered | `dispatch` | v0.1.0 |
 | `list_sent` | `(conn, limit=100) -> list[SentAlert]` | The newest alerts with their delivery | `routes/alerts` | v0.1.0 |
 | `find_problems` | `(rules, environment, resources, ports, *, labels, new_errors, was_up, open_keys) -> dict[str, str]` | Every problem the rules ask about in one reading, by key; a watched port only once it went down from up | `AlertMonitor.checked` | v0.1.0 |
@@ -991,12 +1017,12 @@ and deleted from the page).
 | `send_email` | `(email, password, subject, text, now=None) -> None` | Sends one e-mail over STARTTLS, SSL/TLS or plain, checking the certificate; raises on failure | `deliver` | v0.1.0 |
 | `post_webhook` | `(url, fmt, secret, events, switch, now, transport=None) -> None` | POSTs one alert, signed when there is a secret; raises without the URL in the message | `deliver` | v0.1.0 |
 | `deliver` | `(conn, secret_key, events, switch, now, transport=None, *, webhook_id=None, email_only=False) -> str` | Sends by e-mail and to every webhook (or one, for a test); how it went, in words | `dispatch`, `send_test` | v0.1.0 |
-| `switch_label` | `(conn) -> str` | The switch as alerts name it, `leaf1 (192.0.2.10)` | `dispatch`, `send_test` | v0.1.0 |
-| `dispatch` | `(settings, events, transport=None, *, background=True, now=None) -> None` | Logs events and sends them on a thread of their own; never raises | `history.Sampler`, `notify_change` | v0.1.0 |
-| `notify_change` | `(settings, username, area, what, transport=None, *, background=True) -> None` | Sends a change made through NXray when the rules ask for it; never raises | `dependencies.note_activity` | v0.1.0 |
-| `send_test` | `(settings, transport=None, *, webhook_id=None, email_only=False) -> str` | Sends a test alert now and waits for it | `routes/alerts` | v0.1.0 |
+| `switch_label` | `(connection: SwitchConnection \| None) -> str` | A switch as alerts name it, `leaf1 (192.0.2.10)`; empty for none | `history.Sampler`, `dependencies.note_activity`, `routes/alerts` | v0.1.0 |
+| `dispatch` | `(settings, events, switch, transport=None, *, background=True, now=None) -> None` | Logs events about the switch named `switch` and sends them on a thread of their own; never raises | `history.Sampler`, `notify_change` | v0.1.0 |
+| `notify_change` | `(settings, username, area, what, switch="", transport=None, *, background=True) -> None` | Sends a change made through NXray to that switch (empty: to NXray itself) when the rules ask for it; never raises | `dependencies.note_activity` | v0.1.0 |
+| `send_test` | `(settings, transport=None, *, switch="", webhook_id=None, email_only=False) -> str` | Sends a test alert naming that switch now and waits for it | `routes/alerts` | v0.1.0 |
 
-`AlertMonitor` (class) remembers between samples which ports were up, how long
+`AlertMonitor(switch_id)` (class) remembers, for one switch, between samples which ports were up, how long
 CPU or memory has been over its limit and how many reads failed in a row:
 `checked(conn, now, reading, new_errors, labels)` and `failed(conn, now,
 reason)` return the alerts a sample starts or resolves.

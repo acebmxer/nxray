@@ -174,6 +174,7 @@ def validate_note(note: str) -> str:
 
 def store_backup(
     conn: sqlite3.Connection,
+    switch_id: int,
     *,
     config: str,
     created_by: str,
@@ -181,47 +182,64 @@ def store_backup(
     note: str = "",
     now: float | None = None,
 ) -> int:
-    """Store a configuration; returns the backup's number."""
+    """Store a configuration of a switch; returns the backup's number."""
     cursor = conn.execute(
-        "INSERT INTO config_backups (created_at, created_by, switch, note, checkpoint, config) "
-        "VALUES (?, ?, ?, ?, '', ?)",
-        (time.time() if now is None else now, created_by, switch, validate_note(note), config),
+        "INSERT INTO config_backups "
+        "(switch_id, created_at, created_by, switch, note, checkpoint, config) "
+        "VALUES (?, ?, ?, ?, ?, '', ?)",
+        (
+            switch_id,
+            time.time() if now is None else now,
+            created_by,
+            switch,
+            validate_note(note),
+            config,
+        ),
     )
     conn.commit()
     return int(cursor.lastrowid or 0)
 
 
-def set_backup_checkpoint(conn: sqlite3.Connection, backup_id: int, checkpoint: str) -> None:
+def set_backup_checkpoint(
+    conn: sqlite3.Connection, switch_id: int, backup_id: int, checkpoint: str
+) -> None:
     """Note the switch checkpoint made with a backup ("" when it is gone)."""
     conn.execute(
-        "UPDATE config_backups SET checkpoint = ? WHERE id = ?", (checkpoint, int(backup_id))
+        "UPDATE config_backups SET checkpoint = ? WHERE id = ? AND switch_id = ?",
+        (checkpoint, int(backup_id), switch_id),
     )
     conn.commit()
 
 
-def list_backups(conn: sqlite3.Connection, limit: int = LIST_LIMIT) -> list[Backup]:
-    """The stored backups, newest first, without their text."""
+def list_backups(conn: sqlite3.Connection, switch_id: int, limit: int = LIST_LIMIT) -> list[Backup]:
+    """A switch's stored backups, newest first, without their text."""
     rows = conn.execute(
         "SELECT id, created_at, created_by, switch, note, checkpoint, LENGTH(config) AS size "
-        "FROM config_backups ORDER BY id DESC LIMIT ?",
-        (limit,),
+        "FROM config_backups WHERE switch_id = ? ORDER BY id DESC LIMIT ?",
+        (switch_id, limit),
     ).fetchall()
     return [_backup(row) for row in rows]
 
 
-def get_backup(conn: sqlite3.Connection, backup_id: int) -> tuple[Backup, str] | None:
-    """One backup and its configuration text, or None."""
+def get_backup(
+    conn: sqlite3.Connection, switch_id: int, backup_id: int
+) -> tuple[Backup, str] | None:
+    """One backup of a switch and its configuration text, or None, also when the
+    backup is another switch's: it can never be compared with or rolled back
+    onto the wrong switch."""
     row = conn.execute(
         "SELECT id, created_at, created_by, switch, note, checkpoint, config, "
-        "LENGTH(config) AS size FROM config_backups WHERE id = ?",
-        (int(backup_id),),
+        "LENGTH(config) AS size FROM config_backups WHERE id = ? AND switch_id = ?",
+        (int(backup_id), switch_id),
     ).fetchone()
     return (_backup(row), row["config"]) if row else None
 
 
-def delete_backup(conn: sqlite3.Connection, backup_id: int) -> bool:
-    """Delete a stored backup; False when there was none."""
-    cursor = conn.execute("DELETE FROM config_backups WHERE id = ?", (int(backup_id),))
+def delete_backup(conn: sqlite3.Connection, switch_id: int, backup_id: int) -> bool:
+    """Delete a stored backup of a switch; False when it has none by that number."""
+    cursor = conn.execute(
+        "DELETE FROM config_backups WHERE id = ? AND switch_id = ?", (int(backup_id), switch_id)
+    )
     conn.commit()
     return cursor.rowcount > 0
 

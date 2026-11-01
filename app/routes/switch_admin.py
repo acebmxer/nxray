@@ -28,6 +28,7 @@ from app.switch_admin import (
     load_switch_log,
     parse_log,
 )
+from app.switch_choice import selected_switch_id
 from app.switch_connection import set_switch_hostname
 from app.switch_setup import read_switch
 
@@ -60,7 +61,7 @@ def _after(request: Request, change: ProtocolChange) -> None:
     if change.setting == "hostname" and change.action == "set":
         name = change.lines[-1].removeprefix("hostname ").strip()
         with open_db(request.app.state.settings.db_path) as conn:
-            set_switch_hostname(conn, name)
+            set_switch_hostname(conn, selected_switch_id(request), name)
 
 
 SITE = ProtocolSite(

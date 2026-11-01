@@ -53,8 +53,11 @@ NXray's database.
 - **Test connection** signs in with NXray's account and reads the switch's
   hostname and version. The dashboard also signs in with that account every
   time it opens, and reads the switch's health.
-- **Forget this switch** deletes NXray's stored login only. The account stays
-  on the switch. To remove it, in an SSH session on the switch as admin:
+- **Forget this switch** deletes NXray's stored login, and what NXray kept
+  about that switch: its history, port labels, config backups and open
+  alerts. The activity log and the alert log keep their lines, and NXray's
+  other switches stay as they are. The account stays on the switch. To
+  remove it, in an SSH session on the switch as admin:
 
       configure terminal
       no username nxray
@@ -62,6 +65,30 @@ NXray's database.
       copy running-config startup-config
 
   (with your account name in place of `nxray`).
+
+## Several switches
+
+One NXray can look after several switches. Once one is set up, the
+**Switch** page has **Add another switch**: the same form as the first setup,
+for the next switch's address and admin login. Each switch gets its own
+account made the same way (the name can be the same on every switch), its
+own port changes, its own history, port labels, config backups and open
+alerts. NXray refuses a second switch at an address and NX-API port it
+already has.
+
+Once there are two or more, the top bar has a switch picker. Every page
+(the dashboard, ports, VLANs, routing, history, the Switch and Config pages,
+and the rest) shows the switch picked there, and every change goes to that
+switch only. The choice is kept per browser in a cookie, for a year. Any
+account may pick a switch, whatever its role. When a page was left open for
+one switch and another switch was picked since, in another tab, its forms are
+refused like an expired form: reload the page, which then shows the switch
+picked, and try again. This way a change can never land on a switch other
+than the one the page showed.
+
+History reads every switch each minute, one after the other, and alerts name
+the switch they are about. The alert rules, the e-mail settings and the
+webhooks are the same for every switch.
 
 ## Changing the address, and Run setup again
 
@@ -101,7 +128,8 @@ password, tick the box and press **Run setup again**. NXray then:
 
 The address and NX-API port fields of Run setup again start with the stored
 address; change them too if the switch moved. The account keeps its name:
-to use another name, press **Forget this switch** and set it up again.
+to use another name, press **Forget this switch** and set it up again (which
+also deletes the history, port labels and config backups NXray kept for it).
 Neither button can be used while NXray is waiting for the switch to apply a
 new role, because signing in would make the wait start over.
 

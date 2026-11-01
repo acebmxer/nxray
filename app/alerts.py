@@ -1,4 +1,4 @@
-"""Alerts: telling someone by e-mail or webhook when the switch needs attention.
+"""Alerts: telling someone by e-mail or webhook when a switch needs attention.
 
 What is watched is checked each time history samples the switch
 (``app/history.py``), from the same three read-only commands, so alerts cost
@@ -7,10 +7,11 @@ switch is not read on its own and no problem is noticed; change alerts still
 go out.
 
 A problem has a key ("fan:Fan2", "down:Ethernet1/5") and is kept open in the
-``alert_open`` table until it goes away, so each one is sent once when it
+``alert_open`` table, per switch, until it goes away, so each one is sent once when it
 starts and once when it is resolved, also across a restart of NXray. Every
 alert sent, with how its delivery went, is kept in ``alert_log`` for
-``KEEP_DAYS``.
+``KEEP_DAYS``. Every alert names the switch it is about; the rules and the
+destinations are the same for every switch.
 
 The e-mail settings and the webhooks live in the database, set on the Alerts
 page by an admin. The SMTP password, each webhook's URL (Slack and Discord
@@ -48,6 +49,7 @@ from app.crypto import DecryptionError, decrypt, encrypt
 from app.db import open_db
 from app.ports import Port
 from app.switch import Environment, Resources
+from app.switch_connection import SwitchConnection
 
 log = logging.getLogger("nxray.alerts")
 
@@ -148,6 +150,9 @@ class OpenProblem:
     key: str
     since: float
     message: str
+    switch_id: int = 0
+    # The switch as alerts name it; empty when it is the only one.
+    switch: str = ""
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,8 @@ class SentAlert:
     kind: str
     message: str
     delivery: str
+    # The switch as the alert named it; empty for one about no switch.
+    switch: str = ""
 
 
 # ---- the rules and destinations, stored ----
@@ -476,51 +483,64 @@ def delete_webhook(conn: sqlite3.Connection, webhook_id: int) -> Webhook | None:
 # ---- open problems and the log ----
 
 
-def list_open(conn: sqlite3.Connection) -> list[OpenProblem]:
-    """The problems open now, oldest first."""
+def list_open(conn: sqlite3.Connection, switch_id: int | None = None) -> list[OpenProblem]:
+    """The problems open now on one switch, or on every switch (``switch_id``
+    None), oldest first. Each names its switch when NXray has several."""
+    names = {}
+    rows = conn.execute("SELECT * FROM switch_connection ORDER BY id").fetchall()
+    if len(rows) > 1:
+        names = {row["id"]: _label(row["switch_hostname"], row["host"]) for row in rows}
+    sql = "SELECT switch_id, key, since, message FROM alert_open"
+    args: tuple[int, ...] = ()
+    if switch_id is not None:
+        sql += " WHERE switch_id = ?"
+        args = (switch_id,)
     return [
-        OpenProblem(r["key"], r["since"], r["message"])
-        for r in conn.execute("SELECT key, since, message FROM alert_open ORDER BY since, key")
+        OpenProblem(
+            r["key"], r["since"], r["message"], r["switch_id"], names.get(r["switch_id"], "")
+        )
+        for r in conn.execute(sql + " ORDER BY since, switch_id, key", args)
     ]
 
 
-def clear_open(conn: sqlite3.Connection) -> None:
-    """Forget every open problem, without alerts; for when the switch is forgotten."""
-    conn.execute("DELETE FROM alert_open")
-    conn.commit()
-
-
-def update_open(conn: sqlite3.Connection, now: float, found: Mapping[str, str]) -> list[AlertEvent]:
-    """Store the problems found now. A problem not open before is a new alert;
-    an open one not found any more is resolved. One already open stays as it
-    was first sent."""
-    before = {problem.key: problem for problem in list_open(conn)}
+def update_open(
+    conn: sqlite3.Connection, switch_id: int, now: float, found: Mapping[str, str]
+) -> list[AlertEvent]:
+    """Store the problems found now on one switch. A problem not open before is
+    a new alert; an open one not found any more is resolved. One already open
+    stays as it was first sent."""
+    before = {problem.key: problem for problem in list_open(conn, switch_id)}
     events: list[AlertEvent] = []
     for key, message in found.items():
         if key not in before:
             message = message[:MESSAGE_MAX]
             conn.execute(
-                "INSERT INTO alert_open (key, since, message) VALUES (?, ?, ?)",
-                (key, now, message),
+                "INSERT INTO alert_open (switch_id, key, since, message) VALUES (?, ?, ?, ?)",
+                (switch_id, key, now, message),
             )
             events.append(AlertEvent(PROBLEM, message, key))
     for key, problem in before.items():
         if key not in found:
-            conn.execute("DELETE FROM alert_open WHERE key = ?", (key,))
+            conn.execute("DELETE FROM alert_open WHERE switch_id = ? AND key = ?", (switch_id, key))
             events.append(AlertEvent(RESOLVED, problem.message, key, problem.since))
     conn.commit()
     return events
 
 
 def log_alerts(
-    conn: sqlite3.Connection, now: float, events: Sequence[AlertEvent], delivery: str
+    conn: sqlite3.Connection,
+    now: float,
+    events: Sequence[AlertEvent],
+    delivery: str,
+    switch: str = "",
 ) -> list[int]:
-    """Keep the events in the alert log, and delete lines older than ``KEEP_DAYS``."""
+    """Keep the events in the alert log, with the switch they named, and delete
+    lines older than ``KEEP_DAYS``."""
     ids = []
     for event in events:
         cursor = conn.execute(
-            "INSERT INTO alert_log (at, kind, message, delivery) VALUES (?, ?, ?, ?)",
-            (now, event.kind, event.message[:MESSAGE_MAX], delivery),
+            "INSERT INTO alert_log (at, kind, message, delivery, switch) VALUES (?, ?, ?, ?, ?)",
+            (now, event.kind, event.message[:MESSAGE_MAX], delivery, switch),
         )
         ids.append(int(cursor.lastrowid or 0))
     conn.execute("DELETE FROM alert_log WHERE at < ?", (now - KEEP_DAYS * 86400,))
@@ -537,9 +557,10 @@ def set_delivery(conn: sqlite3.Connection, ids: Iterable[int], delivery: str) ->
 def list_sent(conn: sqlite3.Connection, limit: int = LOG_LIMIT) -> list[SentAlert]:
     """The newest alerts, newest first, with how each was delivered."""
     return [
-        SentAlert(r["id"], r["at"], r["kind"], r["message"], r["delivery"])
+        SentAlert(r["id"], r["at"], r["kind"], r["message"], r["delivery"], r["switch"])
         for r in conn.execute(
-            "SELECT id, at, kind, message, delivery FROM alert_log ORDER BY id DESC LIMIT ?",
+            "SELECT id, at, kind, message, delivery, switch FROM alert_log "
+            "ORDER BY id DESC LIMIT ?",
             (limit,),
         )
     ]
@@ -628,10 +649,11 @@ def find_problems(
 
 
 class AlertMonitor:
-    """Turns readings of the switch into alerts. Remembers, between readings,
+    """Turns readings of one switch into alerts. Remembers, between readings,
     which ports were up and how long a limit or a failure has lasted."""
 
-    def __init__(self) -> None:
+    def __init__(self, switch_id: int = 1) -> None:
+        self.switch_id = switch_id
         self._was_up: set[str] | None = None
         self._streaks: dict[str, int] = {}
         self._failures = 0
@@ -657,7 +679,7 @@ class AlertMonitor:
         """The alerts one successful reading starts or resolves."""
         self._failures = 0
         rules = load_rules(conn)
-        open_keys = {problem.key for problem in list_open(conn)}
+        open_keys = {problem.key for problem in list_open(conn, self.switch_id)}
         environment, resources, ports = reading
         found = find_problems(
             rules,
@@ -670,17 +692,17 @@ class AlertMonitor:
             open_keys=open_keys,
         )
         self._was_up = {port.name for port in ports if port.up}
-        return update_open(conn, now, self._sustained(found, open_keys))
+        return update_open(conn, self.switch_id, now, self._sustained(found, open_keys))
 
     def failed(self, conn: sqlite3.Connection, now: float, reason: str) -> list[AlertEvent]:
         """The alert a failed reading may start. Every other open problem stays
         open: nothing is known about it."""
         self._failures += 1
         rules = load_rules(conn)
-        found = {problem.key: problem.message for problem in list_open(conn)}
+        found = {problem.key: problem.message for problem in list_open(conn, self.switch_id)}
         if rules.unreachable and (self._failures >= UNREACHABLE_AFTER or UNREACHABLE_KEY in found):
             found.setdefault(UNREACHABLE_KEY, f"NXray cannot read the switch: {reason}")
-        return update_open(conn, now, found)
+        return update_open(conn, self.switch_id, now, found)
 
 
 # ---- what is sent ----
@@ -873,30 +895,34 @@ def deliver(
     return "; ".join(results)
 
 
-def switch_label(conn: sqlite3.Connection) -> str:
-    """The switch as alerts name it: ``leaf1 (192.0.2.10)``; empty with none set up."""
-    row = conn.execute("SELECT switch_hostname, host FROM switch_connection").fetchone()
-    if row is None:
+def _label(hostname: str, host: str) -> str:
+    return f"{hostname} ({host})" if hostname else host
+
+
+def switch_label(connection: SwitchConnection | None) -> str:
+    """A switch as alerts name it: ``leaf1 (192.0.2.10)``; empty for none."""
+    if connection is None:
         return ""
-    return f"{row['switch_hostname']} ({row['host']})" if row["switch_hostname"] else row["host"]
+    return _label(connection.switch_hostname, connection.host)
 
 
 def dispatch(
     settings: Settings,
     events: Sequence[AlertEvent],
+    switch: str,
     transport: httpx.BaseTransport | None = None,
     *,
     background: bool = True,
     now: float | None = None,
 ) -> None:
-    """Log ``events`` and send them, on a thread of their own unless
-    ``background`` is False. Never raises: a failure is logged and noted."""
+    """Log ``events`` about the switch named ``switch`` (``switch_label``) and
+    send them, on a thread of their own unless ``background`` is False. Never
+    raises: a failure is logged and noted."""
     if not events:
         return
     moment = time.time() if now is None else now
     with open_db(settings.db_path) as conn:
-        ids = log_alerts(conn, moment, events, "sending")
-        switch = switch_label(conn)
+        ids = log_alerts(conn, moment, events, "sending", switch)
 
     def _send() -> None:
         try:
@@ -920,18 +946,24 @@ def notify_change(
     username: str,
     area: str,
     what: str,
+    switch: str = "",
     transport: httpx.BaseTransport | None = None,
     *,
     background: bool = True,
 ) -> None:
-    """Send a change made through NXray, when the rules ask for that. Never raises."""
+    """Send a change made through NXray to the switch named ``switch`` (empty
+    for a change to NXray itself), when the rules ask for that. Never raises."""
     try:
         with open_db(settings.db_path) as conn:
             if not load_rules(conn).changes:
                 return
         message = f"{username} on the {area} page: {' '.join(what.split())}"
         dispatch(
-            settings, [AlertEvent(CHANGE, message[:MESSAGE_MAX])], transport, background=background
+            settings,
+            [AlertEvent(CHANGE, message[:MESSAGE_MAX])],
+            switch,
+            transport,
+            background=background,
         )
     except Exception:
         log.exception("could not send a change alert")
@@ -941,14 +973,15 @@ def send_test(
     settings: Settings,
     transport: httpx.BaseTransport | None = None,
     *,
+    switch: str = "",
     webhook_id: int | None = None,
     email_only: bool = False,
 ) -> str:
-    """Send a test alert now and wait for it; how it went, in words."""
+    """Send a test alert now and wait for it; how it went, in words. It names
+    the switch ``switch``: the one the Alerts page was shown for."""
     now = time.time()
     events = [AlertEvent(TEST, "This is a test alert from NXray's Alerts page.")]
     with open_db(settings.db_path) as conn:
-        switch = switch_label(conn)
         outcome = deliver(
             conn,
             settings.secret_key,
@@ -959,5 +992,5 @@ def send_test(
             webhook_id=webhook_id,
             email_only=email_only,
         )
-        log_alerts(conn, now, events, outcome)
+        log_alerts(conn, now, events, outcome, switch)
     return outcome

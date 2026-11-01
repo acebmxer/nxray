@@ -69,18 +69,31 @@ def test_set_get_and_remove(tmp_path: Path) -> None:
     db = tmp_path / "nxray.db"
     init_db(db)
     with open_db(db) as conn:
-        assert get_labels(conn) == {}
-        assert set_label(conn, "Ethernet1/3", " NAS ", "admin") == "NAS"
-        set_label(conn, "Ethernet1/4", "printer", "admin")
-        set_label(conn, "Ethernet1/3", "NAS 2", "otto")
-        assert get_labels(conn) == {"Ethernet1/3": "NAS 2", "Ethernet1/4": "printer"}
+        assert get_labels(conn, 1) == {}
+        assert set_label(conn, 1, "Ethernet1/3", " NAS ", "admin") == "NAS"
+        set_label(conn, 1, "Ethernet1/4", "printer", "admin")
+        set_label(conn, 1, "Ethernet1/3", "NAS 2", "otto")
+        assert get_labels(conn, 1) == {"Ethernet1/3": "NAS 2", "Ethernet1/4": "printer"}
         query = "SELECT updated_by FROM port_labels WHERE port = ?"
         row = conn.execute(query, ("Ethernet1/3",)).fetchone()
         assert row["updated_by"] == "otto"
-        set_label(conn, "Ethernet1/4", "", "admin")
-        assert get_labels(conn) == {"Ethernet1/3": "NAS 2"}
+        set_label(conn, 1, "Ethernet1/4", "", "admin")
+        assert get_labels(conn, 1) == {"Ethernet1/3": "NAS 2"}
         with pytest.raises(ValueError):
-            set_label(conn, "mgmt0", "no", "admin")
+            set_label(conn, 1, "mgmt0", "no", "admin")
+
+
+def test_each_switch_has_its_own_labels(tmp_path: Path) -> None:
+    db = tmp_path / "nxray.db"
+    init_db(db)
+    with open_db(db) as conn:
+        set_label(conn, 1, "Ethernet1/3", "NAS", "admin")
+        set_label(conn, 2, "Ethernet1/3", "printer", "admin")
+        assert get_labels(conn, 1) == {"Ethernet1/3": "NAS"}
+        assert get_labels(conn, 2) == {"Ethernet1/3": "printer"}
+        set_label(conn, 2, "Ethernet1/3", "", "admin")
+        assert get_labels(conn, 1) == {"Ethernet1/3": "NAS"}
+        assert get_labels(conn, 2) == {}
 
 
 # ---- pages ----
@@ -132,7 +145,7 @@ def test_unknown_port_gets_no_label(logged_in: TestClient, switch: FakeSwitch) -
     response = _save(logged_in, "Ethernet9/99", "ghost")
     assert response.status_code == 404
     with open_db(logged_in.app.state.settings.db_path) as conn:  # type: ignore[attr-defined]
-        assert get_labels(conn) == {}
+        assert get_labels(conn, 1) == {}
 
 
 def test_the_label_form_needs_the_csrf_token(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -141,7 +154,7 @@ def test_the_label_form_needs_the_csrf_token(logged_in: TestClient, switch: Fake
     )
     assert response.status_code in (400, 403)
     with open_db(logged_in.app.state.settings.db_path) as conn:  # type: ignore[attr-defined]
-        assert get_labels(conn) == {}
+        assert get_labels(conn, 1) == {}
 
 
 def test_labels_work_while_port_changes_are_off(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -188,4 +201,4 @@ def test_operators_can_label(logged_in: TestClient, switch: FakeSwitch) -> None:
     otto = _sign_in_as(logged_in, "otto", "operator")
     assert _save(otto, "Ethernet1/3", "NAS").status_code == 200
     with open_db(logged_in.app.state.settings.db_path) as conn:  # type: ignore[attr-defined]
-        assert get_labels(conn) == {"Ethernet1/3": "NAS"}
+        assert get_labels(conn, 1) == {"Ethernet1/3": "NAS"}

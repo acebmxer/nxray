@@ -13,8 +13,9 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 19 of the [roadmap](#roadmap) are built;
-stage 20 is planned. Today you can install NXray, sign in, connect it to a switch,
+**Status:** early. All 20 stages of the [roadmap](#roadmap) are built. Today
+you can install NXray, sign in, connect it to one switch or several and pick
+the one every page shows from the top bar,
 see the switch's health on the dashboard, look at every port on a picture of
 the front panel coloured by state, traffic, errors or VLAN, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
@@ -146,7 +147,9 @@ default: *(built)*.
     what in NXray, config diff, backup, rollback and restarting the switch.
     *(built)*
 19. **Alerts** by e-mail and webhook. *(built)*
-20. **Several switches** in one NXray. *(planned)*
+20. **Several switches** in one NXray: add more on the Switch page, pick one
+    in the top bar; each has its own history, port labels, backups and
+    alerts. *(built)*
 
 ## Contributing
 

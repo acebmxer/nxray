@@ -50,6 +50,7 @@ from app.port_settings import (
 )
 from app.ports import COUNTER_LABELS, Port, load_ports
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, connection_error, read_switch
 from app.vlans import VlanView, describe_port_vlans, load_ports_with_vlans, plan_port_vlans
@@ -141,7 +142,7 @@ def _read_port_page(
 
 def _labels(request: Request) -> dict[str, str]:
     with open_db(request.app.state.settings.db_path) as conn:
-        return get_labels(conn)
+        return get_labels(conn, selected_switch_id(request))
 
 
 @router.get("/ports", response_class=HTMLResponse)
@@ -228,7 +229,7 @@ def _render_port(
     charts = []
     if port:
         with open_db(request.app.state.settings.db_path) as conn:
-            charts = port_charts(conn, name, period, time.time())
+            charts = port_charts(conn, selected_switch_id(request), name, period, time.time())
     return templates.TemplateResponse(
         request,
         "port.html",
@@ -420,7 +421,7 @@ def port_change(
 
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("port change on %s by %s: %s", connection.host, username, summary)
     note_activity(request, username, "Ports", summary, connection.host)
 
@@ -548,7 +549,7 @@ def port_vlans_change(
 
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
@@ -607,7 +608,7 @@ def port_label(
         return again()
     try:
         with open_db(request.app.state.settings.db_path) as conn:
-            stored = set_label(conn, name, label, username)
+            stored = set_label(conn, selected_switch_id(request), name, label, username)
     except ValueError as exc:
         return again(error=f"Label not saved: {exc}.", label=label, status_code=400)
     log.info("port label on %s by %s: %r", name, username, stored)
@@ -761,7 +762,7 @@ def port_settings_change(
         return again(error=change_refused(exc, target), settings_form=form, status_code=400)
 
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
@@ -860,7 +861,7 @@ def port_breakout(
         return again(error=change_refused(exc, target), status_code=400)
 
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("%s of %s by %s (%s)", plan.action, plan.port, username, plan.mapping)
     note_activity(
         request,
@@ -992,7 +993,7 @@ def port_discovery_change(
         return again(error=change_refused(exc, target), status_code=400)
 
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("CDP/LLDP change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 

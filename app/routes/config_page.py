@@ -48,6 +48,7 @@ from app.dependencies import (
 from app.nxapi import NxapiClient, NxapiError, SwitchTarget
 from app.port_changes import SSH_TIMEOUT
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import SWITCH_TIMEOUT, SwitchConnection, set_unsaved_changes
 from app.switch_setup import connection_error, read_switch
 from app.switch_ssh import SshAuthError, SshCommandError, SshError, reload_switch
@@ -96,7 +97,7 @@ def _text(name: str, configs: SwitchConfigs | None, request: Request) -> str | N
     if number is None:
         return None
     with open_db(request.app.state.settings.db_path) as conn:
-        found = get_backup(conn, number)
+        found = get_backup(conn, selected_switch_id(request), number)
     return found[1] if found else None
 
 
@@ -113,7 +114,7 @@ def render_config_page(
     ``a`` with ``b`` when both are given."""
     connection, target, problem = stored_switch(request)
     with open_db(request.app.state.settings.db_path) as conn:
-        backups = list_backups(conn)
+        backups = list_backups(conn, selected_switch_id(request))
     status = configs = None
     if target is not None:
         status, configs = read_switch(
@@ -171,7 +172,7 @@ def config_download(
 ) -> Response:
     """``GET /config/backup/<n>.txt``: one backup's configuration as a text file."""
     with open_db(request.app.state.settings.db_path) as conn:
-        found = get_backup(conn, number)
+        found = get_backup(conn, selected_switch_id(request), number)
     if found is None:
         return render_config_page(request, username, error=f"There is no backup {number}.")
     backup, text = found
@@ -197,7 +198,12 @@ def _take_backup(
         return None, f"No backup taken: {status.message}"
     with open_db(request.app.state.settings.db_path) as conn:
         number = store_backup(
-            conn, config=running, created_by=username, switch=connection.host, note=note
+            conn,
+            connection.id,
+            config=running,
+            created_by=username,
+            switch=connection.host,
+            note=note,
         )
     if not connection.security_changes_enabled:
         return number, (
@@ -215,7 +221,7 @@ def _take_backup(
             f"it cannot be rolled back to: {connection_error(exc, target)}"
         )
     with open_db(request.app.state.settings.db_path) as conn:
-        set_backup_checkpoint(conn, number, name)
+        set_backup_checkpoint(conn, selected_switch_id(request), number, name)
     return number, f"Backup {number} is stored in NXray, and the switch keeps it as {name}."
 
 
@@ -279,7 +285,9 @@ def config_backup_delete(
     require_csrf(request, csrf)
     number = _backup_id(id)
     with open_db(request.app.state.settings.db_path) as conn:
-        found = get_backup(conn, number) if number is not None else None
+        found = (
+            get_backup(conn, selected_switch_id(request), number) if number is not None else None
+        )
     if found is None:
         return render_config_page(request, username, error="Not deleted: there is no such backup.")
     backup = found[0]
@@ -313,7 +321,7 @@ def config_backup_delete(
                     f"{backup.checkpoint}: {connection_error(exc, target)}",
                 )
     with open_db(request.app.state.settings.db_path) as conn:
-        delete_backup(conn, backup.id)
+        delete_backup(conn, selected_switch_id(request), backup.id)
     note_activity(
         request,
         username,
@@ -366,7 +374,9 @@ def config_rollback(
     require_csrf(request, csrf)
     number = _backup_id(id)
     with open_db(request.app.state.settings.db_path) as conn:
-        found = get_backup(conn, number) if number is not None else None
+        found = (
+            get_backup(conn, selected_switch_id(request), number) if number is not None else None
+        )
     if found is None:
         return render_config_page(
             request, username, error="Not rolled back: there is no such backup."
@@ -438,7 +448,7 @@ def config_rollback(
             f"configuration is as it was. ({message})",
         )
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("rolled %s back to %s by %s", connection.host, backup.checkpoint, username)
     note_activity(
         request,
@@ -539,7 +549,7 @@ def config_reload(
                 f"{connection_error(exc, target)}"
             )
         with open_db(request.app.state.settings.db_path) as conn:
-            set_unsaved_changes(conn, False)
+            set_unsaved_changes(conn, selected_switch_id(request), False)
     try:
         reload_switch(
             host=connection.host,

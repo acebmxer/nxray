@@ -90,6 +90,13 @@ body {
 
 .who { color: var(--text-dim); font-size: 0.9rem; }
 
+.switch-picker { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0 auto 0 0; }
+.switch-picker select { padding: 0.3rem 0.4rem; max-width: 18rem; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
 .navlink { color: var(--text); text-decoration: none; font-size: 0.92rem; white-space: nowrap; }
 .navlink:hover { color: var(--accent); }
 .inline { display: inline; margin: 0; }

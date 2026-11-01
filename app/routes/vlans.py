@@ -26,6 +26,7 @@ from app.nxapi import (
 )
 from app.routes.ports import change_refused
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
 from app.vlans import VlanView, load_vlan_page
@@ -107,7 +108,7 @@ def _changing(request: Request):
 def _changed(request: Request, connection, username: str, what: str) -> None:
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("VLAN change on %s by %s: %s", connection.host, username, what)
     note_activity(request, username, "VLANs", what, connection.host)
 

@@ -11,6 +11,23 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Several switches in one NXray.** Once a switch is set up, the Switch page
+  (admins only) has **Add another switch**, the same setup as the first, and
+  lists every switch NXray has. With two or more, the top bar has a switch
+  picker, for every role: every page shows the switch picked there, and every
+  change goes to that switch only. The choice is kept per browser. A page left
+  open for one switch refuses its forms once another switch was picked in
+  another tab (reload it and try again), so a change never lands on a switch
+  the page did not show. Each switch has its own NXray account, port changes,
+  history, port labels, config backups (a backup is never compared with or
+  rolled back onto another switch) and open alerts; history reads every
+  switch each minute, one after the other, and every alert names its switch
+  (also in the alert log on the Alerts page). NXray refuses a second switch
+  at an address it already has, and moving one onto another's address.
+  **Forget this switch** now also deletes the history, port labels, config
+  backups and open alerts NXray kept for that switch. An existing install
+  keeps its switch and everything recorded for it.
+
 - **Restart the switch.** The Config page (admins only) has **Restart the
   switch**: a confirm page warns that every port goes down for several
   minutes, says how much of the running configuration is unsaved, offers

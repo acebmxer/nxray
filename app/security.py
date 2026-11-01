@@ -20,6 +20,7 @@ from fastapi import Request
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from app.db import open_db
+from app.switch_choice import selected_switch_id
 
 SESSION_COOKIE = "nxray_session"
 
@@ -241,22 +242,42 @@ def session_id_from_request(request: Request) -> str | None:
     return unsign_session_id(cookie, request.app.state.settings.secret_key)
 
 
+def _csrf_for(request: Request, switch_id: int | None) -> str:
+    session_id = session_id_from_request(request) or ""
+    key = request.app.state.settings.secret_key.encode()
+    message = f"csrf:{session_id}:{switch_id or 0}"
+    return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
+
+
 def csrf_token(request: Request) -> str:
     """The anti-forgery token forms on this session must send back.
 
-    Derived from the session id with the secret key, so it needs no storage,
-    changes with every login, and cannot be computed by another site.
+    Derived from the session id and the switch the page is for
+    (``app/switch_choice.py``) with the secret key, so it needs no storage,
+    changes with every login, cannot be computed by another site, and a form
+    shown for one switch is refused once another switch has been picked.
     """
-    session_id = session_id_from_request(request) or ""
-    key = request.app.state.settings.secret_key.encode()
-    return hmac.new(key, f"csrf:{session_id}".encode(), hashlib.sha256).hexdigest()
+    return _csrf_for(request, selected_switch_id(request))
 
 
 def csrf_valid(request: Request, token: str) -> bool:
-    """True when a submitted form carries this session's token."""
+    """True when a submitted form carries this session's token for the switch
+    this request is for."""
     if session_id_from_request(request) is None or not token:
         return False
     return hmac.compare_digest(token, csrf_token(request))
+
+
+def csrf_valid_any_switch(request: Request, token: str, switch_ids: list[int]) -> bool:
+    """True when the token is this session's for any of ``switch_ids`` or for
+    no switch: for the switch picker, which may be used from a page shown
+    before another tab picked a different switch. It changes nothing on a
+    switch."""
+    if session_id_from_request(request) is None or not token:
+        return False
+    return any(
+        hmac.compare_digest(token, _csrf_for(request, switch_id)) for switch_id in [0, *switch_ids]
+    )
 
 
 def current_user(request: Request) -> str | None:

@@ -42,6 +42,7 @@ from app.routing_protocols import (
     protocol,
 )
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import read_switch
 
@@ -368,7 +369,7 @@ def site_change(
         return refuse(refused)
     if change.config:
         with open_db(request.app.state.settings.db_path) as conn:
-            set_unsaved_changes(conn, True)
+            set_unsaved_changes(conn, selected_switch_id(request), True)
     if site.after is not None:
         site.after(request, change)
     log.info("%s on %s by %s", change.describe, connection.host, username)

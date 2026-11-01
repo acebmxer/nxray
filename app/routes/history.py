@@ -19,6 +19,7 @@ from app.history import (
     range_key,
     system_charts,
 )
+from app.switch_choice import selected_switch_id
 from app.switch_connection import get_connection
 
 router = APIRouter()
@@ -34,9 +35,9 @@ def history_page(
     key = range_key(period)
     now = time.time()
     with open_db(settings.db_path) as conn:
-        connection = get_connection(conn)
-        charts = system_charts(conn, key, now) if connection else []
-        last_sample = last_sample_time(conn)
+        connection = get_connection(conn, selected_switch_id(request))
+        charts = system_charts(conn, connection.id, key, now) if connection else []
+        last_sample = last_sample_time(conn, connection.id) if connection else None
     return templates.TemplateResponse(
         request,
         "history.html",

@@ -46,6 +46,7 @@ from app.port_channels import (
 )
 from app.routes.ports import change_refused
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
 
@@ -188,7 +189,7 @@ def _send(request: Request, change: Callable[[NxapiClient], None]) -> str | None
 
 def _done(request: Request, username: str, line: str, what: str, connection) -> Response:
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("%s on %s by %s", what, connection.host, username)
     note_activity(request, username, "Port-channels", what, connection.host)
     return _render(request, username, notice=f"Done: {line} {NOT_SAVED}")

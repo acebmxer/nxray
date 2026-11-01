@@ -1,9 +1,10 @@
-"""History: sampling the switch once a minute, and drawing what was recorded.
+"""History: sampling the switches once a minute, and drawing what was recorded.
 
-A background thread asks the switch for temperatures, power, fans, CPU,
-memory and every port's traffic and errors, and stores the numbers in the
-``history`` table. Rows older than ``KEEP_DAYS`` are deleted. The pages read
-only that table; opening them costs the switch nothing.
+A background thread asks each switch NXray has, one after the other, for
+temperatures, power, fans, CPU, memory and every port's traffic and errors,
+and stores the numbers in the ``history`` table under the switch's id. Rows
+older than ``KEEP_DAYS`` are deleted. The pages read only that table;
+opening them costs the switch nothing.
 
 The three show commands per sample are the ones the dashboard already runs
 on every page load. Each sample is also what alerts are checked against
@@ -22,7 +23,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from app.alerts import AlertMonitor, dispatch
+from app.alerts import AlertMonitor, dispatch, switch_label
 from app.charts import SERIES_COLOURS, Line, Point, line_chart
 from app.config import Settings
 from app.db import open_db
@@ -30,7 +31,13 @@ from app.nxapi import NxapiClient
 from app.port_labels import get_labels
 from app.ports import Port, human_rate, parse_ports
 from app.switch import Environment, Resources, parse_environment, parse_resources
-from app.switch_connection import DecryptionError, get_connection, load_target
+from app.switch_connection import (
+    DecryptionError,
+    SwitchConnection,
+    get_connection,
+    list_connections,
+    load_target,
+)
 from app.switch_setup import KEY_CHANGED_MESSAGE, read_switch
 
 log = logging.getLogger("nxray.history")
@@ -118,29 +125,31 @@ def build_rows(
     return rows, errors
 
 
-def record(conn: sqlite3.Connection, moment: float, rows: Sequence[Row]) -> None:
-    """Store one sample's rows."""
+def record(conn: sqlite3.Connection, switch_id: int, moment: float, rows: Sequence[Row]) -> None:
+    """Store one sample's rows for a switch."""
     conn.executemany(
-        "INSERT INTO history (ts, metric, item, value) VALUES (?, ?, ?, ?)",
-        [(moment, metric, item, value) for metric, item, value in rows],
+        "INSERT INTO history (switch_id, ts, metric, item, value) VALUES (?, ?, ?, ?, ?)",
+        [(switch_id, moment, metric, item, value) for metric, item, value in rows],
     )
     conn.commit()
 
 
 def purge(conn: sqlite3.Connection, now: float, keep_days: int = KEEP_DAYS) -> int:
-    """Delete rows older than ``keep_days``. Returns how many went."""
+    """Delete every switch's rows older than ``keep_days``. Returns how many went."""
     cursor = conn.execute("DELETE FROM history WHERE ts < ?", (now - keep_days * 86400,))
     conn.commit()
     return cursor.rowcount
 
 
-def last_sample_time(conn: sqlite3.Connection) -> float | None:
-    """When the newest row was stored, or None when nothing has been."""
-    return conn.execute("SELECT MAX(ts) FROM history").fetchone()[0]
+def last_sample_time(conn: sqlite3.Connection, switch_id: int) -> float | None:
+    """When the newest row of a switch was stored, or None when nothing has been."""
+    row = conn.execute("SELECT MAX(ts) FROM history WHERE switch_id = ?", (switch_id,)).fetchone()
+    return row[0]
 
 
 class Sampler:
-    """Takes samples. Remembers each port's error total between them."""
+    """Takes samples of every switch. Remembers, per switch, each port's error
+    total between them and what the alerts need (``AlertMonitor``)."""
 
     def __init__(
         self,
@@ -154,11 +163,13 @@ class Sampler:
         self._transport = transport
         self._alert_transport = alert_transport
         self._background_alerts = background_alerts
-        self._errors: dict[str, int] = {}
-        self._monitor = AlertMonitor()
+        # Per switch id.
+        self._errors: dict[int, dict[str, int]] = {}
+        self._monitors: dict[int, AlertMonitor] = {}
 
     def _alert(
         self,
+        connection: SwitchConnection,
         moment: float,
         *,
         failure: str = "",
@@ -167,20 +178,22 @@ class Sampler:
     ) -> None:
         """Check the alerts against this sample, and send what starts or ends.
         A failure here is logged; it never costs the sample."""
+        monitor = self._monitors.setdefault(connection.id, AlertMonitor(connection.id))
         try:
             with open_db(self._settings.db_path) as conn:
                 if reading is None:
-                    events = self._monitor.failed(conn, moment, failure)
+                    events = monitor.failed(conn, moment, failure)
                 else:
                     new_errors = {
                         item: value for metric, item, value in rows if metric == PORT_ERRORS
                     }
-                    events = self._monitor.checked(
-                        conn, moment, reading, new_errors, get_labels(conn)
+                    events = monitor.checked(
+                        conn, moment, reading, new_errors, get_labels(conn, connection.id)
                     )
             dispatch(
                 self._settings,
                 events,
+                switch_label(connection),
                 self._alert_transport(),
                 background=self._background_alerts,
                 now=moment,
@@ -188,35 +201,61 @@ class Sampler:
         except Exception:
             log.exception("checking alerts failed")
 
-    def sample_once(self, now: float | None = None) -> str | None:
-        """Read the switch and store one sample.
+    def sample_switch(self, switch_id: int, now: float | None = None) -> str | None:
+        """Read one switch and store one sample of it.
 
         None when it was stored, and also when there was nothing to do (no
-        switch set up, or NXray is leaving the switch alone while it applies
-        a new role). Otherwise the reason it failed, in words.
+        such switch, or NXray is leaving it alone while it applies a new
+        role). Otherwise the reason it failed, in words.
         """
         moment = time.time() if now is None else now
         with open_db(self._settings.db_path) as conn:
-            connection = get_connection(conn)
+            connection = get_connection(conn, switch_id)
             if connection is None or connection.paused_seconds(moment):
                 return None
             try:
-                target = load_target(conn, self._settings.secret_key)
+                target = load_target(conn, switch_id, self._settings.secret_key)
             except DecryptionError:
                 target = None
         if target is None:
-            self._alert(moment, failure=KEY_CHANGED_MESSAGE)
+            self._alert(connection, moment, failure=KEY_CHANGED_MESSAGE)
             return KEY_CHANGED_MESSAGE
         # Outside the database block: the switch can take seconds to answer.
         status, data = read_switch(target, _read, self._transport())
         if data is None:
-            self._alert(moment, failure=status.message)
+            self._alert(connection, moment, failure=status.message)
             return status.message
-        rows, self._errors = build_rows(*data, self._errors)
+        rows, self._errors[switch_id] = build_rows(*data, self._errors.get(switch_id, {}))
         with open_db(self._settings.db_path) as conn:
-            record(conn, moment, rows)
-        self._alert(moment, reading=data, rows=rows)
+            record(conn, switch_id, moment, rows)
+        self._alert(connection, moment, reading=data, rows=rows)
         return None
+
+    def sample_once(self, now: float | None = None) -> str | None:
+        """Sample every switch, one after the other.
+
+        None when every sample was stored or there was nothing to do;
+        otherwise what failed, in words, each failure after the switch's name
+        when NXray has several.
+        """
+        moment = time.time() if now is None else now
+        with open_db(self._settings.db_path) as conn:
+            connections = list_connections(conn)
+        known = {connection.id for connection in connections}
+        for gone in set(self._errors) - known:
+            del self._errors[gone]
+        for gone in set(self._monitors) - known:
+            del self._monitors[gone]
+        failures = []
+        for connection in connections:
+            failed = self.sample_switch(connection.id, moment)
+            if failed:
+                failures.append((switch_label(connection), failed))
+        if not failures:
+            return None
+        if len(connections) == 1:
+            return failures[0][1]
+        return "; ".join(f"{label}: {failed}" for label, failed in failures)
 
 
 def start_sampler(
@@ -279,6 +318,7 @@ def bucket_seconds(span: int) -> int:
 
 def read_series(
     conn: sqlite3.Connection,
+    switch_id: int,
     metric: str,
     *,
     start: float,
@@ -287,7 +327,7 @@ def read_series(
     item: str | None = None,
     total: bool = False,
 ) -> dict[str, list[Point]]:
-    """A metric's rows averaged into buckets, by item: {item: [(time, value)]}.
+    """A switch's rows of a metric averaged into buckets, by item: {item: [(time, value)]}.
 
     ``total`` adds the rows of each bucket up instead (for counts such as
     errors). Each point sits in the middle of its bucket.
@@ -295,9 +335,9 @@ def read_series(
     function = "SUM" if total else "AVG"  # chosen here, never from the request
     sql = (
         f"SELECT item, CAST((ts - ?) / ? AS INTEGER) AS slot, {function}(value) AS value "
-        "FROM history WHERE metric = ? AND ts >= ? AND ts < ?"
+        "FROM history WHERE switch_id = ? AND metric = ? AND ts >= ? AND ts < ?"
     )
-    args: list[object] = [start, bucket, metric, start, end]
+    args: list[object] = [start, bucket, switch_id, metric, start, end]
     if item is not None:
         sql += " AND item = ?"
         args.append(item)
@@ -404,13 +444,15 @@ def _count(value: float) -> str:
     return f"{value:g}"
 
 
-def system_charts(conn: sqlite3.Connection, key: str, now: float) -> list[ChartView]:
-    """The History page's charts for the range named ``key``."""
+def system_charts(
+    conn: sqlite3.Connection, switch_id: int, key: str, now: float
+) -> list[ChartView]:
+    """The History page's charts of a switch for the range named ``key``."""
     span = RANGES[key]
     start, end, bucket = now - span, now, bucket_seconds(span)
 
     def read(metric: str) -> dict[str, list[Point]]:
-        return read_series(conn, metric, start=start, end=end, bucket=bucket)
+        return read_series(conn, switch_id, metric, start=start, end=end, bucket=bucket)
 
     def one(metric: str, label: str) -> Line:
         return Line(label, read(metric).get("", []))
@@ -443,15 +485,17 @@ def system_charts(conn: sqlite3.Connection, key: str, now: float) -> list[ChartV
     ]
 
 
-def port_charts(conn: sqlite3.Connection, port: str, key: str, now: float) -> list[ChartView]:
-    """One port's traffic and errors for the range named ``key``."""
+def port_charts(
+    conn: sqlite3.Connection, switch_id: int, port: str, key: str, now: float
+) -> list[ChartView]:
+    """One port's traffic and errors on a switch for the range named ``key``."""
     span = RANGES[key]
     start, end, bucket = now - span, now, bucket_seconds(span)
     common = {"start": start, "end": end, "bucket": bucket}
 
     def read(metric: str, *, total: bool = False) -> list[Point]:
         found = read_series(
-            conn, metric, start=start, end=end, bucket=bucket, item=port, total=total
+            conn, switch_id, metric, start=start, end=end, bucket=bucket, item=port, total=total
         )
         return found.get(port, [])
 

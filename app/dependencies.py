@@ -15,12 +15,19 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.activity import record_activity, utc_time
-from app.alerts import notify_change
+from app.alerts import notify_change, switch_label
 from app.db import open_db
 from app.nxapi import SwitchTarget
 from app.ports import human_bytes, human_rate
-from app.security import csrf_valid, current_user
-from app.switch_connection import DecryptionError, SwitchConnection, get_connection, load_target
+from app.security import csrf_token, csrf_valid, current_user
+from app.switch_choice import selected_switch_id
+from app.switch_connection import (
+    DecryptionError,
+    SwitchConnection,
+    get_connection,
+    list_connections,
+    load_target,
+)
 from app.switch_setup import KEY_CHANGED_MESSAGE
 from app.users import User, get_user
 
@@ -169,39 +176,66 @@ def paused_message(seconds: int) -> str:
 def stored_switch(
     request: Request,
 ) -> tuple[SwitchConnection | None, SwitchTarget | None, str | None]:
-    """The stored switch, its decrypted login, and an error message.
+    """The switch this request is for (``app/switch_choice.py``), its decrypted
+    login, and an error message.
 
     (None, None, None) when no switch is set up; (connection, None, message)
     when the stored login cannot be decrypted, or while NXray waits for the
     switch to apply a new role (see app/port_changes.py).
     """
     settings = request.app.state.settings
+    switch_id = selected_switch_id(request)
     with open_db(settings.db_path) as conn:
-        connection = get_connection(conn)
+        connection = get_connection(conn, switch_id)
         if connection is None:
             return None, None, None
         if waiting := connection.paused_seconds():
             return connection, None, paused_message(waiting)
         try:
-            return connection, load_target(conn, settings.secret_key), None
+            return connection, load_target(conn, connection.id, settings.secret_key), None
         except DecryptionError:
             return connection, None, KEY_CHANGED_MESSAGE
+
+
+def selected_connection(request: Request) -> SwitchConnection | None:
+    """The switch this request is for, without its login; None with none set up."""
+    with open_db(request.app.state.settings.db_path) as conn:
+        return get_connection(conn, selected_switch_id(request))
+
+
+def switch_picker(request: Request) -> tuple[list[SwitchConnection], int | None]:
+    """Every switch and the one this page is for, for the top bar's picker."""
+    if getattr(request.state, "picker", None) is None:
+        with open_db(request.app.state.settings.db_path) as conn:
+            switches = list_connections(conn)
+        request.state.picker = (switches, selected_switch_id(request))
+    return request.state.picker
+
+
+templates.env.globals["switch_picker"] = switch_picker
+# The top bar's own form; a page's forms get ``csrf_token`` from their route.
+templates.env.globals["form_token"] = csrf_token
 
 
 def note_activity(request: Request, username: str, area: str, what: str, switch: str = "") -> None:
     """Record a change in the activity log (``app/activity.py``), after it worked,
     and send it as an alert when the Alerts page asks for changes.
 
-    ``switch`` is the switch's address when the switch itself was changed.
+    ``switch`` is the switch's address when the switch itself was changed;
+    the alert names the switch this request is for, or that address when it
+    is gone (Forget this switch).
     """
     settings = request.app.state.settings
     with open_db(settings.db_path) as conn:
         record_activity(conn, username, area, what, switch)
+        # A change to NXray's own settings names no switch.
+        label = switch_label(get_connection(conn, selected_switch_id(request))) if switch else ""
     notify_change(
         settings,
         username,
         area,
         what,
+        label or switch,
         request.app.state.alert_transport,
         background=request.app.state.alerts_background,
     )

@@ -1,6 +1,9 @@
-"""Storing and retrieving the switch NXray talks to.
+"""Storing and retrieving the switches NXray talks to.
 
-The account password is encrypted on the way in and decrypted only when a
+Each switch is a row of ``switch_connection``, named by its ``id``; every
+function here takes that id, so nothing reads or changes "the" switch by
+default. Which one a page shows is ``app/switch_choice.py``'s job. The
+account password is encrypted on the way in and decrypted only when a
 call to the switch is about to be made. Nothing here hands the password to a
 template: pages show which account is used, never its password.
 """
@@ -22,6 +25,7 @@ SWITCH_TIMEOUT = 10.0
 class SwitchConnection:
     """The stored connection, without the password."""
 
+    id: int
     host: str
     port: int
     username: str
@@ -141,18 +145,21 @@ def save_connection(
     switch_hostname: str,
     config_saved: bool,
     secret_key: str,
-) -> None:
-    """Store the connection, encrypting the password.
+) -> int:
+    """Store a new switch, encrypting the password. Returns its id.
 
-    Refuses to replace an existing one: a second setup must forget the first
-    on purpose, or its account on the switch would be orphaned unnoticed.
+    Refuses (sqlite3.IntegrityError) a second switch at the same address and
+    NX-API port: setting it up again would orphan the first account on it
+    unnoticed. Run setup again is the way to give that one a new login.
     """
-    conn.execute(
+    if find_by_address(conn, host, port) is not None:
+        raise sqlite3.IntegrityError(f"a switch at {host}, port {port} is already stored")
+    cursor = conn.execute(
         """
         INSERT INTO switch_connection
-            (id, host, port, username, password_encrypted, switch_hostname,
+            (host, port, username, password_encrypted, switch_hostname,
              created_at, config_saved, last_tested_at, last_test_ok, last_test_message)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
         """,
         (
             host,
@@ -165,14 +172,12 @@ def save_connection(
         ),
     )
     conn.commit()
+    return int(cursor.lastrowid or 0)
 
 
-def get_connection(conn: sqlite3.Connection) -> SwitchConnection | None:
-    """The stored connection, or None when no switch is set up."""
-    row = conn.execute("SELECT * FROM switch_connection WHERE id = 1").fetchone()
-    if row is None:
-        return None
+def _connection(row: sqlite3.Row) -> SwitchConnection:
     return SwitchConnection(
+        id=row["id"],
         host=row["host"],
         port=row["port"],
         username=row["username"],
@@ -190,8 +195,33 @@ def get_connection(conn: sqlite3.Connection) -> SwitchConnection | None:
     )
 
 
+def get_connection(conn: sqlite3.Connection, switch_id: int | None) -> SwitchConnection | None:
+    """The stored switch with this id, or None when there is none."""
+    if switch_id is None:
+        return None
+    row = conn.execute("SELECT * FROM switch_connection WHERE id = ?", (switch_id,)).fetchone()
+    return None if row is None else _connection(row)
+
+
+def list_connections(conn: sqlite3.Connection) -> list[SwitchConnection]:
+    """Every stored switch, in the order they were added."""
+    return [_connection(row) for row in conn.execute("SELECT * FROM switch_connection ORDER BY id")]
+
+
+def find_by_address(conn: sqlite3.Connection, host: str, port: int) -> int | None:
+    """The id of the stored switch at this address and NX-API port, or None.
+
+    The host is compared without regard to case, as DNS names are."""
+    row = conn.execute(
+        "SELECT id FROM switch_connection WHERE host = ? COLLATE NOCASE AND port = ?",
+        (host, port),
+    ).fetchone()
+    return None if row is None else int(row["id"])
+
+
 def set_changes_enabled(
     conn: sqlite3.Connection,
+    switch_id: int,
     *,
     pause_seconds: float,
     role_version: int,
@@ -212,29 +242,32 @@ def set_changes_enabled(
                paused_until = MAX(COALESCE(paused_until, 0), ?),
                role_version = ?,
                role_vlan_interfaces = COALESCE(?, role_vlan_interfaces)
-         WHERE id = 1
+         WHERE id = ?
         """,
         (
             time.time(),
             until,
             role_version,
             None if vlan_interfaces is None else int(vlan_interfaces),
+            switch_id,
         ),
     )
     conn.commit()
 
 
-def set_changes_off(conn: sqlite3.Connection) -> None:
+def set_changes_off(conn: sqlite3.Connection, switch_id: int) -> None:
     """Record that port changes are off (the role is gone from the switch)."""
     conn.execute(
         "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0, "
-        "role_vlan_interfaces = 0 WHERE id = 1"
+        "role_vlan_interfaces = 0 WHERE id = ?",
+        (switch_id,),
     )
     conn.commit()
 
 
 def replace_login(
     conn: sqlite3.Connection,
+    switch_id: int,
     *,
     host: str,
     port: int,
@@ -250,76 +283,89 @@ def replace_login(
         """
         UPDATE switch_connection
            SET host = ?, port = ?, password_encrypted = ?, switch_hostname = ?
-         WHERE id = 1
+         WHERE id = ?
         """,
-        (host, port, encrypt(password, secret_key), switch_hostname),
+        (host, port, encrypt(password, secret_key), switch_hostname, switch_id),
     )
     conn.commit()
 
 
-def set_switch_hostname(conn: sqlite3.Connection, switch_hostname: str) -> None:
+def set_switch_hostname(conn: sqlite3.Connection, switch_id: int, switch_hostname: str) -> None:
     """Store the switch's new name, after NXray renamed it on the Switch admin page."""
     conn.execute(
-        "UPDATE switch_connection SET switch_hostname = ? WHERE id = 1", (switch_hostname,)
+        "UPDATE switch_connection SET switch_hostname = ? WHERE id = ?",
+        (switch_hostname, switch_id),
     )
     conn.commit()
 
 
-def set_address(conn: sqlite3.Connection, *, host: str, port: int, switch_hostname: str) -> None:
+def set_address(
+    conn: sqlite3.Connection, switch_id: int, *, host: str, port: int, switch_hostname: str
+) -> None:
     """Store a new switch address that NXray's account has already signed in at."""
     conn.execute(
-        "UPDATE switch_connection SET host = ?, port = ?, switch_hostname = ? WHERE id = 1",
-        (host, port, switch_hostname),
+        "UPDATE switch_connection SET host = ?, port = ?, switch_hostname = ? WHERE id = ?",
+        (host, port, switch_hostname, switch_id),
     )
     conn.commit()
 
 
-def set_unsaved_changes(conn: sqlite3.Connection, unsaved: bool) -> None:
+def set_unsaved_changes(conn: sqlite3.Connection, switch_id: int, unsaved: bool) -> None:
     """Remember whether NXray changed the switch since the config was last saved."""
-    conn.execute("UPDATE switch_connection SET unsaved_changes = ? WHERE id = 1", (int(unsaved),))
+    conn.execute(
+        "UPDATE switch_connection SET unsaved_changes = ? WHERE id = ?", (int(unsaved), switch_id)
+    )
     conn.commit()
 
 
-def set_config_saved(conn: sqlite3.Connection, saved: bool) -> None:
+def set_config_saved(conn: sqlite3.Connection, switch_id: int, saved: bool) -> None:
     """Record whether the switch config was saved after the account was made."""
-    conn.execute("UPDATE switch_connection SET config_saved = ? WHERE id = 1", (int(saved),))
+    conn.execute(
+        "UPDATE switch_connection SET config_saved = ? WHERE id = ?", (int(saved), switch_id)
+    )
     conn.commit()
 
 
-def delete_connection(conn: sqlite3.Connection) -> bool:
-    """Forget the stored connection and its password. True if one was removed.
+def delete_connection(conn: sqlite3.Connection, switch_id: int) -> bool:
+    """Forget a switch: its login, and what NXray kept about it (history, port
+    labels, config backups, open problems). True if one was removed.
 
-    The account stays on the switch; only NXray's copy of the login goes.
+    The account stays on the switch; only NXray's copy of the login goes. The
+    activity log and the alert log keep their lines: they name the switch in
+    words.
     """
-    cursor = conn.execute("DELETE FROM switch_connection WHERE id = 1")
+    cursor = conn.execute("DELETE FROM switch_connection WHERE id = ?", (switch_id,))
+    for table in ("history", "port_labels", "config_backups", "alert_open"):
+        conn.execute(f"DELETE FROM {table} WHERE switch_id = ?", (switch_id,))  # fixed names
     conn.commit()
     return cursor.rowcount > 0
 
 
-def record_test_result(conn: sqlite3.Connection, *, ok: bool, message: str) -> None:
+def record_test_result(conn: sqlite3.Connection, switch_id: int, *, ok: bool, message: str) -> None:
     """Remember the outcome of the last connection test."""
     conn.execute(
         """
         UPDATE switch_connection
            SET last_tested_at = ?, last_test_ok = ?, last_test_message = ?
-         WHERE id = 1
+         WHERE id = ?
         """,
-        (time.time(), 1 if ok else 0, message),
+        (time.time(), 1 if ok else 0, message, switch_id),
     )
     conn.commit()
 
 
-def load_target(conn: sqlite3.Connection, secret_key: str) -> SwitchTarget:
-    """The stored connection as a SwitchTarget, password decrypted.
+def load_target(conn: sqlite3.Connection, switch_id: int | None, secret_key: str) -> SwitchTarget:
+    """The stored switch as a SwitchTarget, password decrypted.
 
-    Raises LookupError when nothing is set up and DecryptionError when the
-    secret key no longer matches: distinct failures with distinct fixes.
+    Raises LookupError when there is no such switch and DecryptionError when
+    the secret key no longer matches: distinct failures with distinct fixes.
     """
     row = conn.execute(
-        "SELECT host, port, username, password_encrypted FROM switch_connection WHERE id = 1"
+        "SELECT host, port, username, password_encrypted FROM switch_connection WHERE id = ?",
+        (switch_id,),
     ).fetchone()
     if row is None:
-        raise LookupError("no switch is set up")
+        raise LookupError("no such switch is set up")
     return SwitchTarget(
         host=row["host"],
         port=row["port"],
@@ -334,7 +380,9 @@ __all__ = [
     "DecryptionError",
     "SwitchConnection",
     "delete_connection",
+    "find_by_address",
     "get_connection",
+    "list_connections",
     "load_target",
     "record_test_result",
     "replace_login",
@@ -343,5 +391,6 @@ __all__ = [
     "set_changes_enabled",
     "set_changes_off",
     "set_config_saved",
+    "set_switch_hostname",
     "set_unsaved_changes",
 ]

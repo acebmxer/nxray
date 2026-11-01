@@ -36,6 +36,7 @@ from app.oui import format_mac
 from app.ports import port_sort_key
 from app.routes.ports import change_refused, render_port_page
 from app.security import csrf_token
+from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
 from app.vlans import VlanView, load_vlans
@@ -248,7 +249,7 @@ def mac_aging_change(
         log.warning("MAC aging change refused: %s", refused)
         return _render(request, username, error=refused, form=form, status_code=400)
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info("MAC aging time on %s set to %d by %s", connection.host, seconds, username)
     note_activity(request, username, "Neighbors", lines[0], connection.host)
     return _render(request, username, notice=f"Done: {lines[0]} {NOT_SAVED}")
@@ -292,7 +293,7 @@ def static_mac_add(
         log.warning("static MAC %s refused: %s", entry.mac, refused)
         return _render(request, username, error=refused, form=form, status_code=400)
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info(
         "static MAC %s vlan %d %s added on %s by %s",
         entry.mac,
@@ -339,7 +340,7 @@ def static_mac_remove(
         log.warning("removing static MAC %s refused: %s", entry.mac, refused)
         return _render(request, username, error=refused, status_code=400)
     with open_db(request.app.state.settings.db_path) as conn:
-        set_unsaved_changes(conn, True)
+        set_unsaved_changes(conn, selected_switch_id(request), True)
     log.info(
         "static MAC %s vlan %d removed on %s by %s",
         entry.mac,

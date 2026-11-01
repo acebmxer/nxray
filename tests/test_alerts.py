@@ -198,11 +198,11 @@ def test_a_port_turned_off_is_not_a_problem() -> None:
 
 def test_a_problem_is_sent_once_and_again_when_resolved(settings: Settings) -> None:
     with _db(settings) as conn:
-        first = alerts.update_open(conn, 100.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
+        first = alerts.update_open(conn, 1, 100.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
         assert [(e.kind, e.key) for e in first] == [("problem", "fan:Fan2")]
-        assert alerts.update_open(conn, 160.0, {"fan:Fan2": "different words"}) == []
+        assert alerts.update_open(conn, 1, 160.0, {"fan:Fan2": "different words"}) == []
         assert alerts.list_open(conn)[0].message == "Fan Fan2 reports Failure."
-        done = alerts.update_open(conn, 400.0, {})
+        done = alerts.update_open(conn, 1, 400.0, {})
         assert [(e.kind, e.since) for e in done] == [("resolved", 100.0)]
         assert alerts.list_open(conn) == []
 
@@ -210,7 +210,7 @@ def test_a_problem_is_sent_once_and_again_when_resolved(settings: Settings) -> N
 def test_the_monitor_waits_for_two_failures_and_keeps_other_problems(settings: Settings) -> None:
     monitor = AlertMonitor()
     with _db(settings) as conn:
-        alerts.update_open(conn, 1.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
+        alerts.update_open(conn, 1, 1.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
         assert monitor.failed(conn, 60.0, "timed out") == []
         events = monitor.failed(conn, 120.0, "timed out")
         assert [(e.kind, e.message) for e in events] == [
@@ -245,7 +245,7 @@ def test_a_restart_does_not_send_an_open_problem_again(settings: Settings) -> No
 
 def test_turning_a_check_off_drops_its_problems_quietly(settings: Settings) -> None:
     with _db(settings) as conn:
-        alerts.update_open(conn, 1.0, {"fan:Fan2": "x", "power:1": "y", "down:Ethernet1/3": "z"})
+        alerts.update_open(conn, 1, 1.0, {"fan:Fan2": "x", "power:1": "y", "down:Ethernet1/3": "z"})
         alerts.save_rules(conn, AlertRules(fans=False, port_down="off"))
         assert [p.key for p in alerts.list_open(conn)] == ["power:1"]
 
@@ -487,7 +487,7 @@ def test_forgetting_the_switch_forgets_its_problems(
     settings: Settings, switch: FakeSwitch, logged_in: TestClient
 ) -> None:
     with open_db(settings.db_path) as conn:
-        alerts.update_open(conn, 1.0, {"fan:Fan2": "x"})
+        alerts.update_open(conn, 1, 1.0, {"fan:Fan2": "x"})
     logged_in.post("/switch/forget", data={"csrf": _csrf(logged_in, "/switch")})
     with open_db(settings.db_path) as conn:
         assert alerts.list_open(conn) == []
@@ -636,7 +636,7 @@ def test_the_page_lists_open_problems_and_warns_when_history_is_off(
     logged_in: TestClient, settings: Settings
 ) -> None:
     with open_db(settings.db_path) as conn:
-        alerts.update_open(conn, 1.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
+        alerts.update_open(conn, 1, 1.0, {"fan:Fan2": "Fan Fan2 reports Failure."})
     page = _text(logged_in.get("/alerts").text)
     assert "Fan Fan2 reports Failure." in page
     assert "History is off" in page  # the test settings turn history off

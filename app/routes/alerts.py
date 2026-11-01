@@ -34,16 +34,29 @@ from app.alerts import (
     save_email,
     save_rules,
     send_test,
+    switch_label,
     validate_email,
     validate_webhook,
 )
 from app.db import open_db
-from app.dependencies import admin_required, note_activity, require_csrf, templates
+from app.dependencies import (
+    admin_required,
+    note_activity,
+    require_csrf,
+    selected_connection,
+    templates,
+)
 from app.routes.protocols import form_fields
 from app.security import csrf_token
+from app.switch_connection import list_connections
 
 router = APIRouter()
 log = logging.getLogger("nxray.alerts")
+
+
+def _switch(request: Request) -> str:
+    """The switch a test alert names: the one the page was shown for."""
+    return switch_label(selected_connection(request))
 
 
 def _render(
@@ -62,6 +75,7 @@ def _render(
             "webhooks": list_webhooks(conn),
             "open_problems": list_open(conn),
             "sent": list_sent(conn),
+            "several_switches": len(list_connections(conn)) > 1,
         }
     return templates.TemplateResponse(
         request,
@@ -197,7 +211,7 @@ def alerts_email_test(
         configured = load_email(conn).configured
     if not configured:
         return _render(request, username, error="Save the e-mail settings first.", status_code=400)
-    outcome = send_test(settings, email_only=True)
+    outcome = send_test(settings, switch=_switch(request), email_only=True)
     if outcome.startswith("e-mail sent"):
         return _render(request, username, notice=f"Test: {outcome}.")
     return _render(request, username, error=f"Test: {outcome}.")
@@ -268,7 +282,12 @@ def alerts_webhook_test(
         known = any(hook.id == webhook_id for hook in list_webhooks(conn))
     if not known:
         return _render(request, username, error="There is no such webhook.", status_code=404)
-    outcome = send_test(settings, request.app.state.alert_transport, webhook_id=webhook_id)
+    outcome = send_test(
+        settings,
+        request.app.state.alert_transport,
+        switch=_switch(request),
+        webhook_id=webhook_id,
+    )
     if outcome.endswith(" sent"):
         return _render(request, username, notice=f"Test: {outcome}.")
     return _render(request, username, error=f"Test: {outcome}.")
