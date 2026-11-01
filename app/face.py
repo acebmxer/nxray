@@ -2,16 +2,19 @@
 
 Drawn on the server as inline SVG, like the History charts (app/charts.py):
 no script, every colour from a CSS class in static/style.css, so the page's
-Content-Security-Policy stays strict. Each port is a link to its own page and
-carries an SVG <title>, which browsers show as a tooltip on hover.
+Content-Security-Policy stays strict. Each port is a link (by default to its
+own page; the Ports page passes one that opens its side panel) and carries an
+SVG <title>, which browsers show as a tooltip on hover. Above each top-row
+port and below each bottom-row port is the name of the device plugged into it,
+when the switch heard one over CDP or LLDP.
 
 The layout follows Cisco's front-panel numbering: ports in pairs, the odd
 number on top and the even one below it, the small SFP cages first (in blocks
-of six pairs) and the wide QSFP cages after them. Which cages are wide is read
-from the port's hardware line (a port that can run at 40 Gb/s or more is a
-QSFP), so the drawing comes from what the switch reports, not a table of
-models. A QSFP port split into four (breakout, Ethernet1/50/1-4) is drawn as
-one cage cut into four.
+of eight pairs, as on the Nexus 92160YC-X: 1-16, 17-32, 33-48) and the wide
+QSFP cages after them. Which cages are wide is read from the port's hardware
+line (a port that can run at 40 Gb/s or more is a QSFP), so the drawing comes
+from what the switch reports, not a table of models. A QSFP port split into
+four (breakout, Ethernet1/50/1-4) is drawn as one cage cut into four.
 
 Pure functions over app/ports.Port, so they are tested without a switch.
 Every text that reaches the markup goes through ``html.escape``.
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -31,7 +34,14 @@ from app.neighbors import NeighborView, PortDevices
 from app.ports import Port, human_rate
 
 # How the ports can be coloured, and the words on the buttons for each.
-MODES = {"state": "State", "traffic": "Traffic", "errors": "Errors", "vlan": "VLAN"}
+MODES = {
+    "state": "State",
+    "speed": "Speed",
+    "vlan": "VLAN",
+    "channel": "Port-channel",
+    "traffic": "Traffic",
+    "errors": "Errors",
+}
 
 # How many VLAN colours style.css defines (.s0 to .s7, shared with the charts).
 VLAN_COLOURS = 8
@@ -41,17 +51,29 @@ _SPEEDS = re.compile(r"\d+")
 # A port that can run this fast (Mb/s) is a wide QSFP cage.
 _QSFP_SPEED = 40_000
 
-_PAD = 14
-_NUMBERS = 14  # the band above and below the cages for port numbers
-_SFP = (26, 18, 30)  # cage width, height, distance from one pair to the next
-_QSFP = (40, 20, 46)
-_ROW_GAP = {"sfp": 6, "qsfp": 2}  # between the top and bottom cage of a pair
-_BLOCK_PAIRS = 6  # SFP pairs per block
-_BLOCK_GAP = 14
-_SECTION_GAP = 30  # between the SFP cages and the QSFP cages
-# A pair of cages is as tall for SFP (2 x 18 + 6) as for QSFP (2 x 20 + 2),
+_PAD = 12
+_LABELS = 13  # the band above and below the cages for device names
+_BADGE = 100  # the model name at the left, when known
+_SFP = (30, 22, 34)  # cage width, height, distance from one pair to the next
+_QSFP = (44, 23, 50)
+_ROW_GAP = {"sfp": 5, "qsfp": 3}  # between the top and bottom cage of a pair
+_BLOCK_PAIRS = 8  # SFP pairs per block
+_BLOCK_GAP = 18
+_SECTION_GAP = 26  # between the SFP cages and the QSFP cages
+# A pair of cages is as tall for SFP (2 x 22 + 5) as for QSFP (2 x 23 + 3),
 # so the top and bottom rows line up across the panel.
 _PAIR_HEIGHT = 2 * _SFP[1] + _ROW_GAP["sfp"]
+# Roughly how wide one character of the device names is, in picture units.
+_CHAR = 4.6
+
+# Running speed (bits per second) -> (CSS class, legend words), for the Speed view.
+_SPEED_CLASSES = {
+    1_000_000_000: ("f-1g", "1G"),
+    10_000_000_000: ("f-10g", "10G"),
+    25_000_000_000: ("f-25g", "25G"),
+    40_000_000_000: ("f-40g", "40G"),
+    100_000_000_000: ("f-100g", "100G"),
+}
 
 
 @dataclass(frozen=True)
@@ -91,8 +113,11 @@ def _max_speed(port: Port) -> int:
     return max((int(speed) for speed in _SPEEDS.findall(port.hardware)), default=0)
 
 
-def panel_layout(ports: Sequence[Port]) -> tuple[list[Cage], float, float]:
-    """Where each port sits on the panel, plus the picture's width and height."""
+def panel_layout(ports: Sequence[Port], left: float = _PAD) -> tuple[list[Cage], float, float]:
+    """Where each port sits on the panel, plus the picture's width and height.
+
+    ``left`` is where the first cage starts (room for the model name before it).
+    """
     groups: dict[tuple[int, int], list[Port]] = {}
     for port in ports:
         match = _PORT_NAME.match(port.name)
@@ -106,8 +131,8 @@ def panel_layout(ports: Sequence[Port]) -> tuple[list[Cage], float, float]:
         (wide if is_wide else narrow).append(key)
 
     cages: list[Cage] = []
-    top_y = _PAD + _NUMBERS
-    x = float(_PAD)
+    top_y = _PAD + _LABELS
+    x = float(left)
     for keys, kind in ((sorted(narrow), "sfp"), (sorted(wide), "qsfp")):
         if not keys:
             continue
@@ -133,8 +158,8 @@ def panel_layout(ports: Sequence[Port]) -> tuple[list[Cage], float, float]:
             )
         blocks = (len(pairs) - 1) // _BLOCK_PAIRS if kind == "sfp" else 0
         x += (len(pairs) - 1) * pitch + width + blocks * _BLOCK_GAP + _SECTION_GAP
-    panel_width = (x - _SECTION_GAP + _PAD) if cages else 2 * _PAD
-    return cages, panel_width, top_y + _PAIR_HEIGHT + _NUMBERS + _PAD
+    panel_width = (x - _SECTION_GAP + _PAD) if cages else left + _PAD
+    return cages, panel_width, top_y + _PAIR_HEIGHT + _LABELS + _PAD
 
 
 def _sub_number(port: Port) -> int:
@@ -148,13 +173,44 @@ def vlan_colours(ports: Sequence[Port]) -> dict[str, int]:
     return {vlan: index % VLAN_COLOURS for index, vlan in enumerate(used)}
 
 
+def channel_colours(neighbors: NeighborView | None) -> dict[str, int]:
+    """A colour number for each port-channel, in name order."""
+    names = sorted(
+        (pc.name for pc in neighbors.port_channels) if neighbors else (),
+        key=lambda name: (len(name), name),
+    )
+    return {name: index % VLAN_COLOURS for index, name in enumerate(names)}
+
+
+def speed_class(port: Port) -> tuple[str, str]:
+    """(CSS class, words) for the speed a port runs at; f-none when it has no link."""
+    if not port.up:
+        return "f-none", "No link"
+    known = _SPEED_CLASSES.get(port.bandwidth_bits)
+    if known:
+        return known
+    return "f-other", port.speed or "Other speed"
+
+
 def port_colour(
     port: Port,
     mode: str,
     colours: Mapping[str, int],
     vlan_names: Mapping[int, str] | None = None,
+    channel: str = "",
 ) -> tuple[str, str]:
-    """(CSS classes, legend words) for one port in a colour mode."""
+    """(CSS classes, legend words) for one port in a colour mode.
+
+    ``colours`` maps VLANs (vlan mode) or port-channel names (channel mode) to
+    a colour number; ``channel`` is the port-channel the port is in.
+    """
+    if mode == "speed":
+        return speed_class(port)
+    if mode == "channel":
+        faded = "" if port.up else " f-faded"
+        if channel and channel in colours:
+            return f"f-channel s{colours[channel]}{faded}", channel
+        return "f-none", "Not in a port-channel"
     if mode == "traffic":
         if not port.up:
             return "f-none", "No link"
@@ -259,21 +315,48 @@ def device_lines(devices: PortDevices) -> list[str]:
     return lines
 
 
+def short_device_name(name: str) -> str:
+    """A neighbor's name without its domain or CDP serial.
+
+    "esx-01.lab.example(FOX1)" -> "esx-01".
+    """
+    return name.split("(", 1)[0].split(".", 1)[0].strip()
+
+
+def _fit(text: str, room: float) -> str:
+    """``text`` cut to fit ``room`` picture units, with an ellipsis when cut."""
+    most = max(1, int(room // _CHAR))
+    return text if len(text) <= most else text[: most - 1] + "…"
+
+
+def detail_link(name: str) -> str:
+    """A port's own page."""
+    return "/ports/detail?name=" + quote(name, safe="/")
+
+
 def draw_face(
     ports: Sequence[Port],
     mode: str,
     labels: Mapping[str, str] | None = None,
     vlan_names: Mapping[int, str] | None = None,
     neighbors: NeighborView | None = None,
+    *,
+    model: str = "",
+    link: Callable[[str], str] = detail_link,
+    selected: str = "",
 ) -> Face:
     """The front panel as SVG, plus a legend of the colours it uses with their counts.
 
-    With ``neighbors``, each port's tooltip also says what is plugged into it.
+    With ``neighbors``, each port's tooltip also says what is plugged into it
+    and the device's name is written next to the port. ``model`` is written at
+    the left; ``link`` gives each port's address; the ``selected`` port is
+    outlined.
     """
     labels = labels or {}
     mode = color_mode(mode)
-    colours = vlan_colours(ports)
-    cages, width, height = panel_layout(ports)
+    colours = channel_colours(neighbors) if mode == "channel" else vlan_colours(ports)
+    left = _PAD + (_BADGE if model else 0)
+    cages, width, height = panel_layout(ports, left)
     counts: dict[tuple[str, str], int] = {}
     parts = [
         f'<svg class="face" viewBox="0 0 {width:.0f} {height:.0f}" role="group" '
@@ -281,34 +364,78 @@ def draw_face(
         '<defs><pattern id="face-hatch" width="5" height="5" patternUnits="userSpaceOnUse" '
         'patternTransform="rotate(45)"><rect class="face-hatch-bg" width="5" height="5"/>'
         '<line class="face-hatch-line" x1="0" y1="0" x2="0" y2="5"/></pattern></defs>',
-        f'<rect class="face-body" x="1" y="1" width="{width - 2:.0f}" '
-        f'height="{height - 2:.0f}" rx="6"/>',
+        f'<rect class="face-body" x="0.5" y="0.5" width="{width - 1:.0f}" '
+        f'height="{height - 1:.0f}" rx="4"/>',
+        f'<rect class="face-ear" x="3" y="{height / 2 - 14:.1f}" width="4" height="28" rx="1"/>',
+        f'<rect class="face-ear" x="{width - 7:.0f}" y="{height / 2 - 14:.1f}" width="4" '
+        f'height="28" rx="1"/>',
     ]
+    if model:
+        # "Nexus9000 C92160YC-X chassis" is written as "Nexus9000" over "C92160YC-X".
+        lines = [
+            (_fit(word, _BADGE - 12), "face-model")
+            for word in model.removesuffix(" chassis").split(" ", 1)
+        ]
+        narrow = sum(1 for cage in cages if not cage.wide)
+        wide = sum(1 for cage in cages if cage.wide)
+        if narrow:
+            lines.append((f"{narrow} × SFP", "face-sub"))
+        if wide:
+            lines.append((f"{wide} × QSFP", "face-sub"))
+        y = height / 2 - (len(lines) - 1) * 6.5 + 3
+        for words, css in lines:
+            parts.append(
+                f'<text class="{css}" x="{_PAD + 4}" y="{y:.1f}">{html.escape(words)}</text>'
+            )
+            y += 13
+    pitch = {False: _SFP[2], True: _QSFP[2]}
     for cage in cages:
-        number_y = cage.y - 4 if cage.top else cage.y + cage.height + 11
-        parts.append(
-            f'<text class="face-number" x="{cage.x + cage.width / 2:.1f}" y="{number_y:.1f}" '
-            f'text-anchor="middle">{cage.number}</text>'
-        )
+        first = cage.ports[0]
+        devices = neighbors.for_port(first.name) if neighbors else None
+        if devices and devices.neighbors:
+            device = _fit(short_device_name(devices.neighbors[0].name), pitch[cage.wide] - 3)
+            device_y = cage.y - 4 if cage.top else cage.y + cage.height + 10
+            parts.append(
+                f'<text class="face-device face-device-on" x="{cage.x + cage.width / 2:.1f}" '
+                f'y="{device_y:.1f}" text-anchor="middle">{html.escape(device)}</text>'
+            )
         slice_width = (cage.width - (len(cage.ports) - 1)) / len(cage.ports)
         for index, port in enumerate(cage.ports):
-            css, words = port_colour(port, mode, colours, vlan_names)
+            channel_pc = neighbors.channel_of(port.name) if neighbors else None
+            css, words = port_colour(
+                port, mode, colours, vlan_names, channel_pc.name if channel_pc else ""
+            )
             key = (css.replace(" f-faded", ""), words)
             counts[key] = counts.get(key, 0) + 1
             label = labels.get(port.name, "")
-            devices = neighbors.for_port(port.name) if neighbors else None
+            port_devices = (
+                devices if index == 0 else (neighbors.for_port(port.name) if neighbors else None)
+            )
             x = cage.x + index * (slice_width + 1)
-            href = "/ports/detail?name=" + quote(port.name, safe="/")
+            classes = "face-port face-sel" if port.name == selected else "face-port"
+            dim = css.startswith(("f-none", "f-empty", "f-off"))
             parts.append(
-                f'<a class="face-port" href="{html.escape(href)}">'
-                f"<title>{html.escape(tooltip(port, label, vlan_names, devices))}</title>"
+                f'<a class="{classes}" href="{html.escape(link(port.name))}">'
+                f"<title>{html.escape(tooltip(port, label, vlan_names, port_devices))}</title>"
                 f'<rect class="face-cell {css}" x="{x:.1f}" y="{cage.y:.1f}" '
                 f'width="{slice_width:.1f}" height="{cage.height:.1f}" rx="2"/>'
             )
+            light = "face-light face-light-on" if port.up else "face-light"
+            if port.reason and "disabled" in port.reason.lower() and port.admin_up:
+                light = "face-light face-light-err"
+            parts.append(
+                f'<rect class="{light}" x="{x + slice_width - 7:.1f}" y="{cage.y + 3:.1f}" '
+                f'width="4.5" height="2.5" rx="0.6"/>'
+            )
+            if index == 0:
+                number_class = "face-number face-number-dim" if dim else "face-number"
+                parts.append(
+                    f'<text class="{number_class}" x="{x + 3:.1f}" '
+                    f'y="{cage.y + cage.height - 4:.1f}">{cage.number}</text>'
+                )
             if label:
                 parts.append(
-                    f'<circle class="face-mark" cx="{x + slice_width - 4:.1f}" '
-                    f'cy="{cage.y + 4:.1f}" r="2.2"/>'
+                    f'<circle class="face-mark" cx="{x + 4:.1f}" cy="{cage.y + 4:.1f}" r="2"/>'
                 )
             parts.append("</a>")
     parts.append("</svg>")
@@ -323,6 +450,12 @@ _ORDER = (
     "f-down",
     "f-empty",
     "f-off",
+    "f-1g",
+    "f-10g",
+    "f-25g",
+    "f-40g",
+    "f-100g",
+    "f-other",
     "f-t0",
     "f-t1",
     "f-t2",
@@ -336,8 +469,9 @@ _ORDER = (
 
 
 def _legend_order(entry: LegendEntry) -> tuple[int, int]:
-    """Legend entries in a fixed order; VLANs by number."""
+    """Legend entries in a fixed order; VLANs and port-channels by number."""
     first = entry.css.split()[0]
-    if first == "f-vlan":
-        return (len(_ORDER), int(entry.label.split()[1]))
+    if first in ("f-vlan", "f-channel"):
+        number = re.search(r"\d+", entry.label)
+        return (len(_ORDER), int(number[0]) if number else 0)
     return (_ORDER.index(first) if first in _ORDER else len(_ORDER) + 1, 0)

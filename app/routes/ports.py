@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Annotated
 from urllib.parse import quote
 
@@ -19,7 +20,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
-from app.face import MODES, color_mode, draw_face
+from app.face import MODES, color_mode, draw_face, short_device_name, speed_class
 from app.history import RANGE_LABELS, port_charts, range_key
 from app.neighbor_changes import (
     PortDiscovery,
@@ -59,13 +60,37 @@ from app.vlans import VlanView, describe_port_vlans, load_ports_with_vlans, plan
 router = APIRouter()
 log = logging.getLogger("nxray.ports")
 
-# The filters offered above the table, and which ports each keeps.
-FILTERS = {
-    "all": lambda port: True,
-    "up": lambda port: port.up,
-    "down": lambda port: not port.up,
-    "errors": lambda port: port.errors > 0,
+# The filters offered above the table: their words, and which ports each keeps
+# (given the port and the port-channel it is in, "" for none). None in the
+# list is a gap between two groups of filters.
+FILTERS: dict[str, Callable[[Port, str], bool]] = {
+    "all": lambda port, channel: True,
+    "up": lambda port, channel: port.up,
+    "down": lambda port, channel: not port.up,
+    "off": lambda port, channel: not port.admin_up,
+    "errors": lambda port, channel: port.errors > 0,
+    "1g": lambda port, channel: port.up and port.bandwidth_bits == 1_000_000_000,
+    "10g": lambda port, channel: port.up and port.bandwidth_bits == 10_000_000_000,
+    "25g": lambda port, channel: port.up and port.bandwidth_bits == 25_000_000_000,
+    "40g": lambda port, channel: port.up and port.bandwidth_bits >= 40_000_000_000,
+    "trunk": lambda port, channel: port.vlan == "trunk",
+    "channel": lambda port, channel: bool(channel),
 }
+FILTER_LABELS: list[tuple[str, str] | None] = [
+    ("all", "All"),
+    ("up", "Up"),
+    ("down", "Down"),
+    ("off", "Turned off"),
+    ("errors", "With errors"),
+    None,
+    ("1g", "1G"),
+    ("10g", "10G"),
+    ("25g", "25G"),
+    ("40g", "40G / 100G"),
+    None,
+    ("trunk", "Trunks"),
+    ("channel", "In a port-channel"),
+]
 
 # What the change form on a port's page can ask for.
 ACTIONS = ("description", "off", "on")
@@ -153,8 +178,18 @@ def ports_page(
     show: str = "all",
     color: str = "state",
     select: str = "",
+    port: str = "",
 ) -> Response:
-    return render_ports_page(request, username, show=show, color=color, tick_all=select == "all")
+    return render_ports_page(
+        request, username, show=show, color=color, tick_all=select == "all", selected=port
+    )
+
+
+def ports_link(show: str, color: str, port: str = "") -> str:
+    """The Ports page's address with a filter, a colour mode and, optionally,
+    the port whose side panel is open."""
+    link = f"/ports?show={quote(show)}&color={quote(color)}"
+    return link + (f"&port={quote(port, safe='/')}" if port else "")
 
 
 def render_ports_page(
@@ -168,12 +203,14 @@ def render_ports_page(
     tick_all: bool = False,
     ticked: list[str] | None = None,
     bulk: dict[str, str] | None = None,
+    selected: str = "",
     status_code: int = 200,
 ) -> Response:
     """Read the switch fresh and show the Ports page, with an optional message.
 
     ``tick_all`` ticks every port the filter shows; ``ticked`` keeps the ports
     ticked and ``bulk`` the change picked (action, description) after a refusal.
+    ``selected`` names the port whose side panel is open.
     """
     color = color_mode(color)
     vlan_names: dict[int, str] = {}
@@ -186,9 +223,49 @@ def render_ports_page(
     if show not in FILTERS:
         show = "all"
     labels = _labels(request)
-    shown: list[Port] = [port for port in ports or [] if FILTERS[show](port)]
-    counts = {name: sum(1 for port in ports or [] if keep(port)) for name, keep in FILTERS.items()}
-    face = draw_face(ports, color, labels, vlan_names, neighbors) if ports else None
+    channels = (
+        {
+            port.name: (pc.name if (pc := neighbors.channel_of(port.name)) else "")
+            for port in ports or []
+        }
+        if neighbors
+        else {}
+    )
+
+    def keeps(name: str, port: Port) -> bool:
+        return FILTERS[name](port, channels.get(port.name, ""))
+
+    shown: list[Port] = [port for port in ports or [] if keeps(show, port)]
+    counts = {name: sum(1 for port in ports or [] if keeps(name, port)) for name in FILTERS}
+    open_port = next((port for port in ports or [] if port.name == selected), None)
+    face = (
+        draw_face(
+            ports,
+            color,
+            labels,
+            vlan_names,
+            neighbors,
+            model=connection.switch_model if connection else "",
+            link=lambda name: ports_link(show, color, name),
+            selected=open_port.name if open_port else "",
+        )
+        if ports
+        else None
+    )
+    names = [port.name for port in ports or []]
+    drawer = None
+    if open_port is not None and connection is not None:
+        at = names.index(open_port.name)
+        with open_db(request.app.state.settings.db_path) as conn:
+            charts = port_charts(conn, connection.id, open_port.name, range_key(None), time.time())
+        drawer = {
+            "port": open_port,
+            "devices": neighbors.for_port(open_port.name) if neighbors else None,
+            "chart": charts[0] if charts else None,
+            "previous": ports_link(show, color, names[at - 1]),
+            "next": ports_link(show, color, names[(at + 1) % len(names)]),
+            "close": ports_link(show, color),
+        }
     return templates.TemplateResponse(
         request,
         "ports.html",
@@ -210,6 +287,16 @@ def render_ports_page(
             "notice": notice,
             "ticked": {port.name for port in shown} if tick_all else set(ticked or []),
             "bulk": bulk or {"action": "", "description": ""},
+            "filter_labels": FILTER_LABELS,
+            "channels": channels,
+            "drawer": drawer,
+            "selected": open_port.name if open_port else "",
+            "ports_link": ports_link,
+            "speed_class": speed_class,
+            "short_device_name": short_device_name,
+            "throughput": sum(
+                port.in_bits_per_second + port.out_bits_per_second for port in ports or []
+            ),
         },
         status_code=status_code,
     )

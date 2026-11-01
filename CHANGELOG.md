@@ -11,6 +11,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **VLAN grid.** The VLANs page shows every VLAN against every port and
+  port-channel: **U** where the port carries it untagged (its access VLAN, or
+  a trunk's native VLAN) and **T** where a trunk carries it tagged.
+
 - **Change several ports at once.** With port changes on, the Ports page has
   a tick box on each row for operators and admins, a **Tick every port
   shown** link (which follows the Up, Down and With errors filters), and a
@@ -641,6 +645,33 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Changed
 
+- **A new look for every page.** A menu down the left side, grouped as
+  Monitor, Configure, Switch and Admin, with the current page lit; **Narrow
+  the menu** shrinks it to icons. A strip across the top names the switch
+  shown, its address, model and NX-OS version (stored when the dashboard or
+  Test connection reads them), whether the last connection test worked, and
+  **Unsaved changes** when NXray changed the switch since the last Save
+  config; the switch picker moved into it. Square corners, thin borders,
+  denser tables, and port names, addresses and numbers in a fixed-width
+  font. The colours follow the computer's light or dark setting, or the
+  **Light** or **Dark** button at the foot of the menu; the choice is kept per
+  browser. Still no script and no inline style on any page.
+- **The Ports page is built around the front panel.** The panel is drawn as
+  the switch's metal front across the page, with the model at the left, a
+  light on each port that is lit while it has a link, and the name of the
+  device plugged in (from CDP or LLDP) above or below each port. The small
+  ports are drawn in three blocks of sixteen (1-16, 17-32, 33-48), as on the
+  Nexus 92160YC-X; they were drawn in four blocks of twelve. Two new colour
+  views: **Speed** (1G, 10G, 25G, 40G, 100G) and **Port-channel**. Above the
+  table: the port count, how many are up, down, turned off and with errors,
+  and the traffic now; quick filters for turned-off ports, each speed,
+  trunks and ports in a port-channel, each with its count. The table adds
+  the connected device and small bars showing in and out traffic as a share
+  of the link's speed. Clicking a port, on the panel or in the table, opens
+  a side panel with its traffic graph, what is connected, its settings and
+  transceiver, the description and on/off buttons (operators and admins),
+  arrows to the next and previous port, and a link to the port's own page.
+  **Change several ports** is now a bar under the table.
 - **Pages use the full width of the browser window.** Every page used to sit
   in a centred column at most 1100 px wide, and intro lines wrapped at about
   65 characters, so a PC screen had empty space on both sides and tables

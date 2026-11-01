@@ -19,6 +19,7 @@ from app.alerts import notify_change, switch_label
 from app.db import open_db
 from app.nxapi import SwitchTarget
 from app.ports import human_bytes, human_rate
+from app.preferences import THEMES, ui_preferences
 from app.security import csrf_token, csrf_valid, current_user
 from app.switch_choice import selected_switch_id
 from app.switch_connection import (
@@ -213,6 +214,8 @@ def switch_picker(request: Request) -> tuple[list[SwitchConnection], int | None]
 
 
 templates.env.globals["switch_picker"] = switch_picker
+templates.env.globals["ui_preferences"] = ui_preferences
+templates.env.globals["themes"] = THEMES
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 

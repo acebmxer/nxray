@@ -59,7 +59,7 @@ def test_neighbors_page_needs_a_switch(logged_in: TestClient) -> None:
 
 
 def test_neighbors_page_is_in_the_menu(logged_in: TestClient) -> None:
-    assert '<a class="navlink" href="/neighbors">Neighbors</a>' in logged_in.get("/").text
+    assert '<a class="navlink" href="/neighbors" title="Neighbors">' in logged_in.get("/").text
 
 
 def test_neighbors_page_shows_the_three_tables(logged_in: TestClient, switch: FakeSwitch) -> None:

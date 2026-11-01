@@ -122,7 +122,8 @@ def test_page_shows_the_recorded_port_channel_with_its_partner(
     assert "b8:59:9f:00:00:0e (Mellanox Technologies, Inc.), active, fast rate" in text
     assert "The switch's LACP priority 32768 (the default)" in text
     assert "Make port-channel" in text and "Take out" in text
-    assert '<a class="navlink" href="/port-channels">Port-channels</a>' in page.text
+    # In the menu, lit as the page shown.
+    assert 'class="navlink navlink-on" href="/port-channels" title="Port-channels"' in page.text
 
 
 def test_viewer_looks_but_gets_no_forms(logged_in: TestClient, enabled: FakeSwitch) -> None:

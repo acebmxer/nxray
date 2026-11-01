@@ -48,7 +48,8 @@ prose columns; those are a reviewer's job.
 | Read or change a port's speed, MTU, FEC, flow control, storm control, layer, or split it | `app/port_settings.py` (`plan_port_settings`, `plan_breakout`); commands from `NxapiClient.configure_port_settings`, `breakout_port`, `join_port` |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
-| Draw the front panel, or colour a port by state, traffic, errors or VLAN | `app/face.py`, `draw_face` |
+| Draw the front panel, or colour a port by state, speed, VLAN, port-channel, traffic or errors | `app/face.py`, `draw_face` |
+| Know a browser's theme (system, light, dark) or menu width | `app/preferences.py`, `ui_preferences` (a template global) |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
@@ -105,7 +106,7 @@ behind.
 | `create_session` | `(conn, username: str, session_hours: int) -> str` | Records a session, returns its id | `routes/auth.login_submit` | v0.1.0 |
 | `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id and the switch the page is for (`switch_choice.selected_switch_id`), so a form shown for one switch is refused once another is picked | routes rendering forms | v0.1.0 |
 | `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token for the switch this request is for | `dependencies.require_csrf` | v0.1.0 |
-| `csrf_valid_any_switch` | `(request, token, switch_ids) -> bool` | True when the token is this session's for any of those switches or none; only for the switch picker, which changes no switch | `routes/switch_page.switches_select` | v0.1.0 |
+| `csrf_valid_any_switch` | `(request, token, switch_ids) -> bool` | True when the token is this session's for any of those switches or none; only for forms that change no switch (the switch picker, the theme and menu buttons) | `routes/switch_page.switches_select`, `routes/preferences.preferences` | v0.1.0 |
 | `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
 | `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user` | v0.1.0 |
 | `destroy_user_sessions` | `(conn, username, *, keep=None) -> int` | Signs an account out everywhere except one session | `users.set_password`, `users.set_disabled` | v0.1.0 |
@@ -301,6 +302,7 @@ none reads or changes "the" switch by default.
 | `replace_login` | `(conn, switch_id, *, host, port, password, switch_hostname, secret_key) -> None` | Stores the new password Run setup again gave the account, and the address it worked at | `routes/switch_page.switch_repair` | v0.1.0 |
 | `save_connection` | `(conn, *, host, port, username, password, switch_hostname, config_saved, secret_key) -> int` | Stores a new switch, password encrypted; its id. Refuses one at an address already stored | `routes/switch_page.switch_setup` | v0.1.0 |
 | `set_address` | `(conn, switch_id, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
+| `set_switch_identity` | `(conn, connection, system: SystemInfo) -> None` | Stores the model and NX-OS version the switch just reported (for the strip at the top of every page); writes only when they changed | `routes/dashboard`, `routes/switch_page` (test, address) | v0.1.0 |
 | `set_switch_hostname` | `(conn, switch_id, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
 | `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
@@ -327,6 +329,13 @@ the switch takes only while interface-vlan is on.
 | `selected_switch_id` | `(request) -> int \| None` | The switch this request is for, from the cookie; looked up once per request | `dependencies.stored_switch`, `security.csrf_token`, every route that stores something per switch | v0.1.0 |
 
 `SWITCH_COOKIE` is the cookie's name.
+
+## `app/preferences.py` — how a browser wants NXray to look
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `remember_preferences` | `(request, response, *, theme="", menu="") -> Response` | Sets the `nxray_theme` / `nxray_menu` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
+| `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`) and menu width (`wide`, `narrow`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
 
 ## `app/switch_setup.py` — creating NXray's account
 
@@ -425,7 +434,9 @@ interfaces). `ON_WARNINGS` and `OFF_WARNING` go on the confirm page.
 | `parse_switchports` | `(body) -> dict[str, PortVlans]` | Each Ethernet port's mode, access, native and carried VLANs from `show interface switchport` | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
 | `parse_vlans` | `(body) -> list[Vlan]` | Every VLAN from `show vlan brief`, lowest first | `load_vlans`, `load_ports_with_vlans` | v0.1.0 |
 | `plan_port_vlans` | `(current, view, *, mode, access_vlan, native_vlan, allowed) -> PortVlanChange` | Checks a port's VLAN form against the switch (VLANs must exist), adds a trunk's native VLAN to the VLANs it carries (`PortVlanChange.native_added`) and keeps only what changes | `routes/ports.port_vlans_change` | v0.1.0 |
+| `vlan_grid` | `(view) -> tuple[list[str], list[tuple[Vlan, list[str]]]]` | The VLANs page's grid: the ports that carry VLANs (Ethernet in front-panel order, then port-channels) and each VLAN's mark on each | `routes/vlans` | v0.1.0 |
 | `vlan_interface_ids` | `(brief_body) -> frozenset[int]` | The VLANs that have a VLAN interface, from `show interface brief` | `load_vlan_page` | v0.1.0 |
+| `vlan_mark` | `(port, vlan_id) -> str` | How a port carries a VLAN: `U` untagged (access VLAN, or a trunk's native VLAN it carries), `T` tagged, `""` not at all | `vlan_grid` | v0.1.0 |
 
 `PortVlans.uses(vlan_id)` says whether deleting a VLAN would cut a port off
 (access VLAN, native VLAN, or a trunk naming it; a trunk carrying every VLAN
@@ -513,9 +524,11 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
-| `ports_page` | `(request, username, show, color, select) -> Response` | `GET /ports?show=all\|up\|down\|errors&color=state\|traffic\|errors\|vlan&select=all`: the front panel and the table (`select=all` ticks every port shown); only `vlan` also reads the VLAN names; every mode reads the neighbors and MAC address table for the tooltips | router | v0.1.0 |
+| `ports_link` | `(show, color, port="") -> str` | The Ports page's address with a filter, a colour mode and the port whose side panel is open | `render_ports_page`, `ports.html` | v0.1.0 |
+| `ports_page` | `(request, username, show, color, select, port) -> Response` | `GET /ports?show=<filter>&color=state\|speed\|vlan\|channel\|traffic\|errors&select=all&port=<name>`: the front panel and the table (`select=all` ticks every port shown; `port` opens that port's side panel); only `vlan` also reads the VLAN names; every mode reads the neighbors and MAC address table | router | v0.1.0 |
+| `preferences` | `(request, username, csrf, theme, menu, next) -> Response` | `POST /preferences`, the theme and menu-width buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
 | `ports_bulk_change` | `(request, username, csrf, names, action, description, show, color, confirm) -> Response` | `POST /ports/bulk`: asks to confirm, listing every ticked port, then turns them off or on or sets one description, one request per port; the first refusal stops the rest and the page names what changed, what was refused and what was not tried | router | v0.1.0 |
-| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and the picked change after a refusal | `ports_page`, `ports_bulk_change`, `switch_save` | v0.1.0 |
+| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and the picked change after a refusal; with `selected`, that port's side panel is open | `ports_page`, `ports_bulk_change`, `switch_save` | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
@@ -723,11 +736,15 @@ totals and `alerts.AlertMonitor` apart.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `channel_colours` | `(neighbors) -> dict[str, int]` | A colour number (0-7, repeating) per port-channel, in name order | `draw_face` | v0.1.0 |
 | `color_mode` | `(value) -> str` | A valid `?color=` name; `state` for anything else | `draw_face`, `routes/ports.ports_page` | v0.1.0 |
+| `detail_link` | `(name) -> str` | A port's own page, `draw_face`'s default link | `draw_face` | v0.1.0 |
 | `device_lines` | `(devices: PortDevices) -> list[str]` | The tooltip lines for what is plugged into a port: neighbors, its port-channel, then up to three learned addresses with their makers | `tooltip` | v0.1.0 |
-| `draw_face` | `(ports, mode, labels=None, vlan_names=None, neighbors=None) -> Face` | The front panel as inline SVG (each port a link with a tooltip, which with `neighbors` says what is plugged in) and a legend with a count per colour | `routes/ports.ports_page` | v0.1.0 |
-| `panel_layout` | `(ports) -> tuple[list[Cage], float, float]` | Where each port sits: pairs with the odd port on top, SFP cages in blocks of six pairs, then QSFP cages (40 Gb/s or more, or broken out); plus width and height | `draw_face` | v0.1.0 |
-| `port_colour` | `(port, mode, colours, vlan_names=None) -> tuple[str, str]` | A port's CSS classes and legend words in one colour mode | `draw_face` | v0.1.0 |
+| `draw_face` | `(ports, mode, labels=None, vlan_names=None, neighbors=None, *, model="", link=detail_link, selected="") -> Face` | The front panel as inline SVG, drawn as the switch's metal front: each port a link (`link(name)`) with a tooltip and a light that is lit while up; with `neighbors` the device's name next to each port; the model at the left; the `selected` port outlined; plus a legend with a count per colour | `routes/ports.render_ports_page` | v0.1.0 |
+| `panel_layout` | `(ports, left=12) -> tuple[list[Cage], float, float]` | Where each port sits: pairs with the odd port on top, SFP cages in blocks of eight pairs (1-16, 17-32, 33-48), then QSFP cages (40 Gb/s or more, or broken out); plus width and height | `draw_face` | v0.1.0 |
+| `port_colour` | `(port, mode, colours, vlan_names=None, channel="") -> tuple[str, str]` | A port's CSS classes and legend words in one colour mode | `draw_face` | v0.1.0 |
+| `short_device_name` | `(name) -> str` | A neighbor's name without its domain or CDP serial | `draw_face`, `routes/ports` (the table) | v0.1.0 |
+| `speed_class` | `(port) -> tuple[str, str]` | The CSS class and words (1G ... 100G) for the speed a port runs at; `f-none` without a link | `port_colour`, `routes/ports` (the table) | v0.1.0 |
 | `tooltip` | `(port, label="", vlan_names=None, devices=None) -> str` | What hovering over a port shows, one fact per line | `draw_face` | v0.1.0 |
 | `vlan_colours` | `(ports) -> dict[str, int]` | A colour number (0-7, repeating) per access VLAN in use, lowest first | `draw_face` | v0.1.0 |
 

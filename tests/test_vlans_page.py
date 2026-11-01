@@ -417,3 +417,14 @@ def test_save_from_the_vlans_page_stays_there(logged_in: TestClient, enabled: Fa
     assert "changed the switch since" not in saved.text
     assert "storage" in saved.text  # the page was read again
     assert enabled.saved
+
+
+def test_vlans_page_draws_the_port_grid(logged_in: TestClient, switch: FakeSwitch) -> None:
+    switch.vlans[20] = "storage"
+    page = logged_in.get("/vlans").text
+    assert '<table class="vlan-grid">' in page
+    grid = page.split('<table class="vlan-grid">')[1].split("</table>")[0]
+    # Every port is an access port in VLAN 1 on the recorded switch.
+    assert grid.count('class="cell-u"') == 54
+    assert 'title="Ethernet1/1: VLAN 1 untagged"' in grid
+    assert '<span class="mono">20</span> <span class="dim">storage</span>' in grid

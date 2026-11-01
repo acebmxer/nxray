@@ -1,10 +1,26 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Ports — NXray{% endblock %}
 
 {% block content %}
 {% set role = current_role(request) %}
 {% set can_change = role in ("admin", "operator") %}
-<h1 class="page-title">Ports</h1>
+<div class="page-head">
+  <div>
+    <p class="breadcrumb">Monitor</p>
+    <h1 class="page-title">Ports</h1>
+  </div>
+  {% if ports %}
+  <dl class="kpis">
+    <div><dt>Ports</dt><dd>{{ ports|length }}</dd></div>
+    <div><dt>Up</dt><dd class="kpi-ok">{{ counts.up }}</dd></div>
+    <div><dt>Down</dt><dd>{{ counts.down - counts.off }}</dd></div>
+    <div><dt>Turned off</dt><dd>{{ counts.off }}</dd></div>
+    <div><dt>With errors</dt><dd{% if counts.errors %} class="kpi-crit"{% endif %}>{{ counts.errors }}</dd></div>
+    <div><dt>Traffic now</dt><dd>{{ throughput|rate }}</dd></div>
+  </dl>
+  {% endif %}
+</div>
 {% if error %}
 <p class="alert alert-error" role="alert">{{ error }}</p>
 {% endif %}
@@ -40,96 +56,247 @@
   </form>
 </div>
 {% endif %}
+
 <section class="card">
-  <h2 class="card-title">Front panel</h2>
-  <nav class="filters" aria-label="Colour the ports by">
-    {% for key, label in modes.items() %}
-    <a class="filter{% if color == key %} filter-on{% endif %}" href="/ports?show={{ show }}&amp;color={{ key }}">{{ label }}</a>
-    {% endfor %}
-  </nav>
-  {{ face.svg }}
-  <ul class="legend">
+  <div class="box-head">
+    <h2 class="card-title">Front panel</h2>
+    <nav class="seg" aria-label="Colour the ports by">
+      {% for key, label in modes.items() %}
+      <a class="{% if color == key %}seg-on{% endif %}" href="{{ ports_link(show, key, selected) }}"{% if color == key %} aria-current="true"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <span class="box-gap"></span>
+    <a class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
+  </div>
+  <div class="faceplate">{{ face.svg }}</div>
+  <ul class="legend face-legend">
     {% for entry in face.legend %}
     <li><span class="swatch {{ entry.css }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.count }}</span></li>
     {% endfor %}
     {% if labels %}<li><span class="swatch swatch-mark"></span>Has a label</li>{% endif %}
   </ul>
-  <p class="note">
-    Hover over a port for its details and what is plugged into it; click it to open its page.
-    {% if color == "traffic" %}Traffic is the busier direction over the last 30 seconds, as a share of the link's speed.{% endif %}
-    {% if color == "errors" %}Errors and discards count since the switch's counters were last cleared.{% endif %}
-    {% if color == "vlan" %}Ports without a link are drawn faded. Colours repeat after eight VLANs; hover to be sure.{% endif %}
-  </p>
+  {% if color == "traffic" %}<p class="note">The busier direction over the last 30 seconds, as a share of the link's speed.</p>{% endif %}
+  {% if color == "errors" %}<p class="note">Errors and discards since the switch's counters were last cleared.</p>{% endif %}
+  {% if color in ("vlan", "channel") %}<p class="note">Ports without a link are drawn faded. Colours repeat after eight; hover over a port to be sure.</p>{% endif %}
 </section>
-
-<nav class="filters" aria-label="Show ports">
-  {% for key, label in [("all", "All"), ("up", "Up"), ("down", "Down"), ("errors", "With errors")] %}
-  <a class="filter{% if show == key %} filter-on{% endif %}" href="/ports?show={{ key }}{% if color != 'state' %}&amp;color={{ color }}{% endif %}">{{ label }} ({{ counts[key] }})</a>
-  {% endfor %}
-</nav>
 
 {% if bulk_on %}
 <form method="post" action="/ports/bulk" id="change-several">
 <input type="hidden" name="csrf" value="{{ csrf_token }}">
 <input type="hidden" name="show" value="{{ show }}">
 <input type="hidden" name="color" value="{{ color }}">
-<section class="card">
-  <h2 class="card-title">Change several ports</h2>
-  <p class="lead">Tick the ports in the table, pick a change and press the button. A confirm page lists every ticked port and what happens to it first.
-    <a href="/ports?show={{ show }}&amp;color={{ color }}&amp;select=all#change-several">Tick every port shown</a>{% if ticked %} · <a href="/ports?show={{ show }}&amp;color={{ color }}#change-several">Clear the ticks</a>{% endif %}</p>
-  <div class="form-grid">
-    <fieldset class="choice">
-      <legend>Change</legend>
-      <label class="check"><input type="radio" name="action" value="off" {% if bulk.action == "off" %}checked{% endif %}> Turn them off</label>
-      <label class="check"><input type="radio" name="action" value="on" {% if bulk.action == "on" %}checked{% endif %}> Turn them on</label>
-      <label class="check"><input type="radio" name="action" value="description" {% if bulk.action == "description" %}checked{% endif %}> Give them this description:</label>
-    </fieldset>
-    <div class="stack form-narrow">
-      <label for="bulk_description">Description</label>
-      <input id="bulk_description" name="description" type="text" value="{{ bulk.description }}" maxlength="254" spellcheck="false">
-      <p class="hint">Up to 254 plain characters, no "?" or ";". Leave empty to remove it. Used only with the description change.</p>
-    </div>
-  </div>
-  <button type="submit" class="btn btn-primary">Change the ticked ports</button>
-</section>
 {% endif %}
 <section class="card card-flush">
+  <div class="toolbar">
+    <nav class="filters" aria-label="Show ports">
+      {% for entry in filter_labels %}
+      {% if entry is none %}<span class="toolbar-sep"></span>{% else %}
+      {% set key, label = entry %}
+      <a class="filter{% if show == key %} filter-on{% endif %}" href="{{ ports_link(key, color) }}">{{ label }} <span class="count">{{ counts[key] }}</span></a>
+      {% endif %}
+      {% endfor %}
+    </nav>
+    {% if bulk_on %}
+    <span class="box-gap"></span>
+    <a class="btn btn-quiet" href="{{ ports_link(show, color) }}&amp;select=all#change-several">Tick every port shown</a>
+    {% if ticked %}<a class="btn btn-quiet" href="{{ ports_link(show, color) }}#change-several">Clear the ticks</a>{% endif %}
+    {% endif %}
+  </div>
   <table class="table table-ports">
     <thead>
       <tr>
         {% if bulk_on %}<th><span class="sr-only">Tick</span></th>{% endif %}
         <th>Port</th><th>Description</th><th>State</th><th>Speed</th><th>VLAN</th>
-        <th>Transceiver</th><th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
+        <th>Connected</th><th>Transceiver</th><th>Activity</th>
+        <th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
       </tr>
     </thead>
     <tbody>
       {% for port in shown %}
-      <tr>
+      {% set devices = neighbors.for_port(port.name) if neighbors else none %}
+      {% set speed_css, speed_words = speed_class(port) %}
+      <tr{% if port.name == selected %} class="row-sel"{% endif %}>
         {% if bulk_on %}<td><input type="checkbox" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
-        <td><a href="/ports/detail?name={{ port.name|urlencode }}">{{ port.name }}</a>{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}{% set pc = neighbors.channel_of(port.name) if neighbors else none %}{% if pc %}<a class="reason" href="/port-channels#{{ pc.name }}">in {{ pc.name }}</a>{% endif %}</td>
-        <td>{{ port.description }}</td>
+        <td><a class="port-name" href="{{ ports_link(show, color, port.name) }}">{{ port.name }}</a>{% if channels.get(port.name) %} <a class="reason" href="/port-channels#{{ channels[port.name] }}">in {{ channels[port.name] }}</a>{% endif %}{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
+        <td class="cell-desc" title="{{ port.description }}">{{ port.description }}</td>
         <td>
-          <span class="badge {{ 'badge-ok' if port.up else ('badge-unknown' if port.admin_up else 'badge-warn') }}">{{ port.state_label }}</span>
-          {% if port.reason %}<span class="reason">{{ port.reason }}</span>{% endif %}
+          <span class="state {{ 'state-up' if port.up else ('state-off' if not port.admin_up else ('state-err' if 'disabled' in port.reason|lower else 'state-down')) }}">{{ port.state_label }}</span>
+          {% if port.reason and not port.up and port.admin_up %}<span class="reason">{{ port.reason }}</span>{% endif %}
         </td>
-        <td>{{ port.speed }}</td>
-        <td>{{ port.vlan }}</td>
-        <td>{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
-        <td class="num">{{ port.in_bits_per_second|rate }}</td>
-        <td class="num">{{ port.out_bits_per_second|rate }}</td>
-        <td class="num">{% if port.errors %}<span class="badge badge-crit">{{ port.errors }}</span>{% else %}0{% endif %}</td>
+        <td>{% if port.up %}<span class="speed {{ speed_css }}">{{ speed_words }}</span>{% else %}<span class="dim">{{ port.speed }}</span>{% endif %}</td>
+        <td><span class="mono">{{ port.vlan }}</span></td>
+        <td>
+          {% if devices and devices.neighbors %}
+          {% set n = devices.neighbors[0] %}
+          <span class="device" title="{{ n.protocol }}: {{ n.name }}{% if n.platform %}, {{ n.platform }}{% endif %}">{{ icon("neighbors") }}{{ short_device_name(n.name) }}{% if n.remote_port %} <small>{{ n.remote_port }}</small>{% endif %}</span>
+          {% elif devices and devices.macs %}
+          {% set m = devices.macs|rejectattr("switch_own")|list %}
+          {% if m %}<span class="device">{{ icon("account") }}{{ m[0].maker or m[0].mac }}{% if m|length > 1 %} <small>+{{ m|length - 1 }}</small>{% endif %}</span>{% endif %}
+          {% endif %}
+        </td>
+        <td class="mono">{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
+        <td>
+          {% if port.up and port.bandwidth_bits %}
+          {% set in_share = [port.in_bits_per_second / port.bandwidth_bits, 1]|min %}
+          {% set out_share = [port.out_bits_per_second / port.bandwidth_bits, 1]|min %}
+          <svg class="bars" viewBox="0 0 84 10" aria-hidden="true"><rect class="bar-bg" width="84" height="4" rx="1"/><rect class="bar-in" width="{{ [in_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/><rect class="bar-bg" y="6" width="84" height="4" rx="1"/><rect class="bar-out" y="6" width="{{ [out_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/></svg>
+          {% endif %}
+        </td>
+        <td class="num">{% if port.up %}{{ port.in_bits_per_second|rate }}{% endif %}</td>
+        <td class="num">{% if port.up %}{{ port.out_bits_per_second|rate }}{% endif %}</td>
+        <td class="num">{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>{% else %}<span class="dim">0</span>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="{{ 10 if bulk_on else 9 }}">No ports match this filter.</td></tr>
+      <tr><td colspan="{{ 12 if bulk_on else 11 }}">No ports match this filter.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  <p class="note">In and Out are the average over the last 30 seconds; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
 </section>
-{% if bulk_on %}</form>{% endif %}
-<p class="note">
-  In and Out are the average over the last 30 seconds. Errors adds up input and
-  output errors and discards since the counters were last cleared. Read from the
-  switch when this page opened; reload for fresh values.
-</p>
+{% if bulk_on %}
+<div class="bulk-bar">
+  <fieldset class="choice">
+    <legend>Change several ports:</legend>
+    <label class="check"><input type="radio" name="action" value="off" {% if bulk.action == "off" %}checked{% endif %}> Turn off</label>
+    <label class="check"><input type="radio" name="action" value="on" {% if bulk.action == "on" %}checked{% endif %}> Turn on</label>
+    <label class="check"><input type="radio" name="action" value="description" {% if bulk.action == "description" %}checked{% endif %}> Give them the description</label>
+  </fieldset>
+  <label for="bulk_description" class="sr-only">Description</label>
+  <input id="bulk_description" name="description" type="text" value="{{ bulk.description }}" maxlength="254" spellcheck="false" placeholder="Description">
+  <button type="submit" class="btn btn-primary">Change the ticked ports</button>
+  <p class="hint">A confirm page lists every ticked port and what happens to it first. Descriptions: up to 254 plain characters, no "?" or ";"; leave empty to remove them.</p>
+</div>
+</form>
+{% endif %}
+
+{% if drawer %}
+{% set port = drawer.port %}
+{% set devices = drawer.devices %}
+<a class="drawer-shade" href="{{ drawer.close }}" aria-label="Close the port panel"></a>
+<aside class="drawer" aria-label="{{ port.name }}">
+  <div class="drawer-head">
+    <div class="drawer-top">
+      <h2>{{ port.name }}</h2>
+      {% if channels.get(port.name) %}<a class="tag" href="/port-channels#{{ channels[port.name] }}">{{ channels[port.name] }}</a>{% endif %}
+      <span class="box-gap"></span>
+      <a class="icon-btn" href="{{ drawer.previous }}" title="Previous port">{{ icon("narrow") }}</a>
+      <a class="icon-btn" href="{{ drawer.next }}" title="Next port">{{ icon("wide") }}</a>
+      <a class="icon-btn" href="{{ drawer.close }}" title="Close"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
+    </div>
+    <div class="drawer-sub">{% if labels.get(port.name) %}{{ labels[port.name] }} · {% endif %}{{ port.description or "No description" }}</div>
+    <div class="pills">
+      <span class="pill {{ 'pill-ok' if port.up else ('pill-crit' if 'disabled' in port.reason|lower and port.admin_up else '') }}">{{ port.state_label }}</span>
+      {% if port.speed %}<span class="pill">{{ port.speed }}</span>{% endif %}
+      <span class="pill">{{ "VLAN " ~ port.vlan if port.vlan.isdigit() else port.vlan }}</span>
+      {% if port.mtu %}<span class="pill">MTU {{ port.mtu }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="drawer-body">
+    {% if drawer.chart and drawer.chart.svg %}
+    <section class="drawer-part">
+      <h3>{{ drawer.chart.title }}</h3>
+      {{ drawer.chart.svg }}
+      <ul class="legend">
+        {% for entry in drawer.chart.legend %}
+        <li><span class="swatch s{{ entry.colour }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.summary }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    <section class="drawer-part">
+      <h3>Traffic</h3>
+      <dl class="kv">
+        <dt>In now</dt><dd>{{ port.in_bits_per_second|rate }}</dd>
+        <dt>Out now</dt><dd>{{ port.out_bits_per_second|rate }}</dd>
+        <dt>Received</dt><dd>{{ port.in_bytes|bytes }}</dd>
+        <dt>Sent</dt><dd>{{ port.out_bytes|bytes }}</dd>
+        <dt>Errors</dt><dd>{{ "{:,}".format(port.errors) }}</dd>
+      </dl>
+    </section>
+    <section class="drawer-part">
+      <h3>Connected</h3>
+      {% if devices is none %}
+      <p class="dim">The switch did not report its neighbors.</p>
+      {% elif not devices.neighbors and not devices.macs %}
+      <p class="dim">Nothing seen on this port.</p>
+      {% else %}
+      {% for n in devices.neighbors %}
+      <dl class="kv">
+        <dt>Device</dt><dd>{{ n.name }}</dd>
+        {% if n.remote_port %}<dt>Its port</dt><dd>{{ n.remote_port }}</dd>{% endif %}
+        {% if n.platform %}<dt>Model</dt><dd>{{ n.platform }}</dd>{% endif %}
+        {% if n.address %}<dt>Address</dt><dd>{{ n.address }}</dd>{% endif %}
+        <dt>Heard over</dt><dd>{{ n.protocol }}</dd>
+      </dl>
+      {% endfor %}
+      {% set learned = devices.macs|rejectattr("switch_own")|list %}
+      {% if learned %}
+      <table class="table">
+        <tbody>
+          {% for m in learned[:6] %}
+          <tr><td class="mono">{{ m.mac }}</td><td class="mono">{{ m.vlan }}</td><td>{{ m.maker }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if learned|length > 6 %}<p class="dim">and {{ learned|length - 6 }} more</p>{% endif %}
+      {% endif %}
+      {% endif %}
+    </section>
+    <section class="drawer-part">
+      <h3>Port</h3>
+      <dl class="kv">
+        {% if port.reason and not port.up %}<dt>Why down</dt><dd>{{ port.reason }}</dd>{% endif %}
+        <dt>Mode</dt><dd>{{ port.mode or "—" }}</dd>
+        {% if port.duplex %}<dt>Duplex</dt><dd>{{ port.duplex }}</dd>{% endif %}
+        {% if port.fec_oper or port.fec %}<dt>FEC</dt><dd>{{ port.fec_oper or port.fec }}</dd>{% endif %}
+        <dt>Hardware</dt><dd>{{ port.hardware }}</dd>
+        <dt>Last link change</dt><dd>{{ port.last_flap }}</dd>
+      </dl>
+    </section>
+    <section class="drawer-part">
+      <h3>Transceiver</h3>
+      {% if port.transceiver.present %}
+      <dl class="kv">
+        <dt>Type</dt><dd>{{ port.transceiver.type }}</dd>
+        <dt>Vendor</dt><dd>{{ port.transceiver.vendor }}</dd>
+        <dt>Part number</dt><dd>{{ port.transceiver.part_number }}</dd>
+      </dl>
+      {% else %}
+      <p class="dim">Nothing plugged in.</p>
+      {% endif %}
+    </section>
+    {% if bulk_on %}
+    <section class="drawer-part">
+      <h3>Description</h3>
+      <form method="post" action="/ports/change" class="row-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="{{ port.name }}">
+        <input type="hidden" name="action" value="description">
+        <label for="drawer_description" class="sr-only">Description</label>
+        <input id="drawer_description" name="description" type="text" value="{{ port.description }}" maxlength="254" spellcheck="false">
+        <button type="submit" class="btn btn-quiet">Change</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+  <div class="drawer-foot">
+    {% if bulk_on %}
+    <form method="post" action="/ports/change" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="name" value="{{ port.name }}">
+      {% if port.admin_up %}
+      <input type="hidden" name="action" value="off">
+      <button type="submit" class="btn btn-danger">Turn off</button>
+      {% else %}
+      <input type="hidden" name="action" value="on">
+      <button type="submit" class="btn">Turn on</button>
+      {% endif %}
+    </form>
+    {% endif %}
+    <span class="box-gap"></span>
+    <a class="btn" href="/ports/detail?name={{ port.name|urlencode }}">All of this port →</a>
+  </div>
+</aside>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -55,6 +55,7 @@ from app.switch_connection import (
     set_changes_enabled,
     set_changes_off,
     set_config_saved,
+    set_switch_identity,
     set_unsaved_changes,
 )
 from app.switch_repair import ROLE_GIVEN, ROLE_KEPT, ROLE_MISSING, run_repair
@@ -271,6 +272,8 @@ def switch_test(
     status = check_connection(target, transport=request.app.state.nxapi_transport)
     with open_db(settings.db_path) as conn:
         record_test_result(conn, connection.id, ok=status.ok, message=status.message)
+        if status.system is not None:
+            set_switch_identity(conn, connection, status.system)
     if status.ok:
         return _render(request, username, notice=status.message)
     return _render(request, username, error=status.message)
@@ -338,6 +341,7 @@ def switch_address(
                 switch_hostname=status.system.hostname,
             )
             record_test_result(conn, connection.id, ok=True, message=status.message)
+            set_switch_identity(conn, connection, status.system)
     finally:
         _setup_lock.release()
 

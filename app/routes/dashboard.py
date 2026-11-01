@@ -9,8 +9,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.db import open_db
 from app.dependencies import login_required, stored_switch, templates
 from app.switch import Dashboard, health_problems
+from app.switch_connection import set_switch_identity
 from app.switch_setup import ConnectionStatus, load_dashboard_status
 
 router = APIRouter()
@@ -24,6 +26,9 @@ def dashboard(request: Request, username: str = Depends(login_required)) -> Resp
     # Outside any database block: the switch can take seconds to answer.
     if target is not None:
         status, data = load_dashboard_status(target, transport=request.app.state.nxapi_transport)
+    if data is not None and connection is not None:
+        with open_db(request.app.state.settings.db_path) as conn:
+            set_switch_identity(conn, connection, data.system)
 
     return templates.TemplateResponse(
         request,

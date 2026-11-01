@@ -205,6 +205,34 @@ class PortVlanChange:
         )
 
 
+def vlan_mark(port: PortVlans, vlan_id: int) -> str:
+    """How a port carries a VLAN, for the VLANs page's grid: "U" untagged
+    (access VLAN, or a trunk's native VLAN it carries), "T" tagged (a trunk
+    carries it), "" not at all."""
+    if not port.switchport:
+        return ""
+    if port.mode == "trunk":
+        if vlan_id not in port.allowed:
+            return ""
+        return "U" if vlan_id == port.native_vlan else "T"
+    return "U" if vlan_id == port.access_vlan else ""
+
+
+def vlan_grid(view: VlanView) -> tuple[list[str], list[tuple[Vlan, list[str]]]]:
+    """The VLANs page's grid: the ports that carry VLANs (front-panel ports in
+    order, then port-channels), and for each VLAN its mark on each of them."""
+    switchports = [name for name, port in view.ports.items() if port.switchport]
+    ethernet = sorted((n for n in switchports if n.startswith("Ethernet")), key=port_sort_key)
+    channels = sorted(
+        (n for n in switchports if n.startswith("port-channel")),
+        key=lambda name: int(re.sub(r"\D", "", name) or 0),
+    )
+    columns = ethernet + channels
+    return columns, [
+        (vlan, [vlan_mark(view.ports[name], vlan.id) for name in columns]) for vlan in view.vlans
+    ]
+
+
 def plan_port_vlans(
     current: PortVlans,
     view: VlanView,

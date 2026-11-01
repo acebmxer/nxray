@@ -73,16 +73,16 @@ def test_ports_page_lists_every_port_from_one_request(
 ) -> None:
     text = _text(logged_in.get("/ports").text)
     assert switch.requests == [PORT_COMMANDS, *NEIGHBOR_READS]
-    assert "All (54)" in text and "Up (0)" in text and "Down (54)" in text
-    assert "Ethernet1/1 Down XCVR not inserted auto 1 none 0 b/s 0 b/s 0" in text
+    assert "All 54 Up 0 Down 54" in text
+    assert "Ethernet1/1 Down XCVR not inserted auto 1 none 0" in text
     assert "Ethernet1/54" in text
 
 
 def test_filters(logged_in: TestClient, switch: FakeSwitch) -> None:
     _one_port_up(switch)
     up = _table(logged_in.get("/ports?show=up").text)
-    assert "Up (1)" in up and "Down (53)" in up and "With errors (1)" in up
-    assert "Ethernet1/3 xcp-host-1 &lt;storage&gt; Up 25 Gb/s" in up
+    assert "Up 1 Down 53" in up and "With errors 1" in up
+    assert "Ethernet1/3 xcp-host-1 &lt;storage&gt; Up 25G" in up
     assert "Ethernet1/1 " not in up
     assert "Ethernet1/3" in _table(logged_in.get("/ports?show=errors").text)
     assert "Ethernet1/3 " not in _table(logged_in.get("/ports?show=down").text)
@@ -109,8 +109,25 @@ def test_port_detail(logged_in: TestClient, switch: FakeSwitch) -> None:
     assert "Nothing plugged in." in text
 
 
-def test_ports_link_to_their_detail_page(logged_in: TestClient, switch: FakeSwitch) -> None:
-    assert 'href="/ports/detail?name=Ethernet1/1"' in logged_in.get("/ports").text
+def test_ports_open_their_side_panel(logged_in: TestClient, switch: FakeSwitch) -> None:
+    page = logged_in.get("/ports").text
+    assert 'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/1"' in page
+    assert 'class="drawer"' not in page
+    panel = logged_in.get("/ports", params={"port": "Ethernet1/1"}).text
+    assert '<aside class="drawer" aria-label="Ethernet1/1">' in panel
+    # The panel links to the port's own page, and its arrows wrap around the panel.
+    assert 'href="/ports/detail?name=Ethernet1/1"' in panel
+    assert (
+        'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/54" title="Previous port"'
+        in panel
+    )
+    assert 'href="/ports?show=all&amp;color=state&amp;port=Ethernet1/2" title="Next port"' in panel
+    assert (
+        'class="face-port face-sel" href="/ports?show=all&amp;color=state&amp;port=Ethernet1/1"'
+        in panel
+    )
+    # An unknown port opens no panel.
+    assert 'class="drawer"' not in logged_in.get("/ports", params={"port": "Ethernet9/9"}).text
 
 
 def test_unknown_port_is_a_404(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -174,6 +191,9 @@ def test_unknown_colour_mode_is_state(logged_in: TestClient, switch: FakeSwitch)
     assert "<b>" not in html
 
 
-def test_face_links_open_the_port_page(logged_in: TestClient, switch: FakeSwitch) -> None:
-    html = logged_in.get("/ports").text
-    assert '<a class="face-port" href="/ports/detail?name=Ethernet1/54">' in html
+def test_face_links_open_the_side_panel(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/ports?color=errors").text
+    assert (
+        '<a class="face-port" href="/ports?show=all&amp;color=errors&amp;port=Ethernet1/54">'
+        in html
+    )

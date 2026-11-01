@@ -29,7 +29,7 @@ from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
-from app.vlans import VlanView, load_vlan_page
+from app.vlans import VlanView, load_vlan_page, vlan_grid
 
 router = APIRouter()
 log = logging.getLogger("nxray.vlans")
@@ -67,6 +67,7 @@ def _render(
             "status": status,
             "view": view,
             "usage": usage,
+            "grid": vlan_grid(view) if view else None,
             "error": error,
             "notice": notice,
             "form": form or {"vlan_id": "", "name": ""},

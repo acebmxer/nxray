@@ -7,13 +7,17 @@ import re
 from dataclasses import replace
 
 from app.face import (
+    channel_colours,
     color_mode,
     draw_face,
     panel_layout,
     port_colour,
+    short_device_name,
+    speed_class,
     tooltip,
     vlan_colours,
 )
+from app.neighbors import Neighbor, NeighborView, PortChannel
 from app.ports import Port, Transceiver, parse_ports
 from tests.conftest import load_fixture
 
@@ -52,11 +56,14 @@ def test_odd_ports_sit_on_top_of_the_even_ones() -> None:
     assert cages[2].y + cages[2].height == cages[50].y + cages[50].height
 
 
-def test_small_cages_come_in_blocks_of_six_pairs() -> None:
+def test_small_cages_come_in_blocks_of_eight_pairs() -> None:
+    """As on the Nexus 92160YC-X: ports 1-16, 17-32 and 33-48."""
     cages = {cage.number: cage for cage in panel_layout(_ports())[0]}
     inside = cages[3].x - cages[1].x
-    assert cages[11].x - cages[9].x == inside
-    assert cages[13].x - cages[11].x > inside
+    assert cages[15].x - cages[13].x == inside
+    assert cages[17].x - cages[15].x > inside
+    assert cages[31].x - cages[29].x == inside
+    assert cages[33].x - cages[31].x > inside
 
 
 def test_a_broken_out_port_is_one_cage_cut_in_four() -> None:
@@ -184,3 +191,81 @@ def test_no_inline_style_or_script_reaches_the_svg() -> None:
     svg = str(draw_face(_ports(), "vlan").svg)
     assert "style=" not in svg and "<script" not in svg
     assert not re.search(r"\bon[a-z]+=", svg)
+
+
+def _view() -> NeighborView:
+    return NeighborView(
+        neighbors=[
+            Neighbor("LLDP", "Ethernet1/3", "esx-01.lab.example", "vmnic2", "", "", "", ""),
+            Neighbor("CDP", "Ethernet1/4", "core-switch-north(FOX123)", "Te1/0/1", "", "", "", ""),
+        ],
+        port_channels=[
+            PortChannel("port-channel43", ("Ethernet1/43", "Ethernet1/44"), "LACP", True),
+            PortChannel("port-channel5", ("Ethernet1/5",), "LACP", True),
+        ],
+    )
+
+
+def test_speed_colours_follow_the_running_speed() -> None:
+    port = _port(_ports(), "Ethernet1/1")
+    assert speed_class(port) == ("f-none", "No link")
+    for bits, css in (
+        (10**9, "f-1g"),
+        (10**10, "f-10g"),
+        (25 * 10**9, "f-25g"),
+        (10**11, "f-100g"),
+    ):
+        assert speed_class(replace(port, up=True, bandwidth_bits=bits))[0] == css
+    odd = replace(port, up=True, bandwidth_bits=5 * 10**9, speed="5 Gb/s")
+    assert speed_class(odd) == ("f-other", "5 Gb/s")
+    assert port_colour(odd, "speed", {}) == ("f-other", "5 Gb/s")
+
+
+def test_port_channel_colours() -> None:
+    colours = channel_colours(_view())
+    # port-channel5 before port-channel43: by number, not as text.
+    assert colours == {"port-channel5": 0, "port-channel43": 1}
+    port = replace(_port(_ports(), "Ethernet1/43"), up=True)
+    assert port_colour(port, "channel", colours, channel="port-channel43") == (
+        "f-channel s1",
+        "port-channel43",
+    )
+    assert port_colour(replace(port, up=False), "channel", colours, channel="port-channel43")[
+        0
+    ] == ("f-channel s1 f-faded")
+    assert port_colour(port, "channel", colours)[0] == "f-none"
+    assert channel_colours(None) == {}
+
+
+def test_device_names_are_written_next_to_their_ports() -> None:
+    assert short_device_name("esx-01.lab.example") == "esx-01"
+    assert short_device_name("core-switch-north(FOX123)") == "core-switch-north"
+    svg = str(draw_face(_ports(), "state", neighbors=_view()).svg)
+    assert '<text class="face-device face-device-on"' in svg
+    assert ">esx-01</text>" in svg
+    # Too long for one cage: cut, with an ellipsis.
+    assert ">core-…</text>" in svg
+
+
+def test_the_model_link_and_selected_port() -> None:
+    face = draw_face(
+        _ports(),
+        "channel",
+        neighbors=_view(),
+        model="Nexus9000 C92160YC-X chassis",
+        link=lambda name: f"/ports?port={name}",
+        selected="Ethernet1/7",
+    )
+    svg = str(face.svg)
+    assert ">Nexus9000</text>" in svg and ">C92160YC-X</text>" in svg
+    assert ">48 × SFP</text>" in svg and ">6 × QSFP</text>" in svg
+    assert '<a class="face-port face-sel" href="/ports?port=Ethernet1/7">' in svg
+    assert svg.count("face-sel") == 1
+    assert {entry.label for entry in face.legend} >= {"port-channel43", "Not in a port-channel"}
+
+
+def test_a_light_is_lit_on_ports_with_a_link() -> None:
+    ports = _ports()
+    ports[0] = replace(ports[0], up=True)
+    svg = str(draw_face(ports, "state").svg)
+    assert svg.count('class="face-light face-light-on"') == 1

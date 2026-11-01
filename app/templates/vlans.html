@@ -100,6 +100,40 @@
   VLAN interface: delete that on the Routing page first.
 </p>
 
+{% set columns, grid_rows = grid %}
+{% if columns and grid_rows %}
+<section class="card card-flush">
+  <h2 class="card-title">Ports and VLANs</h2>
+  <table class="vlan-grid">
+    <thead>
+      <tr>
+        <th class="vlan-grid-name" scope="col">VLAN</th>
+        {% for name in columns %}
+        {% if name.startswith("port-channel") and (loop.first or not columns[loop.index0 - 1].startswith("port-channel")) %}<th class="vlan-grid-gap"></th>{% endif %}
+        <th scope="col" title="{{ name }}"><a href="/ports/detail?name={{ name|urlencode }}">{{ name|replace("Ethernet", "")|replace("port-channel", "po") }}</a></th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for vlan, marks in grid_rows %}
+      <tr>
+        <th class="vlan-grid-name" scope="row"><span class="mono">{{ vlan.id }}</span> <span class="dim">{{ vlan.name }}</span></th>
+        {% for mark in marks %}
+        {% set name = columns[loop.index0] %}
+        {% if name.startswith("port-channel") and (loop.first or not columns[loop.index0 - 1].startswith("port-channel")) %}<td class="vlan-grid-gap"></td>{% endif %}
+        <td{% if mark == "U" %} class="cell-u" title="{{ name }}: VLAN {{ vlan.id }} untagged"{% elif mark == "T" %} class="cell-t" title="{{ name }}: VLAN {{ vlan.id }} tagged"{% endif %}>{{ mark }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="vlan-grid-key">
+    <span><b class="cell-u">U</b> Untagged: the port's access VLAN, or a trunk's native VLAN</span>
+    <span><b class="cell-t">T</b> Tagged: a trunk carries it</span>
+  </p>
+</section>
+{% endif %}
+
 <section class="card">
   <h2 class="card-title">Create a VLAN</h2>
   {% if not can_change %}

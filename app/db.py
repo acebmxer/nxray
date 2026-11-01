@@ -309,6 +309,11 @@ _MIGRATIONS: list[str] = [
 
     ALTER TABLE alert_log ADD COLUMN switch TEXT NOT NULL DEFAULT '';
     """,
+    # The switch's model and NX-OS version, shown in the strip at the top of every page.
+    """
+    ALTER TABLE switch_connection ADD COLUMN switch_model TEXT NOT NULL DEFAULT '';
+    ALTER TABLE switch_connection ADD COLUMN nxos_version TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 

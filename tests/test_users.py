@@ -213,8 +213,14 @@ ANY_ROLE_POSTS = {
     "/account/2fa/codes",
     "/account/2fa/off",
     "/switches/select",
+    "/preferences",
 }
-ADMIN_ONLY_POSTS_EXCEPT = {"/switch/save", "/switch-admin/change", "/switches/select"}
+ADMIN_ONLY_POSTS_EXCEPT = {
+    "/switch/save",
+    "/switch-admin/change",
+    "/switches/select",
+    "/preferences",
+}
 
 
 def _post_routes(routes: Iterable[object], found: set[str]) -> None:

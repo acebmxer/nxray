@@ -280,7 +280,7 @@ def test_the_history_page_has_a_chart_for_each_recorded_kind(
     body = logged_in.get("/history").text
     for title in ("Temperatures", "CPU and memory", "Power draw", "Fan speed", "Traffic through"):
         assert title in body
-    assert body.count("<svg") == 5
+    assert body.count('<svg class="chart"') == 5
     assert "History is turned off" in body  # the test settings switch the sampler off
 
 
@@ -298,7 +298,7 @@ def test_a_range_with_no_rows_says_there_is_no_data(
 ) -> None:
     body = logged_in.get("/history").text
     assert "No data in this range yet." in body
-    assert "<svg" not in body
+    assert '<svg class="chart"' not in body
 
 
 def test_the_port_page_draws_that_ports_traffic_and_errors(
@@ -313,7 +313,7 @@ def test_the_port_page_draws_that_ports_traffic_and_errors(
     page = logged_in.get("/ports/detail?name=Ethernet1/3&range=6h").text
     assert "Traffic over time" in page
     assert "Errors and discards over time" in page
-    assert page.count("<svg") == 2
+    assert page.count('<svg class="chart"') == 2
     assert "4 in this range" in page
     assert re.search(r'filter filter-on" href="/ports/detail\?name=Ethernet1/3&amp;range=6h"', page)
 

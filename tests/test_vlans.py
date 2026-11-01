@@ -42,6 +42,8 @@ from app.vlans import (
     parse_switchports,
     parse_vlans,
     plan_port_vlans,
+    vlan_grid,
+    vlan_mark,
 )
 from tests.conftest import load_fixture
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
@@ -484,3 +486,37 @@ def test_installs_with_port_changes_on_get_role_version_1(tmp_path: Path) -> Non
     assert connection is not None
     assert (connection.role_version, connection.changes_enabled) == (1, True)
     assert not connection.vlan_changes_enabled
+
+
+# ---- the VLANs page's grid -------------------------------------------------
+
+
+def test_vlan_marks() -> None:
+    access = PortVlans("Ethernet1/1", True, "access", 10, 1)
+    trunk = PortVlans("Ethernet1/2", True, "trunk", 1, 1, frozenset({1, 10, 20}))
+    routed = PortVlans("Ethernet1/3", False, "access", 10, 1)
+    assert [vlan_mark(access, v) for v in (1, 10, 20)] == ["", "U", ""]
+    assert [vlan_mark(trunk, v) for v in (1, 10, 20, 30)] == ["U", "T", "T", ""]
+    assert vlan_mark(routed, 10) == ""
+    # A native VLAN the trunk does not carry is not marked.
+    dropped = PortVlans("Ethernet1/4", True, "trunk", 1, 99, frozenset({10}))
+    assert vlan_mark(dropped, 99) == ""
+
+
+def test_vlan_grid_orders_ports_like_the_front_panel() -> None:
+    view = VlanView(
+        vlans=[Vlan(1, "default", "active"), Vlan(10, "servers", "active")],
+        ports={
+            "Ethernet1/10": PortVlans("Ethernet1/10", True, "access", 10, 1),
+            "port-channel43": PortVlans("port-channel43", True, "trunk", 1, 1, frozenset({1, 10})),
+            "Ethernet1/2": PortVlans("Ethernet1/2", True, "access", 1, 1),
+            "port-channel5": PortVlans("port-channel5", True, "access", 1, 1),
+            "Ethernet1/3": PortVlans("Ethernet1/3", False, "access", 1, 1),
+        },
+    )
+    columns, rows = vlan_grid(view)
+    assert columns == ["Ethernet1/2", "Ethernet1/10", "port-channel5", "port-channel43"]
+    assert [(vlan.id, marks) for vlan, marks in rows] == [
+        (1, ["U", "", "U", "U"]),
+        (10, ["", "U", "", "T"]),
+    ]

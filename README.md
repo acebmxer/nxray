@@ -13,11 +13,13 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
+![The Ports page in the dark theme: the front panel coloured by port state, with the device plugged into each port, above the port table](docs/images/ports-dark.png)
+
 **Status:** early. All 20 stages of the [roadmap](#roadmap) are built. Today
 you can install NXray, sign in, connect it to one switch or several and pick
 the one every page shows from the top bar,
 see the switch's health on the dashboard, look at every port on a picture of
-the front panel coloured by state, traffic, errors or VLAN, see what is
+the front panel coloured by state, speed, VLAN, port-channel, traffic or errors, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
 each device's maker, ARP), turn CDP and LLDP on or off per port, set the MAC
 address aging time, add static MAC addresses, clear learned ones, label ports, turn
@@ -43,6 +45,17 @@ from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
 built-in HTTPS, update from the Settings page, and see 30 days of temperatures,
 power, CPU, memory and port traffic as graphs.
+
+## Screenshots
+
+Taken against the test suite's pretend switch, with made-up devices.
+
+| | |
+| --- | --- |
+| ![The Ports page in the light theme, ports coloured by speed](docs/images/ports-speed-light.png) | ![A port's side panel on the Ports page, ports coloured by traffic](docs/images/ports-side-panel-dark.png) |
+| Ports coloured by speed (light theme) | Clicking a port opens its side panel |
+| ![The dashboard in the light theme](docs/images/dashboard-light.png) | ![The VLANs page with its grid of VLANs against ports](docs/images/vlans-grid-dark.png) |
+| The dashboard | VLANs against ports: U untagged, T tagged |
 
 ## Read next
 
@@ -125,8 +138,8 @@ default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
    errors over time, as graphs. *(built)*
 10. **Switch face**: a picture of the front panel with every port colored by
-    state, traffic or VLAN; hover for details, click to open the port; your
-    own labels on ports. *(built)*
+    state, speed, VLAN, port-channel, traffic or errors; hover for details,
+    click to open the port's side panel; your own labels on ports. *(built)*
 11. **Port settings**: speed, duplex, MTU and jumbo frames, FEC, breakout,
     storm control, flow control, layer 2 or layer 3 per port. *(built)*
 12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,

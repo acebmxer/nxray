@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from app.crypto import DecryptionError, decrypt, encrypt
 from app.nxapi import SwitchTarget
+from app.switch import SystemInfo
 
 # How long one NX-API call may take before the switch counts as unreachable.
 SWITCH_TIMEOUT = 10.0
@@ -41,6 +42,9 @@ class SwitchConnection:
     role_version: int = 0
     # The role's port list names the VLAN interfaces (needs interface-vlan on).
     role_vlan_interfaces: bool = False
+    # As last read from the switch (dashboard, connection test); empty until then.
+    switch_model: str = ""
+    nxos_version: str = ""
 
     @property
     def changes_enabled(self) -> bool:
@@ -192,6 +196,8 @@ def _connection(row: sqlite3.Row) -> SwitchConnection:
         unsaved_changes=bool(row["unsaved_changes"]),
         role_version=row["role_version"],
         role_vlan_interfaces=bool(row["role_vlan_interfaces"]),
+        switch_model=row["switch_model"],
+        nxos_version=row["nxos_version"],
     )
 
 
@@ -295,6 +301,19 @@ def set_switch_hostname(conn: sqlite3.Connection, switch_id: int, switch_hostnam
     conn.execute(
         "UPDATE switch_connection SET switch_hostname = ? WHERE id = ?",
         (switch_hostname, switch_id),
+    )
+    conn.commit()
+
+
+def set_switch_identity(
+    conn: sqlite3.Connection, connection: SwitchConnection, system: SystemInfo
+) -> None:
+    """Store the model and NX-OS version the switch just reported, when they changed."""
+    if (connection.switch_model, connection.nxos_version) == (system.model, system.nxos_version):
+        return
+    conn.execute(
+        "UPDATE switch_connection SET switch_model = ?, nxos_version = ? WHERE id = ?",
+        (system.model, system.nxos_version, connection.id),
     )
     conn.commit()
 
