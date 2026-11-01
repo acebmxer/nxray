@@ -13,8 +13,8 @@ NX-API, so everyday checks and changes don't need an SSH session.
 
 Built and tested against a Nexus 9000 (N9K-C92160YC-X) on NX-OS 9.3.
 
-**Status:** early. Stages 1 to 14 of the [roadmap](#roadmap) are built,
-stage 15 (layer 3) in part; stages 16 to 20 are planned. Today you can install NXray, sign in, connect it to a switch,
+**Status:** early. Stages 1 to 19 of the [roadmap](#roadmap) are built;
+stage 20 is planned. Today you can install NXray, sign in, connect it to a switch,
 see the switch's health on the dashboard, look at every port on a picture of
 the front panel coloured by state, traffic, errors or VLAN, see what is
 plugged into each port (CDP and LLDP neighbors, the MAC address table with
@@ -31,7 +31,10 @@ priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set the switch's hostname, banner, clock and NTP, DNS, logging and
 SNMP and read its log, make and apply IPv4 and IPv6 ACLs, set port security,
 keep backups of the switch's configuration, compare them and roll back to one,
-see who changed what in an activity log, turn switch features
+see who changed what in an activity log, be told by e-mail or webhook
+(JSON, Slack or Discord) when the switch cannot be reached, runs hot, loses a
+fan or power supply, runs out of CPU or memory, or a port goes down or
+collects errors, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
@@ -137,7 +140,7 @@ default: *(built)*.
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs, port security, an activity log of
     who changed what in NXray, config diff, backup and rollback. *(built)*
-19. **Alerts** by e-mail and webhook. *(planned)*
+19. **Alerts** by e-mail and webhook. *(built)*
 20. **Several switches** in one NXray. *(planned)*
 
 ## Contributing

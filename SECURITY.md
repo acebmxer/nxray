@@ -20,6 +20,10 @@ generated `secret_key` file on the data volume). The two-factor keys of
 NXray accounts that turned two-factor sign-in on are encrypted the same way.
 With built-in HTTPS on, its private key is on the data volume too
 (`/data/tls/key.pem`, readable by the container user only).
+When alerts are set up, the SMTP password and each webhook's URL and signing
+secret are encrypted the same way (a Slack or Discord webhook URL is itself
+the password, so the Alerts page shows only its host); the mail server, the
+addresses and what is alerted on are not.
 It also keeps 30 days of history in its database, unencrypted: temperatures,
 power, fan speed, CPU and memory use, and each port's traffic rate and error
 counts (no addresses, no packet contents).
@@ -118,6 +122,16 @@ which is root on the host: anyone who can make NXray misbehave could start a
 privileged container. Only admins can press Update now (and every form is
 CSRF-protected); the one outside call is ghcr.io, once a day and on Check
 now. Enable it only on a host where you already trust this image with root.
+
+**Alerts.** Off until an admin sets up e-mail or a webhook on the Alerts
+page; then NXray connects out from the container to that mail server and
+those URLs, and to nothing else. Only admins can set them, so an admin can
+make NXray send a POST to any address the container reaches; what is sent is
+the alert's own words (problems, and the Activity lines when changes are
+asked for, with passwords already masked), never a login. The mail server's
+certificate is checked (STARTTLS or SSL/TLS), a password is never sent over
+a connection without them, and so are the webhooks' HTTPS certificates.
+Redirects are not followed.
 
 **What protects it.** Sign-in accounts with Argon2id password hashes. The
 first one, an admin, comes from a hash in configuration; the app refuses to

@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.activity import record_activity, utc_time
+from app.alerts import notify_change
 from app.db import open_db
 from app.nxapi import SwitchTarget
 from app.ports import human_bytes, human_rate
@@ -188,12 +189,22 @@ def stored_switch(
 
 
 def note_activity(request: Request, username: str, area: str, what: str, switch: str = "") -> None:
-    """Record a change in the activity log (``app/activity.py``), after it worked.
+    """Record a change in the activity log (``app/activity.py``), after it worked,
+    and send it as an alert when the Alerts page asks for changes.
 
     ``switch`` is the switch's address when the switch itself was changed.
     """
-    with open_db(request.app.state.settings.db_path) as conn:
+    settings = request.app.state.settings
+    with open_db(settings.db_path) as conn:
         record_activity(conn, username, area, what, switch)
+    notify_change(
+        settings,
+        username,
+        area,
+        what,
+        request.app.state.alert_transport,
+        background=request.app.state.alerts_background,
+    )
 
 
 def safe_next(target: str) -> str:

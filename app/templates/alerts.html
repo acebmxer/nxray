@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Alerts — NXray{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Alerts</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+<p class="lead">NXray sends an e-mail, a webhook or both when the switch needs attention, and
+again when the problem is over. Each problem is sent once when it starts, not every check.</p>
+
+{% if interval %}
+<p class="hint">The switch is checked each time history reads it, every {{ interval }} seconds,
+with the same three read-only commands; nothing more is asked of the switch.</p>
+{% else %}
+<p class="warning">History is off (<code>NXRAY_HISTORY_INTERVAL=0</code>), so NXray never reads the
+switch on its own and no problem is noticed. Changes made through NXray are still sent when that is
+ticked below. Set <code>NXRAY_HISTORY_INTERVAL</code> in <code>nxray.env</code> to check the switch.</p>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Open now</h2>
+  {% if open_problems %}
+  <table class="table">
+    <thead><tr><th>Since</th><th>Problem</th></tr></thead>
+    <tbody>
+      {% for p in open_problems %}
+      <tr><td class="mono">{{ p.since|utc }}</td><td class="wrap">{{ p.message }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No problem is open.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">What to alert on</h2>
+  <form method="post" action="/alerts/rules" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <fieldset class="choice">
+      <legend>The switch's own judgement</legend>
+      <label class="check"><input type="checkbox" name="unreachable" value="yes" {% if rules.unreachable %}checked{% endif %}> NXray cannot reach the switch (two checks in a row)</label>
+      <label class="check"><input type="checkbox" name="temperature" value="yes" {% if rules.temperature %}checked{% endif %}> A temperature at or above its minor or major limit</label>
+      <label class="check"><input type="checkbox" name="fans" value="yes" {% if rules.fans %}checked{% endif %}> A fan that is not OK</label>
+      <label class="check"><input type="checkbox" name="power" value="yes" {% if rules.power %}checked{% endif %}> A power supply that is not OK</label>
+    </fieldset>
+
+    <label for="cpu_percent">CPU use, in percent</label>
+    <input id="cpu_percent" name="cpu_percent" type="text" inputmode="numeric" value="{{ rules.cpu_percent or '' }}" placeholder="off">
+    <label for="memory_percent">Memory use, in percent</label>
+    <input id="memory_percent" name="memory_percent" type="text" inputmode="numeric" value="{{ rules.memory_percent or '' }}" placeholder="off">
+    <p class="hint">10 to 100, sent once it lasts three checks in a row. Empty is off.</p>
+
+    <label for="port_down">A port that goes down</label>
+    <select id="port_down" name="port_down">
+      {% for key, words in port_watch.items() %}
+      <option value="{{ key }}" {% if rules.port_down == key %}selected{% endif %}>{{ words }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">A port that was up and goes down while it is turned on; sent again when it is
+    back up. A port turned off on purpose is not a problem. Labels are the ones set on a port's
+    page.</p>
+
+    <label for="port_errors">New errors and discards on a port in one check</label>
+    <input id="port_errors" name="port_errors" type="text" inputmode="numeric" value="{{ rules.port_errors or '' }}" placeholder="off">
+    <p class="hint">1 to 1000000. Empty is off.</p>
+
+    <fieldset class="choice">
+      <legend>NXray itself</legend>
+      <label class="check"><input type="checkbox" name="changes" value="yes" {% if rules.changes %}checked{% endif %}> Every change made through NXray, as the Activity page lists it</label>
+    </fieldset>
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="card-title">E-mail</h2>
+  {% if email.configured %}
+  <p><span class="badge badge-ok">on</span> Alerts go to {{ email.recipients|join(", ") }}
+  through {{ email.host }}:{{ email.port }}.</p>
+  {% else %}
+  <p><span class="badge">off</span> No e-mail is sent until a mail server and an address are saved.</p>
+  {% endif %}
+  <form method="post" action="/alerts/email" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="host">Mail server (SMTP)</label>
+    <input id="host" name="host" type="text" value="{{ email.host }}" maxlength="253" spellcheck="false" required placeholder="smtp.example.com">
+    <label for="port">Port</label>
+    <input id="port" name="port" type="text" inputmode="numeric" value="{{ email.port }}" required>
+    <label for="security">Security</label>
+    <select id="security" name="security">
+      {% for key, words in security_choices.items() %}
+      <option value="{{ key }}" {% if email.security == key %}selected{% endif %}>{{ words }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">The server's certificate is checked. A password is only ever sent encrypted.</p>
+    <label for="smtp_username">Username (optional)</label>
+    <input id="smtp_username" name="smtp_username" type="text" value="{{ email.username }}" maxlength="254" autocomplete="off" spellcheck="false">
+    <label for="smtp_password">Password</label>
+    <input id="smtp_password" name="smtp_password" type="password" maxlength="256" autocomplete="new-password" placeholder="{% if email.has_password %}stored; type to replace{% else %}none{% endif %}">
+    {% if email.has_password %}
+    <label class="check"><input type="checkbox" name="clear_password" value="yes"> Remove the stored password</label>
+    {% endif %}
+    <p class="hint">Stored encrypted and never shown. Leave it empty to keep the stored one.</p>
+    <label for="sender">From</label>
+    <input id="sender" name="sender" type="text" value="{{ email.sender }}" maxlength="254" spellcheck="false" required placeholder="nxray@example.com">
+    <label for="recipients">To</label>
+    <input id="recipients" name="recipients" type="text" value="{{ email.recipients|join(', ') }}" spellcheck="false" required placeholder="noc@example.com, you@example.com">
+    <p class="hint">Up to ten addresses, with commas between them.</p>
+    <button type="submit" class="btn btn-primary">Save e-mail settings</button>
+  </form>
+  {% if email.configured %}
+  <div class="button-row form-after">
+    <form method="post" action="/alerts/email/test" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Send a test e-mail</button>
+    </form>
+    <form method="post" action="/alerts/email/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Remove e-mail settings</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Webhooks</h2>
+  {% if webhooks %}
+  <table class="table">
+    <thead><tr><th>Name</th><th>Address</th><th>Format</th><th>Signed</th><th></th></tr></thead>
+    <tbody>
+      {% for hook in webhooks %}
+      <tr>
+        <td>{{ hook.name }}</td>
+        <td class="mono">{{ hook.shown }}</td>
+        <td>{{ formats[hook.format] or hook.format }}</td>
+        <td>{{ "yes" if hook.signed else "no" }}</td>
+        <td class="row-actions">
+          <form method="post" action="/alerts/webhook/test" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="id" value="{{ hook.id }}">
+            <button type="submit" class="btn btn-quiet">Send a test</button>
+          </form>
+          <form method="post" action="/alerts/webhook/delete" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="id" value="{{ hook.id }}">
+            <button type="submit" class="btn btn-quiet">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No webhook yet.</p>
+  {% endif %}
+
+  {% if webhooks|length < max_webhooks %}
+  <h3>Add a webhook</h3>
+  <form method="post" action="/alerts/webhook/add" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="hook_name">Name</label>
+    <input id="hook_name" name="name" type="text" maxlength="64" required placeholder="NOC channel">
+    <label for="hook_url">URL</label>
+    <input id="hook_url" name="url" type="password" maxlength="2000" autocomplete="off" required placeholder="https://hooks.slack.com/services/...">
+    <p class="hint">Stored encrypted; afterwards only its host is shown, since a Slack or Discord
+    URL is itself the password.</p>
+    <label for="hook_format">Format</label>
+    <select id="hook_format" name="format">
+      {% for key, words in formats.items() %}
+      <option value="{{ key }}">{{ words }}</option>
+      {% endfor %}
+    </select>
+    <label for="hook_secret">Signing secret (optional, JSON only)</label>
+    <input id="hook_secret" name="secret" type="password" maxlength="256" autocomplete="new-password">
+    <p class="hint">With a secret, each POST carries <code>X-NXray-Signature: sha256=&lt;HMAC of the
+    body&gt;</code>, so the receiver can tell it came from NXray.</p>
+    <button type="submit" class="btn btn-primary">Add webhook</button>
+  </form>
+  {% else %}
+  <p class="note">NXray keeps at most {{ max_webhooks }} webhooks.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Sent</h2>
+  {% if sent %}
+  <p class="note">The newest {{ sent|length }}; kept for {{ keep_days }} days.</p>
+  <table class="table table-devices">
+    <thead><tr><th>When</th><th>Kind</th><th>Alert</th><th>Delivery</th></tr></thead>
+    <tbody>
+      {% for a in sent %}
+      <tr>
+        <td class="mono">{{ a.at|utc }}</td>
+        <td>{{ a.kind }}</td>
+        <td class="wrap">{{ a.message }}</td>
+        <td class="wrap">{{ a.delivery }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No alert has been sent yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

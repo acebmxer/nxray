@@ -203,6 +203,54 @@ VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, stati
 increase since the previous sample, so the first sample after NXray starts
 records none.
 
+## Alerts
+
+The **Alerts** page (admins only) sends an e-mail, a webhook or both when the
+switch needs attention, and again when the problem is over. It is checked
+each time history reads the switch, from the same three commands, so it asks
+nothing more of the switch; with `NXRAY_HISTORY_INTERVAL=0` nothing is
+checked (changes made through NXray are still sent when asked for).
+
+What can be alerted on:
+
+| Alert | When it starts | When it is resolved |
+| --- | --- | --- |
+| Switch unreachable (on) | Two reads in a row fail | The next read works |
+| Temperature (on) | A sensor at or above its minor limit, and again at its major one | It is below the limit |
+| Fans, power supplies (on) | The switch reports one as not OK | It reports OK |
+| CPU, memory (off) | Use at or above the limit you set, three checks in a row | It is below the limit |
+| A port that goes down (off) | A watched port that was up goes down while it is turned on; watch every port, or only those with a description or a label | It is up again, or turned off |
+| Port errors (off) | A port has at least the number you set of new errors and discards in one check | A check with fewer |
+| Changes (off) | Every change made through NXray, as the Activity page lists it | — |
+
+Each problem is sent once when it starts and once when it is resolved, also
+across a restart of NXray. Everything found in one check goes out as one
+e-mail and one POST to each webhook. The page lists what is open now and the
+alerts sent in the last 90 days with how each delivery went; **Send a test**
+buttons send one at once.
+
+**E-mail** needs a mail server (SMTP), the port, the connection's security
+(STARTTLS, SSL/TLS, or none for a relay on a trusted network), optionally a
+username and password, a From address and up to ten addresses to send to.
+The server's certificate is checked, and a password is never sent over an
+unencrypted connection.
+
+**Webhooks**, up to ten, each POST JSON in one of three formats: NXray's own
+(`source`, `switch`, `sent_at`, `text` and an `events` list with each
+event's `kind` (`problem`, `resolved`, `change` or `test`), `key`, `message`
+and `since`), Slack's (`{"text": ...}`) or Discord's (`{"content": ...}`).
+Anything that answers with a 2xx status counts as delivered. NXray's own
+format can be signed: with a signing secret, each POST carries
+`X-NXray-Signature: sha256=<HMAC-SHA256 of the body with the secret>`.
+
+The SMTP password and each webhook's URL and secret are stored encrypted with
+a key derived from `NXRAY_SECRET_KEY`, like the switch login; after a change
+of that key, type the password and add the webhooks again (the page says so
+when an alert cannot be sent for that reason). The page shows only a
+webhook's scheme and host, since a Slack or Discord URL is itself the
+password. NXray reaches the mail server and the webhooks from the container: e-mail
+directly, webhooks through the proxy in `HTTPS_PROXY` when one is set.
+
 ## Building from a clone
 
 To run your own changes, or code that has no release yet, clone the

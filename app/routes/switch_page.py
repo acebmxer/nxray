@@ -9,6 +9,7 @@ import threading
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.alerts import clear_open
 from app.db import open_db
 from app.dependencies import (
     admin_required,
@@ -702,6 +703,8 @@ def switch_forget(
     with open_db(settings.db_path) as conn:
         connection = get_connection(conn)
         delete_connection(conn)
+        # Its open problems belong to the switch that is gone.
+        clear_open(conn)
     if connection is None:
         return redirect("/switch")
     log.info("forgot the switch %s (account %s)", connection.host, connection.username)

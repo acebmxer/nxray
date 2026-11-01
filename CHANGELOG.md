@@ -11,6 +11,26 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Alerts by e-mail and webhook.** A new **Alerts** page (admins only, in
+  the menu) sends an e-mail, a webhook or both when the switch needs
+  attention, and again when the problem is over: NXray cannot reach the
+  switch (two reads in a row), a temperature at its minor or major limit, a
+  fan or power supply that is not OK, and, when turned on, CPU or memory at
+  a limit for three checks in a row, a port that goes down from up while it
+  is turned on (every port, or only those with a description or a label), a
+  number of new errors on a port, and every change made through NXray. Each
+  problem is sent once when it starts and once when it ends, also across a
+  restart, and what one check finds goes out together. It is checked
+  against each history sample, so it asks nothing more of the switch; with
+  history off only changes are sent. E-mail goes through your mail server
+  (STARTTLS, SSL/TLS, or none for a trusted relay, with the certificate
+  checked and a password never sent unencrypted) to up to ten addresses;
+  up to ten webhooks get NXray's own JSON (optionally signed with
+  `X-NXray-Signature`), Slack's or Discord's format. The SMTP password and
+  the webhook URLs and secrets are stored encrypted and never shown again.
+  The page lists the problems open now and the alerts sent in the last 90
+  days with how each delivery went, and has test buttons.
+
 - **Activity log.** A new **Activity** page (admins only, in the menu) lists
   every change made through NXray, newest first: who made it, on which page,
   the change in plain words (passwords and SNMP communities masked) and the

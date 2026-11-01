@@ -6,7 +6,8 @@ memory and every port's traffic and errors, and stores the numbers in the
 only that table; opening them costs the switch nothing.
 
 The three show commands per sample are the ones the dashboard already runs
-on every page load.
+on every page load. Each sample is also what alerts are checked against
+(``app/alerts.py``).
 """
 
 from __future__ import annotations
@@ -21,10 +22,12 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.alerts import AlertMonitor, dispatch
 from app.charts import SERIES_COLOURS, Line, Point, line_chart
 from app.config import Settings
 from app.db import open_db
 from app.nxapi import NxapiClient
+from app.port_labels import get_labels
 from app.ports import Port, human_rate, parse_ports
 from app.switch import Environment, Resources, parse_environment, parse_resources
 from app.switch_connection import DecryptionError, get_connection, load_target
@@ -143,10 +146,47 @@ class Sampler:
         self,
         settings: Settings,
         transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
+        alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
+        *,
+        background_alerts: bool = True,
     ) -> None:
         self._settings = settings
         self._transport = transport
+        self._alert_transport = alert_transport
+        self._background_alerts = background_alerts
         self._errors: dict[str, int] = {}
+        self._monitor = AlertMonitor()
+
+    def _alert(
+        self,
+        moment: float,
+        *,
+        failure: str = "",
+        reading: tuple[Environment, Resources, list[Port]] | None = None,
+        rows: Sequence[Row] = (),
+    ) -> None:
+        """Check the alerts against this sample, and send what starts or ends.
+        A failure here is logged; it never costs the sample."""
+        try:
+            with open_db(self._settings.db_path) as conn:
+                if reading is None:
+                    events = self._monitor.failed(conn, moment, failure)
+                else:
+                    new_errors = {
+                        item: value for metric, item, value in rows if metric == PORT_ERRORS
+                    }
+                    events = self._monitor.checked(
+                        conn, moment, reading, new_errors, get_labels(conn)
+                    )
+            dispatch(
+                self._settings,
+                events,
+                self._alert_transport(),
+                background=self._background_alerts,
+                now=moment,
+            )
+        except Exception:
+            log.exception("checking alerts failed")
 
     def sample_once(self, now: float | None = None) -> str | None:
         """Read the switch and store one sample.
@@ -163,21 +203,29 @@ class Sampler:
             try:
                 target = load_target(conn, self._settings.secret_key)
             except DecryptionError:
-                return KEY_CHANGED_MESSAGE
+                target = None
+        if target is None:
+            self._alert(moment, failure=KEY_CHANGED_MESSAGE)
+            return KEY_CHANGED_MESSAGE
         # Outside the database block: the switch can take seconds to answer.
         status, data = read_switch(target, _read, self._transport())
         if data is None:
+            self._alert(moment, failure=status.message)
             return status.message
         rows, self._errors = build_rows(*data, self._errors)
         with open_db(self._settings.db_path) as conn:
             record(conn, moment, rows)
+        self._alert(moment, reading=data, rows=rows)
         return None
 
 
 def start_sampler(
-    settings: Settings, transport: Callable[[], httpx.BaseTransport | None]
+    settings: Settings,
+    transport: Callable[[], httpx.BaseTransport | None],
+    alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
 ) -> threading.Event | None:
-    """Sample on its own thread until the returned event is set.
+    """Sample on its own thread until the returned event is set, checking the
+    alerts against each sample.
 
     None when ``NXRAY_HISTORY_INTERVAL`` is 0 and history is off. A failure is
     logged when it starts and when it ends, not every minute.
@@ -186,7 +234,7 @@ def start_sampler(
     if not interval:
         return None
     stop = threading.Event()
-    sampler = Sampler(settings, transport)
+    sampler = Sampler(settings, transport, alert_transport)
 
     def _loop() -> None:
         problem: str | None = None

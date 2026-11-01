@@ -61,6 +61,7 @@ prose columns; those are a reviewer's job.
 | Keep a backup of the switch's configuration, compare two configurations, or roll back | `app/config_tools.py` (`store_backup`, `config_diff`, `load_configs`); commands from `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` |
 | Split a configuration's text into its top-level lines and the lines under them | `app/config_tools.py`, `config_sections` |
 | Record a change in the activity log, or list the log | `dependencies.note_activity` from a route; `app/activity.py` (`record_activity`, `list_activity`) |
+| Send an alert by e-mail or webhook, notice a problem in a sample, or keep the alert settings | `app/alerts.py` (`AlertMonitor`, `dispatch`, `notify_change`, `deliver`, `send_test`); checked from `history.Sampler` |
 | Read the switch's route table | `app/routing_protocols.py`, `load_overview` / `parse_routes` |
 | Read, add or remove static routes | `app/routing.py` (`load_routing`, `plan_add_static_route`, `plan_remove_static_route`); command from `NxapiClient.set_static_route` |
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
@@ -132,7 +133,7 @@ really invalidates rather than merely asking the browser to forget.
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
-| `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`) | every route that changes something | v0.1.0 |
+| `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`), and sends it as an alert when the Alerts page asks for changes (`alerts.notify_change`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
 | `redirect` | `(url: str, status_code: int = 303) -> RedirectResponse` | Redirect, defaulting to see-other | `routes/auth` | v0.1.0 |
@@ -519,6 +520,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `config_rollback` | `(request, username, csrf, id, admin_user, admin_password, confirm) -> Response` | `POST /config/rollback`: shows what changes and asks for the switch admin login, then takes a backup of the configuration it replaces and rolls back with that login (never stored) | router | v0.1.0 |
 | `activity_page` | `(request, username, user, area, search) -> Response` | `GET /activity?user=&area=&search=`: who changed what through NXray, newest first; admins only | router | v0.1.0 |
 | `activity_download` | `(request, username, user, area, search) -> Response` | `GET /activity.csv`: the same list as a CSV file | router | v0.1.0 |
+| `alerts_page` | `(request, username) -> Response` | `GET /alerts`: the problems open now, the rules, e-mail, webhooks and the alerts sent; admins only | router | v0.1.0 |
+| `alerts_rules` | `(request, username) -> Response` | `POST /alerts/rules`: what NXray alerts on | router | v0.1.0 |
+| `alerts_email` | `(request, username, csrf, host, port, security, smtp_username, smtp_password, clear_password, sender, recipients) -> Response` | `POST /alerts/email`: the mail server and addresses; an empty password keeps the stored one | router | v0.1.0 |
+| `alerts_email_delete` | `(request, username, csrf) -> Response` | `POST /alerts/email/delete`: forgets the e-mail settings | router | v0.1.0 |
+| `alerts_email_test` | `(request, username, csrf) -> Response` | `POST /alerts/email/test`: sends a test e-mail now | router | v0.1.0 |
+| `alerts_webhook_add` | `(request, username, csrf, name, url, format, secret) -> Response` | `POST /alerts/webhook/add`: keeps a webhook, URL and secret encrypted | router | v0.1.0 |
+| `alerts_webhook_delete` | `(request, username, csrf, id) -> Response` | `POST /alerts/webhook/delete`: forgets one webhook | router | v0.1.0 |
+| `alerts_webhook_test` | `(request, username, csrf, id) -> Response` | `POST /alerts/webhook/test`: sends a test to one webhook now | router | v0.1.0 |
 | `check_stp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel on the switch, or a VLAN the switch lacks | `SITE.check_place` | v0.1.0 |
 | `render_routing_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Routing page with a message | `switch_save` | v0.1.0 |
 | `routing_page` | `(request, username) -> Response` | `GET /routing?vlan=`: VLAN interfaces and routed ports with their addresses, the VRFs and the static routes, read live; every role looks, operators and admins change; `vlan` picks that VLAN in the make form | router | v0.1.0 |
@@ -655,7 +664,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
 | `read_series` | `(conn, metric, *, start, end, bucket, item=None, total=False) -> dict` | A metric's rows averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
 | `record` | `(conn, moment, rows) -> None` | Stores one sample's rows | `Sampler.sample_once` | v0.1.0 |
-| `start_sampler` | `(settings, transport) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
+| `start_sampler` | `(settings, transport, alert_transport=lambda: None) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, checking the alerts against each sample and purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
 | `system_charts` | `(conn, key, now) -> list[ChartView]` | The History page's charts for a range | `routes/history.history_page` | v0.1.0 |
 
 ## `app/charts.py` — SVG line charts
@@ -917,6 +926,48 @@ and deleted from the page, entries as settings) and for applying one to a layer
 | `activity_choices` | `(conn) -> tuple[list[str], list[str]]` | The accounts and areas in the log, for the filters | `routes/activity` | v0.1.0 |
 | `utc_time` | `(at) -> str` | A stored time as `2026-11-01 14:30:05 UTC`; the `utc` template filter | `dependencies` (the filter) | v0.1.0 |
 | `activity_csv` | `(entries) -> str` | The entries as CSV, with cells that start like a formula made inert | `routes/activity` | v0.1.0 |
+
+## `app/alerts.py` — alerts by e-mail and webhook
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `load_rules` | `(conn) -> AlertRules` | What NXray alerts on; the defaults (unreachable, temperatures, fans, power) until changed | `AlertMonitor`, `notify_change`, `routes/alerts` | v0.1.0 |
+| `save_rules` | `(conn, rules) -> None` | Stores the rules, dropping without a "resolved" alert the open problems of a check turned off | `routes/alerts.alerts_rules` | v0.1.0 |
+| `parse_rules` | `(form) -> AlertRules` | The rules from the form: ticked boxes, numbers where blank is off; raises `AlertSettingsError` | `routes/alerts.alerts_rules` | v0.1.0 |
+| `load_email` | `(conn) -> EmailSettings` | The e-mail settings, with only whether a password is stored | `deliver`, `routes/alerts` | v0.1.0 |
+| `split_addresses` | `(text) -> list[str]` | Addresses typed with commas, semicolons, spaces or new lines between them | `load_email`, `validate_email` | v0.1.0 |
+| `validate_email` | `(*, host, port, security, username, password, keep_password, sender, recipients) -> EmailSettings` | Checks the e-mail form; refuses a password over an unencrypted connection and CR/LF anywhere | `routes/alerts.alerts_email` | v0.1.0 |
+| `save_email` | `(conn, email, password, secret_key) -> None` | Stores checked e-mail settings, the password encrypted; empty keeps or removes the stored one | `routes/alerts.alerts_email` | v0.1.0 |
+| `delete_email` | `(conn) -> None` | Forgets the e-mail settings and password | `routes/alerts.alerts_email_delete` | v0.1.0 |
+| `shown_url` | `(url) -> str` | A webhook URL cut to scheme and host (`https://hooks.slack.com/…`), never its path or query | `add_webhook`, `post_webhook` | v0.1.0 |
+| `validate_webhook` | `(name, url, fmt, secret) -> tuple` | Checks a webhook's name, http(s) URL, format and signing secret (JSON only) | `routes/alerts.alerts_webhook_add` | v0.1.0 |
+| `add_webhook` | `(conn, name, url, fmt, secret, secret_key) -> int` | Stores a webhook with its URL and secret encrypted, at most `MAX_WEBHOOKS` | `routes/alerts.alerts_webhook_add` | v0.1.0 |
+| `list_webhooks` | `(conn) -> list[Webhook]` | The webhooks without their URLs and secrets | `routes/alerts` | v0.1.0 |
+| `delete_webhook` | `(conn, webhook_id) -> Webhook \| None` | Deletes one webhook | `routes/alerts.alerts_webhook_delete` | v0.1.0 |
+| `list_open` | `(conn) -> list[OpenProblem]` | The problems open now, oldest first | `AlertMonitor`, `save_rules`, `routes/alerts` | v0.1.0 |
+| `clear_open` | `(conn) -> None` | Forgets every open problem without alerts | `routes/switch_page.switch_forget` | v0.1.0 |
+| `update_open` | `(conn, now, found) -> list[AlertEvent]` | Stores the problems found now: new ones are alerts, open ones not found are resolved | `AlertMonitor` | v0.1.0 |
+| `log_alerts` | `(conn, now, events, delivery) -> list[int]` | Keeps events in the alert log and deletes lines older than `KEEP_DAYS` | `dispatch`, `send_test` | v0.1.0 |
+| `set_delivery` | `(conn, ids, delivery) -> None` | Notes how logged alerts were delivered | `dispatch` | v0.1.0 |
+| `list_sent` | `(conn, limit=100) -> list[SentAlert]` | The newest alerts with their delivery | `routes/alerts` | v0.1.0 |
+| `find_problems` | `(rules, environment, resources, ports, *, labels, new_errors, was_up, open_keys) -> dict[str, str]` | Every problem the rules ask about in one reading, by key; a watched port only once it went down from up | `AlertMonitor.checked` | v0.1.0 |
+| `duration_words` | `(seconds) -> str` | `3 minutes`, `2 hours 5 minutes`, `1 day 3 hours` | `event_line` | v0.1.0 |
+| `event_line` | `(event, now) -> str` | One event in words (`Problem: ...`, `Resolved after 5 minutes: ...`) | `compose` | v0.1.0 |
+| `compose` | `(events, switch, now) -> tuple[str, str]` | The subject and text of one alert | `deliver`, `webhook_payload` | v0.1.0 |
+| `webhook_payload` | `(fmt, events, switch, now) -> dict` | The JSON body: NXray's own (text and events), Slack's `text` or Discord's `content` | `post_webhook` | v0.1.0 |
+| `signature` | `(secret, body) -> str` | `sha256=<HMAC-SHA256 of the body>`, the `X-NXray-Signature` header | `post_webhook` | v0.1.0 |
+| `send_email` | `(email, password, subject, text, now=None) -> None` | Sends one e-mail over STARTTLS, SSL/TLS or plain, checking the certificate; raises on failure | `deliver` | v0.1.0 |
+| `post_webhook` | `(url, fmt, secret, events, switch, now, transport=None) -> None` | POSTs one alert, signed when there is a secret; raises without the URL in the message | `deliver` | v0.1.0 |
+| `deliver` | `(conn, secret_key, events, switch, now, transport=None, *, webhook_id=None, email_only=False) -> str` | Sends by e-mail and to every webhook (or one, for a test); how it went, in words | `dispatch`, `send_test` | v0.1.0 |
+| `switch_label` | `(conn) -> str` | The switch as alerts name it, `leaf1 (192.0.2.10)` | `dispatch`, `send_test` | v0.1.0 |
+| `dispatch` | `(settings, events, transport=None, *, background=True, now=None) -> None` | Logs events and sends them on a thread of their own; never raises | `history.Sampler`, `notify_change` | v0.1.0 |
+| `notify_change` | `(settings, username, area, what, transport=None, *, background=True) -> None` | Sends a change made through NXray when the rules ask for it; never raises | `dependencies.note_activity` | v0.1.0 |
+| `send_test` | `(settings, transport=None, *, webhook_id=None, email_only=False) -> str` | Sends a test alert now and waits for it | `routes/alerts` | v0.1.0 |
+
+`AlertMonitor` (class) remembers between samples which ports were up, how long
+CPU or memory has been over its limit and how many reads failed in a row:
+`checked(conn, now, reading, new_errors, labels)` and `failed(conn, now,
+reason)` return the alerts a sample starts or resolves.
 
 ## `app/routing.py` — VLAN interfaces, routed ports, their addresses, VRFs and static routes
 

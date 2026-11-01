@@ -172,6 +172,58 @@ _MIGRATIONS: list[str] = [
         config      TEXT NOT NULL
     );
     """,
+    # 11 -> 12: alerts (app/alerts.py). alert_settings is one row (id = 1): what
+    # is alerted on and the e-mail settings, the SMTP password AES-GCM encrypted.
+    # alert_webhooks keeps each URL and signing secret encrypted, and the URL cut
+    # to its scheme and host for the page. alert_open holds the problems open
+    # now, so each is sent once when it starts and once when it ends, also across
+    # a restart; alert_log every alert sent and how its delivery went.
+    """
+    CREATE TABLE alert_settings (
+        id                      INTEGER PRIMARY KEY CHECK (id = 1),
+        rule_unreachable        INTEGER NOT NULL DEFAULT 1,
+        rule_temperature        INTEGER NOT NULL DEFAULT 1,
+        rule_fans               INTEGER NOT NULL DEFAULT 1,
+        rule_power              INTEGER NOT NULL DEFAULT 1,
+        cpu_percent             INTEGER NOT NULL DEFAULT 0,
+        memory_percent          INTEGER NOT NULL DEFAULT 0,
+        port_down               TEXT NOT NULL DEFAULT 'off',
+        port_errors             INTEGER NOT NULL DEFAULT 0,
+        rule_changes            INTEGER NOT NULL DEFAULT 0,
+        smtp_host               TEXT NOT NULL DEFAULT '',
+        smtp_port               INTEGER NOT NULL DEFAULT 587,
+        smtp_security           TEXT NOT NULL DEFAULT 'starttls',
+        smtp_username           TEXT NOT NULL DEFAULT '',
+        smtp_password_encrypted TEXT NOT NULL DEFAULT '',
+        mail_from               TEXT NOT NULL DEFAULT '',
+        mail_to                 TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE alert_webhooks (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        name             TEXT NOT NULL,
+        url_encrypted    TEXT NOT NULL,
+        url_shown        TEXT NOT NULL,
+        format           TEXT NOT NULL,
+        secret_encrypted TEXT NOT NULL DEFAULT '',
+        created_at       REAL NOT NULL
+    );
+
+    CREATE TABLE alert_open (
+        key     TEXT PRIMARY KEY,
+        since   REAL NOT NULL,
+        message TEXT NOT NULL
+    );
+
+    CREATE TABLE alert_log (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        at       REAL NOT NULL,
+        kind     TEXT NOT NULL,
+        message  TEXT NOT NULL,
+        delivery TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX idx_alert_log_at ON alert_log (at);
+    """,
 ]
 
 

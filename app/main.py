@@ -24,6 +24,7 @@ from app.history import start_sampler
 from app.logging_conf import configure_logging
 from app.routes import (
     activity,
+    alerts,
     auth,
     config_page,
     dashboard,
@@ -79,7 +80,9 @@ async def lifespan(app: FastAPI):
     )
 
     start_background_checker(settings)
-    stop_sampler = start_sampler(settings, lambda: app.state.nxapi_transport)
+    stop_sampler = start_sampler(
+        settings, lambda: app.state.nxapi_transport, lambda: app.state.alert_transport
+    )
 
     yield
 
@@ -106,6 +109,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.nxapi_transport = None
     # ...and a pretend SSH shell opener here (app/switch_ssh.py).
     app.state.ssh_opener = None
+    # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
+    # this to False so a change alert is sent before the request answers.
+    app.state.alert_transport = None
+    app.state.alerts_background = True
 
     @app.exception_handler(RedirectToLogin)
     async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
@@ -147,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(security.router)
     app.include_router(config_page.router)
     app.include_router(activity.router)
+    app.include_router(alerts.router)
     app.include_router(features.router)
     app.include_router(users.router)
     app.include_router(settings_page.router)
