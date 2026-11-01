@@ -9,6 +9,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The port side panel makes every change to the port.** On the Ports page,
+  a port's side panel used to change only its description and turn it off or
+  on; everything else needed **All of this port →**, which left the Ports
+  page, and even a description change ended on the port's own page. The panel
+  now has the same forms as the port's own page: VLANs, speed, MTU, FEC, flow
+  control, storm control, layer and address, splitting or joining a 100G
+  port, CDP and LLDP, the label, and clearing the addresses learned on the
+  port. After the confirm page, a refusal or the result, the Ports page comes
+  back with the same filter, colour mode and panel open, and the message and a
+  Save config button are shown in the panel. Cancel on the confirm page goes
+  back to the panel too. What each change sends to the switch, the confirm
+  steps and the role checks are unchanged; **All of this port →** stays for
+  the charts, counters and full device tables (#14).
+
 ## [0.1.0] - 2026-11-01
 
 **The first stable release of NXray: all 20 stages of the roadmap, from the

@@ -139,7 +139,8 @@ default: *(built)*.
    errors over time, as graphs. *(built)*
 10. **Switch face**: a picture of the front panel with every port colored by
     state, speed, VLAN, port-channel, traffic or errors; hover for details,
-    click to open the port's side panel; your own labels on ports. *(built)*
+    click to open the port's side panel, which makes every change to the port;
+    your own labels on ports. *(built)*
 11. **Port settings**: speed, duplex, MTU and jumbo frames, FEC, breakout,
     storm control, flow control, layer 2 or layer 3 per port. *(built)*
 12. **Neighbors and tables**: LLDP and CDP neighbors, MAC address table, ARP,

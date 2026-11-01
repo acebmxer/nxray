@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -94,6 +95,29 @@ FILTER_LABELS: list[tuple[str, str] | None] = [
 
 # What the change form on a port's page can ask for.
 ACTIONS = ("description", "off", "on")
+
+
+@dataclass(frozen=True)
+class PortsOrigin:
+    """A change sent from a port's side panel on the Ports page: the filter
+    and colour mode to show that page with again, the panel still open."""
+
+    show: str
+    color: str
+
+    @property
+    def fields(self) -> dict[str, str]:
+        """The hidden fields that carry this origin through a confirm page."""
+        return {"back": "ports", "show": self.show, "color": self.color}
+
+
+def ports_origin(back: str, show: str, color: str) -> PortsOrigin | None:
+    """The Ports page to answer on when ``back`` is "ports", else None (the
+    port's own page). Unknown filters and colour modes fall back to the
+    defaults, so the fields can never send the browser elsewhere."""
+    if back != "ports":
+        return None
+    return PortsOrigin(show if show in FILTERS else "all", color_mode(color))
 
 
 def _read_ports(
@@ -204,20 +228,31 @@ def render_ports_page(
     ticked: list[str] | None = None,
     bulk: dict[str, str] | None = None,
     selected: str = "",
+    form_values: dict[str, Any] | None = None,
+    found: tuple | None = None,
     status_code: int = 200,
 ) -> Response:
     """Read the switch fresh and show the Ports page, with an optional message.
 
     ``tick_all`` ticks every port the filter shows; ``ticked`` keeps the ports
     ticked and ``bulk`` the change picked (action, description) after a refusal.
-    ``selected`` names the port whose side panel is open.
+    ``selected`` names the port whose side panel is open; ``form_values`` keeps
+    what was typed in one of its forms after a refusal (see port_forms), and
+    ``found`` is what _read_port_page just read for it, to skip a second read.
     """
     color = color_mode(color)
     vlan_names: dict[int, str] = {}
-    if color == "vlan":
-        # Only this mode needs the VLAN names, so only it asks the switch for them.
-        connection, _, status, ports, view, _, neighbors, _ = _read_port_page(request)
-        vlan_names = {vlan.id: vlan.name for vlan in view.vlans} if view else {}
+    view: VlanView | None = None
+    port_settings: PortSettings | None = None
+    discovery: PortDiscovery | None = None
+    if color == "vlan" or selected:
+        # The VLAN colours and an open panel's forms need the VLANs (and the
+        # panel its port's settings and CDP/LLDP), so only they ask for them.
+        connection, _, status, ports, view, port_settings, neighbors, discovery = (
+            found or _read_port_page(request, selected or None)
+        )
+        if color == "vlan" and view:
+            vlan_names = {vlan.id: vlan.name for vlan in view.vlans}
     else:
         connection, _, status, ports, neighbors = _read_ports(request)
     if show not in FILTERS:
@@ -260,6 +295,17 @@ def render_ports_page(
             charts = port_charts(conn, connection.id, open_port.name, range_key(None), time.time())
         drawer = {
             "port": open_port,
+            "forms": port_forms(
+                request,
+                open_port.name,
+                ports,
+                view,
+                port_settings,
+                neighbors,
+                discovery,
+                **(form_values or {}),
+            ),
+            "back": PortsOrigin(show, color).fields,
             "devices": neighbors.for_port(open_port.name) if neighbors else None,
             "chart": charts[0] if charts else None,
             "previous": ports_link(show, color, names[at - 1]),
@@ -302,26 +348,27 @@ def render_ports_page(
     )
 
 
-def _render_port(
+def port_forms(
     request: Request,
-    username: str,
     name: str,
-    connection: SwitchConnection | None,
-    status: ConnectionStatus | None,
     ports: list[Port] | None,
-    view: VlanView | None = None,
-    port_settings: PortSettings | None = None,
-    neighbors: NeighborView | None = None,
-    discovery: PortDiscovery | None = None,
+    view: VlanView | None,
+    port_settings: PortSettings | None,
+    neighbors: NeighborView | None,
+    discovery: PortDiscovery | None,
     *,
-    error: str | None = None,
-    notice: str | None = None,
     description: str | None = None,
     vlan_form: dict[str, str] | None = None,
     settings_form: dict[str, str] | None = None,
     label: str | None = None,
-    status_code: int | None = None,
-) -> Response:
+) -> dict[str, Any]:
+    """What the forms that change one port need (templates/_port_forms.html),
+    for the port's own page and its side panel alike.
+
+    ``description``, ``vlan_form``, ``settings_form`` and ``label`` keep what
+    was typed after a refusal; left out, each form shows what the switch (or,
+    for the label, NXray) has now.
+    """
     port = next((p for p in ports or [] if p.name == name), None)
     if settings_form is None and port_settings is not None:
         settings_form = _settings_form(port_settings)
@@ -336,10 +383,55 @@ def _render_port(
             "native_vlan": str(vlans.native_vlan),
             "allowed": vlans.allowed_text,
         }
-    if status_code is None:
-        status_code = 404 if ports is not None and port is None else 200
     if description is None:
         description = port.description if port else ""
+    return {
+        "port": port,
+        # After a refusal the box keeps what was typed.
+        "description": description,
+        "view": view,
+        "vlans": vlans,
+        "vlan_form": vlan_form,
+        # The stored label, and what the label box holds (what was typed, after a refusal).
+        "stored_label": stored_label,
+        "label": label,
+        "label_max": LABEL_MAX,
+        "settings": port_settings,
+        "settings_form": settings_form,
+        "speed_label": speed_label,
+        "fec_labels": FEC_LABELS,
+        "breakout_labels": BREAKOUT_LABELS,
+        "breakout_guess": _breakout_guess(port_settings, ports),
+        "standard_mtu": STANDARD_MTU,
+        "jumbo_mtu": JUMBO_MTU,
+        "neighbors": neighbors,
+        "discovery": discovery,
+    }
+
+
+def _render_port(
+    request: Request,
+    username: str,
+    name: str,
+    connection: SwitchConnection | None,
+    status: ConnectionStatus | None,
+    ports: list[Port] | None,
+    view: VlanView | None = None,
+    port_settings: PortSettings | None = None,
+    neighbors: NeighborView | None = None,
+    discovery: PortDiscovery | None = None,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+    status_code: int | None = None,
+    **form_values: Any,
+) -> Response:
+    forms = port_forms(
+        request, name, ports, view, port_settings, neighbors, discovery, **form_values
+    )
+    port = forms["port"]
+    if status_code is None:
+        status_code = 404 if ports is not None and port is None else 200
     devices = neighbors.for_port(name) if neighbors and port else None
     period = range_key(request.query_params.get("range"))
     charts = []
@@ -350,38 +442,20 @@ def _render_port(
         request,
         "port.html",
         {
+            **forms,
+            "forms": forms,
             "username": username,
             "connection": connection,
             "status": status,
             "ports": ports,
-            "port": port,
             "name": name,
             "counter_labels": COUNTER_LABELS,
             "csrf_token": csrf_token(request),
             "error": error,
             "notice": notice,
-            # After a refusal the box keeps what was typed.
-            "description": description,
-            "view": view,
-            "vlans": vlans,
-            "vlan_form": vlan_form,
             "charts": charts,
             "range": period,
             "ranges": RANGE_LABELS,
-            # The stored label, and what the label box holds (what was typed, after a refusal).
-            "stored_label": stored_label,
-            "label": label,
-            "label_max": LABEL_MAX,
-            "settings": port_settings,
-            "settings_form": settings_form,
-            "speed_label": speed_label,
-            "fec_labels": FEC_LABELS,
-            "breakout_labels": BREAKOUT_LABELS,
-            "breakout_guess": _breakout_guess(port_settings, ports),
-            "standard_mtu": STANDARD_MTU,
-            "jumbo_mtu": JUMBO_MTU,
-            "neighbors": neighbors,
-            "discovery": discovery,
             "devices": devices,
             "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
             if neighbors and devices
@@ -389,6 +463,60 @@ def _render_port(
         },
         status_code=status_code,
     )
+
+
+def answer_port_change(
+    request: Request,
+    username: str,
+    name: str,
+    origin: PortsOrigin | None,
+    found: tuple | None = None,
+    **kwargs: Any,
+) -> Response:
+    """The page a change of one port answers on: the port's own page, or the
+    Ports page with the port's side panel open when the form came from there.
+
+    ``found`` is what _read_port_page read for ``name``; left out, the switch
+    is read fresh (as after a change). ``kwargs`` are the message, status
+    code and what was typed, as _render_port takes them.
+    """
+    if origin is not None:
+        error = kwargs.pop("error", None)
+        return render_ports_page(
+            request,
+            username,
+            show=origin.show,
+            color=origin.color,
+            selected=name,
+            error=error,
+            notice=kwargs.pop("notice", None),
+            status_code=kwargs.pop("status_code", None) or 200,
+            form_values=kwargs,
+            found=found,
+        )
+    connection, _, status, ports, view, port_settings, neighbors, discovery = (
+        found or _read_port_page(request, name)
+    )
+    return _render_port(
+        request,
+        username,
+        name,
+        connection,
+        status,
+        ports,
+        view,
+        port_settings,
+        neighbors,
+        discovery,
+        **kwargs,
+    )
+
+
+def change_back(origin: PortsOrigin | None, name: str) -> tuple[str, str]:
+    """(where a confirm page's Cancel goes, its words) for a change of one port."""
+    if origin is not None:
+        return ports_link(origin.show, origin.color, name), "Ports"
+    return f"/ports/detail?name={quote(name, safe='')}", name
 
 
 @router.get("/ports/detail", response_class=HTMLResponse)
@@ -513,29 +641,20 @@ def port_change(
     name: str = Form(""),
     action: str = Form(""),
     description: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Change one port. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    origin = ports_origin(back, show, color)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, port_settings, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            port_settings,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if connection is None or target is None or port is None:
         return again()
@@ -556,12 +675,16 @@ def port_change(
 
     summary, warning = change_summary(port, action, description)
     if confirm != "yes":
+        back_url, back_label = change_back(origin, name)
         return templates.TemplateResponse(
             request,
             "port_confirm.html",
             {
                 "username": username,
                 "port": port,
+                "back_url": back_url,
+                "back_label": back_label,
+                "origin": origin.fields if origin else {},
                 "action": action,
                 "description": description,
                 "summary": summary,
@@ -586,10 +709,6 @@ def port_change(
     log.info("port change on %s by %s: %s", connection.host, username, summary)
     note_activity(request, username, "Ports", summary, connection.host)
 
-    # Read the port back so the page shows what the switch now reports.
-    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
-        request, name
-    )
     if action == "description":
         done = (
             f'{name} now has the description "{description}".'
@@ -598,17 +717,12 @@ def port_change(
         )
     else:
         done = f"{name} is turned {action}."
-    return _render_port(
+    return answer_port_change(
         request,
         username,
         name,
-        connection,
-        status,
-        ports,
-        view,
-        port_settings,
-        neighbors,
-        discovery,
+        origin,
+        # Read again, so the page shows what the switch now reports.
         notice=f"Done: {done} Not saved yet: Save config keeps it over a restart of the switch.",
     )
 
@@ -743,13 +857,17 @@ def port_vlans_change(
     access_vlan: str = Form(""),
     native_vlan: str = Form(""),
     allowed: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Set a port's mode and VLANs. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, port_settings, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
     current = view.ports.get(name) if view else None
     form = {
@@ -760,19 +878,7 @@ def port_vlans_change(
     }
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            port_settings,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if connection is None or target is None or port is None or view is None:
         return again()
@@ -805,12 +911,12 @@ def port_vlans_change(
             {
                 "username": username,
                 "title": port.name,
-                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
-                "back_label": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
                 "lines": lines,
                 "warnings": warnings,
                 "action": "/ports/vlans",
-                "fields": {"name": port.name, **form},
+                "fields": {"name": port.name, **form, **(origin.fields if origin else {})},
                 "csrf_token": csrf_token(request),
             },
         )
@@ -834,20 +940,11 @@ def port_vlans_change(
     log.info("VLAN change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
-    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
-        request, name
-    )
-    return _render_port(
+    return answer_port_change(
         request,
         username,
         name,
-        connection,
-        status,
-        ports,
-        view,
-        port_settings,
-        neighbors,
-        discovery,
+        origin,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -862,28 +959,19 @@ def port_label(
     csrf: str = Form(""),
     name: str = Form(""),
     label: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
 ) -> Response:
     """Set or remove a port's label. Kept in NXray only, so no confirm step and no switch call."""
     require_csrf(request, csrf)
-    connection, _, status, ports, view, port_settings, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    origin = ports_origin(back, show, color)
+    found = _read_port_page(request, name)
+    connection, _, status, ports, view, port_settings, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            port_settings,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if port is None:
         return again()
@@ -950,10 +1038,15 @@ def port_settings_change(
     storm_multicast: str = Form(""),
     storm_unicast: str = Form(""),
     storm_action: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Change a port's settings. Without confirm=yes, shows what would happen and asks."""
     require_csrf(request, csrf)
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
     form = {
         "layer": layer,
         "ip_address": ip_address,
@@ -967,25 +1060,12 @@ def port_settings_change(
         "storm_unicast": storm_unicast,
         "storm_action": storm_action,
     }
-    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            current,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if connection is None or target is None or port is None:
         return again()
@@ -1011,12 +1091,12 @@ def port_settings_change(
             {
                 "username": username,
                 "title": port.name,
-                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
-                "back_label": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
                 "lines": lines,
                 "warnings": warnings,
                 "action": "/ports/settings",
-                "fields": {"name": port.name, **form},
+                "fields": {"name": port.name, **form, **(origin.fields if origin else {})},
                 "csrf_token": csrf_token(request),
             },
         )
@@ -1047,20 +1127,11 @@ def port_settings_change(
     log.info("settings change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
-    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, name
-    )
-    return _render_port(
+    return answer_port_change(
         request,
         username,
         name,
-        connection,
-        status,
-        ports,
-        view,
-        current,
-        neighbors,
-        discovery,
+        origin,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
@@ -1076,29 +1147,21 @@ def port_breakout(
     name: str = Form(""),
     action: str = Form(""),
     mapping: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Split a 100G port into four, or join four back. Asks to confirm first."""
     require_csrf(request, csrf)
-    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            current,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if connection is None or target is None or port is None:
         return again()
@@ -1121,12 +1184,17 @@ def port_breakout(
             {
                 "username": username,
                 "title": port.name,
-                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
-                "back_label": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
                 "lines": plan.lines,
                 "warnings": plan.warnings,
                 "action": "/ports/breakout",
-                "fields": {"name": port.name, "action": action, "mapping": mapping},
+                "fields": {
+                    "name": port.name,
+                    "action": action,
+                    "mapping": mapping,
+                    **(origin.fields if origin else {}),
+                },
                 "csrf_token": csrf_token(request),
             },
         )
@@ -1154,20 +1222,11 @@ def port_breakout(
 
     # The port this page was for is gone now; show the one that replaced it.
     shown = f"{plan.port}/1" if plan.action == "split" else plan.port
-    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, shown
-    )
-    return _render_port(
+    return answer_port_change(
         request,
         username,
         shown,
-        connection,
-        status,
-        ports,
-        view,
-        current,
-        neighbors,
-        discovery,
+        origin,
         notice=(
             f"Done: {' '.join(plan.lines)} An NXray admin now presses Update the port list on "
             "the Switch page so NXray may change the new ports. Not saved yet: Save config "
@@ -1189,6 +1248,9 @@ def port_discovery_change(
     lldp_transmit: str = Form(""),
     lldp_receive: str = Form(""),
     lldp_shown: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
     confirm: str = Form(""),
 ) -> Response:
     """Turn CDP and LLDP sending and listening on or off on a port. Asks first.
@@ -1196,25 +1258,14 @@ def port_discovery_change(
     The form is tick boxes: a box that is not sent means off.
     """
     require_csrf(request, csrf)
-    connection, target, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, name
-    )
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
     port = next((p for p in ports or [] if p.name == name), None)
 
     def again(**kwargs) -> Response:
-        return _render_port(
-            request,
-            username,
-            name,
-            connection,
-            status,
-            ports,
-            view,
-            current,
-            neighbors,
-            discovery,
-            **kwargs,
-        )
+        return answer_port_change(request, username, name, origin, found, **kwargs)
 
     if connection is None or target is None or port is None:
         return again()
@@ -1236,7 +1287,7 @@ def port_discovery_change(
         return again(notice="Nothing to change: the port already does this.")
     lines, warnings = describe_port_discovery(name, change)
     if confirm != "yes":
-        fields = {"name": port.name, "lldp_shown": lldp_shown}
+        fields = {"name": port.name, "lldp_shown": lldp_shown, **(origin.fields if origin else {})}
         # Only the ticked boxes are sent, as the browser sends them.
         for key, value in (
             ("cdp", cdp),
@@ -1251,8 +1302,8 @@ def port_discovery_change(
             {
                 "username": username,
                 "title": port.name,
-                "back_url": f"/ports/detail?name={quote(port.name, safe='')}",
-                "back_label": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
                 "lines": lines,
                 "warnings": warnings,
                 "action": "/ports/discovery",
@@ -1278,20 +1329,11 @@ def port_discovery_change(
     log.info("CDP/LLDP change on %s by %s: %s %s", connection.host, username, name, " ".join(lines))
     note_activity(request, username, "Ports", f"{name}: {'; '.join(lines)}", connection.host)
 
-    connection, _, status, ports, view, current, neighbors, discovery = _read_port_page(
-        request, name
-    )
-    return _render_port(
+    return answer_port_change(
         request,
         username,
         name,
-        connection,
-        status,
-        ports,
-        view,
-        current,
-        neighbors,
-        discovery,
+        origin,
         notice=(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
