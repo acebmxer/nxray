@@ -621,3 +621,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   inline scripts.
 - **Health check.** `GET /healthz` answers without a session, for Docker's
   health check.
+
+### Changed
+
+- **Pages use the full width of the browser window.** Every page used to sit
+  in a centred column at most 1100 px wide, and intro lines wrapped at about
+  65 characters, so a PC screen had empty space on both sides and tables
+  wrapped. The column now fills the window (with its side padding), and
+  intro lines run the width of their card. The sign-in box and form fields
+  keep their own widths (#9).
