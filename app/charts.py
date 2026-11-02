@@ -57,8 +57,13 @@ def nice_ticks(low: float, high: float, target: int = 5) -> list[float]:
     return [round(index * step, 10) for index in range(first, last + 1)]
 
 
-# Spacing between time labels, smallest first: 10 minutes up to 5 days.
-_TIME_STEPS = (600, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 2 * 86400, 5 * 86400)
+# Spacing between time labels, smallest first: a minute (for the live charts
+# of the last few minutes) up to 5 days.
+_TIME_STEPS = (
+    *(60, 120, 300, 600, 1800),
+    *(3600, 7200, 10800, 21600, 43200),
+    *(86400, 2 * 86400, 5 * 86400),
+)
 _MAX_TIME_LABELS = 7
 
 

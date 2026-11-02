@@ -16,7 +16,18 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import current_role, live_login_required, stored_switch, templates
 from app.face import color_mode, draw_face, short_device_name, speed_class
-from app.live import CLIENTS, HEALTH, PORTS, LiveAnswer, PortReading, measure_rates
+from app.live import (
+    CLIENTS,
+    HEALTH,
+    PORTS,
+    LiveAnswer,
+    PortReading,
+    health_figures,
+    health_trail_chart,
+    measure_rates,
+    port_figures,
+    port_trail_chart,
+)
 from app.neighbors import NeighborView, filter_macs, try_load_neighbors
 from app.nxapi import SwitchTarget
 from app.port_labels import get_labels
@@ -57,8 +68,9 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
         status, data = load_dashboard_status(target, transport=transport)
         return ((status, data), "") if data is not None else (None, status.message)
 
+    floor = request.app.state.settings.live_min_interval
     answer = request.app.state.live_cache.get(
-        connection.id, HEALTH, request.app.state.settings.live_min_interval, reader
+        connection.id, HEALTH, floor, reader, figures=health_figures
     )
     status, data = answer.value if answer.value else (None, None)
     return no_cache(
@@ -71,6 +83,7 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
                 "problems": health_problems(data) if data else [],
                 "live_at": int(answer.read_at),
                 "live_problem": live_problem_message(answer),
+                "trail_chart": health_trail_chart(answer.trail, now=time.time(), floor=floor),
             },
         )
     )
@@ -99,7 +112,7 @@ def shared_readings(
         return (found, "") if status.ok else (None, status.message)
 
     floor = max(settings.live_min_interval, ports_floor or 0)
-    answer = cache.get(switch_id, PORTS, floor, read_ports)
+    answer = cache.get(switch_id, PORTS, floor, read_ports, figures=port_figures)
     neighbors = cache.get(
         switch_id, CLIENTS, settings.live_clients_min_interval, read_neighbors
     ).value
@@ -227,6 +240,13 @@ def live_port(
                 "rates_window": reading.window if measured and reading else 0,
                 "live_at": int(answer.read_at),
                 "live_problem": live_problem_message(answer),
+                "trail_chart": port_trail_chart(
+                    answer.trail,
+                    name,
+                    measured=rates == "live",
+                    now=time.time(),
+                    floor=request.app.state.settings.live_min_interval,
+                ),
             },
         )
     )

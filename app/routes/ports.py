@@ -23,7 +23,7 @@ from app.dependencies import (
 )
 from app.face import MODES, color_mode, draw_face, short_device_name, speed_class
 from app.history import RANGE_LABELS, port_charts, range_key
-from app.live import PORTS
+from app.live import PORTS, port_trail_chart
 from app.neighbor_changes import (
     PortDiscovery,
     describe_port_discovery,
@@ -71,6 +71,7 @@ from app.port_settings import (
 )
 from app.port_settings import settings_form as make_settings_form
 from app.ports import COUNTER_LABELS, Port, load_ports
+from app.preferences import ui_preferences
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
@@ -503,6 +504,15 @@ def _render_port(
     traffic_reason = port_device(port, devices)[1] if port and devices else ""
     port_traffic = device_traffic([port], neighbors) if port and neighbors else {}
     period = range_key(request.query_params.get("range"))
+    trail_chart = None
+    if port and connection is not None:
+        trail_chart = port_trail_chart(
+            request.app.state.live_cache.trail(connection.id, PORTS),
+            name,
+            measured=ui_preferences(request).live == "live",
+            now=time.time(),
+            floor=request.app.state.settings.live_min_interval,
+        )
     charts = []
     if port:
         with open_db(request.app.state.settings.db_path) as conn:
@@ -534,6 +544,7 @@ def _render_port(
             "live_at": int(time.time()),
             "live_problem": "",
             "rates_window": 0,
+            "trail_chart": trail_chart,
             # Figures that refresh themselves, only on the plain view.
             **(
                 {"live_page": PORTS, "live_url": f"/live/port?name={quote(name, safe='')}"}

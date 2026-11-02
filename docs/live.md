@@ -88,6 +88,24 @@ average.
   colouring the panel stays until you reload (the rows still refresh).
 - The filter counts above the port table, and anything in the side panel.
 - The History charts, which come from the stored samples
-  (`NXRAY_HISTORY_INTERVAL`), not from live readings.
+  (`NXRAY_HISTORY_INTERVAL`), not from live readings. The small charts of the
+  last few minutes below are the live ones.
+
+## The last few minutes, drawn
+
+While a refresh is on, a port's page has a **Last 10 minutes** chart of its In
+and Out, and the dashboard a **CPU and memory, last 10 minutes** chart. They
+fill in at each reading and move with the figures. On **Live** the port chart
+draws the rates measured from the byte counters, otherwise the switch's
+averages.
+
+These readings are **kept in memory only**, not written to the database: the
+stored history stays one sample every `NXRAY_HISTORY_INTERVAL`. NXray keeps the
+last 10 minutes of each switch's readings for as long as someone has a page
+with a refresh open, and drops them five minutes after the last one closes, or
+when NXray restarts. A page opened meanwhile draws what is already kept, so a
+second browser sees the same chart at once. A gap in a line means nobody was
+watching, the port was down or the switch did not answer. Times are UTC, as on
+the History page.
 
 The refresh is read-only; nothing in it changes a switch.

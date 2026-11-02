@@ -11,6 +11,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **The last few minutes, drawn live.** While a refresh is on, a port's page
+  has a **Last 10 minutes** chart of its In and Out (measured from the byte
+  counters on **Live**, the switch's averages otherwise) and the dashboard a
+  **CPU and memory, last 10 minutes** chart, both moving with the figures.
+  The readings are kept in memory only, never written to the history, for as
+  long as someone has a refreshing page open, and a page opened meanwhile
+  draws what is already kept. See [Live figures](docs/live.md) (#19).
+
 - **How long a port averages its rates.** The switch's In and Out are its own
   average over 30 seconds. A port's page and its side panel now show that
   average and, with the new **traffic measuring changes** on, have a **Rate

@@ -327,13 +327,13 @@ def test_a_port_with_no_errors_says_so(
 
 def test_numbers_in_the_legend_have_at_most_one_decimal() -> None:
     assert history._degrees(45.5591) == "45.6°C"
-    assert history._percent(5.88) == "5.9%"
+    assert history.percent_text(5.88) == "5.9%"
     assert history._watts(150.0) == "150 W"
 
 
 def test_axis_rates_drop_a_needless_decimal() -> None:
-    assert history._rate(500_000_000) == "500 Mb/s"
-    assert history._rate(1_500_000_000) == "1.5 Gb/s"
+    assert history.rate_text(500_000_000) == "500 Mb/s"
+    assert history.rate_text(1_500_000_000) == "1.5 Gb/s"
 
 
 # ---- each VLAN's traffic, estimated from its access ports ----

@@ -12,16 +12,26 @@ an answer nobody asked for in a few minutes is dropped.
 Only read-only readers go through it. When the switch fails, the last good
 answer is kept and the next read waits longer each time, so a struggling
 NX-API is left alone.
+
+Each entry also keeps a short trail: a few figures from every fresh reading of
+the last ``TRAIL_SECONDS``, in memory only, so a page can draw a small chart
+of the last few minutes without writing every reading to the database. The
+trail goes with its entry when nobody has asked for it for a few minutes, and
+with NXray's restart; the stored history (app/history.py) is separate.
 """
 
 from __future__ import annotations
 
+import statistics
 import threading
 import time
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from app.charts import Line
+from app.history import ChartView, chart_view, percent_text, rate_text
 from app.ports import Port
 
 # The choices in the top bar. "live" is as fast as the floor allows.
@@ -47,6 +57,8 @@ CLIENTS = "clients"  # MAC table, ARP, neighbours
 KEEP_UNWATCHED_SECONDS = 300
 # The most the wait after failures grows to.
 MAX_BACKOFF_SECONDS = 60
+# How far back each entry's trail of figures reaches, for the live charts.
+TRAIL_SECONDS = 600
 
 
 @dataclass
@@ -60,6 +72,8 @@ class LiveAnswer:
     problem: str = ""
     # Seconds until NXray will ask the switch again after a failure.
     retry_in: int = 0
+    # (read at, figures) of each fresh reading in the last TRAIL_SECONDS, oldest first.
+    trail: tuple[tuple[float, Any], ...] = ()
 
 
 @dataclass
@@ -71,6 +85,7 @@ class _Entry:
     next_try: float = 0.0
     problem: str = ""
     last_asked: float = 0.0
+    trail: deque[tuple[float, Any]] = field(default_factory=deque)
 
 
 class LiveCache:
@@ -98,6 +113,7 @@ class LiveCache:
         kind: str,
         floor: int,
         reader: Callable[[Any], tuple[Any, str]],
+        figures: Callable[[Any], Any] | None = None,
     ) -> LiveAnswer:
         """The newest answer for this switch and kind.
 
@@ -106,6 +122,9 @@ class LiveCache:
         can work out a rate from two readings. A non-empty problem means the
         read failed; the value is then ignored. Only one read per key runs at
         a time; the others wait and share its result.
+
+        ``figures(value)``, when given, picks what the trail keeps of each
+        fresh reading (a few numbers, not the whole reading).
         """
         entry = self._entry((switch_id, kind))
         with entry.lock:
@@ -124,8 +143,22 @@ class LiveCache:
                 else:
                     entry.value, entry.read_at = value, now
                     entry.failures, entry.problem, entry.next_try = 0, "", 0.0
+                    if figures is not None:
+                        entry.trail.append((now, figures(value)))
+                while entry.trail and entry.trail[0][0] < now - TRAIL_SECONDS:
+                    entry.trail.popleft()
             retry = max(0, round(entry.next_try - now)) if entry.problem else 0
-            return LiveAnswer(entry.value, entry.read_at, entry.problem, retry)
+            return LiveAnswer(entry.value, entry.read_at, entry.problem, retry, tuple(entry.trail))
+
+    def trail(self, switch_id: int, kind: str) -> tuple[tuple[float, Any], ...]:
+        """The trail kept for this switch and kind, without reading the switch
+        and without counting as someone watching; () when there is none."""
+        now = self._clock()
+        with self._guard:
+            entry = self._entries.get((switch_id, kind))
+            if entry is None or now - entry.last_asked > KEEP_UNWATCHED_SECONDS:
+                return ()
+            return tuple(item for item in entry.trail if item[0] >= now - TRAIL_SECONDS)
 
     def clear(self) -> None:
         """Forget every answer (tests, and a switch whose login changed)."""
@@ -198,3 +231,137 @@ def measure_rates(previous: PortReading | None, ports: list[Port], now: float) -
         else:
             live.append(port)
     return PortReading(ports, live, window, now)
+
+
+# ---- the trail: figures of the last few minutes ----------------------------------
+
+
+@dataclass(frozen=True)
+class PortFigures:
+    """What the trail keeps of one port per reading: its In and Out as the
+    switch averages them, and as measured from the byte counters (None when
+    that reading had no earlier one to measure from)."""
+
+    up: bool
+    in_average: int
+    out_average: int
+    in_measured: int | None = None
+    out_measured: int | None = None
+
+
+def port_figures(reading: PortReading) -> dict[str, PortFigures]:
+    """Each port's figures from one reading, for the trail."""
+    measured = {port.name: port for port in reading.live} if reading.window > 0 else {}
+    found = {}
+    for port in reading.ports:
+        live = measured.get(port.name)
+        found[port.name] = PortFigures(
+            up=port.up,
+            in_average=port.in_bits_per_second,
+            out_average=port.out_bits_per_second,
+            in_measured=live.in_bits_per_second if live is not None else None,
+            out_measured=live.out_bits_per_second if live is not None else None,
+        )
+    return found
+
+
+def trail_spacing(trail: Sequence[tuple[float, Any]], floor: int) -> float:
+    """The usual gap between two readings of a trail, in seconds: the chart
+    breaks its line where a gap is much longer (nobody was watching, or the
+    switch did not answer). ``floor`` when there are too few readings."""
+    gaps = [later[0] - earlier[0] for earlier, later in zip(trail, trail[1:], strict=False)]
+    return max(float(floor), statistics.median(gaps)) if gaps else float(floor)
+
+
+TRAIL_EMPTY = (
+    "Nothing to draw yet. NXray keeps the last {minutes} minutes in memory only while a "
+    "page with a refresh on is open for this switch: choose Live or an interval in the "
+    "top bar, and this chart fills in as the figures come."
+)
+
+
+def _trail_minutes() -> int:
+    return TRAIL_SECONDS // 60
+
+
+def port_trail_chart(
+    trail: Sequence[tuple[float, Any]], name: str, *, measured: bool, now: float, floor: int
+) -> ChartView:
+    """One port's In and Out over the last few minutes, from the trail.
+
+    ``measured`` draws the rates measured from the byte counters (Live);
+    otherwise the switch's own averages. A reading where the port was down,
+    or (measured) had nothing to measure from, leaves a gap.
+    """
+    in_points, out_points = [], []
+    for moment, figures in trail:
+        port = figures.get(name) if isinstance(figures, dict) else None
+        if port is None or not port.up:
+            continue
+        if measured:
+            if port.in_measured is None or port.out_measured is None:
+                continue
+            in_points.append((moment, float(port.in_measured)))
+            out_points.append((moment, float(port.out_measured)))
+        else:
+            in_points.append((moment, float(port.in_average)))
+            out_points.append((moment, float(port.out_average)))
+    kind = (
+        "measured from the byte counters between readings"
+        if measured
+        else "as the switch averages them"
+    )
+    return chart_view(
+        f"Last {_trail_minutes()} minutes",
+        [Line("In", in_points), Line("Out", out_points)],
+        start=now - TRAIL_SECONDS,
+        end=now,
+        bucket=trail_spacing(trail, floor),
+        fmt=rate_text,
+        note=(
+            f"In and Out {kind}, at each reading of the live refresh. Kept in memory only, "
+            "not in the history: a gap means nobody was watching, the port was down or the "
+            "switch did not answer. Times are UTC."
+        ),
+        empty=TRAIL_EMPTY.format(minutes=_trail_minutes()),
+        anchor="live-trail",
+    )
+
+
+def health_figures(value: Any) -> tuple[float | None, float | None]:
+    """What the trail keeps of a dashboard reading, (status, Dashboard): the
+    CPU and memory in use, in percent (None for one the switch did not give)."""
+    data = value[1] if isinstance(value, tuple) and len(value) == 2 else None
+    resources = getattr(data, "resources", None)
+    if resources is None:
+        return None, None
+    return resources.cpu_used_percent, resources.memory_used_percent
+
+
+def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor: int) -> ChartView:
+    """The switch's CPU and memory over the last few minutes, from the trail
+    of (cpu percent, memory percent) pairs; a figure the switch did not give
+    leaves a gap."""
+    cpu, memory = [], []
+    for moment, figures in trail:
+        if not isinstance(figures, tuple) or len(figures) != 2:
+            continue
+        if figures[0] is not None:
+            cpu.append((moment, float(figures[0])))
+        if figures[1] is not None:
+            memory.append((moment, float(figures[1])))
+    return chart_view(
+        f"CPU and memory, last {_trail_minutes()} minutes",
+        [Line("CPU", cpu), Line("Memory", memory)],
+        start=now - TRAIL_SECONDS,
+        end=now,
+        bucket=trail_spacing(trail, floor),
+        fmt=percent_text,
+        y_max=100,
+        note=(
+            "At each reading of the live refresh. Kept in memory only, not in the history; "
+            "the History page has the last 30 days. Times are UTC."
+        ),
+        empty=TRAIL_EMPTY.format(minutes=_trail_minutes()),
+        anchor="live-trail",
+    )

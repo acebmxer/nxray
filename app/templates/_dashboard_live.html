@@ -1,4 +1,5 @@
 {#- The dashboard's figures: drawn with the page and again, alone, by /live/dashboard. -#}
+{% from "_chart.html" import chart %}
 <div data-live-region="health" data-live-at="{{ live_at }}"{% if live_problem %} data-live-problem="1"{% endif %}>
 {% if live_problem %}
 <p class="alert alert-error" role="alert">{{ live_problem }}</p>
@@ -123,6 +124,7 @@
     </tbody>
   </table>
 </section>
+{% if trail_chart %}{{ chart(trail_chart) }}{% endif %}
 {% endif %}
 <p class="note">Choose Live or an interval in the top bar to refresh these figures by themselves, or reload the page.</p>
 </div>

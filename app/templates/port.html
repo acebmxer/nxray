@@ -134,6 +134,7 @@
   {{ pf.vlans_part(forms, ctx) }}
 </section>
 {% endif %}
+{{ live.trail() }}
 {{ range_links("/ports/detail", range, ranges, "name=" ~ (name|urlencode) ~ "&") }}
 {% for view in charts %}
 {{ chart(view) }}

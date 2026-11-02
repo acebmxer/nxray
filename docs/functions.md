@@ -784,16 +784,26 @@ times, so out of step is worked out without one.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `health_figures` | `(value) -> (cpu, memory)` | What the trail keeps of a dashboard reading: CPU and memory in use, in percent (None when not given) | `routes/live.live_dashboard` | v0.2.0 |
+| `health_trail_chart` | `(trail, *, now, floor) -> ChartView` | The dashboard's CPU and memory chart of the last `TRAIL_SECONDS`, from the trail; says how to fill it when empty | `routes/dashboard`, `routes/live.live_dashboard` | v0.2.0 |
 | `measure_rates` | `(previous, ports, now) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over 120 s | `routes/live.shared_readings` | v0.2.0 |
+| `port_figures` | `(reading) -> dict[str, PortFigures]` | What the trail keeps of one port reading: each port's state, the switch's averages and the measured rates (None without an earlier reading) | `routes/live.shared_readings` | v0.2.0 |
+| `port_trail_chart` | `(trail, name, *, measured, now, floor) -> ChartView` | One port's In and Out over the last `TRAIL_SECONDS` from the trail, measured (Live) or the switch's averages; a down port or an unmeasured reading leaves a gap | `routes/ports._render_port`, `routes/live.live_port` | v0.2.0 |
 | `pick_interval` | `(choice, floor) -> int` | Seconds between refreshes for a picked choice, never below the floor; 0 for Off or anything unknown | tests; `live.js` repeats the rule in the browser | v0.2.0 |
+
+| `trail_spacing` | `(trail, floor) -> float` | The usual gap between a trail's readings (the median, never below `floor`), so a chart breaks its line only at a real gap | `port_trail_chart`, `health_trail_chart` | v0.2.0 |
 
 `PortReading` (class) is one reading: `ports` (the switch's 30 s averages), `live` (counter-based rates), `window` seconds between the two readings, `at`.
 
 `LiveCache` (class) keeps the newest reading per (switch id, kind):
 `get(switch_id, kind, floor, reader)` runs `reader(previous)` only when the
 reading is older than `floor`, one read at a time per key, keeps the last good
-value and waits longer after each failure. `LIVE_CHOICES` is the list shown in
-the top bar. Held in `app.state.live_cache`.
+value and waits longer after each failure; with `figures=`, each fresh reading
+also puts `figures(value)` on the entry's trail, the last `TRAIL_SECONDS` kept in
+memory only and handed back as `LiveAnswer.trail`. `trail(switch_id, kind)`
+returns that trail without reading the switch or counting as someone watching
+(for a page opened while another browser's refresh runs). `LIVE_CHOICES` is the
+list shown in the top bar. Held in `app.state.live_cache`.
 
 ## `app/routes/live.py` — the refresh answers
 
@@ -813,11 +823,14 @@ the top bar. Held in `app.state.live_cache`.
 | --- | --- | --- | --- | --- |
 | `bucket_seconds` | `(span: int) -> int` | How wide one chart point is: a minute at least, and at most 500 points | `system_charts`, `port_charts` | v0.1.0 |
 | `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_switch` | v0.1.0 |
+| `chart_view` | `(title, lines, *, start, end, bucket, fmt, summarize=None, note="", empty=..., zero_based=True, y_max=None, anchor="") -> ChartView` | One chart's card: the SVG with a legend (now and highest unless `summarize` says otherwise), or the `empty` words when no line has a point | `system_charts`, `port_charts`, `vlan_charts`, `live.port_trail_chart`, `live.health_trail_chart` | v0.2.0 |
 | `fill_zeros` | `(points, start, end, bucket) -> list` | Every bucket of a range, 0 where there is no point | `port_charts` | v0.1.0 |
 | `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page`, `latest_vlan_traffic` | v0.1.0 |
 | `latest_vlan_traffic` | `(conn, switch_id, *, now, max_age) -> dict[int, (in, out)]` | Each VLAN's estimated traffic in a switch's newest sample; empty when that sample is older than `max_age` | `routes/vlans._vlan_traffic` | v0.2.0 |
+| `percent_text` | `(value: float) -> str` | An axis value in percent, at most one decimal: `45.56` -> `45.6%` | the charts | v0.2.0 |
 | `port_charts` | `(conn, switch_id, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
 | `purge` | `(conn, now, keep_days=30) -> int` | Deletes every switch's rows older than the retention; how many went | `start_sampler` | v0.1.0 |
+| `rate_text` | `(value: float) -> str` | An axis rate: `500000000` -> `500 Mb/s` | the charts | v0.2.0 |
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
 | `read_series` | `(conn, switch_id, metric, *, start, end, bucket, item=None, total=False) -> dict` | A switch's rows of a metric averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
 | `record` | `(conn, switch_id, moment, rows) -> None` | Stores one sample's rows for a switch | `Sampler.sample_switch` | v0.1.0 |

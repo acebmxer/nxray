@@ -400,13 +400,13 @@ def _latest_and_highest(fmt: Callable[[float], str]) -> Callable[[Sequence[Point
     return _summary
 
 
-def _chart(
+def chart_view(
     title: str,
     lines: list[Line],
     *,
     start: float,
     end: float,
-    bucket: int,
+    bucket: float,
     fmt: Callable[[float], str],
     summarize: Callable[[Sequence[Point]], str] | None = None,
     note: str = "",
@@ -415,6 +415,9 @@ def _chart(
     y_max: float | None = None,
     anchor: str = "",
 ) -> ChartView:
+    """One chart's card: the SVG of ``lines`` over start..end with a legend, or
+    the ``empty`` words when no line has a point. Used by the History page's
+    charts and by the live charts of the last few minutes (app/live.py)."""
     lines = [line for line in lines if line.points]
     if not lines:
         return ChartView(title, None, [], note, empty, anchor)
@@ -445,7 +448,7 @@ def _degrees(value: float) -> str:
     return f"{_short(value)}°C"
 
 
-def _percent(value: float) -> str:
+def percent_text(value: float) -> str:
     return f"{_short(value)}%"
 
 
@@ -453,7 +456,7 @@ def _watts(value: float) -> str:
     return f"{_short(value)} W"
 
 
-def _rate(value: float) -> str:
+def rate_text(value: float) -> str:
     """ "500.0 Mb/s" -> "500 Mb/s"."""
     return human_rate(int(value)).replace(".0 ", " ")
 
@@ -478,26 +481,26 @@ def system_charts(
     temperatures = read(TEMPERATURE)
     common = {"start": start, "end": end, "bucket": bucket}
     return [
-        _chart(
+        chart_view(
             "Temperatures",
             [Line(name, points) for name, points in sorted(temperatures.items())],
             fmt=_degrees,
             zero_based=False,
             **common,
         ),
-        _chart(
+        chart_view(
             "CPU and memory",
             [one(CPU, "CPU"), one(MEMORY, "Memory")],
-            fmt=_percent,
+            fmt=percent_text,
             y_max=100,
             **common,
         ),
-        _chart("Power draw", [one(POWER, "Total draw")], fmt=_watts, **common),
-        _chart("Fan speed", [one(FAN, "Fans")], fmt=_percent, y_max=100, **common),
-        _chart(
+        chart_view("Power draw", [one(POWER, "Total draw")], fmt=_watts, **common),
+        chart_view("Fan speed", [one(FAN, "Fans")], fmt=percent_text, y_max=100, **common),
+        chart_view(
             "Traffic through all ports",
             [one(TRAFFIC_IN, "In"), one(TRAFFIC_OUT, "Out")],
-            fmt=_rate,
+            fmt=rate_text,
             **common,
         ),
     ]
@@ -520,14 +523,14 @@ def port_charts(
     errors = read(PORT_ERRORS, total=True)
     seen = bool(errors)
     return [
-        _chart(
+        chart_view(
             "Traffic over time",
             [Line("In", read(PORT_IN)), Line("Out", read(PORT_OUT))],
-            fmt=_rate,
+            fmt=rate_text,
             note="A gap means the port was down, or NXray could not reach the switch.",
             **common,
         ),
-        _chart(
+        chart_view(
             "Errors and discards over time",
             [Line("Errors", fill_zeros(errors, start, end, bucket))] if seen else [],
             fmt=_count,
@@ -591,19 +594,19 @@ def vlan_charts(conn: sqlite3.Connection, switch_id: int, key: str, now: float) 
         return [Line(f"VLAN {item}", found[metric].get(item, [])) for item in shown]
 
     return [
-        _chart(
+        chart_view(
             "Traffic per VLAN: sent by its devices",
             lines(VLAN_IN),
-            fmt=_rate,
+            fmt=rate_text,
             note=note,
             empty=empty,
             anchor="vlan-traffic",
             **common,
         ),
-        _chart(
+        chart_view(
             "Traffic per VLAN: sent to its devices",
             lines(VLAN_OUT),
-            fmt=_rate,
+            fmt=rate_text,
             note=note,
             empty=empty,
             **common,

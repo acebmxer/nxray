@@ -1,6 +1,7 @@
 {#- The figures of a port's own page that refresh themselves. Drawn with the page
     and again, alone, by /live/port (app/routes/live.py), from these macros. -#}
 {% from "_devices.html" import neighbor_table, mac_table, protocol_notes, port_link, port_list %}
+{% from "_chart.html" import chart %}
 
 {% macro banner() %}
 <div data-live-region="banner" data-live-at="{{ live_at }}"{% if live_problem %} data-live-problem="1"{% endif %}>
@@ -84,4 +85,10 @@
 
 {% macro ratenote() %}
 <p class="note" data-live-region="ratenote">"Now" is {% if rates_window %}the rate measured over the last {{ rates_window|round|int }} s from the byte counters{% else %}the switch's average over the last {{ port.load_interval or 30 }} seconds{% endif %}. Totals count since the counters were last cleared.</p>
+{% endmacro %}
+
+{% macro trail() %}
+<div data-live-region="trail">
+{% if trail_chart %}{{ chart(trail_chart) }}{% endif %}
+</div>
 {% endmacro %}
