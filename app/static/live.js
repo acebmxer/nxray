@@ -138,7 +138,9 @@
         return response.text();
       })
       .then(function (html) {
-        if (html) apply(html);
+        // Someone may have ticked a box while the answer was on its way; the
+        // answer cannot know that, so drop it and wait for the next round.
+        if (html && !userBusy()) apply(html);
         failures = 0;
         schedule(false);
       })

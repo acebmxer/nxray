@@ -181,6 +181,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **A ticked port stays ticked while the page refreshes by itself.** With
+  Refresh on anything but Off, a refresh that was already on its way when a
+  tick box was pressed could land afterwards and redraw the rows without
+  the tick, so it took two or three clicks. The page now checks again when
+  the answer arrives and drops it if a box was changed meanwhile (#24).
+
 - **A port's side panel no longer covers the right of the Ports page.**
   Opening a port from the front panel or the table used to lay its panel over
   the page, hiding the right-hand ports of the front panel. The page now moves
