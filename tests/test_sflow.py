@@ -495,6 +495,8 @@ def test_the_role_has_the_sflow_rules() -> None:
     assert "rule 230 permit command conf t ; sflow *" in lines
     assert "rule 231 permit command conf t ; no sflow *" in lines
     assert set(TRAFFIC_RULES) <= set(lines)
+    # Reading the status is a show command, which a role refuses unless named.
+    assert "rule 233 permit command show sflow" in lines
 
 
 SHOW_SFLOW = """sflow sampling-rate : 8192

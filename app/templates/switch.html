@@ -168,7 +168,7 @@
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
       message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes take effect straight
+      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes take effect straight
       away, with no further waits.
     </p>
     <label class="check">
@@ -192,7 +192,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -325,7 +325,7 @@
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes on gives it a role
+    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports, port-channels
     and VLAN interfaces only,
     turning a port on or off, editing its description, setting its mode
@@ -369,7 +369,7 @@
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes", true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes", true) }}
 </section>
 {% endif %}
 

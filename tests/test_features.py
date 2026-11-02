@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 16
+    assert ROLE_VERSION == 17
 
 
 @pytest.mark.parametrize(
@@ -149,73 +149,75 @@ def test_role_has_the_feature_rules() -> None:
             1,
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
             "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-            "security, traffic measuring and reset to defaults changes",
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
             "routing protocol, spanning tree, switch admin, security and config, layer 2 "
-            "security, traffic measuring and reset to defaults changes",
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
             "protocol, spanning tree, switch admin, security and config, layer 2 security, "
-            "traffic measuring "
-            "and reset to defaults changes",
+            "traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
             "spanning tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring and reset to defaults changes",
+            "measuring, reset to defaults and sFlow status changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
-            "switch admin, security and config, layer 2 security, traffic measuring and reset "
-            "to defaults changes",
+            "switch admin, security and config, layer 2 security, traffic measuring, reset to "
+            "defaults and sFlow status changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
-            "admin, security and config, layer 2 security, traffic measuring and reset to "
-            "defaults changes",
+            "admin, security and config, layer 2 security, traffic measuring, reset to defaults "
+            "and sFlow status changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-            "config, layer 2 security, traffic measuring and reset to defaults changes",
+            "config, layer 2 security, traffic measuring, reset to defaults and sFlow status "
+            "changes",
         ),
         (
             8,
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security, traffic measuring and reset to defaults changes",
+            "layer 2 security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             9,
             "routing protocol, spanning tree, switch admin, security and config, layer 2 "
-            "security, traffic measuring and reset to defaults changes",
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             10,
             "spanning tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring and reset to defaults changes",
+            "measuring, reset to defaults and sFlow status changes",
         ),
         (
             11,
-            "switch admin, security and config, layer 2 security, traffic measuring and "
-            "reset to defaults changes",
+            "switch admin, security and config, layer 2 security, traffic measuring, reset to "
+            "defaults and sFlow status changes",
         ),
         (
             12,
-            "security and config, layer 2 security, traffic measuring and reset to defaults "
+            "security and config, layer 2 security, traffic measuring, reset to defaults and "
+            "sFlow status "
             "changes",
         ),
-        (13, "layer 2 security, traffic measuring and reset to defaults changes"),
-        (14, "traffic measuring and reset to defaults changes"),
-        (15, "reset to defaults changes"),
-        (16, ""),
+        (13, "layer 2 security, traffic measuring, reset to defaults and sFlow status changes"),
+        (14, "traffic measuring, reset to defaults and sFlow status changes"),
+        (15, "reset to defaults and sFlow status changes"),
+        (16, "sFlow status changes"),
+        (17, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

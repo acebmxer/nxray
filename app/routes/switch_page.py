@@ -712,7 +712,8 @@ def switch_enable_changes(
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security, traffic measuring and reset to defaults changes are on: "
+            "layer 2 security, traffic measuring, reset to defaults and sFlow status changes "
+            "are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "

@@ -63,7 +63,7 @@ rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
-15 the traffic measuring rules, 16 the reset rule.
+15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -531,11 +531,20 @@ TRAFFIC_RULES = (
 # was, so this needs no SSH save and no wait.
 RESET_RULES = ("rule 232 permit command conf t ; default interface *",)
 
+# sFlow status rule, added in ROLE_VERSION 17: ``show sflow``, the only way to
+# read the collector, sampling rate and sources (it has no structured form on
+# NX-OS 9.3, so NXray reads its text). The ``sflow`` lines in TRAFFIC_RULES
+# only configure; a role refuses every show command no rule names, so the
+# Traffic page's sFlow card got "Permission denied for the role" without this.
+# Proven on cisco-25gb (2026-11-02): with the rule, the Traffic page reads it.
+# The port list stays as it was, so this needs no SSH save and no wait.
+SFLOW_STATUS_RULES = ("rule 233 permit command show sflow",)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 16
+ROLE_VERSION = 17
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -554,6 +563,7 @@ _ADDED_BY_VERSION = {
     14: "layer 2 security",
     15: "traffic measuring",
     16: "reset to defaults",
+    17: "sFlow status",
 }
 
 
@@ -627,6 +637,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *LAYER2_RULES,
         *TRAFFIC_RULES,
         *RESET_RULES,
+        *SFLOW_STATUS_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

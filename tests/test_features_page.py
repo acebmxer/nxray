@@ -283,7 +283,7 @@ def test_old_role_offers_feature_changes_without_a_wait(
     assert (
         "Turn on feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
         "protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring and reset to defaults changes"
+        "traffic measuring, reset to defaults and sFlow status changes"
         in page
         and "There is no wait this time" in page
     )
@@ -293,8 +293,8 @@ def test_old_role_offers_feature_changes_without_a_wait(
     text = _text(_enable(logged_in).text)
     assert (
         "Feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-        "spanning tree, switch admin, security and config, layer 2 security, traffic "
-        "measuring and reset to defaults changes are on: "
+        "spanning tree, switch admin, security and config, layer 2 security, traffic measuring, "
+        "reset to defaults and sFlow status changes are on: "
         "nxray may now also "
         "turn switch features on and off on the Features page, turn CDP and LLDP on or off" in text
     )

@@ -181,6 +181,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Traffic page's sFlow card can read the switch's sFlow status.** It
+  showed "The switch refused a command: 'show sflow': % Permission denied for
+  the role", because the `nxray-ports` role permitted configuring sFlow but
+  never `show sflow`. The role now has rule 233 for it (role version 17); an
+  install already connected gets a **Turn on sFlow status changes** card on the
+  Switch page, which adds the rule with no wait (#25).
+
 - **A ticked port stays ticked while the page refreshes by itself.** With
   Refresh on anything but Off, a refresh that was already on its way when a
   tick box was pressed could land afterwards and redraw the rows without

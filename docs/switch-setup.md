@@ -420,6 +420,7 @@ NXray then:
          rule 230 permit command conf t ; sflow *
          rule 231 permit command conf t ; no sflow *
          rule 232 permit command conf t ; default interface *
+         rule 233 permit command show sflow
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -486,9 +487,9 @@ went through without it.
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
 routing protocol, spanning tree, switch admin, security and config, layer 2
-security, traffic measuring or reset to defaults changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
+security, traffic measuring, reset to defaults or sFlow status changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
 to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134, 1 to 170, 1 to 190, 1 to
-227 or 1 to 231. The Switch
+227, 1 to 231 or 1 to 232. The Switch
 page then shows a card named for what is missing (for example **Switch admin
 and security and config changes** or **Security and config changes**): type the
 admin login,
@@ -1008,6 +1009,10 @@ An install whose role predates resetting a port or a port-channel gets a
 **Turn on reset to defaults changes** card; it adds rule 232 with no wait.
 This follows Cisco's NX-OS 9.3 Interfaces Configuration Guide and has not yet
 been tried on a switch.
+An install whose role predates reading sFlow's status gets a **Turn on sFlow
+status changes** card; it adds rule 233 (`show sflow`) with no wait. Without
+it the switch refuses `show sflow` for every NXray account, and the Traffic
+page's sFlow card shows "Permission denied for the role".
 
 **How long a port averages its rates.** The switch works out a port's In and
 Out as an average over the last 30 seconds unless told otherwise. With traffic
