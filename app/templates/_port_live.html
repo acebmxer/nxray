@@ -83,5 +83,5 @@
 {% endmacro %}
 
 {% macro ratenote() %}
-<p class="note" data-live-region="ratenote">"Now" is {% if rates_window %}the rate measured over the last {{ rates_window|round|int }} s from the byte counters{% else %}the average over the last 30 seconds{% endif %}. Totals count since the counters were last cleared.</p>
+<p class="note" data-live-region="ratenote">"Now" is {% if rates_window %}the rate measured over the last {{ rates_window|round|int }} s from the byte counters{% else %}the switch's average over the last {{ port.load_interval or 30 }} seconds{% endif %}. Totals count since the counters were last cleared.</p>
 {% endmacro %}

@@ -212,7 +212,9 @@ layer=, remove_ip=, ip_address=, speed=, mtu=, fec=, flow_receive=,
 flow_send=, storm_levels=, storm_action=, old_storm_action=)` (one port's
 settings, only the ones given), `breakout_port(name, mapping)` and
 `join_port(name, mapping)` (split a 100G port into four, or join them;
-`10g-4x` or `25g-4x` only), `set_feature(command, enabled)` (`feature X` or
+`10g-4x` or `25g-4x` only), `set_load_interval(name, seconds)` (how long one
+port averages its In and Out over: `load-interval counter 1 <seconds>` for one
+of `LOAD_INTERVALS`, or `no load-interval counter 1` for None), `set_feature(command, enabled)` (`feature X` or
 `no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
 `no feature ssh`), `set_port_discovery(name, cdp=, lldp_transmit=,
 lldp_receive=)` (CDP and LLDP on one port, only the ones given),
@@ -406,8 +408,9 @@ NX-API certificate is. Tests pass a pretend opener through
 | `role_lines` | `(ports, account_name, vlan_interfaces=True) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off) | `enable_port_changes` | v0.1.0 |
 
 `ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES`,
-`NEIGHBOR_RULES`, `CHANNEL_RULES`, `LAYER3_RULES`, `VRF_RULES` and `ROUTE_RULES` are the role's only
-rules, and its port list names the front ports one by one plus every
+`NEIGHBOR_RULES`, `CHANNEL_RULES`, `LAYER3_RULES`, `VRF_RULES`, `ROUTE_RULES`,
+`PROTOCOL_RULES`, `STP_RULES`, `ADMIN_RULES`, `SECURITY_RULES`, `LAYER2_RULES` and
+`TRAFFIC_RULES` are the role's only rules, and its port list names the front ports one by one plus every
 port-channel (`CHANNEL_PERMIT`) and every VLAN interface
 (`VLAN_INTERFACE_PERMIT`); `ROLE_NAME` is `nxray-ports`, shared by every NXray
 install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
@@ -416,7 +419,10 @@ the MAC address table, 6 also port-channels and LACP, 7 also VLAN interfaces
 and IPv4 and IPv6 addresses, with `VLAN_INTERFACE_PERMIT` in the port list, 8
 also VRFs, 9 also static routes, 10 also routing protocols, 11 also spanning
 tree, 12 also switch admin and reading the running configuration, 13 also ACLs,
-port security, reading the saved configuration and NXray's checkpoints). `EnableResult.had_role`
+port security, reading the saved configuration and NXray's checkpoints, 14 also
+DHCP snooping and relay, ARP inspection, IP Source Guard, MAC ACLs, object
+groups, VLAN access maps and TCAM regions, 15 also how long the front ports
+average their rates over, `TRAFFIC_RULES`). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -463,10 +469,12 @@ among the VLANs it carries, so the switch drops its untagged traffic.
 | --- | --- | --- | --- | --- |
 | `describe_port_settings` | `(current, change, *, up) -> tuple[list[str], list[str]]` | A port's settings change in words, plus warnings (link drops, layer change, smaller MTU, shutdown action) | `routes/ports.port_settings_change` | v0.1.0 |
 | `guess_breakout_map` | `(sibling_speeds: list[str]) -> str \| None` | The split four ports were made with (`10g-4x`, `25g-4x`) from their speed column, or None | `routes/ports` | v0.1.0 |
+| `load_interval_label` | `(seconds: int) -> str` | `30` -> `30 seconds (the switch's default)`, `60` -> `1 minute`, `0` -> `unknown` | `plan_load_interval`, port page | v0.2.0 |
 | `load_port_settings` | `(client, port, vlans) -> PortSettings` | One port's settings, from one request of `settings_commands` | `try_load_port_settings` | v0.1.0 |
 | `parse_ip_addresses` | `(body) -> dict[str, tuple[str, str]]` | Each port's IPv4 address with prefix, and its VRF, from `show ip interface vrf all` | `parse_port_settings` | v0.1.0 |
 | `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body, ipv6_body=None) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, addresses (main and extra IPv4, IPv6) and breakout | `load_port_settings` | v0.1.0 |
 | `plan_breakout` | `(settings, action, mapping) -> BreakoutPlan` | Checks a split or join against the port, with its lines and warnings for the confirm page | `routes/ports.port_breakout` | v0.1.0 |
+| `plan_load_interval` | `(name, current, choice) -> LoadIntervalPlan` | Checks a rate-average choice (one of `LOAD_INTERVALS`, or `default`) against what the port has; `empty` when it already has it, else the confirm page's line and a warning for a shorter average | `routes/ports.port_rate_interval_change` | v0.2.0 |
 | `plan_port_settings` | `(current, form) -> SettingsChange` | Checks the settings form against the port (speeds it can run, MTU for its layer, FEC, levels) and keeps only what changes | `routes/ports.port_settings_change` | v0.1.0 |
 | `settings_form` | `(current) -> dict[str, str]` | The settings form filled with what the switch reports now (empty storm level = no limit), as `plan_port_settings` takes it | `routes/ports.port_forms`, `port_bulk.plan_port` | v0.2.0 |
 | `settings_commands` | `(name: str) -> tuple[str, ...]` | The per-port show commands a port's settings need | `load_port_settings` | v0.1.0 |
@@ -534,6 +542,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_change` | `(request, username, csrf, name, action, description, back, show, color, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off; `back=ports` answers on the Ports page with the port's side panel open | router | v0.1.0 |
 | `port_discovery_change` | `(request, username, csrf, name, cdp, lldp_transmit, lldp_receive, lldp_shown, back, show, color, confirm) -> Response` | `POST /ports/discovery`: asks to confirm, then turns CDP and LLDP sending and listening on or off on one port; an unticked box means off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs, settings and connected devices; 404 for an unknown name | router | v0.1.0 |
+| `port_rate_interval_change` | `(request, username, csrf, name, seconds, back, show, color, confirm) -> Response` | `POST /ports/rate-interval`: asks to confirm, then sets how long the switch averages one port's In and Out over; needs traffic measuring changes (role version 15) | router | v0.2.0 |
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, back, show, color, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, back, show, color, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label, back, show, color) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |

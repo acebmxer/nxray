@@ -112,7 +112,8 @@ def test_role_version_4_offers_neighbor_changes_without_a_wait(
     text = _text(logged_in.get("/switch").text)
     assert (
         "Turn on neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-        "spanning tree, switch admin, security and config and layer 2 security changes" in text
+        "spanning tree, switch admin, security and config, layer 2 security and traffic "
+        "measuring changes" in text
     )
     assert "turn CDP and LLDP on or off on the front ports" in text
     response = logged_in.post(
@@ -128,7 +129,8 @@ def test_role_version_4_offers_neighbor_changes_without_a_wait(
     text = _text(response.text)
     assert (
         "Neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
-        "tree, switch admin, security and config and layer 2 security changes are on: nxray may "
+        "tree, switch admin, security and config, layer 2 security and traffic measuring changes "
+        "are on: nxray may "
         "now also turn CDP "
         "and LLDP on or off" in text
     )

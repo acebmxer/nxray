@@ -97,8 +97,8 @@ def test_turning_on_types_the_settings_rules(
     text = _text(_enable(logged_in).text)
     assert (
         "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-        "security changes "
+        "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+        "security and traffic measuring changes "
         "are on" in text
     )
     assert "split or join the 100G ports" in text
@@ -116,8 +116,8 @@ def test_old_role_offers_port_settings_without_a_wait(
     page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-        "security changes"
+        "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+        "security and traffic measuring changes"
         in page
         and "There is no wait this time" in page
     )
@@ -127,7 +127,8 @@ def test_old_role_offers_port_settings_without_a_wait(
     text = _text(_enable(logged_in).text)
     assert (
         "Port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
-        "routing protocol, spanning tree, switch admin, security and config and layer 2 security "
+        "routing protocol, spanning tree, switch admin, security and config, layer 2 security "
+        "and traffic measuring "
         "changes are on: "
         "nxray may now also set the speed, MTU" in text
     )

@@ -414,6 +414,10 @@
       <h3>Settings</h3>
       {{ pf.settings_part(forms, ctx) }}
     </section>
+    <section class="drawer-part">
+      <h3>Rate average</h3>
+      {{ pf.rate_interval_part(forms, ctx) }}
+    </section>
     {% if forms.settings and (forms.settings.breakout_capable or forms.settings.is_breakout_port) %}
     <section class="drawer-part">
       <h3>Split port</h3>

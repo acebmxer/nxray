@@ -80,6 +80,9 @@ class Port:
     # Forward error correction: what is set, and what the link runs with.
     fec: str = ""
     fec_oper: str = ""
+    # Seconds the switch averages In and Out over (``load-interval counter
+    # 1``), 0 when not reported.
+    load_interval: int = 0
 
     @property
     def errors(self) -> int:
@@ -190,6 +193,7 @@ def parse_ports(
                 duplex=str(row.get("eth_duplex", "")).strip(),
                 fec=str(row.get("eth_admin_fec_state", "")).strip(),
                 fec_oper=str(row.get("eth_oper_fec_state", "")).strip(),
+                load_interval=_int(row.get("eth_load_interval1_rx")),
             )
         )
     ports.sort(key=lambda port: port_sort_key(port.name))

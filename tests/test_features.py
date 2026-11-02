@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 14
+    assert ROLE_VERSION == 15
 
 
 @pytest.mark.parametrize(
@@ -148,56 +148,63 @@ def test_role_has_the_feature_rules() -> None:
         (
             1,
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-            "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security and traffic measuring changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
-            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security and traffic measuring changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
-            "protocol, spanning tree, switch admin, security and config and layer 2 security "
+            "protocol, spanning tree, switch admin, security and config, layer 2 security and "
+            "traffic measuring "
             "changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-            "spanning tree, switch admin, security and config and layer 2 security changes",
+            "spanning tree, switch admin, security and config, layer 2 security and traffic "
+            "measuring changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
-            "switch admin, security and config and layer 2 security changes",
+            "switch admin, security and config, layer 2 security and traffic measuring changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
-            "admin, security and config and layer 2 security changes",
+            "admin, security and config, layer 2 security and traffic measuring changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-            "config and layer 2 security changes",
+            "config, layer 2 security and traffic measuring changes",
         ),
         (
             8,
-            "static route, routing protocol, spanning tree, switch admin, security and config "
-            "and layer 2 security changes",
+            "static route, routing protocol, spanning tree, switch admin, security and config, "
+            "layer 2 security and traffic measuring changes",
         ),
         (
             9,
-            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security and traffic measuring changes",
         ),
-        (10, "spanning tree, switch admin, security and config and layer 2 security changes"),
-        (11, "switch admin, security and config and layer 2 security changes"),
-        (12, "security and config and layer 2 security changes"),
-        (13, "layer 2 security changes"),
-        (14, ""),
+        (
+            10,
+            "spanning tree, switch admin, security and config, layer 2 security and traffic "
+            "measuring changes",
+        ),
+        (11, "switch admin, security and config, layer 2 security and traffic measuring changes"),
+        (12, "security and config, layer 2 security and traffic measuring changes"),
+        (13, "layer 2 security and traffic measuring changes"),
+        (14, "traffic measuring changes"),
+        (15, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

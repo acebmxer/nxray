@@ -100,15 +100,15 @@ def test_switch_page_offers_port_changes(logged_in: TestClient, switch: FakeSwit
     text = _text(logged_in.get("/switch").text)
     assert (
         "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-        "security changes"
+        "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+        "security and traffic measuring changes"
         in text
         and "Off: NXray's account can only read" in text
     )
     assert (
         "Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, "
         "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config and layer 2 security changes" in text
+        "config, layer 2 security and traffic measuring changes" in text
     )
     assert "This wait happens once" in text
     assert "(read-only)" in text
@@ -128,8 +128,8 @@ def test_turning_on_gives_the_role_saves_and_waits(
     text = _text(response.text)
     assert (
         "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-        "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-        "security changes "
+        "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+        "security and traffic measuring changes "
         "are on: nxray may now turn the 54 front ports on or off" in text
     )
     assert "waits about 11 minutes" in text
@@ -184,7 +184,7 @@ def test_turning_on_with_a_wrong_admin_password(logged_in: TestClient, switch: F
     assert (
         "Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, "
         "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config and layer 2 security changes" in response.text
+        "config, layer 2 security and traffic measuring changes" in response.text
     )
 
 

@@ -165,11 +165,11 @@ Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config and layer 2 security changes**, tick the box and press
+security and config, layer 2 security and traffic measuring changes**, tick the box and press
 **Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config and layer 2 security changes**. One press turns on all
-fourteen, with a single wait.
+security and config, layer 2 security and traffic measuring changes**. One press turns on all
+fifteen, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -406,6 +406,8 @@ NXray then:
          rule 225 permit command conf t ; vlan filter *
          rule 226 permit command conf t ; no vlan filter *
          rule 227 permit command conf t ; hardware access-list tcam region *
+         rule 228 permit command conf t ; interface * ; load-interval *
+         rule 229 permit command conf t ; interface * ; no load-interval *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -444,7 +446,10 @@ console, terminal, timestamps), SNMP contact and location, read-only SNMP
 communities and trap receivers, and read the running configuration; make,
 change and delete IPv4 and IPv6 ACLs and apply them to those interfaces and
 ports; set port security on the front ports; read the saved configuration and
-make, list and delete checkpoints; and save the configuration. The switch
+make, list and delete checkpoints; set DHCP snooping, the DHCP relay, ARP
+inspection and IP Source Guard, MAC ACLs, object groups, VLAN access maps and
+the TCAM regions' sizes; set how long the front ports average their In and Out
+rates over; and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts, SNMP users and read-write SNMP communities, rolling the switch back
 (the Config page asks for the admin login each time for that), and other
@@ -457,8 +462,7 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol, spanning tree, switch admin, security and config and
-layer 2 security changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -467,9 +471,10 @@ went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
-routing protocol, spanning tree, switch admin or security and config changes
-existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
-to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134 or 1 to 170. The Switch
+routing protocol, spanning tree, switch admin, security and config, layer 2
+security or traffic measuring changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
+to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134, 1 to 170, 1 to 190 or
+1 to 227. The Switch
 page then shows a card named for what is missing (for example **Switch admin
 and security and config changes** or **Security and config changes**): type the
 admin login,
@@ -980,6 +985,25 @@ guides and have not yet been tried on a switch. An install whose role predates
 the DHCP and ARP page gets a **Turn on layer 2 security changes** card; it adds
 rules 191 to 227 with no wait. They also follow Cisco's NX-OS 9.3 Security
 Configuration Guide and have not yet been tried on a switch.
+An install whose role predates the rate average gets a **Turn on traffic
+measuring changes** card; it adds rules 228 and 229 with no wait. They follow
+Cisco's NX-OS 9.3 Interfaces Configuration Guide and have not yet been tried
+on a switch.
+
+**How long a port averages its rates.** The switch works out a port's In and
+Out as an average over the last 30 seconds unless told otherwise. With traffic
+measuring changes on (role version 15), a port's page and its side panel have
+a **Rate average** card: pick 5, 10, 15 seconds, 1, 2 or 5 minutes, or the
+switch's default of 30 seconds, and press **Change the rate average**. NXray
+asks you to confirm, then sends `interface <port>` and `load-interval counter
+1 <seconds>` (or `no load-interval counter 1` for the default). Only the first
+of the switch's three counters is changed, the one NXray reads; the traffic
+itself is not touched, only the figures. A shorter average follows bursts
+more closely, so the figures jump about more. Cisco's guide gives 5 to 300
+seconds for the Nexus 9000; if the switch refuses one of these values, the
+page shows the switch's own words. Not saved until you press **Save config**.
+NXray's **Live** refresh works its rates out from the byte counters instead,
+whatever the average (see [Live figures](live.md)).
 
 **Activity.** The **Activity** page (admins only) lists every change made
 through NXray, newest first, with the account, the page it was made on, the

@@ -17,7 +17,8 @@ Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
-``breakout_port``, ``join_port``, ``set_feature``, ``set_port_discovery``,
+``breakout_port``, ``join_port``, ``set_load_interval``, ``set_feature``,
+``set_port_discovery``,
 ``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
 ``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
 ``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
@@ -118,6 +119,14 @@ MTU_MIN = 576
 MTU_MAX = 9216
 # How a 100G port is split: four 10G or four 25G ports.
 BREAKOUT_MAPS = ("10g-4x", "25g-4x")
+# How many seconds the switch averages a port's In and Out rate over
+# (``load-interval counter 1 <seconds>``). Cisco's NX-OS 9.3 Interfaces
+# Configuration Guide for the Nexus 9000 gives 5 to 300 seconds; NXray offers
+# a few steps of it, and ``no load-interval counter 1`` goes back to the
+# switch's default of 30. Not yet tried on cisco-25gb: a value the switch does
+# not take is refused by it, and the page says so.
+LOAD_INTERVALS = (5, 10, 15, 30, 60, 120, 300)
+DEFAULT_LOAD_INTERVAL = 30
 
 # What may follow "feature": the commands ``feature ?`` lists on an
 # N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
@@ -1015,6 +1024,23 @@ class NxapiClient:
         module, port = breakout_numbers(name)
         command = f"no interface breakout module {module} port {port} map {mapping}"
         self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def set_load_interval(self, name: str, seconds: int | None) -> None:
+        """How long one port's In and Out rates are averaged over.
+
+        ``load-interval counter 1 <seconds>`` for one of LOAD_INTERVALS, or
+        ``no load-interval counter 1`` (None) to go back to the switch's default.
+        Only the first counter, the one NXray reads, is ever changed.
+        """
+        validate_port_name(name)
+        if seconds is None:
+            line = "no load-interval counter 1"
+        elif seconds in LOAD_INTERVALS and not isinstance(seconds, bool):
+            line = f"load-interval counter 1 {int(seconds)}"
+        else:
+            raise ValueError(f"the rate is averaged over one of {LOAD_INTERVALS} seconds")
+        commands = [f"interface {name}", line]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def set_feature(self, command: str, enabled: bool) -> None:
         """``feature <command>`` or ``no feature <command>``, for one known feature.

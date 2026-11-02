@@ -136,6 +136,8 @@ _SETTINGS = (
     ),
     (re.compile(r"storm-control action (shutdown|trap)"), "storm-control action *", "storm_action"),
     (re.compile(r"no storm-control action (\S+)"), "no storm-control action *", None),
+    (re.compile(r"load-interval counter 1 (\d+)"), "load-interval *", "load_interval"),
+    (re.compile(r"no load-interval counter 1"), "no load-interval *", None),
     (re.compile(r"switchport"), "switchport", None),
     (re.compile(r"no switchport"), "no switchport", None),
     (re.compile(r"ip address (\S+)"), "ip address *", "ip"),
@@ -1278,6 +1280,8 @@ class FakeSwitch:
             state["routed"] = True
         elif cmd.startswith("no storm-control action"):
             state.pop("storm_action", None)
+        elif cmd == "no load-interval counter 1":
+            state.pop("load_interval", None)
         elif cmd.startswith("no ip address"):
             if state.get("ip") != match.group(1):
                 return _error(ident, "% Address not found\n")
@@ -1951,6 +1955,9 @@ class FakeSwitch:
                     row["eth_mtu"] = state["mtu"]
                 if "fec" in state:
                     row["eth_admin_fec_state"] = state["fec"]
+                if "load_interval" in state:
+                    row["eth_load_interval1_rx"] = state["load_interval"]
+                    row["eth_load_interval1_tx"] = state["load_interval"]
                 if "desc" in state:
                     if state["desc"]:
                         row["desc"] = state["desc"]

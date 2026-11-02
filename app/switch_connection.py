@@ -137,6 +137,12 @@ class SwitchConnection:
         object groups, VLAN access maps and TCAM regions."""
         return self.changes_enabled and self.role_version >= 14
 
+    @property
+    def traffic_changes_enabled(self) -> bool:
+        """True once that role includes the traffic measuring rules (role version 15
+        or later): how long the front ports average their In and Out rates over."""
+        return self.changes_enabled and self.role_version >= 15
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

@@ -267,7 +267,7 @@ def test_the_ports_page_offers_live_figures(logged_in: TestClient, switch: FakeS
     assert 'data-live-url="/live/ports?show=up&amp;color=traffic"' in page
     for name in ("banner", "kpis", "face", "rows", "ratenote"):
         assert f'data-live-region="{name}"' in page
-    assert "average over the last 30 seconds" in page
+    assert "own average, over the last 30 seconds unless" in page
 
 
 def test_the_ports_answer_carries_each_region_once(

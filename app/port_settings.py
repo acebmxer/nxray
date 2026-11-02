@@ -32,7 +32,9 @@ from typing import Any
 
 from app.nxapi import (
     BREAKOUT_MAPS,
+    DEFAULT_LOAD_INTERVAL,
     FEC_MODES,
+    LOAD_INTERVALS,
     MTU_MAX,
     MTU_MIN,
     ON_OFF,
@@ -547,3 +549,60 @@ def guess_breakout_map(sibling_speeds: list[str]) -> str | None:
     if found == {"10000"}:
         return "10g-4x"
     return None
+
+
+def load_interval_label(seconds: int) -> str:
+    """30 -> "30 seconds (the switch's default)", 60 -> "1 minute", 0 -> "unknown"."""
+    if seconds <= 0:
+        return "unknown"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        text = f"{minutes} minute{'s' if minutes != 1 else ''}"
+    else:
+        text = f"{seconds} seconds"
+    return f"{text} (the switch's default)" if seconds == DEFAULT_LOAD_INTERVAL else text
+
+
+@dataclass(frozen=True)
+class LoadIntervalPlan:
+    """What a rate-interval form asks of a port: ``seconds`` None goes back to the default."""
+
+    seconds: int | None
+    empty: bool
+    lines: list[str]
+    warnings: list[str]
+
+
+def plan_load_interval(name: str, current: int, choice: str) -> LoadIntervalPlan:
+    """Check a rate-interval choice against the port, or raise ValueError.
+
+    ``choice`` is one of LOAD_INTERVALS as text, or "default" for the switch's
+    own 30 seconds. ``current`` is what ``show interface`` reports (0 unknown);
+    asking for what the port already has is ``empty``, and nothing is sent.
+    """
+    text = choice.strip()
+    if text == "default":
+        seconds: int | None = None
+        wanted = DEFAULT_LOAD_INTERVAL
+    elif text.isascii() and text.isdigit() and int(text) in LOAD_INTERVALS:
+        seconds = int(text)
+        wanted = seconds
+    else:
+        raise ValueError(
+            "Pick how long to average over: "
+            + ", ".join(str(n) for n in LOAD_INTERVALS)
+            + " seconds, or the switch's default."
+        )
+    if current == wanted:
+        return LoadIntervalPlan(seconds, True, [], [])
+    line = (
+        f"Average {name}'s In and Out rates over {load_interval_label(wanted)}"
+        f"{f', instead of {load_interval_label(current)}' if current else ''}."
+    )
+    warnings = []
+    if wanted < DEFAULT_LOAD_INTERVAL:
+        warnings.append(
+            "A shorter average follows bursts more closely, so the switch's own In and Out "
+            "figures jump about more. It does not change the traffic itself."
+        )
+    return LoadIntervalPlan(seconds, False, [line], warnings)

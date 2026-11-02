@@ -25,7 +25,7 @@
 {% macro busiest_devices() %}
 <section class="card" id="busiest" data-live-region="busiest">
   <h2 class="card-title">Busiest devices</h2>
-  <p class="lead">The devices with the most traffic right now, for each device that is alone on an access port: that port's traffic is the device's own. Sends is what came in on the port, receives what went out of it, averaged over the last 30 seconds.</p>
+  <p class="lead">The devices with the most traffic right now, for each device that is alone on an access port: that port's traffic is the device's own. Sends is what came in on the port, receives what went out of it, the switch's own average (over 30 seconds unless the port's rate average was changed).</p>
   {% if busiest %}
   <table class="table table-devices">
     <thead>

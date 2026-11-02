@@ -23,7 +23,8 @@ communities and trap receivers) and reading the running configuration; IPv4
 and IPv6 ACLs and where they apply, port security on the ports, reading the
 saved configuration and making and deleting checkpoints; DHCP snooping, the
 DHCP relay, ARP inspection, IP Source Guard, MAC ACLs, object groups, VLAN
-access maps and the TCAM regions' sizes; and saving the configuration.
+access maps and the TCAM regions' sizes; how long the front ports average
+their traffic rates over; and saving the configuration.
 Everything else (mgmt0, a VLAN's own on/off state, accounts, SNMP users and
 read-write communities, rolling the switch back, reloading it, other
 switch-wide settings) stays refused by the switch itself, not just by NXray.
@@ -59,7 +60,8 @@ neighbor rules (CDP, LLDP and the MAC address table), 6 the port-channel
 rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
-admin rules, 13 the security and config rules, 14 the layer 2 security rules.
+admin rules, 13 the security and config rules, 14 the layer 2 security rules,
+15 the traffic measuring rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -502,11 +504,22 @@ LAYER2_RULES = (
     "rule 227 permit command conf t ; hardware access-list tcam region *",
 )
 
+# Traffic measuring rules, added in ROLE_VERSION 15: how long a port's In and
+# Out rates are averaged over (``load-interval counter 1 <seconds>``, and its
+# ``no`` form to go back to the default). Written after Cisco's NX-OS 9.3
+# Interfaces Configuration Guide and the shapes of the rules proven before; not
+# yet tried on a switch. The port list stays as it was, so this needs no SSH
+# save and no wait.
+TRAFFIC_RULES = (
+    "rule 228 permit command conf t ; interface * ; load-interval *",
+    "rule 229 permit command conf t ; interface * ; no load-interval *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 14
+ROLE_VERSION = 15
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -523,6 +536,7 @@ _ADDED_BY_VERSION = {
     12: "switch admin",
     13: "security and config",
     14: "layer 2 security",
+    15: "traffic measuring",
 }
 
 
@@ -594,6 +608,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *ADMIN_RULES,
         *SECURITY_RULES,
         *LAYER2_RULES,
+        *TRAFFIC_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

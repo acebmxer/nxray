@@ -285,14 +285,15 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     switch_page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
-        "admin, security and config and layer 2 security changes"
+        "admin, security and config, layer 2 security and traffic measuring changes"
     ) in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
     text = _text(response.text)
     assert (
         "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, "
-        "security and config and layer 2 security changes are on: nxray may now also make, change "
+        "security and config, layer 2 security and traffic measuring changes are on: nxray may "
+        "now also make, change "
         "and delete VLAN" in text
     )
     assert "there is no wait" in text
@@ -420,15 +421,15 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     switch_page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on VRF, static route, routing protocol, spanning tree, switch admin, security "
-        "and config and layer 2 security changes" in switch_page
+        "and config, layer 2 security and traffic measuring changes" in switch_page
     )
     assert "this version of NXray can also make and delete VRFs and move" in switch_page
     enabled.ssh_lines.clear()
     text = _text(_enable_changes(logged_in).text)
     assert (
         "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config and layer 2 security changes are on: nxray may now also make and delete VRFs"
-        in text
+        "config, layer 2 security and traffic measuring changes are on: nxray may now also make "
+        "and delete VRFs" in text
     )
     assert "there is no wait" in text
     # Only rules change: checked and saved over NX-API, no SSH save.
@@ -499,13 +500,14 @@ def test_role_version_8_offers_static_route_changes(
     assert refused.status_code == 400 and "Static route changes are off" in _text(refused.text)
     assert (
         "Turn on static route, routing protocol, spanning tree, switch admin, security and "
-        "config and layer 2 security changes" in _text(logged_in.get("/switch").text)
+        "config, layer 2 security and traffic measuring changes"
+        in _text(logged_in.get("/switch").text)
     )
     text = _text(_enable_changes(logged_in).text)
     assert (
-        "Static route, routing protocol, spanning tree, switch admin, security and config "
-        "and layer 2 security changes are on: nxray may now also add and remove static routes"
-        in text
+        "Static route, routing protocol, spanning tree, switch admin, security and config, layer "
+        "2 security and traffic measuring changes are on: nxray may now also add and remove "
+        "static routes" in text
     )
     assert "there is no wait" in text
     assert "/routing/route/add" in logged_in.get("/routing").text

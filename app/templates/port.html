@@ -114,6 +114,13 @@
   {{ pf.settings_part(forms, ctx) }}
 </section>
 
+{% if port %}
+<section class="card">
+  <h2 class="card-title">Rate average</h2>
+  {{ pf.rate_interval_part(forms, ctx) }}
+</section>
+{% endif %}
+
 {% if settings and (settings.breakout_capable or settings.is_breakout_port) %}
 <section class="card">
   <h2 class="card-title">Split port</h2>

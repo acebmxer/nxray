@@ -600,18 +600,21 @@ def switch_enable_changes(
         "ARP page, and make MAC ACLs, object groups and VLAN access maps and size the TCAM "
         "regions on the ACLs page"
     )
+    traffic_words = (
+        "set how long the front ports average their In and Out rates over on each port's page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-            "static route, routing protocol, spanning tree, switch admin, security and config and "
-            "layer 2 security changes are on: "
+            "static route, routing protocol, spanning tree, switch admin, security and config, "
+            "layer 2 security and traffic measuring changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, {security_words}, and {layer2_words}. "
+            f"{admin_words}, {security_words}, {layer2_words}, and {traffic_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -651,7 +654,9 @@ def switch_enable_changes(
             parts.append(admin_words)
         if connection.role_version < 13:
             parts.append(security_words)
-        parts.append(layer2_words)
+        if connection.role_version < 14:
+            parts.append(layer2_words)
+        parts.append(traffic_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (

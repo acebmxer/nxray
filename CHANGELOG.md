@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **How long a port averages its rates.** The switch's In and Out are its own
+  average over 30 seconds. A port's page and its side panel now show that
+  average and, with the new **traffic measuring changes** on, have a **Rate
+  average** card to set it to 5, 10 or 15 seconds, 1, 2 or 5 minutes, or back
+  to the default (`load-interval counter 1`). It asks first, changes only the
+  figures (never the traffic), and is not saved until Save config. The rate
+  notes now name the real average instead of always saying 30 seconds. Turning
+  it on adds rules 228 and 229 to NXray's role (role version 15) with no wait:
+  an admin presses **Turn on traffic measuring changes** on the Switch page.
+  The values follow Cisco's NX-OS 9.3 guide and have not yet been tried on a
+  switch; a value the switch refuses is shown with its own words (#19).
+
 - **Live figures.** The dashboard, the Ports page, a port's page and the
   Neighbors page can refresh their figures by themselves: pick **Live, 3 s, 5 s,
   10 s, 15 s, 30 s, 60 s** or **Off** (the default) in the top bar, kept per

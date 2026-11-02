@@ -149,7 +149,7 @@
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
       message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes take effect straight
+      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes take effect straight
       away, with no further waits.
     </p>
     <label class="check">
@@ -173,7 +173,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -205,7 +205,9 @@
     page);{% endif %}{% if connection.layer2_security_changes_enabled %}
     set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard (on
     the DHCP and ARP page), make MAC ACLs, object groups and VLAN access maps
-    and size the TCAM regions (on the ACLs page);{% endif %} and save the configuration.
+    and size the TCAM regions (on the ACLs page);{% endif %}{% if connection.traffic_changes_enabled %}
+    set how long the front ports average their In and Out rates over (on each
+    port's own page);{% endif %} and save the configuration.
     The switch refuses it everything else.
   </p>
   {% elif connection.vlan_changes_enabled %}
@@ -264,10 +266,11 @@
     configuration (on the Switch admin page), {% endif %}{% if not connection.security_changes_enabled %}make
     and delete IPv4 and IPv6 ACLs and apply them (on the ACLs page), set port
     security on the front ports (on the Port security page), read the saved
-    configuration and keep checkpoints for backups (on the Config page), {% endif %}and
-    set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard (on
-    the DHCP and ARP page), and make MAC ACLs, object groups and VLAN access
-    maps and size the TCAM regions (on the ACLs page).
+    configuration and keep checkpoints for backups (on the Config page), {% endif %}{% if not connection.layer2_security_changes_enabled %}set
+    DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard (on the
+    DHCP and ARP page), make MAC ACLs, object groups and VLAN access maps and
+    size the TCAM regions (on the ACLs page), {% endif %}and set how long the
+    front ports average their In and Out rates over (on each port's own page).
     NXray's role on the switch ({{ role_name }}) was made
     before that and does not allow it yet. NXray signs in to the switch over SSH
     once more with the admin login below and adds the rules to the role. The
@@ -301,7 +304,7 @@
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes on gives it a role
+    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports, port-channels
     and VLAN interfaces only,
     turning a port on or off, editing its description, setting its mode
@@ -326,7 +329,8 @@
     making, listing and deleting NXray's checkpoints; DHCP snooping, the DHCP
     relay, ARP inspection and its ARP ACLs, IP Source Guard and its fixed
     bindings; MAC ACLs, object groups, VLAN access maps and filters, and the
-    TCAM regions' sizes;
+    TCAM regions' sizes; how long the front ports average their In and Out
+    rates over;
     splitting a 100G port into four and joining
     it again; creating, renaming and deleting VLANs; turning switch features on
     and off; setting how long learned MAC addresses are kept, adding and
@@ -342,7 +346,7 @@
     SSH once with the admin login below, types the role in, and checks it took.
     The admin password is used for this only and never stored.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes", true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes", true) }}
 </section>
 {% endif %}
 

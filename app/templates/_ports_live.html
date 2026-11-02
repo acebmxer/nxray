@@ -5,7 +5,7 @@
 {% from "_icons.html" import icon %}
 
 {% macro window_words() -%}
-{% if rates_window %}over the last {{ rates_window|round|int }} s, measured from the byte counters{% else %}over the last 30 seconds{% endif %}
+{% if rates_window %}over the last {{ rates_window|round|int }} s, measured from the byte counters{% else %}as the switch averages it (over 30 seconds unless a port's rate average was changed){% endif %}
 {%- endmacro %}
 
 {#- Why the figures may be old, and which kind of rate is shown. -#}
@@ -87,5 +87,5 @@ tick-{{ name|replace("/", "-")|replace(" ", "-") }}
 {% endmacro %}
 
 {% macro ratenote() %}
-<p class="note" data-live-region="ratenote">In and Out are {% if rates_window %}the rate measured {{ window_words() }}{% else %}the average over the last 30 seconds{% endif %}; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
+<p class="note" data-live-region="ratenote">In and Out are {% if rates_window %}the rate measured {{ window_words() }}{% else %}the switch's own average, over the last 30 seconds unless a port's rate average was changed{% endif %}; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
 {% endmacro %}

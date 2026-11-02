@@ -398,8 +398,8 @@ def test_role_has_the_layer2_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in LAYER2_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 14
-    assert missing_changes(13) == "layer 2 security changes"
+    assert ROLE_VERSION == 15
+    assert missing_changes(13) == "layer 2 security and traffic measuring changes"
     description = next(line for line in lines if line.startswith("description "))
     assert len(description.removeprefix("description ")) <= 128
     # Restarting is never in the role.

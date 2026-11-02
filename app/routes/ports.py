@@ -32,6 +32,8 @@ from app.neighbor_changes import (
 )
 from app.neighbors import NeighborView, try_load_neighbors
 from app.nxapi import (
+    DEFAULT_LOAD_INTERVAL,
+    LOAD_INTERVALS,
     NxapiClient,
     NxapiCommandError,
     NxapiError,
@@ -60,7 +62,9 @@ from app.port_settings import (
     PortSettings,
     describe_port_settings,
     guess_breakout_map,
+    load_interval_label,
     plan_breakout,
+    plan_load_interval,
     plan_port_settings,
     speed_label,
     try_load_port_settings,
@@ -465,6 +469,9 @@ def port_forms(
         "jumbo_mtu": JUMBO_MTU,
         "neighbors": neighbors,
         "discovery": discovery,
+        "load_intervals": [n for n in LOAD_INTERVALS if n != DEFAULT_LOAD_INTERVAL],
+        "default_load_interval": DEFAULT_LOAD_INTERVAL,
+        "load_interval_label": load_interval_label,
     }
 
 
@@ -1477,4 +1484,89 @@ def port_discovery_change(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
         ),
+    )
+
+
+# ---- how long a port averages its rates over ------------------------------------
+
+
+@router.post("/ports/rate-interval", response_class=HTMLResponse)
+def port_rate_interval_change(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    seconds: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Set how many seconds the switch averages one port's In and Out over
+    (``load-interval counter 1``). Asks first."""
+    require_csrf(request, csrf)
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return answer_port_change(request, username, name, origin, found, **kwargs)
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.traffic_changes_enabled:
+        return again(
+            error=(
+                "Traffic measuring changes are off. An NXray admin turns them on on the "
+                "Switch page first."
+            ),
+            status_code=400,
+        )
+    try:
+        plan = plan_load_interval(name, port.load_interval, seconds)
+    except ValueError as exc:
+        return again(error=str(exc), status_code=400)
+    if plan.empty:
+        return again(notice="Nothing to change: the port already averages over that long.")
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
+                "lines": plan.lines,
+                "warnings": plan.warnings,
+                "action": "/ports/rate-interval",
+                "fields": {
+                    "name": port.name,
+                    "seconds": seconds.strip(),
+                    **(origin.fields if origin else {}),
+                },
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.set_load_interval(name, plan.seconds)
+    except NxapiError as exc:
+        log.warning("Rate interval change on %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    words = " ".join(plan.lines)
+    log.info("Rate interval change on %s by %s: %s", connection.host, username, words)
+    note_activity(request, username, "Ports", f"{name}: {words}", connection.host)
+    return answer_port_change(
+        request,
+        username,
+        name,
+        origin,
+        notice=(f"Done: {words} Not saved yet: Save config keeps it over a restart of the switch."),
     )
