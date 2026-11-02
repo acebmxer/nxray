@@ -24,7 +24,8 @@ commands NXray needs have their own methods (``create_user``,
 ``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
 ``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
 ``set_lacp_system_priority``, ``configure_vlan_interface``,
-``delete_vlan_interface``, ``set_interface_addresses``, ``save_config``), each building
+``delete_vlan_interface``, ``set_interface_addresses``, ``reset_ports``,
+``reset_port_channel``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -1265,6 +1266,30 @@ class NxapiClient:
         some; NXray refuses that before it gets here (app/port_channels.py).
         """
         command = f"no interface port-channel{validate_channel_number(number)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def reset_ports(self, names: Iterable[str]) -> None:
+        """``default interface <name>`` for one or more front-panel ports, in one request.
+
+        Puts each port back to how it came out of the box: no description,
+        a plain access port in VLAN 1, the switch's default speed, MTU, FEC,
+        flow control, storm control and layer, and no IP address. Every name
+        is checked first, so this can only ever send one such command per port.
+        """
+        names = [validate_port_name(name) for name in names]
+        if not names:
+            raise ValueError("no ports given")
+        commands = [f"default interface {name}" for name in names]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def reset_port_channel(self, number: int) -> None:
+        """``default interface port-channel<n>``: the port-channel's own settings
+
+        (its description, LACP minimum links, admin state and layer) go back
+        to the switch's defaults. Its members keep their channel-group
+        membership, which is set on each member port, not on the port-channel.
+        """
+        command = f"default interface port-channel{validate_channel_number(number)}"
         self._send([command], [command], self._target.timeout, allow_text=True)
 
     def configure_port_channel(

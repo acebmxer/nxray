@@ -164,6 +164,14 @@
     <input type="hidden" name="number" value="{{ c.number }}">
     <button type="submit" class="btn btn-quiet">Delete {{ c.name }}</button>
   </form>
+  {% if connection.reset_changes_enabled %}
+  <form method="post" action="/port-channels/reset" class="inline form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="number" value="{{ c.number }}">
+    <button type="submit" class="btn btn-quiet">Reset {{ c.name }} to defaults</button>
+  </form>
+  <p class="note">Clears {{ c.name }}'s own description and LACP minimum links; its members keep their channel-group membership.</p>
+  {% endif %}
   {% if c.members %}<p class="note">A port-channel is deleted once its ports are taken out.</p>{% endif %}
   {% endif %}
 </section>

@@ -54,6 +54,7 @@ from app.port_bulk import (
     plan_bulk,
 )
 from app.port_labels import LABEL_MAX, get_labels, set_label
+from app.port_reset import plan_bulk_reset, port_reset_summary
 from app.port_settings import (
     BREAKOUT_LABELS,
     FEC_LABELS,
@@ -757,6 +758,86 @@ def port_change(
     )
 
 
+@router.post("/ports/reset", response_class=HTMLResponse)
+def port_reset(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Reset one port to how it came out of the box (``default interface``). Asks first."""
+    require_csrf(request, csrf)
+    origin = ports_origin(back, show, color)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return answer_port_change(request, username, name, origin, found, **kwargs)
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.changes_enabled:
+        return again(
+            error="Port changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if not connection.reset_changes_enabled:
+        return again(
+            error=(
+                "Resetting a port is off. An NXray admin presses Update the port list on the "
+                "Switch page first: NXray's role on the switch does not allow it yet."
+            ),
+            status_code=400,
+        )
+    vlans = view.ports.get(name) if view else None
+    line, warnings = port_reset_summary(port, current, vlans)
+    if confirm != "yes":
+        back_url, back_label = change_back(origin, name)
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
+                "lines": [line],
+                "warnings": warnings,
+                "action": "/ports/reset",
+                "fields": {"name": port.name, **(origin.fields if origin else {})},
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.reset_ports([name])
+    except NxapiError as exc:
+        log.warning("reset of %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    settings = request.app.state.settings
+    with open_db(settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    log.info("port reset on %s by %s: %s", connection.host, username, name)
+    note_activity(request, username, "Ports", f"{name} reset to defaults", connection.host)
+    return answer_port_change(
+        request,
+        username,
+        name,
+        origin,
+        notice=(
+            f"Done: {name} was reset to its defaults. Not saved yet: Save config keeps it "
+            "over a restart of the switch."
+        ),
+    )
+
+
 # The Switch page switch each kind of change in the shared form needs: the
 # connection's attribute, and the words of the refusal while it is off.
 BULK_SWITCHES = {
@@ -986,6 +1067,97 @@ def ports_bulk_change(
             notice=f"Done: changed {listed}. {details}{left}{not_saved}",
         )
     return again(error=refusal + not_saved, status_code=400)
+
+
+@router.post("/ports/reset-bulk", response_class=HTMLResponse)
+def ports_reset_bulk(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    names: Annotated[list[str] | None, Form()] = None,
+    show: str = Form("all"),
+    color: str = Form("state"),
+    confirm: str = Form(""),
+) -> Response:
+    """Reset every ticked port to how it came out of the box, in one request each.
+
+    Asks first, naming every ticked port and what it removes.
+    """
+    require_csrf(request, csrf)
+    names = list(dict.fromkeys(names or []))
+
+    def again(**kwargs) -> Response:
+        return render_ports_page(request, username, show=show, color=color, ticked=names, **kwargs)
+
+    connection, target, _ = stored_switch(request)
+    if connection is None or target is None:
+        return again()
+    if not connection.changes_enabled:
+        return again(
+            error="Port changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if not connection.reset_changes_enabled:
+        return again(
+            error=(
+                "Resetting ports is off. An NXray admin presses Update the port list on the "
+                "Switch page first: NXray's role on the switch does not allow it yet."
+            ),
+            status_code=400,
+        )
+    status, found = _read_bulk(request, target, names, {"settings"})
+    if found is None:
+        return again(error=status.message, status_code=400)
+    ports, view, _neighbors, settings, _discovery = found
+    try:
+        chosen, lines, warnings = plan_bulk_reset(ports, names, view, settings)
+    except ValueError as exc:
+        return again(error=f"Not reset: {exc}.", status_code=400)
+
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": "Ports",
+                "back_url": "/ports",
+                "back_label": "All ports",
+                "lines": lines,
+                "warnings": warnings,
+                "action": "/ports/reset-bulk",
+                "fields": {
+                    "names": [port.name for port in chosen],
+                    "show": show,
+                    "color": color,
+                },
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.reset_ports([port.name for port in chosen])
+    except NxapiError as exc:
+        log.warning("bulk reset refused: %s", exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    listed = ", ".join(port.name for port in chosen)
+    log.info("bulk port reset on %s by %s: %s", connection.host, username, listed)
+    note_activity(request, username, "Ports", f"reset to defaults: {listed}", connection.host)
+    plural = "its" if len(chosen) == 1 else "their"
+    return render_ports_page(
+        request,
+        username,
+        show=show,
+        color=color,
+        notice=(
+            f"Done: reset {listed} to {plural} defaults. Not saved yet: Save config keeps it "
+            "over a restart of the switch."
+        ),
+    )
 
 
 def _fill_bulk_form(

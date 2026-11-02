@@ -1069,6 +1069,16 @@ class FakeSwitch:
                 return _ok(ident, None), context
             self.channels.setdefault(number, {})
             return _ok(ident, None), ("interface", name)
+        if match := re.fullmatch(r"default interface (\S+)", cmd):
+            name = match.group(1)
+            rule = "conf t ; default interface *"
+            if not (is_admin or self._role_allows(user, rule, name)):
+                if self._role_allows(user, "interface", None):
+                    return _error(ident, "% Interface permission denied\n"), None
+                return denied, None
+            # As on the switch: back to how it came out of the box.
+            self.port_state.pop(name, None)
+            return _ok(ident, None), context
         if match := re.fullmatch(r"lacp system-priority (\d+)", cmd):
             if not (is_admin or self._role_allows(user, "conf t ; lacp system-priority *", None)):
                 return denied, context

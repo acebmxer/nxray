@@ -605,18 +605,23 @@ def switch_enable_changes(
         "set how long the front ports average their In and Out rates over on each port's page, "
         "and have the switch send sFlow samples to NXray on the Traffic page"
     )
+    reset_words = (
+        "put a port or a port-channel back to how it came out of the box, on its own page or "
+        "the Port-channels page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security and traffic measuring changes are on: "
+            "layer 2 security, traffic measuring and reset to defaults changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, {security_words}, {layer2_words}, and {traffic_words}. "
+            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, and "
+            f"{reset_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -658,7 +663,9 @@ def switch_enable_changes(
             parts.append(security_words)
         if connection.role_version < 14:
             parts.append(layer2_words)
-        parts.append(traffic_words)
+        if connection.role_version < 15:
+            parts.append(traffic_words)
+        parts.append(reset_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (

@@ -172,7 +172,7 @@ def test_role_has_the_traffic_rules() -> None:
     lines = role_lines([PORT], "nxray")
     for rule in TRAFFIC_RULES:
         assert rule in lines
-    assert missing_changes(14) == "traffic measuring changes"
+    assert missing_changes(14) == "traffic measuring and reset to defaults changes"
 
 
 def test_role_version_14_turns_on_traffic_measuring_without_a_wait(
@@ -180,7 +180,7 @@ def test_role_version_14_turns_on_traffic_measuring_without_a_wait(
 ) -> None:
     _db(settings, "UPDATE switch_connection SET role_version = 14")
     page = _text(logged_in.get("/switch").text)
-    assert "Turn on traffic measuring changes" in page
+    assert "Turn on traffic measuring and reset to defaults changes" in page
     enabled.ssh_lines.clear()
     response = logged_in.post(
         "/switch/enable-changes",
@@ -193,7 +193,10 @@ def test_role_version_14_turns_on_traffic_measuring_without_a_wait(
         },
     )
     text = _text(response.text)
-    assert "Traffic measuring changes are on: nxray may now also set how long" in text
+    assert (
+        "Traffic measuring and reset to defaults changes are on: nxray may now also set how long"
+        in text
+    )
     assert "there is no wait" in text
     assert "rule 228 permit command conf t ; interface * ; load-interval *" in enabled.ssh_lines
 

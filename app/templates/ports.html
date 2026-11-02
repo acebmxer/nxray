@@ -269,7 +269,11 @@
     {% for port in ports %}<option value="{{ port.name }}" {% if b.start == port.name %}selected{% endif %}>{{ port.name }}</option>{% endfor %}
   </select>
   <button type="submit" name="fill" value="yes" class="btn btn-quiet">Fill in the form from it</button>
-  <p class="hint">A confirm page lists every ticked port and what changes on it first; ports already set as asked are left out. Start from port copies a port's VLANs, settings and CDP/LLDP into the form, so you can copy a known-good port onto others.</p>
+  {% if connection.reset_changes_enabled %}
+  <span class="toolbar-sep"></span>
+  <button type="submit" formaction="/ports/reset-bulk" class="btn btn-danger">Reset the ticked ports to their defaults</button>
+  {% endif %}
+  <p class="hint">A confirm page lists every ticked port and what changes on it first; ports already set as asked are left out. Start from port copies a port's VLANs, settings and CDP/LLDP into the form, so you can copy a known-good port onto others. Reset the ticked ports clears everything on each and lists what it removes, instead of using the form above.</p>
 </div>
 </aside>
 </form>
@@ -431,6 +435,7 @@
   </div>
   <div class="drawer-foot">
     {% if bulk_on %}{{ pf.power_form(forms, ctx, css="inline", button="btn", off_button="btn btn-danger", words="") }}{% endif %}
+    {{ pf.reset_form(forms, ctx) }}
     <span class="box-gap"></span>
     <a class="btn" href="/ports/detail?name={{ port.name|urlencode }}" title="Charts, counters and every device seen">All of this port →</a>
   </div>

@@ -165,11 +165,11 @@ Port changes are off after setup: NXray's account can only read. To turn
 them on, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config, layer 2 security and traffic measuring changes**, tick the box and press
+security and config, layer 2 security, traffic measuring and reset to defaults changes**, tick the box and press
 **Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config, layer 2 security and traffic measuring changes**. One press turns on all
-fifteen, with a single wait.
+security and config, layer 2 security, traffic measuring and reset to defaults changes**. One press turns on all
+sixteen, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -410,6 +410,7 @@ NXray then:
          rule 229 permit command conf t ; interface * ; no load-interval *
          rule 230 permit command conf t ; sflow *
          rule 231 permit command conf t ; no sflow *
+         rule 232 permit command conf t ; default interface *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -452,7 +453,8 @@ make, list and delete checkpoints; set DHCP snooping, the DHCP relay, ARP
 inspection and IP Source Guard, MAC ACLs, object groups, VLAN access maps and
 the TCAM regions' sizes; set how long the front ports average their In and Out
 rates over, and set up sFlow (where the samples go, how often, from which front
-ports); and save the configuration. The switch
+ports); put a front port or a port-channel back to how it came out of the box
+(`default interface`); and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts, SNMP users and read-write SNMP communities, rolling the switch back
 (the Config page asks for the admin login each time for that), and other
@@ -465,7 +467,7 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -475,9 +477,9 @@ went through without it.
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
 routing protocol, spanning tree, switch admin, security and config, layer 2
-security or traffic measuring changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
-to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134, 1 to 170, 1 to 190 or
-1 to 227. The Switch
+security, traffic measuring or reset to defaults changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
+to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134, 1 to 170, 1 to 190, 1 to
+227 or 1 to 231. The Switch
 page then shows a card named for what is missing (for example **Switch admin
 and security and config changes** or **Security and config changes**): type the
 admin login,
@@ -992,6 +994,10 @@ An install whose role predates the rate average and sFlow gets a **Turn on
 traffic measuring changes** card; it adds rules 228 to 231 with no wait. They
 follow Cisco's NX-OS 9.3 Interfaces and System Management Configuration Guides
 and have not yet been tried on a switch.
+An install whose role predates resetting a port or a port-channel gets a
+**Turn on reset to defaults changes** card; it adds rule 232 with no wait.
+This follows Cisco's NX-OS 9.3 Interfaces Configuration Guide and has not yet
+been tried on a switch.
 
 **How long a port averages its rates.** The switch works out a port's In and
 Out as an average over the last 30 seconds unless told otherwise. With traffic
@@ -1007,6 +1013,26 @@ seconds for the Nexus 9000; if the switch refuses one of these values, the
 page shows the switch's own words. Not saved until you press **Save config**.
 NXray's **Live** refresh works its rates out from the byte counters instead,
 whatever the average (see [Live figures](live.md)).
+
+**Reset to defaults (#21).** With reset changes on (role version 16), a port's
+own page and its side panel have a **Reset to defaults** button, and the
+Ports page's **Change several ports** card has **Reset the ticked ports to
+their defaults**; the Port-channels page has **Reset `<name>` to defaults**
+for each port-channel. All three send `default interface <name>` after a
+confirm page that names everything the port, each ticked port, or the
+port-channel loses: its description, VLANs (mode, access or native VLAN, the
+VLANs a trunk carries), speed, MTU, FEC, flow control, storm control, layer
+(switched or routed, with any IPv4 address) — or says there is nothing to
+remove when it is already a plain, unconfigured access port. A port goes back
+to a plain access port in VLAN 1, turned on; a port-channel's own description
+and LACP minimum links reset, but its members keep their channel-group
+membership, which is set on each member port, not on the port-channel, so the
+confirm page names them and warns that only the port-channel's own settings
+change. The confirm page also warns when a port or port-channel is up: the
+device on it may lose its connection while it resets. NXray refuses rather
+than resetting only part of several ticked ports: an unticked, unknown or
+untickable port stops the whole request and names the reason. Like other
+changes, this is not saved until you press **Save config**.
 
 **Activity.** The **Activity** page (admins only) lists every change made
 through NXray, newest first, with the account, the page it was made on, the
@@ -1049,6 +1075,7 @@ account, page or text, or download it as CSV. Lines are kept for a year.
 | still has ...; take them out first | NXray deletes only an empty port-channel. Take its ports out first |
 | Not turned off: ... still uses ... | The feature is in use (an LACP port-channel, a VLAN interface). Remove that first |
 | NXray's role on the switch does not name this port | The port came from a split or a join. Press **Update the port list** on the Switch page |
+| Resetting a port is off / Resetting ports is off / Resetting a port-channel is off | Port changes were turned on before NXray could reset ports and port-channels. Press **Turn on reset to defaults changes** on the Switch page |
 
 ## The certificate and the SSH host key
 

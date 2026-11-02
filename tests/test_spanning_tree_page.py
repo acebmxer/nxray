@@ -125,8 +125,8 @@ def test_changes_off_before_role_version_11(
     page = logged_in.get("/spanning-tree").text
     assert "Spanning tree changes are off" in _text(page)
     assert (
-        "Turn on spanning tree, switch admin, security and config, layer 2 security and traffic "
-        "measuring changes" in _text(logged_in.get("/switch").text)
+        "Turn on spanning tree, switch admin, security and config, layer 2 security, traffic "
+        "measuring and reset to defaults changes" in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, scope="vlan", setting="priority", action="set",
                       id_vlan="10", v_priority="4096")  # fmt: skip

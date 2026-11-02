@@ -11,6 +11,21 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Reset a port, several ticked ports or a port-channel to its defaults.**
+  A port's own page and its side panel now have a **Reset to defaults**
+  button, the Ports page's **Change several ports** card a **Reset the
+  ticked ports to their defaults** button, and the Port-channels page a
+  **Reset `<name>` to defaults** button for each port-channel. Each sends
+  `default interface <name>` after a confirm page listing everything it
+  removes (description, VLANs, speed, MTU, FEC, flow control, storm control,
+  layer, any IP address) — or says there is nothing to remove when it is
+  already a plain, unconfigured access port; a port-channel's reset names
+  its member ports and says they keep their channel-group membership, which
+  is set on the member, not the port-channel. Warns when a port or
+  port-channel is up, since whatever is plugged in may lose its connection
+  while it resets. This adds rule 232 to role version 16. See
+  [Reset to defaults](docs/switch-setup.md#port-changes) (#21).
+
 - **Traffic per VLAN and per device, measured with sFlow.** NXray can now be
   the switch's sFlow collector, which gives real traffic per VLAN and per
   device, trunks and ports with several devices behind them included, on a

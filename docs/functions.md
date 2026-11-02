@@ -256,7 +256,11 @@ the Switch admin page; the lines come from `switch_admin.build_admin_change`),
 `dhcp_security.build_dhcp_change`), `create_checkpoint(name)` and
 `delete_checkpoint(name)` (NXray's own `nxray-<n>` switch checkpoints),
 `rollback_to_checkpoint(name)` (sent only with the switch admin login the
-Config page asks for; NX-OS rolls back all or nothing)
+Config page asks for; NX-OS rolls back all or nothing),
+`reset_ports(names)` (`default interface <name>` for one or more front
+ports: back to how they came out of the box) and `reset_port_channel(number)`
+(the same for a port-channel's own settings; its members keep their
+channel-group membership)
 and `save_config()`; each builds its commands from checked values.
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
@@ -546,6 +550,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `channel_create` | `(request, username, csrf, number, ports, mode, fast_rate, description, confirm) -> Response` | `POST /port-channels/create`: asks to confirm, then makes a port-channel from free ports | router | v0.1.0 |
 | `channel_delete` | `(request, username, csrf, number, confirm) -> Response` | `POST /port-channels/delete`: refuses a port-channel that still has ports (naming them), else asks to confirm and deletes it | router | v0.1.0 |
 | `channel_remove` | `(request, username, csrf, port, confirm) -> Response` | `POST /port-channels/remove`: asks to confirm, then takes a port out of its port-channel | router | v0.1.0 |
+| `channel_reset` | `(request, username, csrf, number, confirm) -> Response` | `POST /port-channels/reset`: asks to confirm, then resets a port-channel's own settings (`default interface`); needs reset changes (role version 16) | router | v0.2.0 |
 | `channel_settings` | `(request, username, csrf, number, description, min_links, confirm) -> Response` | `POST /port-channels/settings`: asks to confirm, then sets a port-channel's description and LACP minimum links | router | v0.1.0 |
 | `port_channels_page` | `(request, username) -> Response` | `GET /port-channels`: every port-channel with its ports, how they joined, their LACP rate and priority and the device at the other end, read live; operators and admins change them | router | v0.1.0 |
 | `port_lacp` | `(request, username, csrf, port, rate, priority, confirm) -> Response` | `POST /port-channels/port-lacp`: asks to confirm, then sets one member's LACP rate and port priority; a rate change only while the port is off | router | v0.1.0 |
@@ -556,6 +561,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_discovery_change` | `(request, username, csrf, name, cdp, lldp_transmit, lldp_receive, lldp_shown, back, show, color, confirm) -> Response` | `POST /ports/discovery`: asks to confirm, then turns CDP and LLDP sending and listening on or off on one port; an unticked box means off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs, settings and connected devices; 404 for an unknown name | router | v0.1.0 |
 | `port_rate_interval_change` | `(request, username, csrf, name, seconds, back, show, color, confirm) -> Response` | `POST /ports/rate-interval`: asks to confirm, then sets how long the switch averages one port's In and Out over; needs traffic measuring changes (role version 15) | router | v0.2.0 |
+| `port_reset` | `(request, username, csrf, name, back, show, color, confirm) -> Response` | `POST /ports/reset`: asks to confirm, then resets one port to how it came out of the box (`default interface`); needs reset changes (role version 16); `back=ports` answers on the Ports page with the port's side panel open | router | v0.2.0 |
+| `ports_reset_bulk` | `(request, username, csrf, names, show, color, confirm) -> Response` | `POST /ports/reset-bulk`: asks to confirm, naming every ticked port and what it removes, then resets each; needs reset changes (role version 16) | router | v0.2.0 |
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, back, show, color, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, back, show, color, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label, back, show, color) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
@@ -1036,6 +1043,18 @@ A port-channel's LACP minimum links appears only in `show running-config`,
 which NXray's role may not read, so its form has no current value.
 NXray refuses to delete a port-channel that still has ports; the switch itself
 would take them out silently.
+
+## `app/port_reset.py` — resetting a port or a port-channel to its defaults
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `port_reset_summary` | `(port, settings, vlans) -> tuple[str, list[str]]` | The confirm line for resetting one port: everything it removes (description, VLANs, speed, MTU, FEC, flow control, storm control, layer, IP address), or that it is already a plain access port; a warning when it is up | `routes/ports.port_reset`, `plan_bulk_reset` | v0.2.0 |
+| `plan_bulk_reset` | `(ports, names, view, settings) -> tuple[list[Port], list[str], list[str]]` | Every ticked port, in front-panel order, with one confirm line each and every warning once; `ValueError` naming any ticked port the switch does not have | `routes/ports.ports_reset_bulk` | v0.2.0 |
+| `channel_reset_summary` | `(channel) -> tuple[str, list[str]]` | The confirm line for resetting a port-channel's own settings (its description); warns which member ports it affects and that they keep their channel-group membership | `routes/port_channels.channel_reset` | v0.2.0 |
+
+`NxapiClient.reset_ports` and `reset_port_channel` (app/nxapi.py) send
+`default interface <name>`; the role rule for it is `RESET_RULES`
+(app/port_changes.py, `ROLE_VERSION` 16).
 
 ## `app/protocols.py` — routing protocols as data: fields, settings, scopes
 

@@ -25,7 +25,8 @@ saved configuration and making and deleting checkpoints; DHCP snooping, the
 DHCP relay, ARP inspection, IP Source Guard, MAC ACLs, object groups, VLAN
 access maps and the TCAM regions' sizes; how long the front ports average
 their traffic rates over, and sFlow (where the samples go, how often, and from
-which ports); and saving the configuration.
+which ports); resetting a port or a port-channel to its defaults
+(``default interface``); and saving the configuration.
 Everything else (mgmt0, a VLAN's own on/off state, accounts, SNMP users and
 read-write communities, rolling the switch back, reloading it, other
 switch-wide settings) stays refused by the switch itself, not just by NXray.
@@ -62,7 +63,7 @@ rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
-15 the traffic measuring rules.
+15 the traffic measuring rules, 16 the reset rule.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -521,11 +522,20 @@ TRAFFIC_RULES = (
     "rule 231 permit command conf t ; no sflow *",
 )
 
+# Reset rule, added in ROLE_VERSION 16: ``default interface <name>``, typed in
+# configuration mode, outside any port's own lines (as the breakout lines in
+# SETTINGS_RULES are). It covers a front-panel port or a port-channel, since
+# both are named after "default interface" and the role already names every
+# one of each in its port list. Written after Cisco's NX-OS 9.3 Interfaces
+# Configuration Guide; not yet tried on a switch. The port list stays as it
+# was, so this needs no SSH save and no wait.
+RESET_RULES = ("rule 232 permit command conf t ; default interface *",)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 15
+ROLE_VERSION = 16
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -543,6 +553,7 @@ _ADDED_BY_VERSION = {
     13: "security and config",
     14: "layer 2 security",
     15: "traffic measuring",
+    16: "reset to defaults",
 }
 
 
@@ -599,7 +610,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         f"role name {ROLE_NAME}",
         # Kept short: NX-OS takes up to 128 characters here.
         "description NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
-        "switch admin, ACLs, port security, DHCP, ARP, checkpoints",
+        "admin, ACLs, port security, DHCP, ARP, checkpoints, reset",
         *ROLE_RULES,
         *VLAN_RULES,
         *SETTINGS_RULES,
@@ -615,6 +626,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *SECURITY_RULES,
         *LAYER2_RULES,
         *TRAFFIC_RULES,
+        *RESET_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

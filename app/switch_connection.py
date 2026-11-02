@@ -145,6 +145,12 @@ class SwitchConnection:
         or later): how long the front ports average their In and Out rates over."""
         return self.changes_enabled and self.role_version >= 15
 
+    @property
+    def reset_changes_enabled(self) -> bool:
+        """True once that role includes the reset rule (role version 16 or later):
+        putting a port or a port-channel back to how it came out of the box."""
+        return self.changes_enabled and self.role_version >= 16
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:

@@ -122,7 +122,9 @@ def test_changes_off_before_role_version_14(
     _db(settings, "UPDATE switch_connection SET role_version = 13")
     assert "Layer 2 security changes are off" in _text(logged_in.get("/security/dhcp").text)
     switch_page = _text(logged_in.get("/switch").text)
-    assert "Turn on layer 2 security and traffic measuring changes" in switch_page
+    assert (
+        "Turn on layer 2 security, traffic measuring and reset to defaults changes" in switch_page
+    )
     refused = _change(logged_in, DHCP, scope="switch", setting="snooping", action="set")
     assert refused.status_code == 400
     assert "Layer 2 security changes are off" in _text(refused.text)
@@ -142,7 +144,8 @@ def test_role_version_13_turns_on_layer2_without_a_wait(
     enabled.ssh_lines.clear()
     text = _enable(logged_in)
     assert (
-        "Layer 2 security and traffic measuring changes are on: nxray may now also set DHCP "
+        "Layer 2 security, traffic measuring and reset to defaults changes are on: nxray may "
+        "now also set DHCP "
         "snooping" in text
     )
     assert "there is no wait" in text

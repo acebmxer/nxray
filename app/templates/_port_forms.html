@@ -50,6 +50,22 @@
 <p class="lead">Port changes are off. {% if ctx.role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn this port on or off, edit its description and set its VLANs.</p>
 {% endmacro %}
 
+{% macro reset_form(f, ctx) %}
+{% if ctx.can_change and ctx.connection.changes_enabled and ctx.connection.reset_changes_enabled %}
+<form method="post" action="/ports/reset" class="inline-actions">
+  <input type="hidden" name="csrf" value="{{ ctx.csrf }}">
+  <input type="hidden" name="name" value="{{ f.port.name }}">
+  {{ origin(ctx) }}
+  <button type="submit" class="btn btn-danger">Reset to defaults</button>
+</form>
+<p class="note">Clears everything NXray can set on this port (its description, VLANs, speed, MTU, FEC, flow control, storm control, layer, and any IP address) and leaves it a plain, unconfigured access port in VLAN 1, turned on. Asks you to confirm first and lists what it removes.</p>
+{% elif ctx.can_change and ctx.connection.changes_enabled %}
+<p class="lead">Resetting ports is off. {% if ctx.role == "admin" %}<a href="/switch">Turn it on on the Switch page</a>{% else %}An NXray admin can turn it on on the Switch page{% endif %} to reset a port to its defaults.</p>
+{% elif ctx.can_change %}
+{{ changes_off(ctx) }}
+{% endif %}
+{% endmacro %}
+
 {% macro label_form(f, ctx) %}
 {% if ctx.can_change %}
 <form method="post" action="/ports/label" class="stack form-narrow">

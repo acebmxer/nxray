@@ -134,6 +134,15 @@
   {{ pf.vlans_part(forms, ctx) }}
 </section>
 {% endif %}
+
+<section class="card">
+  <h2 class="card-title">Reset this port</h2>
+  {% if not can_change %}
+  <p class="lead">Your role ({{ role }}) can look at ports but not change them.</p>
+  {% else %}
+  {{ pf.reset_form(forms, ctx) }}
+  {% endif %}
+</section>
 {{ live.trail() }}
 {{ range_links("/ports/detail", range, ranges, "name=" ~ (name|urlencode) ~ "&") }}
 {% for view in charts %}

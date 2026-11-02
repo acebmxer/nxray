@@ -181,60 +181,65 @@ def test_role_has_the_neighbor_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in NEIGHBOR_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 15
+    assert ROLE_VERSION == 16
     # Rule numbers carry on from the feature rules and never repeat.
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 232))
+    assert numbers == list(range(1, 233))
 
 
 def test_missing_changes_names_neighbor_changes() -> None:
     assert missing_changes(4) == (
         "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
-        "tree, switch admin, security and config, layer 2 security and traffic measuring changes"
+        "tree, switch admin, security and config, layer 2 security, traffic measuring and "
+        "reset to defaults changes"
     )
     assert (
         missing_changes(3)
         == "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
-        "protocol, spanning tree, switch admin, security and config, layer 2 security and "
-        "traffic measuring changes"
+        "protocol, spanning tree, switch admin, security and config, layer 2 security, "
+        "traffic measuring and reset to defaults changes"
     )
     assert missing_changes(1) == (
         "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
         "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-        "security and traffic measuring changes"
+        "security, traffic measuring and reset to defaults changes"
     )
     assert missing_changes(6) == (
         "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, "
-        "security and config, layer 2 security and traffic measuring changes"
+        "security and config, layer 2 security, traffic measuring and reset to defaults changes"
     )
     assert (
         missing_changes(7)
         == "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config, layer 2 security and traffic measuring changes"
+        "config, layer 2 security, traffic measuring and reset to defaults changes"
     )
     assert (
         missing_changes(8)
         == "static route, routing protocol, spanning tree, switch admin, security and config, "
-        "layer 2 security and traffic measuring changes"
+        "layer 2 security, traffic measuring and reset to defaults changes"
     )
     assert missing_changes(9) == (
-        "routing protocol, spanning tree, switch admin, security and config, layer 2 security "
-        "and traffic measuring "
-        "changes"
+        "routing protocol, spanning tree, switch admin, security and config, layer 2 security, "
+        "traffic measuring "
+        "and reset to defaults changes"
     )
     assert missing_changes(10) == (
-        "spanning tree, switch admin, security and config, layer 2 security and traffic "
-        "measuring changes"
+        "spanning tree, switch admin, security and config, layer 2 security, traffic "
+        "measuring and reset to defaults changes"
     )
     assert missing_changes(11) == (
-        "switch admin, security and config, layer 2 security and traffic measuring changes"
+        "switch admin, security and config, layer 2 security, traffic measuring and reset to "
+        "defaults changes"
     )
     assert missing_changes(12) == (
-        "security and config, layer 2 security and traffic measuring changes"
+        "security and config, layer 2 security, traffic measuring and reset to defaults changes"
     )
-    assert missing_changes(13) == "layer 2 security and traffic measuring changes"
-    assert missing_changes(14) == "traffic measuring changes"
-    assert missing_changes(15) == ""
+    assert (
+        missing_changes(13) == "layer 2 security, traffic measuring and reset to defaults changes"
+    )
+    assert missing_changes(14) == "traffic measuring and reset to defaults changes"
+    assert missing_changes(15) == "reset to defaults changes"
+    assert missing_changes(16) == ""
 
 
 def test_the_role_lets_the_account_make_neighbor_changes() -> None:
