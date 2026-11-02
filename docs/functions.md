@@ -185,6 +185,9 @@ raises, all handled in `main.create_app`.
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 | `validate_checkpoint_name` | `(name: str) -> str` | Refuses any checkpoint name but NXray's own, `nxray-<number>` | `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` | v0.1.0 |
+| `sflow_data_source` | `(name) -> str` | `Ethernet1/5` -> `ethernet 1/5`, as `sflow data-source interface` takes a front port | `NxapiClient.configure_sflow` | v0.2.0 |
+| `validate_sflow_address` | `(text) -> str` | An IPv4 address for sFlow's collector or agent; refuses 0.0.0.0, broadcast, multicast and loopback | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
+| `validate_sflow_vrf` | `(name) -> str` | The VRF the switch reaches the collector in: `default`, `management` or a VRF name | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
 | `validate_vlan_id` | `(value: int \| str) -> int` | A VLAN number 1-4094, else `ValueError` | VLAN client methods, `vlans`, `routes/vlans` | v0.1.0 |
 | `validate_vlan_name` | `(name: str) -> str` | A VLAN name the switch stores: 1-32 letters, digits, `.`, `-`, `_` | `NxapiClient.configure_vlan`, `routes/vlans` | v0.1.0 |
@@ -214,7 +217,11 @@ settings, only the ones given), `breakout_port(name, mapping)` and
 `join_port(name, mapping)` (split a 100G port into four, or join them;
 `10g-4x` or `25g-4x` only), `set_load_interval(name, seconds)` (how long one
 port averages its In and Out over: `load-interval counter 1 <seconds>` for one
-of `LOAD_INTERVALS`, or `no load-interval counter 1` for None), `set_feature(command, enabled)` (`feature X` or
+of `LOAD_INTERVALS`, or `no load-interval counter 1` for None),
+`configure_sflow(sampling_rate=, collector=, vrf=, collector_port=, agent=,
+add_ports=, remove_ports=)` (where the switch sends its sFlow samples, how
+often, and which front ports it samples; only the values given; the collector
+with its VRF), `set_feature(command, enabled)` (`feature X` or
 `no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
 `no feature ssh`), `set_port_discovery(name, cdp=, lldp_transmit=,
 lldp_receive=)` (CDP and LLDP on one port, only the ones given),
@@ -320,6 +327,7 @@ none reads or changes "the" switch by default.
 | `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
 | `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, switch_id, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
+| `set_sflow_agent` | `(conn, switch_id, agent) -> None` | Remembers the sFlow agent address NXray set on a switch, so the collector knows its datagrams | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
 | `set_unsaved_changes` | `(conn, switch_id, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
@@ -514,6 +522,11 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `ports_bulk_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `port_discovery_change`, `routes/vlans`, `routes/features`, `routes/neighbors` | v0.1.0 |
 | `feature_set` | `(request, username, csrf, name, state, confirm) -> Response` | `POST /features/set`: asks to confirm, then turns one feature on or off; admin only; refuses what `Feature.refusal` names | router | v0.1.0 |
 | `features_page` | `(request, username) -> Response` | `GET /features`: every switch feature by group with its state, read live; every role looks, admins change | router | v0.1.0 |
+| `device_rows` | `(sends, receives, neighbors) -> list[DeviceRow]` | The Traffic page's busiest devices both ways, with each one's maker, IP addresses and port from the MAC and ARP tables | `routes/traffic._render` | v0.2.0 |
+| `render_traffic_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Traffic page with a message | `routes/switch_page.switch_save` | v0.2.0 |
+| `traffic_page` | `(request, username) -> Response` | `GET /traffic?range=&mac=`: traffic per VLAN and per device measured with sFlow, the collector's state and sFlow on the switch; every role looks | router | v0.2.0 |
+| `traffic_sflow_off` | `(request, username, csrf, confirm) -> Response` | `POST /traffic/sflow-off`: asks to confirm, then turns the sflow feature off; needs traffic measuring changes | router | v0.2.0 |
+| `traffic_sflow_setup` | `(request, username, csrf, collector, vrf, collector_port, agent, sampling_rate, scope, ports, confirm) -> Response` | `POST /traffic/sflow`: asks to confirm, then turns sflow on if needed and sends only what changes; stores the agent address; needs traffic measuring changes | router | v0.2.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
 | `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
@@ -856,6 +869,42 @@ totals and `alerts.AlertMonitor` apart.
 These are estimates from per-port counters; what each leaves out is in
 [Traffic per VLAN and per device](traffic.md). `DeviceTraffic` names the rates
 from the device's side (it *sends* what comes in on the port).
+
+## `app/sflow.py` — the sFlow collector: traffic per VLAN and per device, measured
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `agent_addresses` | `(connections) -> dict[str, int]` | Which agent address is which switch, from (id, host, stored agent): the stored agent, else the host when it is an IP address | `load_agents` | v0.2.0 |
+| `decode_datagram` | `(data: bytes) -> Datagram` | One sFlow version 5 datagram's flow samples (formats 1 and 3: raw header, Ethernet frame and extended switch records), bounds-checked; raises `SflowError` | `SflowCollector.receive` | v0.2.0 |
+| `device_label` | `(item) -> str` | A device item in words (`Other devices` for the left-over) | the Traffic page | v0.2.0 |
+| `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts` | v0.2.0 |
+| `latest_minute` | `(conn, switch_id) -> float \| None` | When a switch's newest stored minute began | `routes/traffic` | v0.2.0 |
+| `load_agents` | `(db_path) -> dict[str, int]` | `agent_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
+| `minute_rows` | `(switch_id, minute, totals) -> list[SflowRow]` | One minute's rows: every VLAN, the busiest `MAX_DEVICES_PER_MINUTE` devices each way, the rest as `other` | `SflowCollector.drain` | v0.2.0 |
+| `parse_frame_header` | `(header: bytes) -> dict` | MAC addresses, 802.1Q VLAN and IPv4 or IPv6 addresses from the first bytes of an Ethernet frame | `decode_datagram` | v0.2.0 |
+| `purge_sflow` | `(conn, now, keep_days) -> int` | Deletes rows older than `NXRAY_SFLOW_KEEP_DAYS` | `run_collector` | v0.2.0 |
+| `run_collector` | `(sock, collector, db_path, keep_days, stop, clock=time.time) -> None` | The listener's loop: receive, write the minutes that are over every 10 s, look the switches up again every 30 s, purge hourly; writes what is left when stopped | `start_collector` | v0.2.0 |
+| `sflow_charts` | `(conn, switch_id, key, now, mac="") -> list[ChartView]` | The busiest VLANs over a range, and one device's sends and receives when `mac` is given | `routes/traffic` | v0.2.0 |
+| `start_collector` | `(port, collector, db_path, keep_days) -> Event \| None` | Listens on UDP `port` on a thread; None when the port is 0 or cannot be opened (logged) | `main.lifespan` | v0.2.0 |
+| `store_rows` | `(conn, rows) -> None` | Adds rows to `sflow_traffic`; a minute written twice adds up | `run_collector` | v0.2.0 |
+| `top_items` | `(conn, switch_id, kind, *, start, end, limit=20) -> list[TopItem]` | The busiest VLANs or devices over a range, with their average in bits per second | `sflow_charts`, `routes/traffic` | v0.2.0 |
+| `vlan_label` | `(item) -> str` | `VLAN 10`, or `VLAN not given` | the Traffic page, `sflow_charts` | v0.2.0 |
+
+`SflowCollector` (class, `app.state.sflow_collector`) adds samples up in memory
+per switch and minute: `receive(data, now=None)` counts a datagram only when its
+agent address is one of NXray's switches (`set_agents`), else notes the address
+(`unknown_agents()`); `drain(now, everything=False)` hands out the minutes that
+are over; `status(switch_id)` is what was heard since NXray started. Kinds are
+`VLAN` (`vlan`), `MAC_SENDS` (`mac_out`) and `MAC_RECEIVES` (`mac_in`).
+
+## `app/sflow_switch.py` — sFlow on the switch
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `load_sflow_config` | `(client) -> SflowConfig` | `show feature`, then `show sflow` as text while the feature is on | `routes/traffic._read` | v0.2.0 |
+| `parse_sflow_text` | `(text) -> SflowConfig` | `show sflow`'s sampling rate, collector and VRF, port, agent and sampled ports (ranges expanded); 0.0.0.0 reads as not set | `load_sflow_config` | v0.2.0 |
+| `plan_sflow` | `(current, ports, form) -> SflowPlan` | Checks the setup form (addresses, VRF, port, rate, which ports) and keeps only what changes, with the confirm page's lines and warnings | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
+| `sflow_form` | `(current, *, collector, agent, port, front=()) -> dict` | The setup form filled with what the switch has, else with NXray's guesses; every front port sampled reads as "every front port" | `routes/traffic._render` | v0.2.0 |
 
 ## `app/charts.py` — SVG line charts
 

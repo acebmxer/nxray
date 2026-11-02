@@ -37,6 +37,7 @@ from app.routes.routing import render_routing_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
+from app.routes.traffic import render_traffic_page
 from app.routes.vlans import render_vlans_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
@@ -601,7 +602,8 @@ def switch_enable_changes(
         "regions on the ACLs page"
     )
     traffic_words = (
-        "set how long the front ports average their In and Out rates over on each port's page"
+        "set how long the front ports average their In and Out rates over on each port's page, "
+        "and have the switch send sFlow samples to NXray on the Traffic page"
     )
     if not result.had_role:
         minutes = result.pause_seconds // 60
@@ -724,6 +726,8 @@ def switch_save(
             )
         if back == "vlans":
             return render_vlans_page(request, username, error=error, notice=notice)
+        if back == "traffic":
+            return render_traffic_page(request, username, error=error, notice=notice)
         if back == "features":
             return render_features_page(request, username, error=error, notice=notice)
         if back == "neighbors":

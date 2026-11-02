@@ -78,6 +78,10 @@ class Settings:
     # are cheap; the MAC and ARP tables cost the switch more.
     live_min_interval: int = 2
     live_clients_min_interval: int = 10
+    # The sFlow collector (app/sflow.py): the UDP port it listens on, 0 for
+    # off, and how many days of measured traffic it keeps.
+    sflow_port: int = 0
+    sflow_keep_days: int = 7
 
     # Derived paths. Kept here so no other module builds a path by hand.
     db_path: Path = field(init=False)
@@ -158,6 +162,7 @@ def load_settings() -> Settings:
 
     live_min_interval = _env_int("NXRAY_LIVE_MIN_INTERVAL", 2, 1, 60)
     live_clients_min_interval = _env_int("NXRAY_LIVE_CLIENTS_MIN_INTERVAL", 10, 1, 300)
+    sflow_port = _env_int("NXRAY_SFLOW_PORT", 0, 0, 65535)
 
     return Settings(
         data_dir=data_dir,
@@ -176,4 +181,6 @@ def load_settings() -> Settings:
         history_interval=history_interval,
         live_min_interval=live_min_interval,
         live_clients_min_interval=live_clients_min_interval,
+        sflow_port=sflow_port,
+        sflow_keep_days=_env_int("NXRAY_SFLOW_KEEP_DAYS", 7, 1, 90),
     )

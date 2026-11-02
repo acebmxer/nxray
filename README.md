@@ -43,8 +43,9 @@ collects errors, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
-built-in HTTPS, update from the Settings page, and see 30 days of temperatures,
-power, CPU, memory and port traffic as graphs.
+built-in HTTPS, update from the Settings page, see 30 days of temperatures,
+power, CPU, memory and port traffic as graphs, and measure traffic per VLAN and
+per device, trunks included, with NXray as the switch's sFlow collector.
 
 ## Screenshots
 
@@ -65,7 +66,7 @@ Taken against the test suite's pretend switch, with made-up devices.
 | [Configuration](docs/configuration.md) | Every setting, its default and what it does |
 | [Switch setup](docs/switch-setup.md) | What setup does on the switch, and how to undo it |
 | [Live figures](docs/live.md) | Pages that refresh themselves: the intervals, what it costs the switch, what Live measures |
-| [Traffic per VLAN and per device](docs/traffic.md) | What the estimates mean, what they leave out, and what would measure them |
+| [Traffic per VLAN and per device](docs/traffic.md) | What the estimates mean and what they leave out, and measuring them with sFlow on the Traffic page |
 | [Function index](docs/functions.md) | Every function in the codebase, in one place |
 | [Contributing](CONTRIBUTING.md) | Development setup and conventions |
 | [Security](SECURITY.md) | Threat model and reporting a vulnerability |
@@ -140,7 +141,7 @@ default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
    errors over time, as graphs. *(built)* Traffic per VLAN and per device,
    estimated from the ports' own counters: *(built)*. Measured per VLAN and
-   per device, trunks included, with NXray as an sFlow collector: *(planned)*.
+   per device, trunks included, with NXray as an sFlow collector: *(built)*.
 10. **Switch face**: a picture of the front panel with every port colored by
     state, speed, VLAN, port-channel, traffic or errors; hover for details,
     click to open the port's side panel, which makes every change to the port;

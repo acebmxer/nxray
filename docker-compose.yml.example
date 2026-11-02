@@ -59,6 +59,11 @@ services:
       # in nxray.env to the same, so plain-HTTP visits are sent to the right
       # port.
       - "8443:8443"
+      # sFlow from the switch, for measured traffic per VLAN and per device
+      # (the Traffic page). Only with NXRAY_SFLOW_PORT=6343 in nxray.env; keep
+      # both numbers the same as that setting. Uncomment to use it:
+      #
+      #   - "6343:6343/udp"
     volumes:
       # Holds the SQLite database, the session signing key and, with
       # built-in HTTPS on, its certificate.

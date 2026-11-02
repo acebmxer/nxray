@@ -116,7 +116,8 @@ USER nxray
 
 VOLUME ["/data"]
 # 8080: the app over plain HTTP, or with HTTPS on, a redirect to 8443.
-EXPOSE 8080 8443
+# 6343/udp: sFlow from the switch, only with NXRAY_SFLOW_PORT=6343.
+EXPOSE 8080 8443 6343/udp
 
 # With HTTPS on this asks nginx, not just the app behind it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

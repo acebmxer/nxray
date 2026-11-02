@@ -45,10 +45,12 @@ from app.routes import (
     switch_accounts,
     switch_admin,
     switch_page,
+    traffic,
     users,
     vlans,
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
+from app.sflow import SflowCollector, start_collector
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
 
@@ -87,11 +89,16 @@ async def lifespan(app: FastAPI):
     stop_sampler = start_sampler(
         settings, lambda: app.state.nxapi_transport, lambda: app.state.alert_transport
     )
+    stop_sflow = start_collector(
+        settings.sflow_port, app.state.sflow_collector, settings.db_path, settings.sflow_keep_days
+    )
 
     yield
 
     if stop_sampler is not None:
         stop_sampler.set()
+    if stop_sflow is not None:
+        stop_sflow.set()
     log.info("NXray stopped")
 
 
@@ -113,6 +120,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.nxapi_transport = None
     # The newest switch readings the self-refreshing pages share (app/live.py).
     app.state.live_cache = LiveCache()
+    # sFlow samples added up per switch and minute (app/sflow.py); listened for
+    # only with NXRAY_SFLOW_PORT set.
+    app.state.sflow_collector = SflowCollector()
     # ...and a pretend SSH shell opener here (app/switch_ssh.py).
     app.state.ssh_opener = None
     # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
@@ -150,6 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(live.router)
     app.include_router(ports.router)
     app.include_router(history.router)
+    app.include_router(traffic.router)
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(neighbors.router)

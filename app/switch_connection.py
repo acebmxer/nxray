@@ -45,6 +45,8 @@ class SwitchConnection:
     # As last read from the switch (dashboard, connection test); empty until then.
     switch_model: str = ""
     nxos_version: str = ""
+    # The sFlow agent address NXray set on the switch; "" until then.
+    sflow_agent: str = ""
 
     @property
     def label(self) -> str:
@@ -209,6 +211,7 @@ def _connection(row: sqlite3.Row) -> SwitchConnection:
         role_vlan_interfaces=bool(row["role_vlan_interfaces"]),
         switch_model=row["switch_model"],
         nxos_version=row["nxos_version"],
+        sflow_agent=row["sflow_agent"],
     )
 
 
@@ -359,17 +362,31 @@ def set_config_saved(conn: sqlite3.Connection, switch_id: int, saved: bool) -> N
 def delete_connection(conn: sqlite3.Connection, switch_id: int) -> bool:
     """Forget a switch: its login, and what NXray kept about it (history, port
     labels, config backups, open problems, which of its accounts belong to
-    which NXray user). True if one was removed.
+    which NXray user, its sFlow traffic). True if one was removed.
 
     The account stays on the switch; only NXray's copy of the login goes. The
     activity log and the alert log keep their lines: they name the switch in
     words.
     """
     cursor = conn.execute("DELETE FROM switch_connection WHERE id = ?", (switch_id,))
-    for table in ("history", "port_labels", "config_backups", "alert_open", "switch_accounts"):
+    for table in (
+        "history",
+        "port_labels",
+        "config_backups",
+        "alert_open",
+        "switch_accounts",
+        "sflow_traffic",
+    ):
         conn.execute(f"DELETE FROM {table} WHERE switch_id = ?", (switch_id,))  # fixed names
     conn.commit()
     return cursor.rowcount > 0
+
+
+def set_sflow_agent(conn: sqlite3.Connection, switch_id: int, agent: str) -> None:
+    """Remember the sFlow agent address NXray set on a switch, so the collector
+    knows its datagrams."""
+    conn.execute("UPDATE switch_connection SET sflow_agent = ? WHERE id = ?", (agent, switch_id))
+    conn.commit()
 
 
 def record_test_result(conn: sqlite3.Connection, switch_id: int, *, ok: bool, message: str) -> None:

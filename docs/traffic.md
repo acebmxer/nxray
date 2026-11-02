@@ -9,6 +9,9 @@ works out two estimates from the port figures it already reads, without
 asking the switch for anything more or changing it. Both are always labelled
 as estimates, and this page says what each one leaves out.
 
+For traffic **measured** per VLAN and per device, trunks included, NXray can
+also be the switch's sFlow collector: see [Measured with sFlow](#measured-with-sflow).
+
 ## Per device
 
 **Where:** the **Busiest devices** card and the **Traffic now** column of
@@ -78,11 +81,11 @@ to another VLAN counts toward the new one from the next sample.
 ## Measuring it instead of estimating it
 
 The estimates above cover access ports only. Measuring traffic per VLAN and
-per device, on trunks too, needs something more from the switch. These are
-the options, cheapest first. **None of them has been checked yet** on the
-switch NXray is built against (an N9K-C92160YC-X on NX-OS 9.3); the
-read-only commands to check each one are listed, and what they show will be
-written here before anything is built on them.
+per device, on trunks too, needs something more from the switch. NXray does it
+with sFlow ([below](#measured-with-sflow)). The switch's own counters are the
+other options; **they have not been checked yet** on the switch NXray is built
+against (an N9K-C92160YC-X on NX-OS 9.3), so NXray does not use them. The
+read-only commands to check each one are listed.
 
 ### VLAN interface counters
 
@@ -109,28 +112,102 @@ To check, read-only:
     show vlan counters
     show vlan id <n> counters
 
-### sFlow, or NetFlow
+### NetFlow
 
-With `feature sflow` on, the switch sends samples of packet headers to a
-collector. Each sample carries the VLAN, the source and destination MAC and
-IP addresses and the port, which gives real per-VLAN and per-device "top
-talkers", trunks included. NXray could be that collector: listen on UDP port
-6343, decode sFlow version 5, add the samples up per VLAN, MAC and IP address
-per minute, and keep them like the rest of history. Sampling is itself an
-estimate, and NXray would show its rate.
-
-Turning it on would be one checked change on the switch (sFlow on, the
-collector set to NXray's address, a sampling rate and the ports to sample),
-built from checked values like every other change NXray makes. Still to
-decide: the listening port and its setting, the Docker port mapping, how
-much space the samples take and how long they are kept, and how samples from
-several switches are told apart.
-
-NetFlow (Flexible NetFlow) is the other option, but which Nexus 9000 models
-support it varies (mainly the -EX and -FX ones).
+NetFlow (Flexible NetFlow) is another way to measure, but which Nexus 9000
+models support it varies (mainly the -EX and -FX ones). NXray uses sFlow,
+below, which the 9000s have.
 
 To check, read-only:
 
+    show feature | include netflow
+
+## Measured with sFlow
+
+With `feature sflow` on, the switch sends **samples** of the frames it
+forwards to a collector over UDP: one frame in every N (the **sampling
+rate**), with the first bytes of the frame, its length and the VLAN it is in.
+NXray can be that collector. Each sampled frame's length times N stands for
+the traffic it was picked from, which gives traffic **per VLAN and per device,
+trunks and ports with several devices included**, on the **Traffic** page
+(under Monitor).
+
+**Turning it on.**
+
+1. In `nxray.env`, set `NXRAY_SFLOW_PORT=6343`. In `docker-compose.yml`,
+   uncomment the `"6343:6343/udp"` line under `ports:` (a compose file from
+   before this has none: add `- "6343:6343/udp"` there). Run `docker compose
+   up -d`. The Traffic page's **NXray's collector** card then says
+   *Listening*.
+2. With **traffic measuring changes** on (role version 15; an admin presses
+   **Turn on traffic measuring changes** on the Switch page), an operator or
+   admin fills in **Send sFlow to NXray** on the Traffic page:
+   - **NXray's address, as the switch reaches it**: an IPv4 address of the
+     machine NXray runs on (filled in from the address your browser used);
+   - **VRF**: `management` when NXray is on the network of the switch's
+     management port, `default` when it is reached over the front ports;
+   - **UDP port**: the left number of the `/udp` line;
+   - **The switch's agent address**: one of the switch's own IPv4 addresses,
+     usually its management address (filled in from the address NXray uses
+     for NX-API). Every datagram carries it, and NXray uses it to tell which
+     of its switches sent it;
+   - **Sample one frame in** 4096 (the switch's default), 8192, 16384, 32768
+     or 65536;
+   - **Ports to sample**: every front port, those up now, or a list such as
+     `Ethernet1/1, Ethernet1/3-6`.
+
+   NXray shows what it will do and asks you to confirm, then turns on the
+   sflow feature if it is off and sends only what changes:
+
+       feature sflow
+       sflow sampling-rate 4096
+       sflow collector-ip <NXray's address> vrf <VRF>
+       sflow collector-port 6343
+       sflow agent-ip <agent address>
+       sflow data-source interface ethernet 1/1
+       ... (one line per port; "no sflow data-source ..." for a port left out)
+
+   Not saved until **Save config**. **Turn sFlow off on the switch** turns the
+   feature off, which removes every sFlow line (the traffic already measured is
+   kept). These lines follow Cisco's NX-OS 9.3 System Management
+   Configuration Guide and have not yet been tried on a switch; if the switch
+   refuses one, the page shows its words.
+
+**What the page shows,** for 1 hour to 30 days (as much as is kept):
+
+- **Busiest VLANs**: each VLAN's average, its share and how many samples it
+  rests on; *VLAN not given* for samples the switch sent without one.
+- **Traffic per VLAN, measured**: the busiest eight VLANs over time.
+- **Busiest devices**: by MAC address, what each sent into the switch
+  (**sends**) and what was sent to it (**receives**), with its maker, IP
+  addresses and port from the switch's MAC address and ARP tables now.
+  **Over time** draws one device's sends and receives.
+
+**What to know.**
+
+- Each frame is counted on the port it **comes in on**, so with every port
+  sampled each frame is counted once. A port left out misses what enters
+  through it.
+- It is an estimate from samples: the more frames, the closer. A device that
+  sends little may get no sample at all in a short range. The page shows how
+  many samples each VLAN rests on.
+- Broadcast and multicast are left out of a device's **receives** (no one
+  device receives them), not out of the VLANs.
+- **Space.** Each minute keeps every VLAN and the 100 busiest devices each way
+  (the rest are added up as *Other devices*), so a switch takes about 1 to
+  15 MB a day; `NXRAY_SFLOW_KEEP_DAYS` (7 by default, up to 90) says how long
+  it is kept. Forgetting a switch deletes its measured traffic.
+- **Several switches** send to the same port; NXray tells them apart by the
+  agent address. Datagrams from an address that is none of its switches are
+  not counted, and the Traffic page names that address.
+- **No password.** sFlow has none: NXray counts only datagrams that name one
+  of its switches, but anyone who can reach the port could send made-up
+  samples. Keep the port on a network you trust, or allow only the switch's
+  address in front of it.
+- What NXray has added up but not yet stored (the current minute) is lost on
+  a restart; stored minutes are kept.
+
+To check what the switch has, read-only:
+
     show feature | include sflow
     show sflow
-    show feature | include netflow

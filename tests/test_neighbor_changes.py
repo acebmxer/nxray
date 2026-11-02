@@ -184,7 +184,7 @@ def test_role_has_the_neighbor_rules() -> None:
     assert ROLE_VERSION == 15
     # Rule numbers carry on from the feature rules and never repeat.
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 230))
+    assert numbers == list(range(1, 232))
 
 
 def test_missing_changes_names_neighbor_changes() -> None:

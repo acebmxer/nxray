@@ -207,7 +207,7 @@
     the DHCP and ARP page), make MAC ACLs, object groups and VLAN access maps
     and size the TCAM regions (on the ACLs page);{% endif %}{% if connection.traffic_changes_enabled %}
     set how long the front ports average their In and Out rates over (on each
-    port's own page);{% endif %} and save the configuration.
+    port's own page) and set up sFlow (on the Traffic page);{% endif %} and save the configuration.
     The switch refuses it everything else.
   </p>
   {% elif connection.vlan_changes_enabled %}
@@ -269,8 +269,10 @@
     configuration and keep checkpoints for backups (on the Config page), {% endif %}{% if not connection.layer2_security_changes_enabled %}set
     DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard (on the
     DHCP and ARP page), make MAC ACLs, object groups and VLAN access maps and
-    size the TCAM regions (on the ACLs page), {% endif %}and set how long the
-    front ports average their In and Out rates over (on each port's own page).
+    size the TCAM regions (on the ACLs page), {% endif %}set how long the
+    front ports average their In and Out rates over (on each port's own page),
+    and set up sFlow, so the switch sends samples of its traffic to NXray (on
+    the Traffic page).
     NXray's role on the switch ({{ role_name }}) was made
     before that and does not allow it yet. NXray signs in to the switch over SSH
     once more with the admin login below and adds the rules to the role. The
@@ -330,7 +332,8 @@
     relay, ARP inspection and its ARP ACLs, IP Source Guard and its fixed
     bindings; MAC ACLs, object groups, VLAN access maps and filters, and the
     TCAM regions' sizes; how long the front ports average their In and Out
-    rates over;
+    rates over; sFlow: where the switch sends its samples, how often it samples
+    and from which front ports;
     splitting a 100G port into four and joining
     it again; creating, renaming and deleting VLANs; turning switch features on
     and off; setting how long learned MAC addresses are kept, adding and

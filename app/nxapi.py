@@ -17,7 +17,8 @@ Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
-``breakout_port``, ``join_port``, ``set_load_interval``, ``set_feature``,
+``breakout_port``, ``join_port``, ``set_load_interval``, ``configure_sflow``,
+``set_feature``,
 ``set_port_discovery``,
 ``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
 ``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
@@ -127,6 +128,13 @@ BREAKOUT_MAPS = ("10g-4x", "25g-4x")
 # not take is refused by it, and the page says so.
 LOAD_INTERVALS = (5, 10, 15, 30, 60, 120, 300)
 DEFAULT_LOAD_INTERVAL = 30
+# sFlow (``NxapiClient.configure_sflow``): one frame in every N is sampled.
+# Cisco's NX-OS 9.3 System Management Configuration Guide gives 4096 to
+# 1000000000 for the Nexus 9000, 4096 by default; NXray offers a few steps.
+# Not yet tried on cisco-25gb.
+SFLOW_SAMPLING_RATES = (4096, 8192, 16384, 32768, 65536)
+SFLOW_DEFAULT_RATE = 4096
+SFLOW_DEFAULT_PORT = 6343
 
 # What may follow "feature": the commands ``feature ?`` lists on an
 # N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
@@ -516,6 +524,39 @@ def validate_vrf_name(name: str) -> str:
     if cleaned.lower() in RESERVED_VRFS:
         raise ValueError(f"the switch keeps the VRF name {cleaned!r} for itself")
     return cleaned
+
+
+def validate_sflow_address(text: str) -> str:
+    """An IPv4 address for sFlow's collector or agent, or raise ValueError.
+
+    The switch takes IPv4 addresses there; NXray refuses any address that
+    cannot be one host's (0.0.0.0, broadcast, multicast, loopback).
+    """
+    try:
+        address = ipaddress.IPv4Address(text.strip())
+    except ValueError as exc:
+        raise ValueError(f"{text.strip()!r} is not an IPv4 address") from exc
+    if (
+        address.is_unspecified
+        or address.is_multicast
+        or address.is_loopback
+        or address == ipaddress.IPv4Address("255.255.255.255")
+    ):
+        raise ValueError(f"{address} cannot be one host's address")
+    return str(address)
+
+
+def validate_sflow_vrf(name: str) -> str:
+    """The VRF the switch reaches the collector in: default, management or one of its own."""
+    cleaned = name.strip()
+    if cleaned.lower() in ("default", "management"):
+        return cleaned.lower()
+    return validate_vrf_name(cleaned)
+
+
+def sflow_data_source(name: str) -> str:
+    """``Ethernet1/5`` -> ``ethernet 1/5``, as ``sflow data-source interface`` takes it."""
+    return "ethernet " + validate_port_name(name).removeprefix("Ethernet")
 
 
 def validate_storm_level(value: str | float) -> str:
@@ -1040,6 +1081,49 @@ class NxapiClient:
         else:
             raise ValueError(f"the rate is averaged over one of {LOAD_INTERVALS} seconds")
         commands = [f"interface {name}", line]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_sflow(
+        self,
+        *,
+        sampling_rate: int | None = None,
+        collector: str | None = None,
+        vrf: str | None = None,
+        collector_port: int | None = None,
+        agent: str | None = None,
+        add_ports: Iterable[str] = (),
+        remove_ports: Iterable[str] = (),
+    ) -> None:
+        """Set where the switch sends its sFlow samples and which ports it samples,
+        in one request; only the values given are sent.
+
+        ``collector`` goes with ``vrf`` (``sflow collector-ip <ip> vrf <vrf>``).
+        ``add_ports`` and ``remove_ports`` are front ports, each one
+        ``sflow data-source interface ethernet <n>`` or its ``no`` form. The
+        switch refuses all of it while the sflow feature is off.
+        """
+        commands = []
+        if sampling_rate is not None:
+            if sampling_rate not in SFLOW_SAMPLING_RATES or isinstance(sampling_rate, bool):
+                raise ValueError(f"the sampling rate is one of {SFLOW_SAMPLING_RATES}")
+            commands.append(f"sflow sampling-rate {int(sampling_rate)}")
+        if (collector is None) != (vrf is None):
+            raise ValueError("the collector's address and VRF go together")
+        if collector is not None and vrf is not None:
+            commands.append(
+                f"sflow collector-ip {validate_sflow_address(collector)} "
+                f"vrf {validate_sflow_vrf(vrf)}"
+            )
+        if collector_port is not None:
+            if isinstance(collector_port, bool) or not 1 <= int(collector_port) <= 65535:
+                raise ValueError("the collector's UDP port is 1 to 65535")
+            commands.append(f"sflow collector-port {int(collector_port)}")
+        if agent is not None:
+            commands.append(f"sflow agent-ip {validate_sflow_address(agent)}")
+        commands += [f"sflow data-source interface {sflow_data_source(p)}" for p in add_ports]
+        commands += [f"no sflow data-source interface {sflow_data_source(p)}" for p in remove_ports]
+        if not commands:
+            raise ValueError("nothing to change")
         self._send(commands, commands, self._target.timeout, allow_text=True)
 
     def set_feature(self, command: str, enabled: bool) -> None:

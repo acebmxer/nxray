@@ -343,6 +343,24 @@ _MIGRATIONS: list[str] = [
     );
     ALTER TABLE users ADD COLUMN password_changed_at REAL;
     """,
+    # sFlow (app/sflow.py): each switch's measured traffic per minute, per VLAN
+    # (kind vlan) and per device (mac_out: what a MAC address sent, mac_in: what
+    # was sent to it), in bytes estimated from the samples and the number of
+    # samples behind it. sflow_agent is the agent address NXray set on the switch,
+    # which the datagrams carry; '' until then (the NX-API address is used).
+    """
+    CREATE TABLE sflow_traffic (
+        switch_id INTEGER NOT NULL,
+        minute    INTEGER NOT NULL,
+        kind      TEXT NOT NULL,
+        item      TEXT NOT NULL,
+        bytes     INTEGER NOT NULL,
+        samples   INTEGER NOT NULL,
+        PRIMARY KEY (switch_id, minute, kind, item)
+    );
+    CREATE INDEX idx_sflow_traffic_minute ON sflow_traffic (minute);
+    ALTER TABLE switch_connection ADD COLUMN sflow_agent TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 

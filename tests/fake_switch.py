@@ -415,6 +415,10 @@ class FakeSwitch:
     )
     # What the switch prints after a rollback; contains "failed" to refuse it.
     rollback_text: str = "Rollback completed successfully.\n"
+    # sFlow, while the sflow feature is on: rate, collector, vrf, port, agent and
+    # sources (front ports sampled). ``show sflow`` prints it as text, after
+    # Cisco's NX-OS 9.3 guide (never recorded on cisco-25gb).
+    sflow: dict[str, Any] = field(default_factory=dict)
     _copying: bool = False
 
     def transport(self) -> httpx.MockTransport:
@@ -563,6 +567,10 @@ class FakeSwitch:
         the rule for it, and ``show logging last <n>``, which any account may."""
         if any(cmd.startswith(prefix) for prefix in self.reject):
             return _error(ident, f"% Rejected by the fake switch: {cmd}\n")
+        if cmd == "show sflow":
+            if not self._feature_on("sflow"):
+                return _error(ident, "% Invalid command at '^' marker.\n")
+            return {"jsonrpc": "2.0", "result": {"msg": self.sflow_text()}, "id": ident}
         if cmd == "show hardware access-list tcam region":
             return {"jsonrpc": "2.0", "result": {"msg": self.tcam_regions()}, "id": ident}
         if cmd == "show ip dhcp snooping binding":
@@ -960,6 +968,13 @@ class FakeSwitch:
             return security_reply
         if layer2_reply := self._layer2(user, is_admin, cmd, ident, context):
             return layer2_reply
+        if interface is None and (match := re.fullmatch(r"(no )?sflow (.+)", cmd)):
+            rule = "conf t ; no sflow *" if match.group(1) else "conf t ; sflow *"
+            if not (is_admin or self._role_allows(user, rule, None)):
+                return denied, context
+            if not self._feature_on("sflow"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            return self._sflow(ident, bool(match.group(1)), match.group(2)), context
 
         if match := re.fullmatch(r"interface (Ethernet\d+/\d+(?:/\d+)?)", cmd):
             name = match.group(1)
@@ -1188,6 +1203,8 @@ class FakeSwitch:
                 self.lldp = not match.group(1)
             else:
                 self.feature_state[name] = not match.group(1)
+            if name == "sflow" and match.group(1):
+                self.sflow = {}
             if name == "interface-vlan":
                 # As on cisco-25gb: on makes Vlan1 (turned off), off removes them all.
                 for number in self.svis:
@@ -1266,6 +1283,46 @@ class FakeSwitch:
             self.extra_roles.pop(match.group(1), None)
             return _ok(ident, None), context
         return _error(ident, f"% Invalid command: {cmd.split()[0]}\n"), context
+
+    def _sflow(self, ident: int, undo: bool, rest: str) -> dict[str, Any]:
+        state = self.sflow
+        sources = state.setdefault("sources", set())
+        if match := re.fullmatch(r"data-source interface ethernet (\d+/\d+(?:/\d+)?)", rest):
+            name = f"Ethernet{match.group(1)}"
+            if name not in self.port_names():
+                return _error(ident, "% Invalid interface\n")
+            (sources.discard if undo else sources.add)(name)
+        elif match := re.fullmatch(r"sampling-rate (\d+)", rest):
+            if not 4096 <= int(match.group(1)) <= 1_000_000_000:
+                return _error(ident, "% Invalid number, range is (4096:1000000000)\n")
+            state["rate"] = int(match.group(1))
+        elif match := re.fullmatch(r"collector-ip (\S+) vrf (\S+)", rest):
+            state["collector"], state["vrf"] = match.groups()
+        elif match := re.fullmatch(r"collector-port (\d+)", rest):
+            state["port"] = int(match.group(1))
+        elif match := re.fullmatch(r"agent-ip (\S+)", rest):
+            state["agent"] = match.group(1)
+        else:
+            return _error(ident, f"% Invalid command at '^' marker: sflow {rest}\n")
+        return _ok(ident, None)
+
+    def sflow_text(self) -> str:
+        """``show sflow`` as Cisco's guide prints it."""
+        state = self.sflow
+        lines = [
+            f"sflow sampling-rate : {state.get('rate', 4096)}",
+            "sflow max-sampled-size : 128",
+            "sflow counter-poll-interval : 20",
+            "sflow max-datagram-size : 1400",
+            f"sflow collector-ip : {state.get('collector', '0.0.0.0')} , vrf : "
+            f"{state.get('vrf', 'default')}",
+            f"sflow collector-port : {state.get('port', 6343)}",
+            f"sflow agent-ip : {state.get('agent', '0.0.0.0')}",
+        ]
+        lines += [
+            f"sflow data-source interface {name}" for name in sorted(state.get("sources", ()))
+        ]
+        return "\n".join(lines) + "\n"
 
     def _setting(
         self, ident: int, interface: str, cmd: str, key: str | None, match: re.Match[str]

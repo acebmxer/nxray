@@ -24,7 +24,8 @@ and IPv6 ACLs and where they apply, port security on the ports, reading the
 saved configuration and making and deleting checkpoints; DHCP snooping, the
 DHCP relay, ARP inspection, IP Source Guard, MAC ACLs, object groups, VLAN
 access maps and the TCAM regions' sizes; how long the front ports average
-their traffic rates over; and saving the configuration.
+their traffic rates over, and sFlow (where the samples go, how often, and from
+which ports); and saving the configuration.
 Everything else (mgmt0, a VLAN's own on/off state, accounts, SNMP users and
 read-write communities, rolling the switch back, reloading it, other
 switch-wide settings) stays refused by the switch itself, not just by NXray.
@@ -506,13 +507,18 @@ LAYER2_RULES = (
 
 # Traffic measuring rules, added in ROLE_VERSION 15: how long a port's In and
 # Out rates are averaged over (``load-interval counter 1 <seconds>``, and its
-# ``no`` form to go back to the default). Written after Cisco's NX-OS 9.3
-# Interfaces Configuration Guide and the shapes of the rules proven before; not
+# ``no`` form to go back to the default), and sFlow: where the switch sends its
+# samples, how often it samples and which ports (``sflow ...`` and ``no sflow
+# ...``, typed in configuration mode; the sflow feature itself is turned on with
+# the feature rules). Written after Cisco's NX-OS 9.3 Interfaces and System
+# Management Configuration Guides and the shapes of the rules proven before; not
 # yet tried on a switch. The port list stays as it was, so this needs no SSH
 # save and no wait.
 TRAFFIC_RULES = (
     "rule 228 permit command conf t ; interface * ; load-interval *",
     "rule 229 permit command conf t ; interface * ; no load-interval *",
+    "rule 230 permit command conf t ; sflow *",
+    "rule 231 permit command conf t ; no sflow *",
 )
 
 # Role versions whose port list gained a line, and so are checked and saved

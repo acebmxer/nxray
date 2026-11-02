@@ -11,6 +11,25 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Traffic per VLAN and per device, measured with sFlow.** NXray can now be
+  the switch's sFlow collector, which gives real traffic per VLAN and per
+  device, trunks and ports with several devices behind them included, on a
+  new **Traffic** page under Monitor: the busiest VLANs with their share, a
+  chart of them over time, and the busiest devices by MAC address (sends and
+  receives, with maker, IP addresses and port) with each one's traffic over
+  time. Off by default: set `NXRAY_SFLOW_PORT=6343` in nxray.env and publish
+  `"6343:6343/udp"` in docker-compose.yml (an older compose file needs the
+  line added). Then, with traffic measuring changes on, the page's **Send
+  sFlow to NXray** form sets the switch up (the sflow feature, the collector
+  and its VRF, the agent address, the sampling rate and the ports), asks
+  first and sends only what changes; **Turn sFlow off on the switch** undoes
+  it. This adds rules 230 and 231 to role version 15. NXray counts only
+  datagrams whose agent address is one of its switches and names any other
+  sender. Minutes are kept `NXRAY_SFLOW_KEEP_DAYS` days (7), each with every
+  VLAN and the 100 busiest devices each way. The switch-side lines follow
+  Cisco's NX-OS 9.3 guide and have not yet been tried on a switch. See
+  [Traffic per VLAN and per device](docs/traffic.md#measured-with-sflow) (#18).
+
 - **The last few minutes, drawn live.** While a refresh is on, a port's page
   has a **Last 10 minutes** chart of its In and Out (measured from the byte
   counters on **Live**, the switch's averages otherwise) and the dashboard a

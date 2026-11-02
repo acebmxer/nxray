@@ -408,6 +408,8 @@ NXray then:
          rule 227 permit command conf t ; hardware access-list tcam region *
          rule 228 permit command conf t ; interface * ; load-interval *
          rule 229 permit command conf t ; interface * ; no load-interval *
+         rule 230 permit command conf t ; sflow *
+         rule 231 permit command conf t ; no sflow *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -449,7 +451,8 @@ ports; set port security on the front ports; read the saved configuration and
 make, list and delete checkpoints; set DHCP snooping, the DHCP relay, ARP
 inspection and IP Source Guard, MAC ACLs, object groups, VLAN access maps and
 the TCAM regions' sizes; set how long the front ports average their In and Out
-rates over; and save the configuration. The switch
+rates over, and set up sFlow (where the samples go, how often, from which front
+ports); and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts, SNMP users and read-write SNMP communities, rolling the switch back
 (the Config page asks for the admin login each time for that), and other
@@ -985,10 +988,10 @@ guides and have not yet been tried on a switch. An install whose role predates
 the DHCP and ARP page gets a **Turn on layer 2 security changes** card; it adds
 rules 191 to 227 with no wait. They also follow Cisco's NX-OS 9.3 Security
 Configuration Guide and have not yet been tried on a switch.
-An install whose role predates the rate average gets a **Turn on traffic
-measuring changes** card; it adds rules 228 and 229 with no wait. They follow
-Cisco's NX-OS 9.3 Interfaces Configuration Guide and have not yet been tried
-on a switch.
+An install whose role predates the rate average and sFlow gets a **Turn on
+traffic measuring changes** card; it adds rules 228 to 231 with no wait. They
+follow Cisco's NX-OS 9.3 Interfaces and System Management Configuration Guides
+and have not yet been tried on a switch.
 
 **How long a port averages its rates.** The switch works out a port's In and
 Out as an average over the last 30 seconds unless told otherwise. With traffic
