@@ -280,7 +280,8 @@
 {% set devices = drawer.devices %}
 {% set forms = drawer.forms %}
 {% set ctx = {"csrf": csrf_token, "role": role, "can_change": can_change, "connection": connection, "back": drawer.back, "id": "drawer_"} %}
-<a class="drawer-shade" href="{{ drawer.close }}" aria-label="Close the port panel"></a>
+{# The port's panel sits on the right and the page moves aside for it, as
+   for the ticked ports' panel, so the front panel and table stay in view. #}
 <aside class="drawer" aria-label="{{ port.name }}">
   <div class="drawer-head">
     <div class="drawer-top">

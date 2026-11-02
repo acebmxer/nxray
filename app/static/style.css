@@ -802,8 +802,9 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 }
 .bulk-drawer .bulk-bar select { max-width: 9rem; }
 #change-several:has(input[name="names"]:checked) .drawer.bulk-drawer { display: flex; }
-/* Keep the table clear of the open panel. */
-.wrap:has(#change-several input[name="names"]:checked) { padding-right: 456px; }
+/* Keep the front panel and table clear of an open side panel. */
+.wrap:has(#change-several input[name="names"]:checked),
+.wrap:has(.drawer:not(.bulk-drawer)) { padding-right: 456px; }
 /* A browser without :has() shows the form as a card under the table. */
 @supports not selector(:has(*)) {
   .drawer.bulk-drawer {
@@ -818,7 +819,6 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 }
 
 /* The side panel: one port, opened by ?port= on the Ports page. */
-.drawer-shade { position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.25); }
 .drawer {
   position: fixed;
   top: 0;

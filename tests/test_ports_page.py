@@ -115,6 +115,8 @@ def test_ports_open_their_side_panel(logged_in: TestClient, switch: FakeSwitch) 
     assert 'class="drawer"' not in page
     panel = logged_in.get("/ports", params={"port": "Ethernet1/1"}).text
     assert '<aside class="drawer" aria-label="Ethernet1/1">' in panel
+    # No shade over the page: it moves aside, so every port stays clickable.
+    assert "drawer-shade" not in panel
     # The panel links to the port's own page, and its arrows wrap around the panel.
     assert 'href="/ports/detail?name=Ethernet1/1"' in panel
     assert (
