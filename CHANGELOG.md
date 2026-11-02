@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Setting up a switch turns changes on in the same step.** The Switch
+  page's setup form (and Add another switch) has a new **Also turn on
+  changes** box, ticked by default, and an **SSH port** field. With it
+  ticked, once NXray's account is made, setup gives it the `nxray-ports`
+  role over SSH with the same admin login, so a new switch no longer needs
+  the admin login typed a second time under **Turn on … changes**. The
+  usual wait of about 11 minutes follows. If that step fails (SSH off or
+  unreachable, a refused line), the switch stays set up with a read-only
+  account, the page says why, and the Turn on button tries again. Untick
+  the box to keep the account read-only. An already connected switch still
+  needs the Turn on button after an update that adds rules. See
+  [What setup does on the switch](docs/switch-setup.md#what-setup-does-on-the-switch)
+  (#22).
+
 - **Reset a port, several ticked ports or a port-channel to its defaults.**
   A port's own page and its side panel now have a **Reset to defaults**
   button, the Ports page's **Change several ports** card a **Reset the

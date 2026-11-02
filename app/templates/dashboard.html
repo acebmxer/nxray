@@ -11,7 +11,7 @@
   <p>
     NXray is running, but it is not connected to a switch. Set one up on the
     Switch page: NXray signs in with the switch's admin login once and creates
-    its own read-only account there.
+    its own account there, allowed only the changes NXray makes.
   </p>
   {% if current_role(request) == "admin" %}
   <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>

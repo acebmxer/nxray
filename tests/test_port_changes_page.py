@@ -188,6 +188,107 @@ def test_turning_on_with_a_wrong_admin_password(logged_in: TestClient, switch: F
     )
 
 
+# ---- turning changes on during setup ------------------------------------------
+
+
+def _setup(client: TestClient, fake: FakeSwitch, **overrides: str):
+    client.app.state.nxapi_transport = fake.transport()  # type: ignore[attr-defined]
+    client.app.state.ssh_opener = fake.ssh_opener()  # type: ignore[attr-defined]
+    form = {
+        "csrf": _csrf(client),
+        "host": "192.0.2.10",
+        "port": "443",
+        "admin_user": "admin",
+        "admin_password": ADMIN_PASSWORD,
+        "account_name": "nxray",
+        "confirm_save": "yes",
+        "turn_on_changes": "yes",
+        "ssh_port": "22",
+    }
+    form.update(overrides)
+    return client.post("/switch/setup", data=form)
+
+
+def test_setup_form_offers_changes_ticked(logged_in: TestClient) -> None:
+    html = logged_in.get("/switch").text
+    assert re.search(r'name="turn_on_changes" value="yes"\s+checked', html)
+    assert 'name="ssh_port"' in html
+
+
+def test_setup_turns_changes_on_with_one_admin_login(
+    logged_in: TestClient, settings: Settings
+) -> None:
+    fake = FakeSwitch()
+    response = _setup(logged_in, fake)
+    assert response.status_code == 200
+    text = _text(response.text)
+    assert "Set up. NXray created the account nxray on nexus-lab" in text
+    assert f"Changes are on too: the account has the {ROLE_NAME} role" in text
+    assert "waits about 11 minutes" in text
+    assert ROLE_NAME in fake.roles_of("nxray")
+    assert fake.saved
+    assert ADMIN_PASSWORD not in response.text
+
+    # The wait applies to every page, as after Turn on.
+    assert "leaving the switch alone" in logged_in.get("/ports").text
+    _end_pause(settings)
+    page = _text(logged_in.get("/switch").text)
+    assert "read, plus port changes" in page
+    assert "Turn on port, VLAN" not in page
+    activity = _text(logged_in.get("/activity").text)
+    assert f"the {ROLE_NAME} role, version" in activity
+
+
+def test_setup_without_the_box_stays_read_only(logged_in: TestClient) -> None:
+    fake = FakeSwitch()
+    response = _setup(logged_in, fake, turn_on_changes="")
+    assert response.status_code == 200
+    text = _text(response.text)
+    assert "Changes are on too" not in text
+    assert ROLE_NAME not in fake.roles_of("nxray")
+    assert fake.ssh_lines == []
+    assert "(read-only)" in text
+    assert "leaving the switch alone" not in text
+
+
+def test_setup_keeps_the_switch_when_turning_changes_on_fails(logged_in: TestClient) -> None:
+    fake = FakeSwitch(ssh_reachable=False)
+    response = _setup(logged_in, fake)
+    text = _text(response.text)
+    assert "NXray created the account nxray on nexus-lab" in text
+    assert "Turning changes on failed, so the account can only read for now" in text
+    assert "could not reach the switch over SSH" in text
+    assert ADMIN_PASSWORD not in response.text
+    assert ROLE_NAME not in fake.roles_of("nxray")
+    # Set up and read-only, with the Turn on button to try again.
+    page = _text(logged_in.get("/switch").text)
+    assert "(read-only)" in page
+    assert "Turn on port, VLAN" in page
+    assert "leaving the switch alone" not in page
+
+
+@pytest.mark.parametrize("value", ["0", "ssh"])
+def test_setup_checks_the_ssh_port_first(logged_in: TestClient, value: str) -> None:
+    fake = FakeSwitch()
+    response = _setup(logged_in, fake, ssh_port=value)
+    assert response.status_code == 400
+    assert "The SSH port is a number from 1 to 65535" in response.text
+    assert fake.requests == [] and fake.ssh_lines == []
+
+
+def test_setup_ignores_the_ssh_port_without_the_box(logged_in: TestClient) -> None:
+    fake = FakeSwitch()
+    response = _setup(logged_in, fake, turn_on_changes="", ssh_port="ssh")
+    assert response.status_code == 200
+    assert "Set up." in response.text
+
+
+def test_setup_error_keeps_the_box_unticked(logged_in: TestClient) -> None:
+    response = _setup(logged_in, FakeSwitch(), turn_on_changes="", confirm_save="")
+    assert response.status_code == 400
+    assert not re.search(r'name="turn_on_changes" value="yes"\s+checked', response.text)
+
+
 # ---- changing a port --------------------------------------------------------
 
 

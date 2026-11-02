@@ -42,10 +42,29 @@
       exists on the switch.
     </p>
 
+    <label class="check">
+      <input type="checkbox" name="turn_on_changes" value="yes"
+             {% if f.get("turn_on_changes", "yes") == "yes" %}checked{% endif %}>
+      Also turn on changes
+    </label>
+    <p class="hint">
+      With this ticked, NXray also signs in to the switch over SSH with the same
+      admin login and gives its account the {{ role_name }} role, so NXray can
+      make every change it offers. Then it leaves the switch alone for about 11
+      minutes: the switch only applies the new role to an account it has not
+      heard from for a while. Untick it to keep the account read-only; you can
+      turn changes on later on this page.
+    </p>
+
+    <label for="{{ p }}ssh_port">SSH port</label>
+    <input id="{{ p }}ssh_port" name="ssh_port" type="text" inputmode="numeric"
+           value="{{ f.get('ssh_port') or '22' }}" required>
+
     <p class="warning">
       When the account is made, NXray runs <code>copy running-config startup-config</code>
-      so the account survives a restart of the switch. That also saves any other
-      changes on the switch that have not been saved yet.
+      so the account survives a restart of the switch (and again after giving it
+      the role). That also saves any other changes on the switch that have not
+      been saved yet.
     </p>
     <label class="check">
       <input type="checkbox" name="confirm_save" value="yes" required>
@@ -425,11 +444,12 @@
   <h2 class="card-title">Add another switch</h2>
   <p class="lead">
     NXray can look after several switches. It signs in to the new switch's
-    NX-API once with an admin login, creates its own read-only account there
-    (role network-operator) with a long random password, and from then on uses
-    only that account. The admin password is used for this setup only and is
-    never stored. Afterwards the pages show the new switch; pick another in the
-    top bar.
+    NX-API once with an admin login, creates its own account there (read-only
+    role network-operator) with a long random password, gives it the
+    {{ role_name }} role over SSH unless you untick Also turn on changes, and
+    from then on uses only that account. The admin password is used for this
+    setup only and is never stored. Afterwards the pages show the new switch;
+    pick another in the top bar.
   </p>
   {{ setup_form(add_form, "add_") }}
 </section>
@@ -438,9 +458,10 @@
   <h2 class="card-title">Set up the switch</h2>
   <p class="lead">
     NXray signs in to the switch's NX-API once with an admin login, creates its
-    own read-only account (role network-operator) with a long random password,
-    and from then on uses only that account. The admin password is used for
-    this setup only and is never stored.
+    own account (read-only role network-operator) with a long random password,
+    gives it the {{ role_name }} role over SSH unless you untick Also turn on
+    changes, and from then on uses only that account. The admin password is
+    used for this setup only and is never stored.
   </p>
 
   {{ setup_form(form, "") }}

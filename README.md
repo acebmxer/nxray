@@ -97,11 +97,12 @@ Then open `http://<that machine>:8080` and sign in. The full steps are in
 ## How it talks to the switch
 
 Through NX-API, the switch's own HTTPS interface: the same commands you
-type over SSH, answered as structured data. NXray uses its own read-only
-account on the switch, never `admin`: the Switch page signs in with the admin
-login once, creates that account with a long random password, saves the
-switch configuration, and keeps only that account's login. The admin
-password is never stored. See [Switch setup](docs/switch-setup.md).
+type over SSH, answered as structured data. NXray uses its own account on
+the switch, never `admin`: the Switch page signs in with the admin login
+once, creates that account with a long random password, gives it a role that
+allows only the changes NXray makes (untick **Also turn on changes** to keep
+it read-only), saves the switch configuration, and keeps only that account's
+login. The admin password is never stored. See [Switch setup](docs/switch-setup.md).
 
 Once a switch is set up, NXray also reads it every minute (four read-only
 commands) to record history; see [Installation](docs/installation.md#history).

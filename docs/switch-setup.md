@@ -43,6 +43,14 @@ When you press **Create the account and connect**, NXray:
    that were not saved yet**, which is why the page asks you to tick a box
    first. If saving fails, NXray still connects and tells you to run the
    command yourself.
+6. With **Also turn on changes** ticked (it is, unless you untick it), turns
+   on every kind of change straight away, with the same admin login and the
+   **SSH port** on the form: exactly the steps under
+   [Port changes](#port-changes) below, including the wait of about 11
+   minutes. If this step fails (SSH off or unreachable, a refused line), the
+   switch stays set up with a read-only account, the page says why, and the
+   **Turn on** button on the Switch page tries again. Untick the box to keep
+   the account read-only.
 
 The admin password is used only during these steps. NXray does not store
 it, log it or show it. The new account's password is stored encrypted in
@@ -161,8 +169,9 @@ new role, because signing in would make the wait start over.
 
 ## Port changes
 
-Port changes are off after setup: NXray's account can only read. To turn
-them on, open the **Switch** page, type the admin username and password
+Setup turns changes on unless **Also turn on changes** was unticked. With it
+unticked, or if that step failed, NXray's account can only read. To turn
+them on later, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
 security and config, layer 2 security, traffic measuring and reset to defaults changes**, tick the box and press
