@@ -41,12 +41,17 @@
 </div>
 {% endmacro %}
 
+{#- The id of a port's tick box, which the ticked ports' panel points at. -#}
+{% macro tick_id(name) -%}
+tick-{{ name|replace("/", "-")|replace(" ", "-") }}
+{%- endmacro %}
+
 {% macro rows(bulk_on) %}
       {% for port in shown %}
       {% set devices = neighbors.for_port(port.name) if neighbors else none %}
       {% set speed_css, speed_words = speed_class(port) %}
       <tr{% if port.name == selected %} class="row-sel"{% endif %}>
-        {% if bulk_on %}<td><input type="checkbox" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
+        {% if bulk_on %}<td><input type="checkbox" id="{{ tick_id(port.name) }}" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
         <td><a class="port-name" href="{{ ports_link(show, color, port.name) }}">{{ port.name }}</a>{% if channels.get(port.name) %} <a class="reason" href="/port-channels#{{ channels[port.name] }}">in {{ channels[port.name] }}</a>{% endif %}{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
         <td class="cell-desc" title="{{ port.description }}">{{ port.description }}</td>
         <td>

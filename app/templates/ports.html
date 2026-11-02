@@ -116,7 +116,10 @@
 {% if bulk_on %}
 {% set b = bulk %}
 {# The side panel for the ticked ports: it opens as soon as one port is
-   ticked (CSS :has, no script), like a port's own panel. #}
+   ticked (CSS :has, no script) and is laid out like a port's own panel, one
+   section per kind of change, all of it in view. The list at the top names
+   the ticked ports; each name unticks its port (static/keep-ticks.js keeps
+   the list in step with the table). #}
 <aside class="drawer bulk-drawer" aria-labelledby="bulk-title">
   <div class="drawer-head">
     <div class="drawer-top">
@@ -125,15 +128,21 @@
       <a class="icon-btn" href="{{ ports_link(show, color) }}" title="Clear the ticks and close"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
     </div>
     <div class="drawer-sub"><span class="bulk-count">Ports ticked: </span></div>
+    <ul class="pills ticked-list" data-ticked-list aria-label="Ticked ports">
+      {% for port in shown if port.name in ticked %}
+      <li><label class="pill pill-untick" for="{{ live.tick_id(port.name) }}" title="Untick {{ port.name }}">{{ port.name }}<span class="untick-x" aria-hidden="true">×</span></label></li>
+      {% endfor %}
+    </ul>
+    <p class="hint">Press a port above, or its box in the table, to untick it.</p>
   </div>
   <div class="drawer-body">
     {% if bulk_open and not drawer and (error or notice) %}<div class="drawer-part">{{ messages() }}</div>{% endif %}
-<section class="drawer-part bulk-config">
-  <p class="lead">Fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it. Tick or untick ports in the table while this is open.</p>
-  <details class="settings-group" {% if b.power or b.set_description or b.clear_macs %}open{% endif %}>
-    <summary>On or off and description</summary>
-    <div class="form-grid">
-      <div class="stack">
+    <div class="drawer-part bulk-config">
+      <p class="lead">Fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it.</p>
+    </div>
+    <section class="drawer-part bulk-config">
+      <h3>On or off</h3>
+      <div class="stack form-narrow">
         <label for="bulk_power">On or off</label>
         <select id="bulk_power" name="power">
           <option value="" {% if not b.power %}selected{% endif %}>Leave as it is</option>
@@ -141,62 +150,57 @@
           <option value="off" {% if b.power == "off" %}selected{% endif %}>Turn off</option>
         </select>
       </div>
-      <div class="stack">
+    </section>
+    <section class="drawer-part bulk-config">
+      <h3>Description</h3>
+      <div class="stack form-narrow">
         <label class="check"><input type="checkbox" name="set_description" value="yes" {% if b.set_description %}checked{% endif %}> Change the description to</label>
         <label for="bulk_description" class="sr-only">Description</label>
         <input id="bulk_description" name="description" type="text" value="{{ b.description }}" maxlength="254" spellcheck="false" placeholder="Description">
         <p class="hint">Up to 254 plain characters, no "?" or ";". Tick the box and leave it empty to remove the description.</p>
       </div>
-      {% if connection.neighbor_changes_enabled %}
-      <div class="stack">
+    </section>
+    {% if connection.neighbor_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>Connected</h3>
+      <div class="stack form-narrow">
         <label class="check"><input type="checkbox" name="clear_macs" value="yes" {% if b.clear_macs %}checked{% endif %}> Clear the addresses learned on them</label>
         <p class="hint">The switch forgets them and learns them again from the next traffic. Static entries stay.</p>
       </div>
-      {% endif %}
-    </div>
-  </details>
-  {% if connection.vlan_changes_enabled %}
-  <details class="settings-group" {% if b.mode or b.access_vlan or b.native_vlan or b.allowed %}open{% endif %}>
-    <summary>VLANs</summary>
-    <div class="form-grid">
-      <div class="stack">
+    </section>
+    {% endif %}
+    {% if connection.vlan_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>VLANs</h3>
+      <div class="stack form-narrow">
         <label for="bulk_mode">Mode</label>
         <select id="bulk_mode" name="mode">
           <option value="" {% if not b.mode %}selected{% endif %}>Leave as it is</option>
           <option value="access" {% if b.mode == "access" %}selected{% endif %}>Access: one VLAN, untagged</option>
           <option value="trunk" {% if b.mode == "trunk" %}selected{% endif %}>Trunk: several VLANs, tagged</option>
         </select>
-      </div>
-      <div class="stack">
-        <label for="bulk_access_vlan">Access VLAN (access mode)</label>
+        <label for="bulk_access_vlan">Access VLAN (used in access mode)</label>
         <input id="bulk_access_vlan" name="access_vlan" type="text" inputmode="numeric" value="{{ b.access_vlan }}" placeholder="Leave as it is">
-      </div>
-      <div class="stack">
-        <label for="bulk_native_vlan">Native VLAN (trunk mode)</label>
+        <label for="bulk_native_vlan">Native VLAN (trunk mode: carries untagged traffic)</label>
         <input id="bulk_native_vlan" name="native_vlan" type="text" inputmode="numeric" value="{{ b.native_vlan }}" placeholder="Leave as it is">
-      </div>
-      <div class="stack">
         <label for="bulk_allowed">VLANs carried (trunk mode)</label>
         <input id="bulk_allowed" name="allowed" type="text" value="{{ b.allowed }}" spellcheck="false" placeholder="Leave as it is">
         <p class="hint">Such as 10,20-30, or all, or none. A trunk always carries its native VLAN; NXray adds it when it is left out.</p>
       </div>
-    </div>
-  </details>
-  {% endif %}
-  {% if connection.settings_changes_enabled %}
-  <details class="settings-group" {% if b.layer or b.speed or b.mtu or b.fec or b.flow_receive or b.flow_send or b.storm_broadcast or b.storm_multicast or b.storm_unicast or b.storm_action %}open{% endif %}>
-    <summary>Port settings</summary>
-    <div class="form-grid">
-      <div class="stack">
+      <p class="note">VLANs are created on the <a href="/vlans">VLANs page</a>.</p>
+    </section>
+    {% endif %}
+    {% if connection.settings_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>Settings</h3>
+      <div class="stack form-narrow">
         <label for="bulk_layer">Layer</label>
         <select id="bulk_layer" name="layer">
           <option value="" {% if not b.layer %}selected{% endif %}>Leave as it is</option>
           <option value="switched" {% if b.layer == "switched" %}selected{% endif %}>Switched (layer 2)</option>
           <option value="routed" {% if b.layer == "routed" %}selected{% endif %}>Routed (layer 3), no address</option>
         </select>
-        <p class="hint">Each routed port needs its own IPv4 address, so set it on the port's own page.</p>
-      </div>
-      <div class="stack">
+        <p class="hint">Each routed port needs its own IPv4 address, so set it in the port's own panel.</p>
         <label for="bulk_speed">Speed</label>
         <select id="bulk_speed" name="speed">
           <option value="" {% if not b.speed %}selected{% endif %}>Leave as it is</option>
@@ -204,13 +208,9 @@
           <option value="{{ value }}" {% if b.speed == value %}selected{% endif %}>{{ speed_label(value) }}</option>
           {% endfor %}
         </select>
-      </div>
-      <div class="stack">
         <label for="bulk_mtu">MTU</label>
         <input id="bulk_mtu" name="mtu" type="text" inputmode="numeric" value="{{ b.mtu }}" placeholder="Leave as it is">
-        <p class="hint">Switched: 1500 or 9216. Routed: 576 to 9216.</p>
-      </div>
-      <div class="stack">
+        <p class="hint">Switched: 1500 (standard) or 9216 (jumbo frames). Routed: 576 to 9216.</p>
         <label for="bulk_fec">FEC</label>
         <select id="bulk_fec" name="fec">
           <option value="" {% if not b.fec %}selected{% endif %}>Leave as it is</option>
@@ -218,24 +218,19 @@
           <option value="{{ value }}" {% if b.fec == value %}selected{% endif %}>{{ text }}</option>
           {% endfor %}
         </select>
-      </div>
-      {% for key, words in (("flow_receive", "Flow control, receive"), ("flow_send", "Flow control, send")) %}
-      <div class="stack">
+        {% for key, words in (("flow_receive", "Flow control, receive"), ("flow_send", "Flow control, send")) %}
         <label for="bulk_{{ key }}">{{ words }}</label>
         <select id="bulk_{{ key }}" name="{{ key }}">
           <option value="" {% if not b[key] %}selected{% endif %}>Leave as it is</option>
           <option value="on" {% if b[key] == "on" %}selected{% endif %}>On</option>
           <option value="off" {% if b[key] == "off" %}selected{% endif %}>Off</option>
         </select>
-      </div>
-      {% endfor %}
-      {% for kind, words in (("broadcast", "broadcast"), ("multicast", "multicast"), ("unicast", "unknown unicast")) %}
-      <div class="stack">
-        <label for="bulk_storm_{{ kind }}">Storm control, {{ words }} (%)</label>
+        {% endfor %}
+        {% for kind, words in (("broadcast", "broadcast"), ("multicast", "multicast"), ("unicast", "unknown unicast")) %}
+        <label for="bulk_storm_{{ kind }}">Storm control, {{ words }} (% of the link)</label>
         <input id="bulk_storm_{{ kind }}" name="storm_{{ kind }}" type="text" inputmode="decimal" value="{{ b['storm_' ~ kind] }}" placeholder="Leave as it is">
-      </div>
-      {% endfor %}
-      <div class="stack">
+        {% endfor %}
+        <p class="hint">0 to 100, up to two decimals, such as 10 or 2.5; "none" for no limit. Switched ports only.</p>
         <label for="bulk_storm_action">When traffic goes over a level</label>
         <select id="bulk_storm_action" name="storm_action">
           <option value="" {% if not b.storm_action %}selected{% endif %}>Leave as it is</option>
@@ -244,30 +239,27 @@
           <option value="shutdown" {% if b.storm_action == "shutdown" %}selected{% endif %}>Turn the port off</option>
         </select>
       </div>
-    </div>
-    <p class="hint">Storm-control levels: 0 to 100, up to two decimals; "none" for no limit. They apply to switched ports only.</p>
-  </details>
-  {% endif %}
-  {% if connection.neighbor_changes_enabled %}
-  <details class="settings-group" {% if b.cdp or b.lldp_transmit or b.lldp_receive %}open{% endif %}>
-    <summary>CDP and LLDP</summary>
-    <div class="form-grid">
-      {% for key, words in (("cdp", "CDP: send and listen"), ("lldp_transmit", "LLDP: send"), ("lldp_receive", "LLDP: listen")) %}
-      <div class="stack">
+    </section>
+    {% endif %}
+    {% if connection.neighbor_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>CDP and LLDP</h3>
+      <div class="stack form-narrow">
+        {% for key, words in (("cdp", "CDP: send and listen"), ("lldp_transmit", "LLDP: send (the device on the port hears this switch)"), ("lldp_receive", "LLDP: listen (this switch hears the device)")) %}
         <label for="bulk_{{ key }}">{{ words }}</label>
         <select id="bulk_{{ key }}" name="{{ key }}">
           <option value="" {% if not b[key] %}selected{% endif %}>Leave as it is</option>
           <option value="on" {% if b[key] == "on" %}selected{% endif %}>On</option>
           <option value="off" {% if b[key] == "off" %}selected{% endif %}>Off</option>
         </select>
+        {% endfor %}
       </div>
-      {% endfor %}
+      {% if neighbors and not neighbors.lldp_enabled %}<p class="note">LLDP is off for the whole switch, so it can be set per port only once it is on{% if role == "admin" %} (<a href="/features">Features page</a>){% endif %}.</p>{% endif %}
+    </section>
+    {% endif %}
+    <div class="drawer-part bulk-config">
+      <p class="note">Not offered here, because each port needs its own: an IPv4 address, the label, and splitting a 100G port. Set those in each port's own panel.</p>
     </div>
-    {% if neighbors and not neighbors.lldp_enabled %}<p class="hint">LLDP is off for the whole switch, so it can be set per port only once it is on{% if role == "admin" %} (<a href="/features">Features page</a>){% endif %}.</p>{% endif %}
-  </details>
-  {% endif %}
-  <p class="note">Not offered here, because each port needs its own: an IPv4 address, the label, and splitting a 100G port. Set those on each port's page.</p>
-</section>
   </div>
 <div class="drawer-foot bulk-bar">
   <button type="submit" class="btn btn-primary">Change the ticked ports</button>

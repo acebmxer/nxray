@@ -775,9 +775,15 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bulk-bar .btn-primary { margin-top: 0; }
 .bulk-bar .hint { flex-basis: 100%; margin: 0; }
 .bulk-bar label { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.bulk-config .form-grid > .stack { min-width: 12rem; }
-.bulk-config .stack label:not(:first-of-type) { margin-top: 0; }
-.bulk-config .lead { margin-top: 0; }
+.bulk-config .lead { margin: 0; }
+/* The ticked ports at the top of their panel: pressing one unticks it. */
+.ticked-list { margin: 0; padding: 0; list-style: none; max-height: 7.5rem; overflow-y: auto; }
+.ticked-list:empty { display: none; }
+.pill-untick { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
+.pill-untick:hover { border-color: var(--crit-line); color: var(--crit); }
+.untick-x { font-size: 13px; line-height: 1; color: var(--text-3); }
+.pill-untick:hover .untick-x { color: var(--crit); }
+.bulk-drawer .drawer-head .hint { margin: 0; }
 
 /* The ticked ports' side panel: shut until a port is ticked, then on the
    right like a port's own panel, without a shade so the table stays usable.

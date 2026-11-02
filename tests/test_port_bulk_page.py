@@ -104,6 +104,28 @@ def test_the_card_offers_every_shared_setting(logged_in: TestClient, enabled: Fa
     assert card.count("Leave as it is</option>") == card.count("<select")
 
 
+def test_the_panel_shows_every_section_open(logged_in: TestClient, enabled: FakeSwitch) -> None:
+    page = logged_in.get("/ports").text
+    card = page.split('id="bulk-title"')[1].split('class="drawer-foot bulk-bar"')[0]
+    # Laid out like a port's own panel: headed sections, nothing folded away.
+    assert "<details" not in card
+    for heading in ("On or off", "Description", "Connected", "VLANs", "Settings", "CDP and LLDP"):
+        assert f"<h3>{heading}</h3>" in card, heading
+
+
+def test_the_panel_lists_the_ticked_ports_to_untick(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    page = logged_in.get("/ports", params={"tick": ["Ethernet1/5", "Ethernet1/12"]}).text
+    head = page.split('id="bulk-title"')[1].split('class="drawer-body"')[0]
+    listed = re.findall(r'<label class="pill pill-untick" for="([^"]+)"', head)
+    assert listed == ["tick-Ethernet1-5", "tick-Ethernet1-12"]
+    # Each name is a label for its port's box in the table, so it unticks it.
+    assert 'id="tick-Ethernet1-5" name="names" value="Ethernet1/5"' in page
+    assert 'id="tick-Ethernet1-12" name="names" value="Ethernet1/12"' in page
+    assert 'title="Untick Ethernet1/5"' in head
+
+
 def test_sections_follow_their_switch_page_switches(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:
