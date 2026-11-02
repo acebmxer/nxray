@@ -154,7 +154,9 @@ trunks and ports with several devices included**, on the **Traffic** page
    - **Sample one frame in** 4096 (the switch's default), 8192, 16384, 32768
      or 65536;
    - **Ports to sample**: every front port, those up now, or a list such as
-     `Ethernet1/1, Ethernet1/3-6`.
+     `Ethernet1/1, Ethernet1/3-6, port-channel41`. The switch refuses a port
+     that is in a port-channel; its port-channel is sampled instead, which
+     covers all its ports, and the confirm page says so.
 
    NXray shows what it will do and asks you to confirm, then turns on the
    sflow feature if it is off and sends only what changes:
@@ -165,13 +167,17 @@ trunks and ports with several devices included**, on the **Traffic** page
        sflow collector-port 6343
        sflow agent-ip <agent address>
        sflow data-source interface ethernet 1/1
-       ... (one line per port; "no sflow data-source ..." for a port left out)
+       sflow data-source interface port-channel 41
+       ... (one line per port or port-channel; "no sflow data-source ..." for
+       one left out)
 
    Not saved until **Save config**. **Turn sFlow off on the switch** turns the
    feature off, which removes every sFlow line (the traffic already measured is
    kept). These lines follow Cisco's NX-OS 9.3 System Management
-   Configuration Guide and have not yet been tried on a switch; if the switch
-   refuses one, the page shows its words.
+   Configuration Guide; the front-port lines have been tried on an
+   N9K-C92160YC-X, the port-channel line not yet. If the switch refuses one,
+   the page shows its words; the lines before it have already taken effect,
+   and the switch is marked as having unsaved changes.
 
 **What the page shows,** for 1 hour to 30 days (as much as is kept):
 

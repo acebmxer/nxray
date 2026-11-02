@@ -1001,8 +1001,9 @@ rules 191 to 227 with no wait. They also follow Cisco's NX-OS 9.3 Security
 Configuration Guide and have not yet been tried on a switch.
 An install whose role predates the rate average and sFlow gets a **Turn on
 traffic measuring changes** card; it adds rules 228 to 231 with no wait. They
-follow Cisco's NX-OS 9.3 Interfaces and System Management Configuration Guides
-and have not yet been tried on a switch.
+follow Cisco's NX-OS 9.3 Interfaces and System Management Configuration Guides;
+rule 230 (`sflow` lines) has worked on an N9K-C92160YC-X, the others have not
+yet been tried on a switch.
 An install whose role predates resetting a port or a port-channel gets a
 **Turn on reset to defaults changes** card; it adds rule 232 with no wait.
 This follows Cisco's NX-OS 9.3 Interfaces Configuration Guide and has not yet

@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.config import ConfigError, Settings, load_settings
 from app.db import init_db, open_db
+from app.neighbors import PortChannel
 from app.nxapi import (
     NxapiClient,
     SwitchTarget,
@@ -56,6 +57,7 @@ from app.sflow_switch import SflowConfig, parse_sflow_text, plan_sflow, sflow_fo
 from app.switch_connection import delete_connection
 from tests.conftest import load_fixture
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
+from tests.fake_switch import _error as fake_error
 
 AGENT = "192.0.2.10"
 SERVER = "02:00:00:00:00:01"
@@ -471,6 +473,21 @@ def test_checked_values() -> None:
     assert validate_sflow_vrf("Management") == "management"
     assert validate_sflow_vrf("lab") == "lab"
     assert sflow_data_source("Ethernet1/5") == "ethernet 1/5"
+    assert sflow_data_source("port-channel41") == "port-channel 41"
+    for bad in ("port-channel0", "port-channel41 ; shutdown", "port-channel", "Vlan10"):
+        with pytest.raises(ValueError):
+            sflow_data_source(bad)
+
+
+def test_the_client_samples_a_port_channel() -> None:
+    sent, client = _recording()
+    client.configure_sflow(add_ports=["port-channel41"], remove_ports=["port-channel43"])
+    assert sent == [
+        [
+            "sflow data-source interface port-channel 41",
+            "no sflow data-source interface port-channel 43",
+        ]
+    ]
 
 
 def test_the_role_has_the_sflow_rules() -> None:
@@ -517,6 +534,20 @@ def test_reading_show_sflow() -> None:
     assert bare.collector == "" and bare.agent == "" and not bare.sending
 
 
+def test_reading_port_channel_sources() -> None:
+    config = parse_sflow_text(
+        SHOW_SFLOW
+        + "sflow data-source interface port-channel43\n"
+        + "sflow data-source interface Po41\n"
+        + "sflow data-source interface port-channel 0\n"
+    )
+    assert config.data_sources[-2:] == ("port-channel41", "port-channel43")
+    assert config.data_sources[0] == "Ethernet1/1"
+
+
+CHANNEL = PortChannel("port-channel43", ("Ethernet1/43", "Ethernet1/44"), "LACP", True)
+
+
 def _front():
     ports = parse_ports(
         load_fixture("show_interface"),
@@ -561,6 +592,38 @@ def test_planning_keeps_only_what_changes() -> None:
     assert moved.agent == "192.0.2.11" and any("agent address" in w for w in moved.warnings)
     every = plan_sflow(current, _front(), {**FORM, "scope": "all"})
     assert len(every.add_ports) == len(_front()) - 5
+
+
+def test_a_port_in_a_port_channel_is_sampled_through_it() -> None:
+    off = SflowConfig(feature_on=False, port_channels=(CHANNEL,))
+    every = plan_sflow(off, _front(), {**FORM, "scope": "all"})
+    assert "port-channel43" in every.add_ports
+    assert "Ethernet1/43" not in every.add_ports and "Ethernet1/44" not in every.add_ports
+    assert len(every.add_ports) == len(_front()) - 1
+    assert any(
+        "port-channel43 for Ethernet1/43, Ethernet1/44" in warning for warning in every.warnings
+    )
+    one = plan_sflow(off, _front(), {**FORM, "ports": "Ethernet1/1, 1/43-44"})
+    assert one.add_ports == ("Ethernet1/1", "port-channel43")
+    named = plan_sflow(off, _front(), {**FORM, "ports": "po43, 1/1"})
+    assert named.add_ports == ("port-channel43", "Ethernet1/1")
+    with pytest.raises(ValueError, match="no port-channel41"):
+        plan_sflow(off, _front(), {**FORM, "ports": "Po41"})
+    current = parse_sflow_text(
+        SHOW_SFLOW + "sflow data-source interface port-channel43\n", (CHANNEL,)
+    )
+    assert plan_sflow(current, _front(), {**FORM, "ports": "1/1-2, 1/10-12, 1/44"}).empty
+    dropped = plan_sflow(current, _front(), FORM)
+    assert dropped.remove_ports == ("port-channel43",) and dropped.add_ports == ()
+    names = [port.name for port in _front()]
+    whole = parse_sflow_text(
+        "".join(f"sflow data-source interface {n}\n" for n in names if n not in CHANNEL.members)
+        + "sflow data-source interface port-channel43\n",
+        (CHANNEL,),
+    )
+    assert plan_sflow(whole, _front(), {**FORM, "scope": "all"}).add_ports == ()
+    form = sflow_form(whole, collector="", agent="", port=0, front=names)
+    assert form["scope"] == "all" and form["ports"] == ""
 
 
 @pytest.mark.parametrize(
@@ -692,6 +755,48 @@ def test_setting_sflow_up_asks_first_then_sends_it(
     again = _setup(logged_in, confirm=True)
     assert "Nothing to change" in _text(again.text)
     assert _config_requests(enabled) == []
+
+
+def test_every_front_port_samples_a_port_channel_through_it(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    assert enabled.channels[43]  # Ethernet1/43-44, as recorded
+    asked = _text(_setup(logged_in, scope="all").text)
+    assert "port-channel43 for Ethernet1/43, Ethernet1/44" in asked
+    done = _setup(logged_in, confirm=True, scope="all")
+    assert done.status_code == 200, _text(done.text)
+    sources = enabled.sflow["sources"]
+    assert "port-channel43" in sources
+    assert "Ethernet1/43" not in sources and "Ethernet1/44" not in sources
+    assert "Ethernet1/1" in sources
+    enabled.requests.clear()
+    again = _setup(logged_in, confirm=True, scope="all")
+    assert "Nothing to change" in _text(again.text)
+    assert _config_requests(enabled) == []
+
+
+def test_a_refusal_part_way_marks_the_switch_unsaved(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings, monkeypatch
+) -> None:
+    sflow = enabled._sflow
+
+    def refuse_one_port(ident: int, undo: bool, rest: str):
+        if rest == "data-source interface ethernet 1/2":
+            return fake_error(ident, "ERR sflow data source refused\n")
+        return sflow(ident, undo, rest)
+
+    monkeypatch.setattr(enabled, "_sflow", refuse_one_port)
+    with open_db(settings.db_path) as conn:
+        row = conn.execute("SELECT unsaved_changes FROM switch_connection").fetchone()
+    assert row["unsaved_changes"] == 0
+    response = _setup(logged_in, confirm=True)
+    assert response.status_code == 400
+    text = _text(response.text)
+    assert "Lines before the refused one have taken effect" in text
+    assert enabled.sflow["sources"] == {"Ethernet1/1"}
+    with open_db(settings.db_path) as conn:
+        row = conn.execute("SELECT unsaved_changes FROM switch_connection").fetchone()
+    assert row["unsaved_changes"] == 1
 
 
 def test_a_bad_form_is_refused(logged_in: TestClient, enabled: FakeSwitch) -> None:

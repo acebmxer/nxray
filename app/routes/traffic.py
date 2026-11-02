@@ -301,8 +301,12 @@ def traffic_sflow_setup(
     except NxapiError as exc:
         log.warning("sFlow setup on %s refused: %s", connection.host, exc)
         message = change_refused(exc, target)
-        if plan.turn_on_feature:
-            message += " The sflow feature may have been turned on before the refusal."
+        if plan.turn_on_feature or plan.configures:
+            # NX-API keeps every line before the refused one, so the switch
+            # may already hold part of the change.
+            message += " Lines before the refused one have taken effect and are not saved yet."
+            with open_db(request.app.state.settings.db_path) as conn:
+                set_unsaved_changes(conn, connection.id, True)
         return fail(message)
 
     settings = request.app.state.settings

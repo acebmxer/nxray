@@ -416,8 +416,9 @@ class FakeSwitch:
     # What the switch prints after a rollback; contains "failed" to refuse it.
     rollback_text: str = "Rollback completed successfully.\n"
     # sFlow, while the sflow feature is on: rate, collector, vrf, port, agent and
-    # sources (front ports sampled). ``show sflow`` prints it as text, after
-    # Cisco's NX-OS 9.3 guide (never recorded on cisco-25gb).
+    # sources (front ports and port-channels sampled). ``show sflow`` prints it as
+    # text, as recorded on cisco-25gb (a port-channel source not yet recorded).
+    # As there, a port in a port-channel is refused as a source.
     sflow: dict[str, Any] = field(default_factory=dict)
     _copying: bool = False
 
@@ -1301,6 +1302,19 @@ class FakeSwitch:
             name = f"Ethernet{match.group(1)}"
             if name not in self.port_names():
                 return _error(ident, "% Invalid interface\n")
+            channel = self.channel_of(name)
+            if channel is not None and not undo:
+                # As on cisco-25gb: a port-channel's port is sampled only through it.
+                return _error(
+                    ident,
+                    f"ERR sflow data source eth{match.group(1)}(0x1a005000) is already member "
+                    f"of a portchannel po{channel}(0x16000028)\n",
+                )
+            (sources.discard if undo else sources.add)(name)
+        elif match := re.fullmatch(r"data-source interface port-channel (\d+)", rest):
+            if int(match.group(1)) not in self.channels:
+                return _error(ident, "% Invalid interface\n")
+            name = f"port-channel{match.group(1)}"
             (sources.discard if undo else sources.add)(name)
         elif match := re.fullmatch(r"sampling-rate (\d+)", rest):
             if not 4096 <= int(match.group(1)) <= 1_000_000_000:

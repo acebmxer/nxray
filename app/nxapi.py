@@ -556,7 +556,11 @@ def validate_sflow_vrf(name: str) -> str:
 
 
 def sflow_data_source(name: str) -> str:
-    """``Ethernet1/5`` -> ``ethernet 1/5``, as ``sflow data-source interface`` takes it."""
+    """``Ethernet1/5`` -> ``ethernet 1/5`` and ``port-channel41`` -> ``port-channel 41``,
+    as ``sflow data-source interface`` takes them. The switch refuses a port
+    that is in a port-channel; its port-channel is the data source instead."""
+    if name.startswith("port-channel"):
+        return f"port-channel {validate_channel_number(name.removeprefix('port-channel'))}"
     return "ethernet " + validate_port_name(name).removeprefix("Ethernet")
 
 
@@ -1099,9 +1103,10 @@ class NxapiClient:
         in one request; only the values given are sent.
 
         ``collector`` goes with ``vrf`` (``sflow collector-ip <ip> vrf <vrf>``).
-        ``add_ports`` and ``remove_ports`` are front ports, each one
-        ``sflow data-source interface ethernet <n>`` or its ``no`` form. The
-        switch refuses all of it while the sflow feature is off.
+        ``add_ports`` and ``remove_ports`` are front ports or port-channels, each
+        one ``sflow data-source interface ethernet <n>`` (``port-channel <n>``)
+        or its ``no`` form. The switch refuses all of it while the sflow feature
+        is off, and refuses a port that is in a port-channel.
         """
         commands = []
         if sampling_rate is not None:

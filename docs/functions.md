@@ -185,7 +185,7 @@ raises, all handled in `main.create_app`.
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 | `validate_checkpoint_name` | `(name: str) -> str` | Refuses any checkpoint name but NXray's own, `nxray-<number>` | `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` | v0.1.0 |
-| `sflow_data_source` | `(name) -> str` | `Ethernet1/5` -> `ethernet 1/5`, as `sflow data-source interface` takes a front port | `NxapiClient.configure_sflow` | v0.2.0 |
+| `sflow_data_source` | `(name) -> str` | `Ethernet1/5` -> `ethernet 1/5` and `port-channel41` -> `port-channel 41`, as `sflow data-source interface` takes them | `NxapiClient.configure_sflow` | v0.2.0 |
 | `validate_sflow_address` | `(text) -> str` | An IPv4 address for sFlow's collector or agent; refuses 0.0.0.0, broadcast, multicast and loopback | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
 | `validate_sflow_vrf` | `(name) -> str` | The VRF the switch reaches the collector in: `default`, `management` or a VRF name | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
@@ -220,7 +220,7 @@ port averages its In and Out over: `load-interval counter 1 <seconds>` for one
 of `LOAD_INTERVALS`, or `no load-interval counter 1` for None),
 `configure_sflow(sampling_rate=, collector=, vrf=, collector_port=, agent=,
 add_ports=, remove_ports=)` (where the switch sends its sFlow samples, how
-often, and which front ports it samples; only the values given; the collector
+often, and which front ports and port-channels it samples; only the values given; the collector
 with its VRF), `set_feature(command, enabled)` (`feature X` or
 `no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
 `no feature ssh`), `set_port_discovery(name, cdp=, lldp_transmit=,
@@ -908,9 +908,9 @@ are over; `status(switch_id)` is what was heard since NXray started. Kinds are
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `load_sflow_config` | `(client) -> SflowConfig` | `show feature`, then `show sflow` as text while the feature is on | `routes/traffic._read` | v0.2.0 |
-| `parse_sflow_text` | `(text) -> SflowConfig` | `show sflow`'s sampling rate, collector and VRF, port, agent and sampled ports (ranges expanded); 0.0.0.0 reads as not set | `load_sflow_config` | v0.2.0 |
-| `plan_sflow` | `(current, ports, form) -> SflowPlan` | Checks the setup form (addresses, VRF, port, rate, which ports) and keeps only what changes, with the confirm page's lines and warnings | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
+| `load_sflow_config` | `(client) -> SflowConfig` | `show feature` and `show port-channel summary`, then `show sflow` as text while the feature is on | `routes/traffic._read` | v0.2.0 |
+| `parse_sflow_text` | `(text, port_channels=()) -> SflowConfig` | `show sflow`'s sampling rate, collector and VRF, port, agent and sampled ports and port-channels (ranges expanded); 0.0.0.0 reads as not set | `load_sflow_config` | v0.2.0 |
+| `plan_sflow` | `(current, ports, form) -> SflowPlan` | Checks the setup form (addresses, VRF, port, rate, which ports) and keeps only what changes, with the confirm page's lines and warnings; a port in a port-channel is sampled through its port-channel | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
 | `sflow_form` | `(current, *, collector, agent, port, front=()) -> dict` | The setup form filled with what the switch has, else with NXray's guesses; every front port sampled reads as "every front port" | `routes/traffic._render` | v0.2.0 |
 
 ## `app/charts.py` — SVG line charts

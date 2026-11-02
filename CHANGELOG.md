@@ -52,12 +52,16 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   sFlow to NXray** form sets the switch up (the sflow feature, the collector
   and its VRF, the agent address, the sampling rate and the ports), asks
   first and sends only what changes; **Turn sFlow off on the switch** undoes
-  it. This adds rules 230 and 231 to role version 15. NXray counts only
+  it. A port in a port-channel is sampled through its port-channel (the
+  switch refuses the port itself), and a refusal part-way marks the switch as
+  having unsaved changes, since the lines before it took effect. This adds
+  rules 230 and 231 to role version 15. NXray counts only
   datagrams whose agent address is one of its switches and names any other
   sender. Minutes are kept `NXRAY_SFLOW_KEEP_DAYS` days (7), each with every
   VLAN and the 100 busiest devices each way. The switch-side lines follow
-  Cisco's NX-OS 9.3 guide and have not yet been tried on a switch. See
-  [Traffic per VLAN and per device](docs/traffic.md#measured-with-sflow) (#18).
+  Cisco's NX-OS 9.3 guide; the front-port lines have been tried on an
+  N9K-C92160YC-X, the port-channel line not yet. See
+  [Traffic per VLAN and per device](docs/traffic.md#measured-with-sflow) (#18, #23).
 
 - **The last few minutes, drawn live.** While a refresh is on, a port's page
   has a **Last 10 minutes** chart of its In and Out (measured from the byte

@@ -33,8 +33,8 @@
       {% for key, words in scopes.items() %}
       <label class="check"><input type="radio" name="scope" value="{{ key }}" {% if form.scope == key %}checked{% endif %}> {{ words }}</label>
       {% endfor %}
-      <input id="ports" name="ports" type="text" value="{{ form.ports }}" spellcheck="false" aria-label="Ports to sample" placeholder="Ethernet1/1, Ethernet1/3-6">
-      <p class="hint">For "These ports": front ports separated by commas; a range such as Ethernet1/3-6 works. Each frame is counted on the port it comes in on, so sampling every port counts each frame once.</p>
+      <input id="ports" name="ports" type="text" value="{{ form.ports }}" spellcheck="false" aria-label="Ports to sample" placeholder="Ethernet1/1, Ethernet1/3-6, port-channel41">
+      <p class="hint">For "These ports": front ports and port-channels separated by commas; a range such as Ethernet1/3-6 works. A port in a port-channel is sampled through its port-channel, which covers all its ports. Each frame is counted on the port it comes in on, so sampling every port counts each frame once.</p>
     </fieldset>
     <button type="submit" class="btn btn-primary">Set up sFlow</button>
   </form>
