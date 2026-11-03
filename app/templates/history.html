@@ -21,9 +21,11 @@
 <p class="alert alert-error" role="alert">History is turned off (NXRAY_HISTORY_INTERVAL is 0), so nothing new is being recorded.</p>
 {% endif %}
 {{ range_links("/history", range, ranges) }}
+<div class="card-grid">
 {% for view in charts %}
 {{ chart(view) }}
 {% endfor %}
+</div>
 <p class="note">
   {% if interval %}NXray reads the switch every {{ interval }} seconds{% else %}NXray is not reading the switch{% endif %}
   and keeps {{ keep_days }} days.

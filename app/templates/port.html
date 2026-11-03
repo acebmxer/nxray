@@ -145,9 +145,11 @@
 </section>
 {{ live.trail() }}
 {{ range_links("/ports/detail", range, ranges, "name=" ~ (name|urlencode) ~ "&") }}
+<div class="card-grid">
 {% for view in charts %}
 {{ chart(view) }}
 {% endfor %}
+</div>
 {{ live.ratenote() }}
 {% endif %}
 {% endblock %}

@@ -5,7 +5,7 @@
 {% macro setup_card() %}
 {% set role = current_role(request) %}
 {% if config is not none and can_change %}
-<section class="card" id="setup">
+<section class="card card-form" id="setup">
   <h2 class="card-title">Send sFlow to NXray</h2>
   {% if not connection.traffic_changes_enabled %}
   <p class="lead">Traffic measuring changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to set sFlow up from here.</p>
@@ -126,6 +126,7 @@
 
 {{ range_links("/traffic", range, ranges) }}
 
+<div class="card-grid">
 <section class="card" id="top-vlans">
   <h2 class="card-title">Busiest VLANs</h2>
   {% if vlans %}
@@ -146,6 +147,7 @@
 {% for view in charts %}
 {% if view.anchor == "vlans" %}{{ chart(view) }}{% endif %}
 {% endfor %}
+</div>
 
 <section class="card" id="top-devices">
   <h2 class="card-title">Busiest devices</h2>

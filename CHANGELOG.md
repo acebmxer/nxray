@@ -181,6 +181,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Charts are no longer huge on a wide screen.** A chart stretched to the
+  full page width, so on a wide screen it was taller than the screen and its
+  labels were oversized. A chart is now at most 960 pixels wide. On the
+  History and port pages the charts sit two to a row, and on the Traffic page
+  the Busiest VLANs table sits beside its chart, whenever the screen leaves
+  each at least 680 pixels, and the Send sFlow to NXray form there is no wider
+  than 680 pixels. Narrower screens stack them as before (#26).
+
 - **The Traffic page's sFlow card can read the switch's sFlow status.** It
   showed "The switch refused a command: 'show sflow': % Permission denied for
   the role", because the `nxray-ports` role permitted configuring sFlow but

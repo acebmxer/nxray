@@ -573,7 +573,18 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .s6 { --series: #c95384; }
 .s7 { --series: #8d969f; }
 
-.chart { width: 100%; height: auto; display: block; }
+.chart { width: 100%; max-width: 960px; height: auto; display: block; }
+/* Cards side by side when each cell is at least 680px wide (a chart is drawn
+   720px wide, so narrower makes its text too small), stacked otherwise. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(680px, 100%), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.card-grid > .card, .card-grid > .card + .card { margin-top: 0; }
+.card-form { max-width: 680px; }
+.card + .card-grid, .card-grid + .card, .card-grid + .card-grid { margin-top: 14px; }
 .chart-grid { stroke: var(--line-soft); stroke-width: 1; }
 .chart-text { fill: var(--text-3); font-size: 11px; font-family: var(--mono); }
 .chart-line { fill: none; stroke: var(--series); stroke-width: 1.75; stroke-linejoin: round; }
