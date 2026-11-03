@@ -53,14 +53,14 @@ tick-{{ name|replace("/", "-")|replace(" ", "-") }}
       <tr{% if port.name == selected %} class="row-sel"{% endif %}>
         {% if bulk_on %}<td><input type="checkbox" id="{{ tick_id(port.name) }}" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
         <td><a class="port-name" href="{{ ports_link(show, color, port.name) }}">{{ port.name }}</a>{% if channels.get(port.name) %} <a class="reason" href="/port-channels#{{ channels[port.name] }}">in {{ channels[port.name] }}</a>{% endif %}{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
-        <td class="cell-desc" title="{{ port.description }}">{{ port.description }}</td>
+        <td class="cell-desc col-more" title="{{ port.description }}">{{ port.description }}</td>
         <td>
           <span class="state {{ 'state-up' if port.up else ('state-off' if not port.admin_up else ('state-err' if 'disabled' in port.reason|lower else 'state-down')) }}">{{ port.state_label }}</span>
           {% if port.reason and not port.up and port.admin_up %}<span class="reason">{{ port.reason }}</span>{% endif %}
         </td>
         <td>{% if port.up %}<span class="speed {{ speed_css }}">{{ speed_words }}</span>{% else %}<span class="dim">{{ port.speed }}</span>{% endif %}</td>
         <td><span class="mono">{{ port.vlan }}</span></td>
-        <td>
+        <td class="col-more">
           {% if devices and devices.neighbors %}
           {% set n = devices.neighbors[0] %}
           <span class="device" title="{{ n.protocol }}: {{ n.name }}{% if n.platform %}, {{ n.platform }}{% endif %}">{{ icon("neighbors") }}{{ short_device_name(n.name) }}{% if n.remote_port %} <small>{{ n.remote_port }}</small>{% endif %}</span>
@@ -69,8 +69,8 @@ tick-{{ name|replace("/", "-")|replace(" ", "-") }}
           {% if m %}<span class="device">{{ icon("account") }}{{ m[0].maker or m[0].mac }}{% if m|length > 1 %} <small>+{{ m|length - 1 }}</small>{% endif %}</span>{% endif %}
           {% endif %}
         </td>
-        <td class="mono">{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
-        <td>
+        <td class="mono col-extra">{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
+        <td class="col-extra">
           {% if port.up and port.bandwidth_bits %}
           {% set in_share = [port.in_bits_per_second / port.bandwidth_bits, 1]|min %}
           {% set out_share = [port.out_bits_per_second / port.bandwidth_bits, 1]|min %}

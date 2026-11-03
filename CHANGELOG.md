@@ -179,6 +179,22 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   installs copy `docker-compose.yml.example`, which already has the line.
   `nxray.env` and the data volume carry over either way.
 
+### Changed
+
+- **Cards sit two or three across on a wide screen, on every page.** Each
+  card used to take a full-width row of its own, so a wide screen showed mostly
+  empty space and the page ran far down. From 1300 pixels wide a page's cards
+  flow down two columns, and three from 2350 pixels, like newspaper columns, so
+  a short card does not leave a gap beside a tall one; narrower screens stack
+  them. The front panel, long tables (as many columns as the column fits, or
+  over 20 rows), code blocks, messages and notes still take the whole row, and
+  the places on a protocol or spanning tree card (one per VLAN, port or
+  instance) fill the card in columns. On the Alerts page **Open now** now comes
+  after **What to alert on** and **E-mail**, beside them on a wide screen. No
+  table scrolls sideways any more: cells wrap, the VLAN grid squeezes its
+  columns, and the Ports table drops its Transceiver and Activity columns under
+  1500 pixels wide, and Description and Connected under 1200 (#28).
+
 ### Fixed
 
 - **Charts are no longer huge on a wide screen.** A chart stretched to the

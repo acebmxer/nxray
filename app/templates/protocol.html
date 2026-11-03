@@ -146,6 +146,7 @@
     {{ setting_forms(scope, none, "s" ~ sidx ~ "-new") }}
   </details>
   {% endif %}
+  <div class="protocol-places">
   {% for inst in places %}
   <div class="protocol-place">
     <h3>{{ inst.title }}</h3>
@@ -168,6 +169,7 @@
   {% else %}
   <p class="dim">None on the switch.</p>
   {% endfor %}
+  </div>
 
   {% if can_change %}
   {% if scope.create %}

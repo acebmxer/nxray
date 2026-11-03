@@ -289,6 +289,58 @@ code {
 .wrap-alone { display: flex; flex-direction: column; justify-content: center; }
 .wrap-centred { max-width: 400px; margin: 0 auto; align-items: stretch; }
 
+/* The places of a protocol or spanning tree card (one per VLAN, port, ...) flow
+   in columns of at least 340px inside the card, so a long list does not run
+   down a single narrow column. */
+.protocol-places { column-width: 340px; column-gap: 14px; }
+.protocol-place { break-inside: avoid; }
+
+/* On a wide screen a page's cards flow down 2 columns (3 on a very wide
+   screen) like newspaper columns, so a short card never leaves a hole beside a
+   tall one, and stack on a narrow one. Anything that is not a plain card
+   (title, messages, notes, rows of cards) and every card that needs the width
+   (the front panel, a list of ports or VLANs, a table of over 20 rows, a code block, a table with too
+   many columns for the column, a long run of places, an empty-state message)
+   takes the whole row. The columns are about 500px wide from 1300px, 700px from
+   1700px and 700px as three from 2350px, so the table limit is 5, 7 and 8
+   columns. */
+main.wrap:not(.wrap-alone) > * { margin-top: 0; margin-bottom: 14px; }
+main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
+@media (min-width: 1300px) {
+  main.wrap:not(.wrap-alone) { column-count: 2; column-gap: 14px; }
+  main.wrap:not(.wrap-alone) > * { column-span: all; }
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
+/* A table in a column wraps its cells instead of running past the card. */
+@media (min-width: 1300px) and (max-width: 1699px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(5))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 1700px) and (max-width: 2349px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(7))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 2350px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(8))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 1700px) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
+@media (min-width: 2350px) {
+  main.wrap:not(.wrap-alone) { column-count: 3; }
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
+
 .page-title { margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
 .breadcrumb { margin: 0 0 2px; font-size: 12px; color: var(--text-3); }
 
@@ -926,3 +978,34 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .vlan-grid-key b { display: inline-grid; place-items: center; width: 18px; height: 16px; border-radius: 2px; font: 600 10.5px var(--mono); }
 .vlan-grid-key .cell-u { color: #fff; background: var(--sp-25g); }
 .vlan-grid-key .cell-t { color: var(--sp-10g); background: var(--accent-soft); }
+
+/* ---- no scroll bars: tables shrink and wrap instead ---- */
+
+/* Text cells wrap, so a table fits its card instead of scrolling. */
+@media (max-width: 1499px) {
+  .card .table:not(.table-ports) :is(th, td) { white-space: normal; }
+}
+.table-ports .reason { white-space: normal; display: inline-block; vertical-align: top; }
+.table-ports .device { white-space: normal; flex-wrap: wrap; }
+.table-ports .port-label { white-space: normal; }
+.row-form { flex-wrap: wrap; }
+.row-form input[type="text"] { min-width: 0; max-width: 100%; }
+/* The Ports table drops its Transceiver and Activity columns (the port's side
+   panel has both) when the page is narrower than 1500px. */
+@media (max-width: 1499px) {
+  .table-ports .col-extra { display: none; }
+}
+/* Under 1200px wide the Ports table also drops Description and Connected, and
+   every table gets tighter cells. */
+@media (max-width: 1199px) {
+  .table-ports .col-more { display: none; }
+  .table th, .table td { padding-left: 6px; padding-right: 6px; }
+  .table td { overflow-wrap: anywhere; }
+}
+.table-vlans td:last-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.table-vlans .row-form input[type="text"] { width: 8rem; }
+/* The VLAN grid squeezes its columns to the card instead of scrolling. */
+.vlan-grid { width: calc(100% - 16px); margin: 0 8px; max-width: 1400px; table-layout: fixed; }
+.vlan-grid thead th, .vlan-grid td { min-width: 0; width: auto; }
+.vlan-grid th.vlan-grid-name { min-width: 0; width: 96px; }
+.vlan-grid thead th.vlan-grid-gap, .vlan-grid td.vlan-grid-gap { min-width: 0; width: 8px; }
