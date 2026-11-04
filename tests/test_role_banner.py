@@ -77,3 +77,35 @@ def test_no_banner_on_the_switch_page_itself(
 ) -> None:
     _set_version(settings, 1)
     assert BANNER not in _flat(logged_in.get("/switch").text)
+
+
+def test_new_functions_and_port_list_are_two_cards(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    """The Switch page keeps 'Update the port list' in view while a 'Turn on'
+    card for new functions is shown above it (#27)."""
+    token = re.search(
+        r'name="csrf" value="([0-9a-f]+)"',
+        logged_in.get("/switch").text,
+    ).group(1)  # type: ignore[union-attr]
+    logged_in.post(
+        "/switch/enable-changes",
+        data={
+            "csrf": token,
+            "admin_user": "admin",
+            "admin_password": ADMIN_PASSWORD,
+            "ssh_port": "22",
+            "confirm_save": "yes",
+        },
+    )
+    _set_version(settings, 1)
+    behind = _flat(logged_in.get("/switch").text)
+    assert behind.count('action="/switch/enable-changes"') == 2
+    assert ">Update the port list</button>" in behind
+    assert re.search(r">\s*Turn on [^<]*</button>", behind)
+
+    _set_version(settings, ROLE_VERSION)
+    current = _flat(logged_in.get("/switch").text)
+    assert current.count('action="/switch/enable-changes"') == 1
+    assert ">Update the port list</button>" in current
+    assert not re.search(r">\s*Turn on [^<]*changes\s*</button>", current)

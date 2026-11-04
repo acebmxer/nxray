@@ -299,7 +299,7 @@
   </p>
   {{ admin_form("Turn on " ~ missing_changes, false) }}
 </section>
-{% else %}
+{% endif %}
 <section class="card">
   <h2 class="card-title">Update the port list</h2>
   {% if not connection.role_vlan_interfaces %}
@@ -321,7 +321,6 @@
   </p>
   {{ admin_form("Update the port list", false) }}
 </section>
-{% endif %}
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,

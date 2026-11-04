@@ -188,6 +188,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Changed
 
+- **The Switch page keeps "Update the port list" in view while new functions
+  wait to be turned on.** The two jobs used to share one card: when an update
+  added rules the card read **Turn on …**, and once they were on it turned
+  into **Update the port list** in the same place, which looked as if nothing
+  had happened. Now **Turn on …** is a card of its own, shown only while the
+  switch's permissions lack rules this version knows, and **Update the port
+  list** stays below it, with its own explanation (#27).
 - **Cards sit two or three across on a wide screen, on every page.** Each
   card used to take a full-width row of its own, so a wide screen showed mostly
   empty space and the page ran far down. From 1300 pixels wide a page's cards
