@@ -138,7 +138,7 @@
       {% endfor %}
     </tbody>
   </table>
-  <p class="note">The average over the range, both ways together, from each sampled frame's length times the sampling rate. "VLAN not given": samples the switch sent without a VLAN.</p>
+  <p class="note">The average over the range, both ways together, from each sampled frame's length times the sampling rate. A frame that came in without a VLAN tag is counted in the VLAN of its port (an access port's VLAN, a trunk's native VLAN). "VLAN not given" is what is left: samples from a port NXray has not read yet, such as in the first minute after NXray starts, or from a routed port.</p>
   {% else %}
   <p class="lead">No sFlow samples from this switch in this range.</p>
   {% endif %}

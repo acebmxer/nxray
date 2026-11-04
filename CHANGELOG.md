@@ -219,6 +219,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Busiest VLANs no longer lumps untagged traffic under "VLAN not given".**
+  A frame that comes in without a VLAN tag (on an access port, or on a trunk's
+  native VLAN) has no VLAN in the sample the switch sends, so all of it was
+  counted together and VLAN 2's own row came out far too low. NXray now reads
+  each port's access or native VLAN from the switch (about once a minute, with
+  the history sample) and counts such frames in that VLAN. "VLAN not given" is
+  left for a port NXray has not read, such as in the first minute after it
+  starts, or a routed port (#30).
 - **Charts are no longer huge on a wide screen.** A chart stretched to the
   full page width, so on a wide screen it was taller than the screen and its
   labels were oversized. A chart is now at most 960 pixels wide. On the

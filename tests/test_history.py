@@ -476,3 +476,17 @@ def test_the_vlans_page_shows_no_traffic_with_history_off(
     body = logged_in.get("/vlans").text
     assert "8.0 Mb/s in" not in body
     assert "history, which is turned off" in body
+
+
+def test_the_sampler_tells_the_sflow_collector_each_ports_vlan(
+    settings: Settings, switch: FakeSwitch
+) -> None:
+    from app.sflow import SflowCollector
+
+    collector = SflowCollector()
+    sampler = history.Sampler(settings, switch.transport, sflow_collector=collector)
+    assert sampler.sample_once() is None
+    assert collector._port_vlans == {}  # not listening: no extra request
+    collector.listening_port = 6343
+    assert sampler.sample_once() is None
+    assert collector._port_vlans[1]  # ifIndex -> VLAN for the switch's ports

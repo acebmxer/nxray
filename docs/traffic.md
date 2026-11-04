@@ -182,7 +182,10 @@ trunks and ports with several devices included**, on the **Traffic** page
 **What the page shows,** for 1 hour to 30 days (as much as is kept):
 
 - **Busiest VLANs**: each VLAN's average, its share and how many samples it
-  rests on; *VLAN not given* for samples the switch sent without one.
+  rests on. A frame that came in without a VLAN tag (on an access port, or on
+  a trunk's native VLAN) is counted in its port's VLAN, which NXray reads from
+  the switch about once a minute; *VLAN not given* is what is left, such as a
+  routed port or the first minute after NXray starts.
 - **Traffic per VLAN, measured**: a small card for each of the busiest eight
   VLANs: its latest figure in large type with the highest and the average
   beside it, and a short chart of the traffic as a filled area, the scale on

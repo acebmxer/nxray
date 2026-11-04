@@ -54,6 +54,7 @@ from app.sflow import (
     top_items,
     vlan_cards,
 )
+from app.sflow_ports import parse_port_vlans
 from app.sflow_switch import SflowConfig, parse_sflow_text, plan_sflow, sflow_form
 from app.switch_connection import delete_connection
 from tests.conftest import load_fixture
@@ -893,3 +894,109 @@ def test_a_viewer_sees_the_page_but_no_form(logged_in: TestClient, enabled: Fake
     refused = viewer.post("/traffic/sflow", data={**FORM, "csrf": _csrf(viewer), "confirm": "yes"})
     assert refused.status_code == 403
     assert _config_requests(enabled) == []
+
+
+# ---- untagged frames: the VLAN of the port they came in on ---------------------
+
+
+def _untagged(index: int = 5, size: int = 1000) -> bytes:
+    """A sample with no VLAN in it (no switch record, no 802.1Q tag) from port ``index``."""
+    body = _u32(7, index, 4096, 1000, 0, index, 6) + _u32(1) + _raw_header(_frame(), size)
+    return _datagram([_u32(1, len(body)) + body])
+
+
+def _vlan_totals(collector: SflowCollector) -> dict[str, int]:
+    return {row.item: row.samples for row in collector.drain(everything=True) if row.kind == VLAN}
+
+
+def test_an_untagged_frame_counts_in_its_ports_vlan() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    collector.set_port_vlans(1, {5: 2})
+    collector.receive(_untagged(5))
+    collector.receive(_untagged(9))  # a port NXray cannot place
+    collector.receive(_one(vlan=10))  # tagged: the tag wins
+    assert _vlan_totals(collector) == {"2": 1, "unknown": 1, "10": 1}
+
+
+def test_an_untagged_frame_stays_unplaced_without_the_ports() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    collector.receive(_untagged(5))
+    assert _vlan_totals(collector) == {"unknown": 1}
+
+
+def test_each_switch_has_its_own_ports() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    collector.set_port_vlans(2, {5: 7})
+    collector.receive(_untagged(5))
+    assert _vlan_totals(collector) == {"unknown": 1}
+
+
+def test_access_vlans_and_native_vlans_are_read_by_ifindex() -> None:
+    switchport = {
+        "TABLE_interface": {
+            "ROW_interface": [
+                {
+                    "interface": "Ethernet1/1",
+                    "switchport": "Enabled",
+                    "oper_mode": "access",
+                    "access_vlan": "2",
+                    "native_vlan": "1",
+                },
+                {
+                    "interface": "Ethernet1/2",
+                    "switchport": "Enabled",
+                    "oper_mode": "trunk",
+                    "access_vlan": "1",
+                    "native_vlan": "3",
+                },
+                {
+                    "interface": "port-channel41",
+                    "switchport": "Enabled",
+                    "oper_mode": "trunk",
+                    "access_vlan": "1",
+                    "native_vlan": "2",
+                },
+                {
+                    "interface": "Ethernet1/3",
+                    "switchport": "Disabled",
+                    "oper_mode": "access",
+                    "access_vlan": "1",
+                    "native_vlan": "1",
+                },
+                {
+                    "interface": "Ethernet1/4",
+                    "switchport": "Enabled",
+                    "oper_mode": "fex-fabric",
+                    "access_vlan": "1",
+                    "native_vlan": "1",
+                },
+                {
+                    "interface": "Ethernet1/5",
+                    "switchport": "Enabled",
+                    "oper_mode": "access",
+                    "access_vlan": "1",
+                    "native_vlan": "1",
+                },
+            ]
+        }
+    }
+    ifindex = {
+        "TABLE_interface": {
+            "ROW_interface": [
+                {"interface": "Ethernet1/1", "snmp-ifindex": "436207616"},
+                {"interface": "Ethernet1/2", "snmp-ifindex": "436208128"},
+                {"interface": "port-channel41", "snmp-ifindex": "369098792"},
+                {"interface": "Ethernet1/3", "snmp-ifindex": "436208640"},
+                {"interface": "Ethernet1/4", "snmp-ifindex": "436209152"},
+            ]
+        }
+    }
+    assert parse_port_vlans(switchport, ifindex) == {
+        436207616: 2,
+        436208128: 3,
+        369098792: 2,
+    }
+    assert parse_port_vlans({}, {}) == {}

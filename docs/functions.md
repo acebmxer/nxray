@@ -906,6 +906,13 @@ agent address is one of NXray's switches (`set_agents`), else notes the address
 are over; `status(switch_id)` is what was heard since NXray started. Kinds are
 `VLAN` (`vlan`), `MAC_SENDS` (`mac_out`) and `MAC_RECEIVES` (`mac_in`).
 
+## `app/sflow_ports.py` — which VLAN an untagged frame belongs to
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_port_vlans` | `(switchport, ifindex) -> dict[int, int]` | SNMP ifIndex -> the VLAN of an untagged frame on that port (an access port's VLAN, a trunk's native VLAN) from `show interface switchport` and `show interface snmp-ifindex`; routed ports have none | `load_port_vlans` | v0.2.0 |
+| `load_port_vlans` | `(client) -> dict[int, int]` | `parse_port_vlans` over what the switch says now, in one request | `history.Sampler` | v0.2.0 |
+
 ## `app/sflow_switch.py` — sFlow on the switch
 
 | Function | Signature | Does | Used by | Since |

@@ -87,7 +87,10 @@ async def lifespan(app: FastAPI):
 
     start_background_checker(settings)
     stop_sampler = start_sampler(
-        settings, lambda: app.state.nxapi_transport, lambda: app.state.alert_transport
+        settings,
+        lambda: app.state.nxapi_transport,
+        lambda: app.state.alert_transport,
+        app.state.sflow_collector,
     )
     stop_sflow = start_collector(
         settings.sflow_port, app.state.sflow_collector, settings.db_path, settings.sflow_keep_days

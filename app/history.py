@@ -21,6 +21,7 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -28,9 +29,10 @@ from app.alerts import AlertMonitor, dispatch, switch_label
 from app.charts import SERIES_COLOURS, Line, Point, line_chart
 from app.config import Settings
 from app.db import open_db
-from app.nxapi import NxapiClient
+from app.nxapi import NxapiClient, NxapiError, SwitchTarget
 from app.port_labels import get_labels
 from app.ports import Port, human_rate, parse_ports
+from app.sflow_ports import load_port_vlans
 from app.switch import Environment, Resources, parse_environment, parse_resources
 from app.switch_connection import (
     DecryptionError,
@@ -173,8 +175,12 @@ class Sampler:
         alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
         *,
         background_alerts: bool = True,
+        sflow_collector: Any = None,
     ) -> None:
         self._settings = settings
+        # The sFlow collector (app/sflow.py) to tell which VLAN each port's
+        # untagged frames belong to; None leaves them out.
+        self._sflow_collector = sflow_collector
         self._transport = transport
         self._alert_transport = alert_transport
         self._background_alerts = background_alerts
@@ -244,7 +250,21 @@ class Sampler:
         with open_db(self._settings.db_path) as conn:
             record(conn, switch_id, moment, rows)
         self._alert(connection, moment, reading=data, rows=rows)
+        self._tell_sflow(switch_id, target)
         return None
+
+    def _tell_sflow(self, switch_id: int, target: SwitchTarget) -> None:
+        """Give the sFlow collector each port's untagged VLAN, read from the
+        switch. Only while the collector listens; a failure is logged and never
+        costs the sample."""
+        collector = self._sflow_collector
+        if collector is None or not collector.listening_port:
+            return
+        try:
+            with NxapiClient(target, transport=self._transport()) as client:
+                collector.set_port_vlans(switch_id, load_port_vlans(client))
+        except NxapiError as exc:
+            log.warning("sFlow: could not read the ports' VLANs: %s", exc)
 
     def sample_once(self, now: float | None = None) -> str | None:
         """Sample every switch, one after the other.
@@ -277,6 +297,7 @@ def start_sampler(
     settings: Settings,
     transport: Callable[[], httpx.BaseTransport | None],
     alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
+    sflow_collector: Any = None,
 ) -> threading.Event | None:
     """Sample on its own thread until the returned event is set, checking the
     alerts against each sample.
@@ -288,7 +309,7 @@ def start_sampler(
     if not interval:
         return None
     stop = threading.Event()
-    sampler = Sampler(settings, transport, alert_transport)
+    sampler = Sampler(settings, transport, alert_transport, sflow_collector=sflow_collector)
 
     def _loop() -> None:
         problem: str | None = None

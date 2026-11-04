@@ -2053,6 +2053,17 @@ class FakeSwitch:
             return _ok(ident, body)
         if cmd == "show interface switchport":
             return _ok(ident, self.switchports())
+        if cmd == "show interface snmp-ifindex":
+            # Every switchport's ifIndex as the switch numbers them: 0x1a000000
+            # plus 512 for each port, and Po41 after the Ethernet ports.
+            names = [
+                row["interface"] for row in self.switchports()["TABLE_interface"]["ROW_interface"]
+            ]
+            table = [
+                {"interface": name, "snmp-ifindex": str(0x1A000000 + 512 * number)}
+                for number, name in enumerate(names)
+            ]
+            return _ok(ident, {"TABLE_interface": {"ROW_interface": table}})
         if cmd == "show vlan brief":
             return _ok(ident, self.vlan_brief())
         if cmd == "show hostname":

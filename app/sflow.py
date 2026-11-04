@@ -312,6 +312,8 @@ class SflowCollector:
         self._clock = clock
         self._lock = threading.Lock()
         self._agents: dict[str, int] = {}
+        # Per switch: SNMP ifIndex -> the VLAN a frame without a tag belongs to.
+        self._port_vlans: dict[int, dict[int, int]] = {}
         self._minutes: dict[tuple[int, int], _Minute] = {}
         self._status: dict[int, AgentStatus] = {}
         self._unknown: dict[str, float] = {}
@@ -321,6 +323,12 @@ class SflowCollector:
     def set_agents(self, agents: dict[str, int]) -> None:
         with self._lock:
             self._agents = dict(agents)
+
+    def set_port_vlans(self, switch_id: int, port_vlans: dict[int, int]) -> None:
+        """Which VLAN an untagged frame belongs to, by the ifIndex of the port it
+        came in on, for one switch (``load_port_vlans``)."""
+        with self._lock:
+            self._port_vlans[switch_id] = dict(port_vlans)
 
     def receive(self, data: bytes, now: float | None = None) -> int:
         """Add one datagram up; how many of its samples counted (0 for one
@@ -344,11 +352,14 @@ class SflowCollector:
             status.agent = datagram.agent
             minute = int(moment // 60) * 60
             bucket = self._minutes.setdefault((switch_id, minute), _Minute())
+            port_vlans = self._port_vlans.get(switch_id, {})
             for sample in datagram.samples:
                 status.samples += 1
                 status.sampling_rate = sample.sampling_rate
                 size = sample.estimated_bytes
-                self._add(bucket, VLAN, str(sample.vlan) if sample.vlan else UNKNOWN_VLAN, size)
+                # A frame without a tag belongs to the VLAN of the port it came in on.
+                vlan = sample.vlan or port_vlans.get(sample.input_index, 0)
+                self._add(bucket, VLAN, str(vlan) if vlan else UNKNOWN_VLAN, size)
                 if sample.src_mac and not _is_group_mac(sample.src_mac):
                     self._add(bucket, MAC_SENDS, sample.src_mac, size)
                 if sample.dst_mac and not _is_group_mac(sample.dst_mac):
