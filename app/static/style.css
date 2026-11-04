@@ -887,9 +887,14 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 }
 .bulk-drawer .bulk-bar select { max-width: 9rem; }
 #change-several:has(input[name="names"]:checked) .drawer.bulk-drawer { display: flex; }
-/* Keep the front panel and table clear of an open side panel. */
-.wrap:has(#change-several input[name="names"]:checked),
-.wrap:has(.drawer:not(.bulk-drawer)) { padding-right: 456px; }
+/* The Ports page leaves room for its side panel all the time (the panel is
+   440px wide, plus a gap), so the front panel and the table keep one size and
+   place whether it is open or shut, and the room stays empty while it is shut.
+   Where the screen is too narrow for that, the panel is laid over the page
+   instead and nothing moves. */
+@media (min-width: 1700px) {
+  .wrap-ports { padding-right: 476px; }
+}
 /* A browser without :has() shows the form as a card under the table. */
 @supports not selector(:has(*)) {
   .drawer.bulk-drawer {
@@ -906,7 +911,8 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 /* The side panel: one port, opened by ?port= on the Ports page. */
 .drawer {
   position: fixed;
-  top: 0;
+  /* Below the top bar, so its Refresh choice stays in reach. */
+  top: var(--strip-h);
   right: 0;
   bottom: 0;
   z-index: 10;
@@ -956,6 +962,10 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .drawer-part .chart { margin-top: 4px; }
 .drawer-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .drawer-foot .btn-primary { margin-top: 0; }
+/* The buttons share one row and one line; a form's own top margin would push its button down. */
+.drawer-foot { align-items: center; }
+.drawer-foot form { margin: 0; }
+.drawer-foot .note { flex: 1 1 100%; margin: 0; }
 
 /* ---- VLANs page: which ports carry which VLAN ---- */
 

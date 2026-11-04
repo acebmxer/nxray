@@ -271,3 +271,27 @@ def test_without_the_origin_the_port_page_answers(
     )
     assert '<h1 class="page-title">Ethernet1/3</h1>' in done.text
     assert 'class="drawer"' not in done.text
+
+
+def test_the_ports_page_keeps_room_for_the_panel_open_or_not(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    """The page's width does not depend on the panel (#32): the same class is on
+    it with the panel shut and open, and the stylesheet reserves the room by that
+    class, never by :has() on the open panel, and starts the panel below the top bar."""
+    shut = logged_in.get("/ports").text
+    opened = logged_in.get("/ports?port=Ethernet1/3").text
+    assert '<main class="wrap wrap-ports"' in shut
+    assert '<main class="wrap wrap-ports"' in opened
+    css = logged_in.get("/static/style.css").text
+    assert ".wrap-ports { padding-right: 476px; }" in css
+    assert ".wrap:has(" not in css
+    assert "top: var(--strip-h);" in css[css.index(".drawer {") :][:200]
+
+
+def test_the_panel_foot_buttons_share_one_line(logged_in: TestClient) -> None:
+    """The forms in the panel's foot carry no top margin of their own (the Reset
+    form's would push its button below Turn off)."""
+    css = logged_in.get("/static/style.css").text
+    assert ".drawer-foot form { margin: 0; }" in css
+    assert ".drawer-foot { align-items: center; }" in css

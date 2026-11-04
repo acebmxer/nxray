@@ -232,6 +232,17 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Ports page no longer shifts when a port's panel opens, and the panel
+  no longer covers the top bar.** The front panel picture and the port list
+  used to shrink to make room when a port (or the ticked ports) opened its
+  side panel, and grow back when it closed. On a screen 1700 pixels wide or
+  more the page now keeps that room on the right all the time, empty while the
+  panel is shut, so nothing moves. On a narrower screen the panel is laid over
+  the page and nothing moves either. The panel now starts below the top bar,
+  so the Refresh choice and the switch picker stay in reach (#32).
+- **The buttons at the foot of a port's panel line up.** **Reset to defaults**
+  sat lower than **Turn off** because its form carried a top margin of its own;
+  both now share one line (#32).
 - **Busiest VLANs no longer lumps untagged traffic under "VLAN not given".**
   A frame that comes in without a VLAN tag (on an access port, or on a trunk's
   native VLAN) has no VLAN in the sample the switch sends, so all of it was
