@@ -19,6 +19,7 @@ from app.alerts import notify_change, switch_label
 from app.db import open_db
 from app.live import LIVE_CHOICES
 from app.nxapi import SwitchTarget
+from app.port_changes import ROLE_VERSION, missing_changes
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
 from app.security import csrf_token, csrf_valid, current_user
@@ -225,7 +226,28 @@ def switch_picker(request: Request) -> tuple[list[SwitchConnection], int | None]
     return request.state.picker
 
 
+def role_behind(request: Request) -> list[tuple[SwitchConnection, str]]:
+    """Switches whose NXray role lacks rules this version of NXray can use, with
+    the missing kinds of change in words, for the banner on every page.
+
+    Only for an admin, who alone can fix it on the Switch page, and only for a
+    switch that already had changes turned on (``role_version`` above 0); one
+    that never had them is simply off, not behind. Empty on the Switch page,
+    which has its own card for this.
+    """
+    account = current_account(request)
+    if account is None or not account.is_admin or request.url.path.startswith("/switch"):
+        return []
+    switches, _ = switch_picker(request)
+    return [
+        (switch, missing_changes(switch.role_version))
+        for switch in switches
+        if 0 < switch.role_version < ROLE_VERSION
+    ]
+
+
 templates.env.globals["switch_picker"] = switch_picker
+templates.env.globals["role_behind"] = role_behind
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
 templates.env.globals["live_choices"] = LIVE_CHOICES

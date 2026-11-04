@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **A banner on every page when the switch's permissions are behind.** After
+  an NXray update adds a kind of change, an admin sees a notice at the top of
+  every page (not only the Switch page) naming the switch and what it can't
+  yet do, with a link to the Switch page where **Turn on …** brings it up to
+  date. It shows only for admins, only for a switch that already had changes
+  turned on, and one banner per switch that is behind. NXray still does not
+  keep the switch's admin login.
 - **Setting up a switch turns changes on in the same step.** The Switch
   page's setup form (and Add another switch) has a new **Also turn on
   changes** box, ticked by default, and an **SSH port** field. With it

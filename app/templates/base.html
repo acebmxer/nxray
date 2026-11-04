@@ -144,6 +144,15 @@
       {% endif %}
     </header>
     <main class="{% block main_class %}wrap{% endblock %}">
+      {% for behind, behind_words in role_behind(request) %}
+      <p class="alert alert-warn" role="status">
+        NXray's account on {{ behind.switch_hostname or behind.host }} is behind this version of
+        NXray: it can't yet do {{ behind_words }}.
+        <a href="/switch">Open the Switch page</a>{% if picker_switches|length > 1 %}
+        (with that switch chosen in the top bar){% endif %}
+        and press the Turn on button to update it.
+      </p>
+      {% endfor %}
       {% block content %}{% endblock %}
     </main>
   </div>
