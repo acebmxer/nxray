@@ -112,6 +112,7 @@ def _render_users(
     error: str | None = None,
     notice: str | None = None,
     form: dict | None = None,
+    switch_form: dict | None = None,
     status_code: int = 200,
 ) -> Response:
     with open_db(request.app.state.settings.db_path) as conn:
@@ -142,6 +143,7 @@ def _render_users(
             "error": error,
             "notice": notice,
             "form": form or {"new_username": "", "role": "viewer"},
+            "switch_form": switch_form or {"account_name": "", "role": "viewer", "switches": []},
             "connections": connections,
             "statuses": statuses,
             "switch_lists": switch_lists,

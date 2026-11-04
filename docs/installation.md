@@ -125,6 +125,19 @@ Things to know:
   there. Without that, a restart of the switch would undo it: a lock would
   open again, a removed account would come back. If the save fails, the page
   says a restart undoes the change until you press Save config.
+- **Either side on its own.** Making: **Add an account** with no switch ticked
+  makes an NXray user only; with switches ticked, both; **Add a switch
+  account only** makes a local account with no NXray sign-in, for someone who
+  uses SSH or the console, with the role you pick and on the switches you
+  tick. Deleting: **Delete** beside a user opens a page that lists their
+  switch accounts; tick none to delete the NXray user only (their switch
+  accounts stay, linked to no one), or tick some to delete those too. **Delete**
+  beside an account in *Local accounts on …* deletes a switch account from the
+  switches you tick; a linked NXray user stays and only the link goes. Each
+  asks you to confirm and, for the switch, the switch admin login. If a switch
+  refuses, the NXray user is kept so you can try again. NXray never deletes
+  its own account, the switch's `admin` and the other reserved names, your own
+  account, or the last active admin.
 - **Accounts already on the switch** are listed on the Users page, with the
   NXray user each belongs to, so you can link one instead of making a
   duplicate. NXray never makes a second account over an existing one.

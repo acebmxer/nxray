@@ -22,6 +22,7 @@ from app.users import (
     authenticate,
     bootstrap_admin,
     create_user,
+    delete_user,
     get_user,
     list_users,
     set_disabled,
@@ -595,3 +596,22 @@ def test_resetpw_refuses_a_short_password(
     assert resetpw.main([TEST_USER]) == 1
     with open_db(settings.db_path) as conn:
         assert authenticate(conn, TEST_USER, TEST_PASSWORD) is not None
+
+
+def test_deleting_an_account_keeps_the_last_active_admin(settings: Settings) -> None:
+    with open_db(settings.db_path) as conn:
+        migrate(conn)
+        bootstrap_admin(conn, "boss", hash_password(PASSWORD))
+        boss = get_user(conn, "boss")
+        assert boss is not None
+        with pytest.raises(UserError, match="only admin left"):
+            delete_user(conn, boss.id)
+        spare = create_user(conn, "spare", PASSWORD, PASSWORD, "admin")
+        set_disabled(conn, spare.id, True)
+        with pytest.raises(UserError, match="only admin left"):
+            delete_user(conn, boss.id)
+        set_disabled(conn, spare.id, False)
+        assert delete_user(conn, boss.id).username == "boss"
+        assert get_user(conn, "boss") is None
+        with pytest.raises(UserError, match="no longer exists"):
+            delete_user(conn, boss.id)

@@ -11,6 +11,19 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Make or delete an NXray user and a switch account separately.** The Users
+  page can now make a switch account on its own (**Add a switch account
+  only**: a local account for someone who uses SSH or the console, with the
+  role you pick, on the switches you tick), and delete either side. **Delete**
+  beside a user opens a page naming their switch accounts: tick none to delete
+  the NXray user only (their switch accounts stay, linked to no one), or tick
+  some to delete those too. **Delete** beside an account in *Local accounts
+  on …* deletes it from the switches you tick, whether or not an NXray user is
+  linked to it (the user stays, only the link goes). Each asks to confirm, uses
+  the switch admin login once and never stores it, and saves the switch
+  configuration. If a switch refuses, the NXray user is kept so you can try
+  again. NXray's own account, the switch's `admin` and the other reserved
+  names, your own account and the last active admin are never deleted (#31).
 - **A banner on every page when the switch's permissions are behind.** After
   an NXray update adds a kind of change, an admin sees a notice at the top of
   every page (not only the Switch page) naming the switch and what it can't

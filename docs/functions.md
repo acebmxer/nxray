@@ -663,6 +663,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `user_switch_remove` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password, confirm) -> Response` | `POST /users/switch/remove`: removes the account from the switch and the link; the NXray user stays | router | v0.2.0 |
 | `user_switch_unlink` | `(request, username, csrf, user_id, switch_id) -> Response` | `POST /users/switch/unlink`: forgets the link; the switch is not touched | router | v0.2.0 |
 | `create_with_switches` | `(request, username, user, password, switch_ids, admin_user, admin_password) -> tuple[list[str], list[str]]` | After an NXray user was added with switches ticked: makes its account on each; what was made, and what was not and why | `users_create` | v0.2.0 |
+| `switch_account_create` | `(request, username, csrf, account_name, password, confirm_password, role, switches, admin_user, admin_password, confirm_switch) -> Response` | `POST /users/switch-account/create`: a local account on the ticked switches with no NXray user, checked on the switch's side first; the role is an NXray role's switch roles | router | v0.2.0 |
+| `switch_account_delete_page` | `(request, name, switch_id, username) -> Response` | `GET /users/switch-account/delete`: every switch that has the account, who it is linked to there, and the confirm form | router | v0.2.0 |
+| `switch_account_delete` | `(request, username, csrf, name, switches, admin_user, admin_password, confirm) -> Response` | `POST /users/switch-account/delete`: deletes a local account from the ticked switches; a linked NXray user stays, only the link goes | router | v0.2.0 |
+| `render_switch_account_delete` | `(request, username, name, *, ticked=None, error=None, notice=None, status_code=200) -> Response` | The delete-a-switch-account page | `switch_account_delete_page`, `switch_account_delete` | v0.2.0 |
+| `delete_on_switches` | `(request, username, name, connections, admin_user, admin_password) -> tuple[list[str], list[str]]` | Removes the account from each switch and any link to an NXray user there; what went and what stayed with why | `switch_account_delete`, `user_delete` | v0.2.0 |
+| `user_delete_page` | `(request, user_id, username) -> Response` | `GET /users/delete`: what deleting an NXray user takes with it, with their linked switch accounts to tick | router | v0.2.0 |
+| `user_delete` | `(request, username, csrf, user_id, switches, admin_user, admin_password, confirm) -> Response` | `POST /users/delete`: deletes the ticked switch accounts first, then the NXray user; a refusing switch keeps the user | router | v0.2.0 |
+| `render_user_delete` | `(request, username, user_id, *, error=None, status_code=200) -> Response` | The delete-an-NXray-user page | `user_delete_page`, `user_delete` | v0.2.0 |
 | `own_session` | `(request, target) -> str \| None` | This session's id when the target is the signed-in account, so a new password leaves it signed in | `routes/users`, `user_switch_create`, `user_switch_password` | v0.1.0 |
 | `switch_ids` | `(values) -> list[int]` | The ticked switches of the Add an account form, as ids | `users_create` | v0.2.0 |
 | `users_2fa_off` | `(request, username, csrf, user_id) -> Response` | `POST /users/2fa-off`: an admin turns off someone else's two-factor, no code needed | router | v0.1.0 |
@@ -726,6 +734,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `list_users` | `(conn) -> list[User]` | Every account, oldest first | `routes/users.users_page` | v0.1.0 |
 | `new_backup_codes` | `(conn, user_id) -> list[str]` | Ten new backup codes; the old ones stop working | `routes/users.account_2fa_codes` | v0.1.0 |
 | `set_disabled` | `(conn, user_id, disabled) -> User` | Disables (and signs out) or enables an account; keeps the last active admin | `routes/users.users_disable`, `resetpw.main` | v0.1.0 |
+| `check_can_delete` | `(conn, user_id) -> User` | The account, or UserError when it is gone or is the only active admin | `delete_user`, `routes/switch_accounts.user_delete` | v0.2.0 |
+| `delete_user` | `(conn, user_id) -> User` | Deletes an account, its links to switch accounts and its sessions; keeps the last active admin | `routes/switch_accounts.user_delete` | v0.2.0 |
 | `set_password` | `(conn, user_id, password, *, keep_session=None) -> None` | Stores a new password and signs the account out everywhere but `keep_session` | `routes/users`, `resetpw.main` | v0.1.0 |
 | `set_role` | `(conn, user_id, role) -> User` | Changes an account's role; keeps the last active admin | `routes/users.users_role` | v0.1.0 |
 | `turn_off_two_factor` | `(conn, user_id) -> User` | Turns two-factor off and forgets the key and backup codes | `routes/users`, `resetpw.main` | v0.1.0 |
@@ -747,6 +757,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `guard_account` | `(name, connection) -> None` | Refuses NXray's own account on that switch and the names the switch keeps for itself (its admin among them) | every switch account change | v0.2.0 |
 | `list_links` | `(conn, *, user_id=None) -> list[AccountLink]` | Every link, or one user's | `routes/users`, `routes/switch_accounts` | v0.2.0 |
 | `load_switch_accounts` | `(client) -> list[SwitchAccount]` | The switch's local accounts from `show user-account` | `create_on_switch`, `bring_roles_in_step`, `routes/switch_accounts.read_accounts` | v0.2.0 |
+| `remove_from_switch` | `(client, name) -> None` | Removes a local account, or says the switch has none by that name | `routes/switch_accounts.delete_on_switches` | v0.2.0 |
 | `lock_password` | `() -> str` | A random password nobody sees, which locks a switch account | `routes/switch_accounts.user_switch_lock` | v0.2.0 |
 | `out_of_step` | `(user, link, connection) -> list[str]` | What differs between the NXray user and its switch account (role, password, disabled versus locked), in words | `routes/users`, `routes/switch_accounts` | v0.2.0 |
 | `parse_user_accounts` | `(body) -> list[SwitchAccount]` | Every local account and its roles from `show user-account`, by name | `load_switch_accounts` | v0.2.0 |

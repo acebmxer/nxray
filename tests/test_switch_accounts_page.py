@@ -520,3 +520,239 @@ def test_own_account_page_shows_the_switch_account(
     user_id = str(_user_id(settings, TEST_USER))
     page = _text(logged_in.get(f"/users/switch?user_id={user_id}").text)
     assert f"Switch accounts of {TEST_USER}" in page
+
+
+# ---- accounts on their own (#31) ----------------------------------------------
+
+
+def _switch_only(
+    client: TestClient, name: str, role: str = "viewer", password: str = GOOD, **extra
+):
+    return _post(
+        client,
+        "/users/switch-account/create",
+        account_name=name,
+        password=password,
+        confirm_password=password,
+        role=role,
+        switches=["1"],
+        confirm_switch="yes",
+        **{**ADMIN, **extra},
+    )
+
+
+def test_a_switch_account_with_no_nxray_user(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    response = _switch_only(logged_in, "sven", "operator")
+    assert "sven on" in _text(response.text) and "network-operator + nxray-ports" in _text(
+        response.text
+    )
+    assert "sven" in switch.users and switch.saved
+    with open_db(settings.db_path) as conn:
+        assert get_user(conn, "sven") is None
+        assert conn.execute("SELECT COUNT(*) FROM switch_accounts").fetchone()[0] == 0
+    assert "switch-account/delete?name=sven" in logged_in.get("/users").text
+
+
+@pytest.mark.parametrize(
+    ("change", "words"),
+    [
+        ({"account_name": "admin"}, "a name the switch keeps for itself"),
+        ({"account_name": "nxray"}, "NXray's own account"),
+        ({"account_name": "1bad"}, "starting with a letter"),
+        ({"password": "short", "confirm_password": "short"}, "password"),
+        ({"confirm_password": OTHER}, "not the same"),
+        ({"role": "root"}, "pick the role"),
+        ({"confirm_switch": ""}, "tick the box"),
+        ({"switches": []}, "tick at least one switch"),
+    ],
+)
+def test_a_switch_account_is_checked_before_anything_is_sent(
+    logged_in: TestClient, switch: FakeSwitch, change: dict, words: str
+) -> None:
+    form = {
+        "account_name": "sven",
+        "password": GOOD,
+        "confirm_password": GOOD,
+        "role": "viewer",
+        "switches": ["1"],
+        "confirm_switch": "yes",
+        **ADMIN,
+        **change,
+    }
+    response = _post(logged_in, "/users/switch-account/create", **form)
+    assert response.status_code == 400 and words in _text(response.text)
+    assert _config_requests(switch) == []
+
+
+def test_a_switch_account_is_never_made_over_an_existing_one(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    _switch_only(logged_in, "sven")
+    again = _switch_only(logged_in, "sven", password=OTHER)
+    assert "already has an account called sven" in _text(again.text)
+    assert switch.users["sven"][0] == GOOD
+
+
+def test_the_users_page_has_a_delete_button_for_others_not_for_yourself(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    _add(logged_in, "otto", "viewer")
+    page = logged_in.get("/users").text
+    assert f'href="/users/delete?user_id={_user_id(settings, "otto")}"' in page
+    assert f'href="/users/delete?user_id={_user_id(settings, TEST_USER)}"' not in page
+
+
+def test_delete_an_nxray_user_only_leaves_the_switch_account(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    _add_on_switch(logged_in, "otto", "viewer")
+    user_id = str(_user_id(settings, "otto"))
+    page = _text(logged_in.get(f"/users/delete?user_id={user_id}").text)
+    assert "Also delete otto from" in page
+    asked = _post(logged_in, "/users/delete", user_id=user_id)
+    assert asked.status_code == 400 and "tick the box" in _text(asked.text)
+    done = _post(logged_in, "/users/delete", user_id=user_id, confirm="yes")
+    text = _text(done.text)
+    assert "Deleted otto from NXray" in text and "Still on the switch" in text
+    assert "otto" in switch.users
+    with open_db(settings.db_path) as conn:
+        assert get_user(conn, "otto") is None
+        assert conn.execute("SELECT COUNT(*) FROM switch_accounts").fetchone()[0] == 0
+
+
+def test_delete_both(logged_in: TestClient, switch: FakeSwitch, settings: Settings) -> None:
+    _add_on_switch(logged_in, "otto", "viewer")
+    user_id = str(_user_id(settings, "otto"))
+    done = _post(
+        logged_in, "/users/delete", user_id=user_id, switches=["1"], confirm="yes", **ADMIN
+    )
+    assert "Also deleted: otto on" in _text(done.text)
+    assert "otto" not in switch.users
+    with open_db(settings.db_path) as conn:
+        assert get_user(conn, "otto") is None
+
+
+def test_a_switch_that_refuses_keeps_the_nxray_user(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    _add_on_switch(logged_in, "otto", "viewer")
+    user_id = str(_user_id(settings, "otto"))
+    wrong = _post(
+        logged_in,
+        "/users/delete",
+        user_id=user_id,
+        switches=["1"],
+        confirm="yes",
+        admin_user="admin",
+        admin_password="wrong",
+    )
+    assert wrong.status_code == 400 and "was NOT deleted from NXray" in _text(wrong.text)
+    assert "wrong" not in wrong.text
+    assert "otto" in switch.users
+    with open_db(settings.db_path) as conn:
+        assert get_user(conn, "otto") is not None
+
+
+def test_you_and_the_last_admin_are_not_deleted(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    own = str(_user_id(settings, TEST_USER))
+    response = _post(logged_in, "/users/delete", user_id=own, confirm="yes")
+    assert response.status_code == 400 and "your own account" in _text(response.text)
+    _add(logged_in, "vera", "admin")
+    vera = str(_user_id(settings, "vera"))
+    _post(logged_in, "/users/role", user_id=vera, role="viewer")
+    other = _post(
+        logged_in, "/users/delete", user_id=str(_user_id(settings, "vera")), confirm="yes"
+    )
+    assert "Deleted vera" in _text(other.text)
+
+
+def test_delete_a_switch_account_with_no_nxray_user(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    _switch_only(logged_in, "sven")
+    page = _text(logged_in.get("/users/switch-account/delete?name=sven&switch_id=1").text)
+    assert "Linked to no NXray user" in page
+    refused = _post(logged_in, "/users/switch-account/delete", name="sven", switches=["1"], **ADMIN)
+    assert refused.status_code == 400 and "tick the box" in _text(refused.text)
+    assert "sven" in switch.users
+    done = _post(
+        logged_in,
+        "/users/switch-account/delete",
+        name="sven",
+        switches=["1"],
+        confirm="yes",
+        **ADMIN,
+    )
+    assert "Deleted: sven on" in _text(done.text)
+    assert "sven" not in switch.users and switch.saved
+
+
+def test_delete_a_linked_switch_account_keeps_the_nxray_user(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    _add_on_switch(logged_in, "otto", "viewer")
+    page = _text(logged_in.get("/users/switch-account/delete?name=otto&switch_id=1").text)
+    assert "Linked to the NXray user otto" in page
+    _post(
+        logged_in,
+        "/users/switch-account/delete",
+        name="otto",
+        switches=["1"],
+        confirm="yes",
+        **ADMIN,
+    )
+    assert "otto" not in switch.users
+    with open_db(settings.db_path) as conn:
+        assert get_user(conn, "otto") is not None
+        assert conn.execute("SELECT COUNT(*) FROM switch_accounts").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("name", ["admin", "nxray"])
+def test_guarded_switch_accounts_are_never_deleted(
+    logged_in: TestClient, switch: FakeSwitch, name: str
+) -> None:
+    response = _post(
+        logged_in,
+        "/users/switch-account/delete",
+        name=name,
+        switches=["1"],
+        confirm="yes",
+        **ADMIN,
+    )
+    assert response.status_code == 400
+    assert name in switch.users
+    assert _config_requests(switch) == []
+
+
+def test_a_missing_account_is_not_reported_as_deleted(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    response = _post(
+        logged_in,
+        "/users/switch-account/delete",
+        name="ghost",
+        switches=["1"],
+        confirm="yes",
+        **ADMIN,
+    )
+    assert "has no account called ghost" in _text(response.text)
+
+
+def test_the_new_forms_need_an_admin_and_a_csrf_token(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    for path in ("/users/switch-account/create", "/users/switch-account/delete", "/users/delete"):
+        response = logged_in.post(path, data={"csrf": "nope", "name": "x"})
+        assert response.status_code in (400, 403), path
+
+
+def test_no_password_in_the_logs_of_a_switch_only_account(
+    logged_in: TestClient, switch: FakeSwitch, caplog
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        _switch_only(logged_in, "sven")
+    assert GOOD not in caplog.text and ADMIN_PASSWORD not in caplog.text

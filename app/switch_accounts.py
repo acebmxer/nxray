@@ -380,6 +380,15 @@ def create_on_switch(client: NxapiClient, name: str, password: str, roles: tuple
     client.create_person_account(name, password, roles)
 
 
+def remove_from_switch(client: NxapiClient, name: str) -> None:
+    """Remove the account, unless the switch has none by that name (then there
+    is nothing to remove, and a silent success would hide a typo)."""
+    existing = {account.name for account in load_switch_accounts(client)}
+    if name not in existing:
+        raise ValueError(f"the switch has no account called {name} any more")
+    client.remove_person_account(name)
+
+
 def bring_roles_in_step(client: NxapiClient, name: str, wanted: tuple[str, ...]) -> tuple[str, ...]:
     """Add the wanted roles the account lacks and take off the other roles NXray
     gives people; other roles stay. Returns the account's roles afterwards."""

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_admin_login.html" import admin_login %}
+{% block title %}Delete a switch account — NXray{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/users">← Users</a></p>
+<h1 class="page-title">Delete the switch account {{ name }}</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+{% set present = places|selectattr("account")|list %}
+{% if not name or not present %}
+<p class="lead">No switch has an account called {{ name or "that" }}.</p>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Where it is</h2>
+  <p class="lead">Deleting a switch account cannot be undone from NXray. A person signed in as it over SSH stays signed in until the session ends.</p>
+  <form method="post" action="/users/switch-account/delete" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ name }}">
+    <fieldset class="choice">
+      <legend>Delete it from</legend>
+      {% for place in present %}
+      {% set connection = place.connection %}
+      {% if place.guarded %}
+      <p class="note">{{ connection.label }}: <span class="dim">{{ place.guarded }}.</span></p>
+      {% else %}
+      <label class="check"><input type="checkbox" name="switches" value="{{ connection.id }}" {% if connection.id in ticked %}checked{% endif %}> {{ connection.label }} ({{ connection.host }}), roles {{ place.account.roles|join(", ") }}
+        {% if place.owner %}<br><span class="dim">Linked to the NXray user {{ place.owner.username }}: the user stays in NXray and only the link goes, so they can no longer sign in over SSH.</span>
+        {% else %}<br><span class="dim">Linked to no NXray user.</span>{% endif %}</label>
+      {% endif %}
+      {% endfor %}
+    </fieldset>
+    {{ admin_login("swdel") }}
+    <label class="check"><input type="checkbox" name="confirm" value="yes"> Yes, delete {{ name }} from the ticked switches</label>
+    <button type="submit" class="btn btn-danger">Delete the switch account</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

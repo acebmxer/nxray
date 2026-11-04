@@ -208,6 +208,31 @@ def _active_admins_besides(conn: sqlite3.Connection, user_id: int) -> int:
     return int(row["n"])
 
 
+def check_can_delete(conn: sqlite3.Connection, user_id: int) -> User:
+    """The account, or UserError when NXray would not delete it: it is gone
+    already, or it is the only active admin left."""
+    user = get_user_by_id(conn, user_id)
+    if user is None:
+        raise UserError("That account no longer exists.")
+    if user.is_admin and not user.disabled and _active_admins_besides(conn, user_id) == 0:
+        raise UserError(
+            f"{user.username} is the only admin left, so it cannot be deleted. "
+            "Make another account admin first."
+        )
+    return user
+
+
+def delete_user(conn: sqlite3.Connection, user_id: int) -> User:
+    """Delete an NXray account and sign it out at once. Its links to switch
+    accounts go with it; the accounts on the switches are not touched here.
+    Who may delete which account is decided by the route."""
+    user = check_can_delete(conn, user_id)
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    destroy_user_sessions(conn, user.username)
+    return user
+
+
 def set_role(conn: sqlite3.Connection, user_id: int, role: str) -> User:
     """Give an account another role; the change applies to its next page."""
     _check_role(role)
