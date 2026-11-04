@@ -52,6 +52,7 @@ from app.sflow import (
     start_collector,
     store_rows,
     top_items,
+    vlan_cards,
 )
 from app.sflow_switch import SflowConfig, parse_sflow_text, plan_sflow, sflow_form
 from app.switch_connection import delete_connection
@@ -328,11 +329,22 @@ def test_the_charts(db: sqlite3.Connection) -> None:
     minute = int(now // 60) * 60 - 120
     store_rows(db, _rows(minute, {"10": 6000}))
     store_rows(db, [SflowRow(1, minute, MAC_SENDS, SERVER, 3000, 1)])
-    vlans, device = sflow_charts(db, 1, "1h", now, mac=SERVER)
-    assert vlans.svg is not None and vlans.legend[0].label == "VLAN 10"
+    (device,) = sflow_charts(db, 1, "1h", now, mac=SERVER)
     assert device.svg is not None and device.title.startswith(SERVER)
-    (only_vlans,) = sflow_charts(db, 1, "1h", now)
-    assert only_vlans.anchor == "vlans"
+    assert sflow_charts(db, 1, "1h", now) == []
+
+
+def test_each_vlan_gets_a_card_with_a_filled_chart(db: sqlite3.Connection) -> None:
+    now = time.time()
+    minute = int(now // 60) * 60 - 120
+    store_rows(db, _rows(minute, {"10": 6000, "20": 600}))
+    store_rows(db, _rows(minute + 60, {"10": 3000, "20": 300}))
+    cards = vlan_cards(db, 1, "1h", now)
+    assert [card.label for card in cards] == ["VLAN 10", "VLAN 20"]
+    assert 'class="chart-area s0"' in str(cards[0].svg)
+    assert 'class="chart-area s1"' in str(cards[1].svg)
+    assert cards[0].now and cards[0].highest and cards[0].average
+    assert vlan_cards(db, 2, "1h", now) == []
 
 
 def test_forgetting_a_switch_forgets_its_traffic(db: sqlite3.Connection) -> None:

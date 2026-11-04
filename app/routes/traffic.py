@@ -44,6 +44,7 @@ from app.sflow import (
     load_agents,
     sflow_charts,
     top_items,
+    vlan_cards,
     vlan_label,
 )
 from app.sflow_switch import SCOPES, SflowConfig, load_sflow_config, plan_sflow, sflow_form
@@ -148,10 +149,11 @@ def _render(
     mac = ":".join(mac_param[i : i + 2] for i in range(0, 12, 2)) if mac_param else ""
     now = time.time()
     start = now - RANGES[period]
-    charts, vlans, devices, newest = [], [], [], None
+    charts, vlan_chart_cards, vlans, devices, newest = [], [], [], [], None
     if connection is not None:
         with open_db(settings.db_path) as conn:
             charts = sflow_charts(conn, switch_id, period, now, mac=mac)
+            vlan_chart_cards = vlan_cards(conn, switch_id, period, now)
             vlans = top_items(conn, switch_id, VLAN, start=start, end=now, limit=30)
             devices = device_rows(
                 top_items(conn, switch_id, MAC_SENDS, start=start, end=now, limit=DEVICE_ROWS),
@@ -190,6 +192,7 @@ def _render(
             "unknown_agents": collector.unknown_agents(),
             "newest": newest,
             "charts": charts,
+            "vlan_cards": vlan_chart_cards,
             "vlans": vlans,
             "vlan_total": vlan_total,
             "vlan_label": vlan_label,

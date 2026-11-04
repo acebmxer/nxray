@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.charts import Line, line_chart, nice_ticks, time_label, time_ticks
+from app.charts import Line, area_chart, line_chart, nice_ticks, time_label, time_ticks
 
 
 def _fmt(value: float) -> str:
@@ -120,3 +120,33 @@ def test_a_temperature_axis_follows_the_data_not_zero() -> None:
     )
     labels = re.findall(r'text-anchor="end">([\d.]+)<', svg)
     assert labels and min(float(label) for label in labels) >= 35
+
+
+def test_area_chart_fills_from_zero_with_the_axis_on_the_right() -> None:
+    svg = str(
+        area_chart(
+            [(10, 1), (70, 3), (130, 2)], start=0, end=200, bucket=60, fmt=_fmt, colour=2, label="a"
+        )
+    )
+    assert 'class="chart-area s2"' in svg and 'class="chart-line s2"' in svg
+    assert 'text-anchor="start"' in svg and "<script" not in svg
+
+
+def test_area_chart_breaks_at_a_gap_and_escapes_the_label() -> None:
+    svg = str(
+        area_chart(
+            [(10, 1), (20, 2), (500, 3), (510, 1)],
+            start=0,
+            end=600,
+            bucket=10,
+            fmt=_fmt,
+            label="<b>x</b>",
+        )
+    )
+    assert svg.count('class="chart-area s0"') == 2
+    assert "<b>" not in svg and "&lt;b&gt;" in svg
+
+
+def test_area_chart_with_no_points_draws_an_empty_axis() -> None:
+    svg = str(area_chart([], start=0, end=100, bucket=60, fmt=_fmt))
+    assert 'class="chart-area ' not in svg and "<svg" in svg

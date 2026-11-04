@@ -179,3 +179,86 @@ def line_chart(
             parts.append(f'<path class="chart-line {colour}" d="{path}"/>')
     parts.append("</svg>")
     return Markup("".join(parts))  # noqa: S704 - every label above went through html.escape
+
+
+# A small filled chart for one series (a VLAN's card on the Traffic page): short
+# and wide, the value axis on the right, no legend of its own.
+AREA_WIDTH = 520
+AREA_HEIGHT = 150
+_AREA_LEFT = 8
+_AREA_RIGHT = 70
+_AREA_TOP = 8
+_AREA_BOTTOM = 22
+
+
+def area_chart(
+    points: Sequence[Point],
+    *,
+    start: float,
+    end: float,
+    bucket: float,
+    fmt: Callable[[float], str],
+    colour: int = 0,
+    label: str = "",
+) -> Markup:
+    """The SVG of one series as a filled area over start..end, from zero up.
+
+    Same drawing rules as ``line_chart`` (gaps break the area, labels are
+    escaped), but a short chart with the value axis on the right.
+    """
+    high = max((value for _, value in points), default=0.0)
+    ticks = nice_ticks(0.0, high if high > 0 else 1.0, target=3)
+    top_value = ticks[-1]
+    plot_width = AREA_WIDTH - _AREA_LEFT - _AREA_RIGHT
+    plot_height = AREA_HEIGHT - _AREA_TOP - _AREA_BOTTOM
+    base = _AREA_TOP + plot_height
+    class_colour = f"s{colour % SERIES_COLOURS}"
+
+    def x_of(moment: float) -> float:
+        return _AREA_LEFT + (moment - start) / (end - start) * plot_width
+
+    def y_of(value: float) -> float:
+        return _AREA_TOP + (top_value - value) / top_value * plot_height
+
+    parts = [
+        f'<svg class="chart chart-area-svg" viewBox="0 0 {AREA_WIDTH} {AREA_HEIGHT}" '
+        f'role="img" aria-label="{html.escape(label)}" xmlns="http://www.w3.org/2000/svg">'
+    ]
+    right_edge = _AREA_LEFT + plot_width
+    for tick in ticks:
+        y = y_of(tick)
+        parts.append(
+            f'<line class="chart-grid" x1="{_AREA_LEFT}" x2="{right_edge}" '
+            f'y1="{y:.1f}" y2="{y:.1f}"/>'
+        )
+        parts.append(
+            f'<text class="chart-text" x="{right_edge + 6}" y="{y + 4:.1f}" '
+            f'text-anchor="start">{html.escape(fmt(tick))}</text>'
+        )
+    moments, step = time_ticks(start, end)
+    for moment in moments:
+        parts.append(
+            f'<text class="chart-text" x="{x_of(moment):.1f}" y="{AREA_HEIGHT - 6}" '
+            f'text-anchor="middle">{html.escape(time_label(moment, step))}</text>'
+        )
+    for segment in _segments(points, bucket):
+        if len(segment) == 1:
+            moment, value = segment[0]
+            parts.append(
+                f'<circle class="chart-dot {class_colour}" cx="{x_of(moment):.1f}" '
+                f'cy="{y_of(value):.1f}" r="2"/>'
+            )
+            continue
+        edge = " ".join(f"L{x_of(m):.1f},{y_of(v):.1f}" for m, v in segment)
+        first, last = x_of(segment[0][0]), x_of(segment[-1][0])
+        parts.append(
+            f'<path class="chart-area {class_colour}" '
+            f'd="M{first:.1f},{base:.1f} {edge} L{last:.1f},{base:.1f} Z"/>'
+        )
+        line = " ".join(
+            f"{'M' if index == 0 else 'L'}{x_of(m):.1f},{y_of(v):.1f}"
+            for index, (m, v) in enumerate(segment)
+        )
+        parts.append(f'<path class="chart-line {class_colour}" d="{line}"/>')
+    parts.append("</svg>")
+    return Markup("".join(parts))  # noqa: S704 - every label above went through html.escape

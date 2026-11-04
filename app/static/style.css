@@ -641,6 +641,28 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .chart-text { fill: var(--text-3); font-size: 11px; font-family: var(--mono); }
 .chart-line { fill: none; stroke: var(--series); stroke-width: 1.75; stroke-linejoin: round; }
 .chart-dot { fill: var(--series); }
+.chart-area { fill: var(--series); fill-opacity: 0.35; stroke: none; }
+/* One small card per VLAN: the figures on the left, a short filled chart beside them. */
+.vlan-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr));
+  gap: 14px;
+}
+.vlan-cards > .card, .vlan-cards > .card + .card { margin-top: 0; }
+.vlan-card { display: flex; align-items: center; gap: 12px; }
+.vlan-card .chart { flex: 1 1 auto; min-width: 0; }
+.vlan-figures { flex: 0 0 auto; min-width: 110px; }
+.vlan-heading {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.vlan-name { margin: 0 0 4px; font-size: 14px; font-weight: 650; color: var(--text); }
+.vlan-figures .note { margin: 4px 0 0; }
+.vlan-now { margin: 0; font-size: 22px; font-weight: 600; color: var(--text); }
 
 .legend {
   list-style: none;

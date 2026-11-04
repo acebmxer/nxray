@@ -144,10 +144,28 @@
   {% endif %}
 </section>
 
-{% for view in charts %}
-{% if view.anchor == "vlans" %}{{ chart(view) }}{% endif %}
-{% endfor %}
 </div>
+
+<section id="vlans">
+  <h2 class="vlan-heading">Traffic per VLAN, measured</h2>
+  {% if vlan_cards %}
+  <div class="vlan-cards">
+    {% for card in vlan_cards %}
+    <section class="card vlan-card">
+      <div class="vlan-figures">
+        <h3 class="vlan-name">{{ card.label }}</h3>
+        <p class="vlan-now">{{ card.now }}</p>
+        <p class="note">highest {{ card.highest }}<br>average {{ card.average }}</p>
+      </div>
+      {{ card.svg }}
+    </section>
+    {% endfor %}
+  </div>
+  <p class="note">The busiest {{ vlan_cards|length }} VLANs, from the switch's sFlow samples: each sampled frame's length times the sampling rate, counted on the port it came in on, so one figure per VLAN (not an in and an out). Trunks are included.</p>
+  {% else %}
+  <p class="lead">No sFlow samples from this switch in this range.</p>
+  {% endif %}
+</section>
 
 <section class="card" id="top-devices">
   <h2 class="card-title">Busiest devices</h2>

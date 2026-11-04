@@ -188,6 +188,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Changed
 
+- **Traffic per VLAN is drawn as a small card for each VLAN, with a filled
+  chart.** On the Traffic page each of the busiest VLANs now has a card of its
+  own: the VLAN's name, its latest figure in large type with the highest and
+  the average beneath, and beside them a short, wide chart of the traffic as a
+  filled area with the scale on the right, instead of one chart with a thin
+  line per VLAN. The cards sit two or three across on a wide screen. sFlow
+  counts each frame once, so there is one figure per VLAN, not an in and an
+  out (#29).
 - **The Switch page keeps "Update the port list" in view while new functions
   wait to be turned on.** The two jobs used to share one card: when an update
   added rules the card read **Turn on …**, and once they were on it turned

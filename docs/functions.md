@@ -885,18 +885,19 @@ from the device's side (it *sends* what comes in on the port).
 | `agent_addresses` | `(connections) -> dict[str, int]` | Which agent address is which switch, from (id, host, stored agent): the stored agent, else the host when it is an IP address | `load_agents` | v0.2.0 |
 | `decode_datagram` | `(data: bytes) -> Datagram` | One sFlow version 5 datagram's flow samples (formats 1 and 3: raw header, Ethernet frame and extended switch records), bounds-checked; raises `SflowError` | `SflowCollector.receive` | v0.2.0 |
 | `device_label` | `(item) -> str` | A device item in words (`Other devices` for the left-over) | the Traffic page | v0.2.0 |
-| `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts` | v0.2.0 |
+| `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts`, `vlan_cards` | v0.2.0 |
 | `latest_minute` | `(conn, switch_id) -> float \| None` | When a switch's newest stored minute began | `routes/traffic` | v0.2.0 |
 | `load_agents` | `(db_path) -> dict[str, int]` | `agent_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
 | `minute_rows` | `(switch_id, minute, totals) -> list[SflowRow]` | One minute's rows: every VLAN, the busiest `MAX_DEVICES_PER_MINUTE` devices each way, the rest as `other` | `SflowCollector.drain` | v0.2.0 |
 | `parse_frame_header` | `(header: bytes) -> dict` | MAC addresses, 802.1Q VLAN and IPv4 or IPv6 addresses from the first bytes of an Ethernet frame | `decode_datagram` | v0.2.0 |
 | `purge_sflow` | `(conn, now, keep_days) -> int` | Deletes rows older than `NXRAY_SFLOW_KEEP_DAYS` | `run_collector` | v0.2.0 |
 | `run_collector` | `(sock, collector, db_path, keep_days, stop, clock=time.time) -> None` | The listener's loop: receive, write the minutes that are over every 10 s, look the switches up again every 30 s, purge hourly; writes what is left when stopped | `start_collector` | v0.2.0 |
-| `sflow_charts` | `(conn, switch_id, key, now, mac="") -> list[ChartView]` | The busiest VLANs over a range, and one device's sends and receives when `mac` is given | `routes/traffic` | v0.2.0 |
+| `sflow_charts` | `(conn, switch_id, key, now, mac="") -> list[ChartView]` | One device's sends and receives over a range when `mac` is given, else none | `routes/traffic` | v0.2.0 |
 | `start_collector` | `(port, collector, db_path, keep_days) -> Event \| None` | Listens on UDP `port` on a thread; None when the port is 0 or cannot be opened (logged) | `main.lifespan` | v0.2.0 |
 | `store_rows` | `(conn, rows) -> None` | Adds rows to `sflow_traffic`; a minute written twice adds up | `run_collector` | v0.2.0 |
-| `top_items` | `(conn, switch_id, kind, *, start, end, limit=20) -> list[TopItem]` | The busiest VLANs or devices over a range, with their average in bits per second | `sflow_charts`, `routes/traffic` | v0.2.0 |
-| `vlan_label` | `(item) -> str` | `VLAN 10`, or `VLAN not given` | the Traffic page, `sflow_charts` | v0.2.0 |
+| `top_items` | `(conn, switch_id, kind, *, start, end, limit=20) -> list[TopItem]` | The busiest VLANs or devices over a range, with their average in bits per second | `sflow_charts`, `vlan_cards`, `routes/traffic` | v0.2.0 |
+| `vlan_cards` | `(conn, switch_id, key, now) -> list[VlanCard]` | A card per busiest VLAN over a range, busiest first: latest, highest and average figures and a filled-area chart | `routes/traffic` | v0.2.0 |
+| `vlan_label` | `(item) -> str` | `VLAN 10`, or `VLAN not given` | the Traffic page, `vlan_cards` | v0.2.0 |
 
 `SflowCollector` (class, `app.state.sflow_collector`) adds samples up in memory
 per switch and minute: `receive(data, now=None)` counts a datagram only when its
@@ -918,6 +919,7 @@ are over; `status(switch_id)` is what was heard since NXray started. Kinds are
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `area_chart` | `(points, *, start, end, bucket, fmt, colour=0, label="") -> Markup` | One series as a short filled-area SVG from zero, the value axis on the right, breaking at gaps | `sflow.vlan_cards` | v0.2.0 |
 | `line_chart` | `(lines, *, start, end, bucket, fmt, zero_based=True, y_max=None, label="") -> Markup` | Draws lines over a time range as inline SVG, breaking a line where samples are missing | `history._chart` | v0.1.0 |
 | `nice_ticks` | `(low, high, target=5) -> list[float]` | Round axis values covering a range | `line_chart` | v0.1.0 |
 | `time_label` | `(moment, step) -> str` | An axis label: the clock time, or the date for a midnight or labels a day apart (UTC) | `line_chart` | v0.1.0 |

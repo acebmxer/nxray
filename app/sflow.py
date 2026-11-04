@@ -40,7 +40,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.charts import SERIES_COLOURS, Line
+from app.charts import SERIES_COLOURS, Line, area_chart
 from app.db import open_db
 from app.history import RANGES, ChartView, bucket_seconds, chart_view, rate_text
 
@@ -539,33 +539,63 @@ def device_label(item: str) -> str:
     return "Other devices" if item == OTHER else item
 
 
+@dataclass(frozen=True)
+class VlanCard:
+    """One VLAN's card on the Traffic page: its name, the figures, a filled chart."""
+
+    label: str
+    now: str
+    highest: str
+    average: str
+    svg: object
+
+
+def vlan_cards(conn: sqlite3.Connection, switch_id: int, key: str, now: float) -> list[VlanCard]:
+    """A card for each of the busiest VLANs over the range named ``key``, busiest
+    first: the latest figure large, the highest and the average beside it, and
+    the traffic drawn as a filled area. sFlow counts each frame once, on the
+    port it came in on, so there is one figure per VLAN, not an in and an out."""
+    span = RANGES[key]
+    start, end, bucket = now - span, now, bucket_seconds(span)
+    tops = top_items(conn, switch_id, VLAN, start=start, end=end, limit=SERIES_COLOURS)
+    found = item_series(
+        conn, switch_id, VLAN, [top.item for top in tops], start=start, end=end, bucket=bucket
+    )
+    cards = []
+    for number, top in enumerate(tops):
+        points = found[top.item]
+        if not points:
+            continue
+        label = vlan_label(top.item)
+        cards.append(
+            VlanCard(
+                label=label,
+                now=rate_text(points[-1][1]),
+                highest=rate_text(max(value for _, value in points)),
+                average=rate_text(top.bits_per_second),
+                svg=area_chart(
+                    points,
+                    start=start,
+                    end=end,
+                    bucket=bucket,
+                    fmt=rate_text,
+                    colour=number,
+                    label=f"{label}: traffic over time",
+                ),
+            )
+        )
+    return cards
+
+
 def sflow_charts(
     conn: sqlite3.Connection, switch_id: int, key: str, now: float, mac: str = ""
 ) -> list[ChartView]:
-    """The Traffic page's charts for the range named ``key``: the busiest VLANs,
-    and one device's sends and receives when ``mac`` names one."""
+    """The Traffic page's chart of one device's sends and receives when ``mac``
+    names one; none otherwise (the VLANs are cards, see ``vlan_cards``)."""
     span = RANGES[key]
     start, end, bucket = now - span, now, bucket_seconds(span)
     common = {"start": start, "end": end, "bucket": bucket, "fmt": rate_text}
-    busiest = [
-        top.item
-        for top in top_items(conn, switch_id, VLAN, start=start, end=end, limit=SERIES_COLOURS)
-    ]
-    found = item_series(conn, switch_id, VLAN, busiest, start=start, end=end, bucket=bucket)
-    charts = [
-        chart_view(
-            "Traffic per VLAN, measured",
-            [Line(vlan_label(item), found[item]) for item in busiest],
-            note=(
-                f"The busiest {SERIES_COLOURS} VLANs, from the switch's sFlow samples: each "
-                "sampled frame's length times the sampling rate, counted on the port it came "
-                "in on. Trunks are included."
-            ),
-            empty="No sFlow samples from this switch in this range.",
-            anchor="vlans",
-            **common,
-        )
-    ]
+    charts: list[ChartView] = []
     if mac:
         sends = item_series(conn, switch_id, MAC_SENDS, [mac], start=start, end=end, bucket=bucket)
         receives = item_series(
