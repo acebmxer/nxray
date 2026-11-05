@@ -8,6 +8,12 @@
   var pauseButton = form.querySelector("[data-live-pause]");
   var stamp = form.querySelector("[data-live-stamp]");
   var url = form.getAttribute("data-live-url");
+  // A page with no figures of its own to refresh (Settings, Users, a result),
+  // and a page that refreshes whole: its own address is fetched and <main> swapped.
+  var none = form.hasAttribute("data-live-none");
+  var whole = form.hasAttribute("data-live-whole");
+  // The page was just read when it was opened.
+  var lastRead = new Date();
   var floor = parseInt(form.getAttribute("data-live-floor"), 10) || 2;
   var timer = null;
   var paused = false;
@@ -78,6 +84,23 @@
   function describe() {
     var r = stampSource();
     if (stopped) return;
+    if (none) {
+      pauseButton.hidden = true;
+      showStamp(seconds() ? "Nothing on this page refreshes" : "", false);
+      return;
+    }
+    if (whole) {
+      if (!seconds()) {
+        showStamp("", false);
+        pauseButton.hidden = true;
+        return;
+      }
+      pauseButton.hidden = false;
+      pauseButton.textContent = paused ? "Resume" : "Pause";
+      if (lastRead) showStamp("Updated " + lastRead.toLocaleTimeString() + (paused ? " (paused)" : ""), false);
+      else showStamp(paused ? "(paused)" : "", false);
+      return;
+    }
     if (!seconds()) {
       showStamp("", false);
       pauseButton.hidden = true;
@@ -97,13 +120,34 @@
     clearTimeout(timer);
     describe();
     var s = seconds();
-    if (!s || paused || stopped) return;
+    if (none || !s || paused || stopped) return;
     var wait = s * 1000;
     if (extra) wait = Math.min(60000, wait * Math.pow(2, failures));
     timer = setTimeout(tick, wait);
   }
 
+  // A whole page: the new <main> replaces the old one. Which <details> are
+  // open, and how far each wide table is scrolled, are carried over.
+  function applyWhole(html) {
+    var parsed = new DOMParser().parseFromString(html, "text/html");
+    var fresh = parsed.querySelector("main");
+    var old = document.querySelector("main");
+    if (!fresh || !old) return;
+    var open = [];
+    old.querySelectorAll("details").forEach(function (d) { open.push(d.open); });
+    var scrolls = [];
+    old.querySelectorAll(".card-flush, .table-wrap").forEach(function (e) { scrolls.push(e.scrollLeft); });
+    var imported = document.importNode(fresh, true);
+    imported.querySelectorAll("details").forEach(function (d, i) { if (i < open.length) d.open = open[i]; });
+    old.replaceWith(imported);
+    imported.querySelectorAll(".card-flush, .table-wrap").forEach(function (e, i) {
+      if (i < scrolls.length) e.scrollLeft = scrolls[i];
+    });
+    lastRead = new Date();
+  }
+
   function apply(html) {
+    if (whole) return applyWhole(html);
     var parsed = new DOMParser().parseFromString(html, "text/html");
     var fresh = parsed.querySelectorAll("[data-live-region]");
     // Each region the answer carries replaces the one of that name; a region
@@ -127,12 +171,13 @@
     })
       .then(function (response) {
         // Signed out: the server sent us to the sign-in page.
-        if (response.redirected) {
+        if (response.redirected && (!whole || /\/login/.test(response.url))) {
           stopped = true;
           showStamp("Signed out. Reload the page to sign in again.", true);
           pauseButton.hidden = true;
           return null;
         }
+        if (response.redirected) throw new Error("moved");
         if (response.status === 204) return null;
         if (!response.ok) throw new Error("status " + response.status);
         return response.text();
@@ -162,7 +207,8 @@
       body: new URLSearchParams(new FormData(form)),
     }).catch(function () {});
     clearTimeout(timer);
-    if (seconds()) tick();
+    if (none) schedule(false);
+    else if (seconds()) tick();
     else schedule(false);
   });
 
@@ -173,7 +219,7 @@
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && seconds() && !paused && !stopped) {
+    if (!none && !document.hidden && seconds() && !paused && !stopped) {
       clearTimeout(timer);
       tick();
     }

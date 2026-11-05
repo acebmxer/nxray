@@ -11,6 +11,19 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Refresh, last-updated time and Pause on every page.** The top bar's
+  **Refresh** choice, the *Updated* time and **Pause** were only on the
+  dashboard, Ports, a port's page and Neighbors. They are now on every page.
+  VLANs, Port-channels, Traffic, Spanning tree, Routing, Protocols, Security,
+  Features, Switch admin, Alerts, History, Activity, Config and Switch
+  refresh by reading the page again, with sections that were open and wide
+  tables scrolled staying as they were, and pausing while a field is changed
+  and not yet sent. Pages with nothing to refresh (Settings, Users, Account)
+  show the control and say so, so the top bar no longer changes from page to
+  page. The switch is read through the shared cache, so many open pages still
+  cost it one read per interval, and refreshing still does not keep a sign-in
+  alive. See [Live figures](docs/live.md) (#33).
+
 - **Make or delete an NXray user and a switch account separately.** The Users
   page can now make a switch account on its own (**Add a switch account
   only**: a local account for someone who uses SSH or the console, with the
@@ -188,7 +201,7 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   until a newer release is out. A beta image now reports its own name
   (`0.2.0-beta.1`) in the page footer and `/healthz`. If the compose file
   names a fixed tag and so ignores the choice, the Updates card says so and
-  shows the line to change instead of reporting success.
+  shows the line to change instead of reporting success (#15).
 
   **Upgrading from 0.1.x: edit `docker-compose.yml` once.** Your compose file
   is your own and no update changes it. For the switch to work, change its

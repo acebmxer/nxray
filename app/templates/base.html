@@ -8,7 +8,7 @@
   <title>{% block title %}NXray{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  {% if live_page is defined and live_page %}<script src="/static/live.js" defer></script>{% endif %}
+  {% if username %}<script src="/static/live.js" defer></script>{% endif %}
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -113,9 +113,13 @@
       {% if here and here.unsaved_changes %}
       <span class="strip-unsaved" title="NXray changed the switch since its configuration was last saved">Unsaved changes</span>
       {% endif %}
-      {% if live_page is defined and live_page %}
-      {% set live_floor = request.app.state.settings.live_clients_min_interval if live_page == "clients" else request.app.state.settings.live_min_interval %}
-      <form method="post" action="/preferences" class="live-picker" data-live-picker data-live-url="{{ live_url }}" data-live-floor="{{ live_floor }}" aria-label="Refresh">
+      {#- The Refresh control is on every page. A page with its own small answer says so
+          (live_page, live_url); a page that reads the switch and nothing else refreshes whole;
+          the rest (settings, users, a result) say there is nothing to refresh. -#}
+      {% set live_own = live_page is defined and live_page %}
+      {% set live_whole = not live_own and refreshes_whole_page(request.method, request.url.path) %}
+      {% set live_floor = request.app.state.settings.live_clients_min_interval if live_own and live_page == "clients" else request.app.state.settings.live_min_interval %}
+      <form method="post" action="/preferences" class="live-picker" data-live-picker{% if live_own %} data-live-url="{{ live_url }}"{% elif live_whole %} data-live-url="{{ back_to }}" data-live-whole{% else %} data-live-none{% endif %} data-live-floor="{{ live_floor }}" aria-label="Refresh">
         <input type="hidden" name="csrf" value="{{ form_token(request) }}">
         <input type="hidden" name="next" value="{{ back_to }}">
         <span class="live-stamp" data-live-stamp aria-live="off"></span>
@@ -128,7 +132,6 @@
         </select>
         <button type="submit" class="btn btn-quiet live-set">Set</button>
       </form>
-      {% endif %}
       {% if picker_switches|length > 1 %}
       <form method="post" action="/switches/select" class="switch-picker">
         <input type="hidden" name="csrf" value="{{ form_token(request) }}">

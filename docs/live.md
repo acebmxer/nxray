@@ -2,21 +2,34 @@
 
 [← back to the README](../README.md)
 
-The dashboard, the Ports page, a port's own page and the Neighbors page can
-refresh their figures by themselves, so you do not reload. It is off until
-you ask for it.
+Every page has the **Refresh** control in the top bar, and every page that
+shows figures from the switch can refresh them by themselves, so you do not
+reload. It is off until you ask for it.
 
 ## Turning it on
 
-Each of those pages has a **Refresh** box in the top bar: **Off, Live, 3 s,
-5 s, 10 s, 15 s, 30 s, 60 s**. The choice is kept for this browser (a cookie,
-like the theme) and applies to all four pages. Next to it the page shows
-*Updated hh:mm:ss*, and a **Pause** button.
+The top bar has a **Refresh** box on every page: **Off, Live, 3 s, 5 s, 10 s,
+15 s, 30 s, 60 s**. The choice is kept for this browser (a cookie, like the
+theme) and applies to every page. Next to it the page shows *Updated
+hh:mm:ss*, and a **Pause** button.
 
-Only the figures change: the numbers, bars, the front panel and the table
-rows. An open side panel, your place on the page and anything you are typing
-stay as they are. Without JavaScript, or with it blocked, the pages work as
-they always did.
+Three kinds of page:
+
+- **The dashboard, the Ports page, a port's own page and the Neighbors page**
+  change only their figures: the numbers, bars, front panel and table rows.
+  An open side panel, your place on the page and anything you are typing stay
+  as they are.
+- **VLANs, Port-channels, Traffic, Spanning tree, Routing, Protocols,
+  Security, Features, Switch admin, Alerts, History, Activity, Config and
+  Switch** read the page again and replace its content. Which sections are
+  open and how far a wide table is scrolled stay as they are, but a choice you
+  have made and not yet sent (a changed field, a ticked box) stops the refresh
+  until you send it or reload.
+- **Settings, Users, Account and the other pages with nothing to refresh**
+  show the control too, so the top bar is the same on every page; with a
+  refresh chosen it says *Nothing on this page refreshes*.
+
+Without JavaScript, or with it blocked, the pages work as they always did.
 
 Refreshing stops by itself:
 
@@ -40,6 +53,11 @@ older than a floor:
 | --- | --- | --- |
 | Switch health (CPU, memory, temperatures, fans, power), ports (state, rates, errors) | 2 s | `NXRAY_LIVE_MIN_INTERVAL` |
 | MAC address table, ARP, neighbours | 10 s | `NXRAY_LIVE_CLIENTS_MIN_INTERVAL` |
+
+A page that refreshes whole reads the switch through the same kind of shared
+reading: each command is kept per switch and read again only after the floor
+above (the slower one for printed text such as the running configuration).
+Opening a page yourself, or sending a form, always reads the switch itself.
 
 Ten browsers on **Live** cost the switch what one does. Nothing is read when
 nobody has a page open with a refresh on: reads happen only when a page asks,

@@ -18,6 +18,7 @@ from app.dependencies import (
     RedirectToLogin,
     add_security_headers,
     current_role,
+    share_switch_reads,
     templates,
 )
 from app.history import start_sampler
@@ -155,6 +156,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=403,
         )
 
+    app.middleware("http")(share_switch_reads)
     app.middleware("http")(add_security_headers)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)

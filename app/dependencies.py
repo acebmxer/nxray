@@ -17,12 +17,12 @@ from app import __version__
 from app.activity import record_activity, utc_time
 from app.alerts import notify_change, switch_label
 from app.db import open_db
-from app.live import LIVE_CHOICES
-from app.nxapi import SwitchTarget
+from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
+from app.nxapi import SwitchTarget, shared_reads
 from app.port_changes import ROLE_VERSION, missing_changes
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
-from app.security import csrf_token, csrf_valid, current_user
+from app.security import LIVE_REQUEST, csrf_token, csrf_valid, current_user
 from app.switch_choice import selected_switch_id
 from app.switch_connection import (
     DecryptionError,
@@ -68,6 +68,31 @@ async def add_security_headers(
     for name, value in SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
     return response
+
+
+async def share_switch_reads(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """HTTP middleware: a page that refreshes itself as a whole (``live.js`` asks
+    with ``X-Requested-With: nxray-live``) reads the switch through the shared
+    cache, so many open pages cost the switch one read per interval. Every
+    other request, a page opened or a form sent, reads the switch itself."""
+    if request.headers.get("x-requested-with") != LIVE_REQUEST or not refreshes_whole_page(
+        request.method, request.url.path
+    ):
+        return await call_next(request)
+    settings = request.app.state.settings
+    token = shared_reads.set(
+        shared_show_reads(
+            request.app.state.live_cache,
+            settings.live_min_interval,
+            settings.live_clients_min_interval,
+        )
+    )
+    try:
+        return await call_next(request)
+    finally:
+        shared_reads.reset(token)
 
 
 class RedirectToLogin(Exception):
@@ -251,6 +276,7 @@ templates.env.globals["role_behind"] = role_behind
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
 templates.env.globals["live_choices"] = LIVE_CHOICES
+templates.env.globals["refreshes_whole_page"] = refreshes_whole_page
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 

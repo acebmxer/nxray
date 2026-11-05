@@ -22,6 +22,7 @@ with NXray's restart; the stored history (app/history.py) is separate.
 
 from __future__ import annotations
 
+import copy
 import statistics
 import threading
 import time
@@ -32,6 +33,7 @@ from typing import Any
 
 from app.charts import Line
 from app.history import ChartView, chart_view, percent_text, rate_text
+from app.nxapi import NxapiCommandError, NxapiError, NxapiUnreachable
 from app.ports import Port
 
 # The choices in the top bar. "live" is as fast as the floor allows.
@@ -365,3 +367,73 @@ def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor:
         empty=TRAIL_EMPTY.format(minutes=_trail_minutes()),
         anchor="live-trail",
     )
+
+
+# Pages that read the switch and nothing else changes on them, so they can
+# refresh whole (the Refresh box in the top bar). Ports, a port, Neighbors and
+# the dashboard have their own, smaller answers (app/routes/live.py).
+WHOLE_PAGE_PATHS = (
+    "/vlans",
+    "/port-channels",
+    "/traffic",
+    "/spanning-tree",
+    "/routing",
+    "/security",
+    "/features",
+    "/switch-admin",
+    "/alerts",
+    "/history",
+    "/activity",
+    "/config",
+    "/switch",
+)
+
+
+def refreshes_whole_page(method: str, path: str) -> bool:
+    """True when this page re-reads itself as a whole while a refresh is on.
+
+    Only a page shown by GET: what follows a form is a result and never
+    refreshes. A prefix matches its sub-pages too (``/routing/protocols/ospf``,
+    ``/security/acls``), but not another page that merely starts the same.
+    """
+    if method != "GET":
+        return False
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in WHOLE_PAGE_PATHS)
+
+
+def shared_show_reads(
+    cache: LiveCache, floor: int, text_floor: int
+) -> Callable[[tuple[str, ...], bool, Callable[[], Any]], Any]:
+    """The ``nxapi.shared_reads`` function for a page refreshing itself.
+
+    Each distinct read (switch, account and command) is kept in ``cache`` and
+    asked of the switch again only after ``floor`` seconds (``text_floor`` for
+    printed text such as the running configuration), however many pages ask.
+    A command the switch rejects is kept too, as a rejection, since the same
+    command will be rejected again; a switch that does not answer is left
+    alone for longer each time, with the last good answer shown meanwhile.
+    """
+    errors: dict[tuple[str, ...], NxapiError] = {}
+
+    def share(key: tuple[str, ...], text: bool, read: Callable[[], Any]) -> Any:
+        def reader(_previous: object) -> tuple[object, str]:
+            try:
+                value = read()
+                errors.pop(key, None)
+                return ("ok", value), ""
+            except NxapiCommandError as exc:
+                return ("rejected", exc), ""
+            except NxapiError as exc:
+                errors[key] = exc
+                return None, str(exc)
+
+        answer = cache.get(0, "page:" + "\x1f".join(key), text_floor if text else floor, reader)
+        if answer.value is None:
+            raise errors.get(key) or NxapiUnreachable(answer.problem or "no answer")
+        outcome, value = answer.value
+        if outcome == "rejected":
+            raise value
+        # Each page parses its own copy: nothing it does can reach another's.
+        return copy.deepcopy(value)
+
+    return share

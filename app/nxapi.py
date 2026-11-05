@@ -36,7 +36,8 @@ from __future__ import annotations
 import ipaddress
 import re
 import threading
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -776,6 +777,17 @@ def error_message(error: Any) -> str:
     return message.strip() if isinstance(message, str) and message.strip() else "unknown error"
 
 
+# Set for the length of one request from a page refreshing itself (app/live.py,
+# ``shared_show_reads``): ``show`` and ``show_text`` then hand their read to it
+# instead of asking the switch, so any number of open pages cost the switch one
+# read per interval. ``(key, text, read)``: ``key`` names the switch, account and
+# command(s); ``text`` is True for printed text (a slower floor); ``read()`` asks
+# the switch. None, the default, reads the switch every time.
+shared_reads: ContextVar[Callable[[tuple[str, ...], bool, Callable[[], Any]], Any] | None] = (
+    ContextVar("nxray_shared_reads", default=None)
+)
+
+
 class NxapiClient:
     """A connection to one switch's NX-API.
 
@@ -804,18 +816,33 @@ class NxapiClient:
     def close(self) -> None:
         self._http.close()
 
+    def _shared[T](self, key: tuple[str, ...], text: bool, read: Callable[[], T]) -> T:
+        """Run ``read``, through the request's shared reads when it has any."""
+        share = shared_reads.get()
+        if share is None:
+            return read()
+        target = self._target
+        return share((target.host, str(target.port), target.username, *key), text, read)  # type: ignore[no-any-return]
+
     def show(self, *commands: str) -> list[dict[str, Any]]:
         """Run show commands in one request; one parsed body per command."""
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
-        return self._send(cleaned, cleaned, self._target.timeout)
+        return self._shared(
+            ("show", *cleaned),
+            False,
+            lambda: self._send(cleaned, cleaned, self._target.timeout),
+        )
 
     def show_text(self, command: str) -> str:
         """One show command's printed text, for commands with no structured form
         (``show running-config spanning-tree``). NX-API gives that text only with
         the ``cli_ascii`` method; the ``cli`` method answers it with nothing."""
         cleaned = validate_show_command(command)
+        return self._shared(("text", cleaned), True, lambda: self._read_text(cleaned))
+
+    def _read_text(self, cleaned: str) -> str:
         payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
         entry = payload[0] if isinstance(payload, list) and payload else payload
         if not isinstance(entry, dict):

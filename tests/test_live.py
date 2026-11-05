@@ -160,9 +160,9 @@ def test_the_picker_remembers_the_interval_and_starts_off(
     assert logged_in.cookies.get(LIVE_COOKIE) == "5"
 
 
-def test_pages_without_live_figures_have_no_picker(logged_in: TestClient) -> None:
+def test_pages_without_live_figures_say_so(logged_in: TestClient) -> None:
     page = logged_in.get("/account").text
-    assert "data-live-picker" not in page and "live.js" not in page
+    assert "data-live-picker" in page and "data-live-none" in page and "data-live-url" not in page
 
 
 def test_the_dashboard_answer_is_the_figures_alone(
@@ -299,7 +299,7 @@ def test_the_vlan_colouring_is_left_out_of_the_ports_answer(
 
 def test_a_result_page_is_never_refreshed(logged_in: TestClient, switch: FakeSwitch) -> None:
     page = logged_in.get("/ports?select=all").text
-    assert "data-live-picker" not in page
+    assert "data-live-none" in page and "data-live-url" not in page
 
 
 def test_a_port_page_offers_live_figures(logged_in: TestClient, switch: FakeSwitch) -> None:
@@ -346,3 +346,65 @@ def test_clients_are_read_at_the_slower_pace(logged_in: TestClient, switch: Fake
     assert len(switch.requests) == first
     logged_in.get("/live/ports")
     assert len(switch.requests) > first
+
+
+def test_every_page_has_the_refresh_control(logged_in: TestClient, switch: FakeSwitch) -> None:
+    for path in ("/vlans", "/traffic", "/routing", "/history", "/switch", "/settings", "/account"):
+        page = logged_in.get(path).text
+        assert "data-live-picker" in page and "/static/live.js" in page, path
+    assert 'data-live-url="/vlans" data-live-whole' in logged_in.get("/vlans").text
+    assert "data-live-none" in logged_in.get("/settings").text
+    assert "data-live-none" in logged_in.get("/users").text
+    # Pages with their own small answer keep it.
+    assert 'data-live-url="/live/dashboard"' in logged_in.get("/").text
+    assert "data-live-whole" not in logged_in.get("/ports").text
+
+
+def test_the_sign_in_page_has_no_refresh_control(client: TestClient) -> None:
+    page = client.get("/login").text
+    assert "data-live-picker" not in page and "live.js" not in page
+
+
+def test_a_whole_page_refresh_reads_the_switch_once_per_floor(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    live = {"X-Requested-With": "nxray-live"}
+    first = logged_in.get("/vlans", headers=live)
+    assert first.status_code == 200 and "<main" in first.text
+    reads = len(switch.requests)
+    assert reads > 0
+    again = logged_in.get("/vlans", headers=live)
+    assert again.text == first.text or again.status_code == 200
+    assert len(switch.requests) == reads
+    # An ordinary visit still reads the switch itself.
+    logged_in.get("/vlans")
+    assert len(switch.requests) > reads
+    # So does the next refresh once the floor has passed.
+    cache = logged_in.app.state.live_cache  # type: ignore[attr-defined]
+    for entry in cache._entries.values():
+        entry.read_at -= 60
+    logged_in.get("/vlans", headers=live)
+    assert len(switch.requests) > reads + 1
+
+
+def test_a_whole_page_refresh_does_not_extend_the_session(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    path = logged_in.app.state.settings.db_path  # type: ignore[attr-defined]
+    with open_db(path) as conn:
+        conn.execute("UPDATE sessions SET expires_at = ?", (time.time() + 60,))
+        conn.commit()
+    logged_in.get("/vlans", headers={"X-Requested-With": "nxray-live"})
+    with open_db(path) as conn:
+        assert conn.execute("SELECT expires_at FROM sessions").fetchone()[0] < time.time() + 120
+
+
+def test_a_result_page_is_not_refreshed_whole(logged_in: TestClient, switch: FakeSwitch) -> None:
+    from app.live import refreshes_whole_page
+
+    assert refreshes_whole_page("GET", "/routing/protocols/ospf")
+    assert refreshes_whole_page("GET", "/security/acls")
+    assert not refreshes_whole_page("POST", "/vlans")
+    assert not refreshes_whole_page("GET", "/switches/select")
+    assert not refreshes_whole_page("GET", "/activity.csv")
+    assert not refreshes_whole_page("GET", "/settings")
