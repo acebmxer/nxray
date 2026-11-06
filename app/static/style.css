@@ -276,12 +276,70 @@ code {
 }
 .switch-picker { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .switch-picker select { max-width: 18rem; }
+.live-picker { display: inline-flex; align-items: center; gap: 6px; margin: 0 12px 0 0; }
+.live-label { font-size: 12px; color: var(--text-2); }
+.live-stamp { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.live-stamp.live-warn { color: var(--crit); }
+.live-pause[hidden] { display: none; }
+.live-picker.live-js .live-set { display: none; }
 
 /* ---- page layout ---- */
 
 .wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }
 .wrap-alone { display: flex; flex-direction: column; justify-content: center; }
 .wrap-centred { max-width: 400px; margin: 0 auto; align-items: stretch; }
+
+/* The places of a protocol or spanning tree card (one per VLAN, port, ...) flow
+   in columns of at least 340px inside the card, so a long list does not run
+   down a single narrow column. */
+.protocol-places { column-width: 340px; column-gap: 14px; }
+.protocol-place { break-inside: avoid; }
+
+/* On a wide screen a page's cards flow down 2 columns (3 on a very wide
+   screen) like newspaper columns, so a short card never leaves a hole beside a
+   tall one, and stack on a narrow one. Anything that is not a plain card
+   (title, messages, notes, rows of cards) and every card that needs the width
+   (the front panel, a list of ports or VLANs, a table of over 20 rows, a code block, a table with too
+   many columns for the column, a long run of places, an empty-state message)
+   takes the whole row. The columns are about 500px wide from 1300px, 700px from
+   1700px and 700px as three from 2350px, so the table limit is 5, 7 and 8
+   columns. */
+main.wrap:not(.wrap-alone) > * { margin-top: 0; margin-bottom: 14px; }
+main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
+@media (min-width: 1300px) {
+  main.wrap:not(.wrap-alone) { column-count: 2; column-gap: 14px; }
+  main.wrap:not(.wrap-alone) > * { column-span: all; }
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
+/* A table in a column wraps its cells instead of running past the card. */
+@media (min-width: 1300px) and (max-width: 1699px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(5))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 1700px) and (max-width: 2349px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(7))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 2350px) {
+  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(8))) .table :is(th, td) { white-space: normal; }
+}
+@media (min-width: 1700px) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
+@media (min-width: 2350px) {
+  main.wrap:not(.wrap-alone) { column-count: 3; }
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+    column-span: none;
+    break-inside: avoid;
+    overflow-x: auto;
+  }
+}
 
 .page-title { margin: 0 0 14px; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
 .breadcrumb { margin: 0 0 2px; font-size: 12px; color: var(--text-3); }
@@ -567,11 +625,44 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .s6 { --series: #c95384; }
 .s7 { --series: #8d969f; }
 
-.chart { width: 100%; height: auto; display: block; }
+.chart { width: 100%; max-width: 960px; height: auto; display: block; }
+/* Cards side by side when each cell is at least 680px wide (a chart is drawn
+   720px wide, so narrower makes its text too small), stacked otherwise. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(680px, 100%), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.card-grid > .card, .card-grid > .card + .card { margin-top: 0; }
+.card-form { max-width: 680px; }
+.card + .card-grid, .card-grid + .card, .card-grid + .card-grid { margin-top: 14px; }
 .chart-grid { stroke: var(--line-soft); stroke-width: 1; }
 .chart-text { fill: var(--text-3); font-size: 11px; font-family: var(--mono); }
 .chart-line { fill: none; stroke: var(--series); stroke-width: 1.75; stroke-linejoin: round; }
 .chart-dot { fill: var(--series); }
+.chart-area { fill: var(--series); fill-opacity: 0.35; stroke: none; }
+/* One small card per VLAN: the figures on the left, a short filled chart beside them. */
+.vlan-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr));
+  gap: 14px;
+}
+.vlan-cards > .card, .vlan-cards > .card + .card { margin-top: 0; }
+.vlan-card { display: flex; align-items: center; gap: 12px; }
+.vlan-card .chart { flex: 1 1 auto; min-width: 0; }
+.vlan-figures { flex: 0 0 auto; min-width: 110px; }
+.vlan-heading {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.vlan-name { margin: 0 0 4px; font-size: 14px; font-weight: 650; color: var(--text); }
+.vlan-figures .note { margin: 4px 0 0; }
+.vlan-now { margin: 0; font-size: 22px; font-weight: 600; color: var(--text); }
 
 .legend {
   list-style: none;
@@ -768,12 +859,60 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bulk-bar input[type="text"] { width: 18rem; }
 .bulk-bar .btn-primary { margin-top: 0; }
 .bulk-bar .hint { flex-basis: 100%; margin: 0; }
+.bulk-bar label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.bulk-config .lead { margin: 0; }
+/* The ticked ports at the top of their panel: pressing one unticks it. */
+.ticked-list { margin: 0; padding: 0; list-style: none; max-height: 7.5rem; overflow-y: auto; }
+.ticked-list:empty { display: none; }
+.pill-untick { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
+.pill-untick:hover { border-color: var(--crit-line); color: var(--crit); }
+.untick-x { font-size: 13px; line-height: 1; color: var(--text-3); }
+.pill-untick:hover .untick-x { color: var(--crit); }
+.bulk-drawer .drawer-head .hint { margin: 0; }
+
+/* The ticked ports' side panel: shut until a port is ticked, then on the
+   right like a port's own panel, without a shade so the table stays usable.
+   No script: :has() opens it and a CSS counter counts the ticks. */
+#change-several { counter-reset: ticked; }
+#change-several input[name="names"]:checked { counter-increment: ticked; }
+.bulk-count::after { content: counter(ticked); font-family: var(--mono); font-weight: 600; color: var(--text); }
+.drawer.bulk-drawer { display: none; }
+.bulk-drawer .bulk-bar {
+  position: static;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.bulk-drawer .bulk-bar select { max-width: 9rem; }
+#change-several:has(input[name="names"]:checked) .drawer.bulk-drawer { display: flex; }
+/* The Ports page leaves room for its side panel all the time (the panel is
+   440px wide, plus a gap), so the front panel and the table keep one size and
+   place whether it is open or shut, and the room stays empty while it is shut.
+   Where the screen is too narrow for that, the panel is laid over the page
+   instead and nothing moves. */
+@media (min-width: 1700px) {
+  .wrap-ports { padding-right: 476px; }
+}
+/* A browser without :has() shows the form as a card under the table. */
+@supports not selector(:has(*)) {
+  .drawer.bulk-drawer {
+    display: flex;
+    position: static;
+    width: auto;
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: none;
+  }
+}
 
 /* The side panel: one port, opened by ?port= on the Ports page. */
-.drawer-shade { position: fixed; inset: 0; z-index: 9; background: rgba(0, 0, 0, 0.25); }
 .drawer {
   position: fixed;
-  top: 0;
+  /* Below the top bar, so its Refresh choice stays in reach. */
+  top: var(--strip-h);
   right: 0;
   bottom: 0;
   z-index: 10;
@@ -823,6 +962,10 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .drawer-part .chart { margin-top: 4px; }
 .drawer-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .drawer-foot .btn-primary { margin-top: 0; }
+/* The buttons share one row and one line; a form's own top margin would push its button down. */
+.drawer-foot { align-items: center; }
+.drawer-foot form { margin: 0; }
+.drawer-foot .note { flex: 1 1 100%; margin: 0; }
 
 /* ---- VLANs page: which ports carry which VLAN ---- */
 
@@ -867,3 +1010,34 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .vlan-grid-key b { display: inline-grid; place-items: center; width: 18px; height: 16px; border-radius: 2px; font: 600 10.5px var(--mono); }
 .vlan-grid-key .cell-u { color: #fff; background: var(--sp-25g); }
 .vlan-grid-key .cell-t { color: var(--sp-10g); background: var(--accent-soft); }
+
+/* ---- no scroll bars: tables shrink and wrap instead ---- */
+
+/* Text cells wrap, so a table fits its card instead of scrolling. */
+@media (max-width: 1499px) {
+  .card .table:not(.table-ports) :is(th, td) { white-space: normal; }
+}
+.table-ports .reason { white-space: normal; display: inline-block; vertical-align: top; }
+.table-ports .device { white-space: normal; flex-wrap: wrap; }
+.table-ports .port-label { white-space: normal; }
+.row-form { flex-wrap: wrap; }
+.row-form input[type="text"] { min-width: 0; max-width: 100%; }
+/* The Ports table drops its Transceiver and Activity columns (the port's side
+   panel has both) when the page is narrower than 1500px. */
+@media (max-width: 1499px) {
+  .table-ports .col-extra { display: none; }
+}
+/* Under 1200px wide the Ports table also drops Description and Connected, and
+   every table gets tighter cells. */
+@media (max-width: 1199px) {
+  .table-ports .col-more { display: none; }
+  .table th, .table td { padding-left: 6px; padding-right: 6px; }
+  .table td { overflow-wrap: anywhere; }
+}
+.table-vlans td:last-child { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.table-vlans .row-form input[type="text"] { width: 8rem; }
+/* The VLAN grid squeezes its columns to the card instead of scrolling. */
+.vlan-grid { width: calc(100% - 16px); margin: 0 8px; max-width: 1400px; table-layout: fixed; }
+.vlan-grid thead th, .vlan-grid td { min-width: 0; width: auto; }
+.vlan-grid th.vlan-grid-name { min-width: 0; width: 96px; }
+.vlan-grid thead th.vlan-grid-gap, .vlan-grid td.vlan-grid-gap { min-width: 0; width: 8px; }

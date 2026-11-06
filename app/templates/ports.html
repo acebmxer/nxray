@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
 {% import "_port_forms.html" as pf %}
+{% import "_ports_live.html" as live with context %}
 {% block title %}Ports — NXray{% endblock %}
+{% block main_class %}wrap wrap-ports{% endblock %}
+{% block head_extra %}<script src="/static/keep-ticks.js" defer></script>{% endblock %}
 
 {% block content %}
 {% set role = current_role(request) %}
@@ -12,14 +15,7 @@
     <h1 class="page-title">Ports</h1>
   </div>
   {% if ports %}
-  <dl class="kpis">
-    <div><dt>Ports</dt><dd>{{ ports|length }}</dd></div>
-    <div><dt>Up</dt><dd class="kpi-ok">{{ counts.up }}</dd></div>
-    <div><dt>Down</dt><dd>{{ counts.down - counts.off }}</dd></div>
-    <div><dt>Turned off</dt><dd>{{ counts.off }}</dd></div>
-    <div><dt>With errors</dt><dd{% if counts.errors %} class="kpi-crit"{% endif %}>{{ counts.errors }}</dd></div>
-    <div><dt>Traffic now</dt><dd>{{ throughput|rate }}</dd></div>
-  </dl>
+  {{ live.kpis() }}
   {% endif %}
 </div>
 {% macro messages() %}
@@ -30,8 +26,9 @@
 <p class="alert alert-ok" role="status">{{ notice }}</p>
 {% endif %}
 {% endmacro %}
-{# With a port's panel open, its messages are shown in the panel. #}
-{% if not drawer %}{{ messages() }}{% endif %}
+{# With a port's panel, or the ticked ports' panel, open, its messages are shown in the panel. #}
+{% set bulk_open = ticked and can_change and connection and connection.changes_enabled and ports %}
+{% if not drawer and not bulk_open %}{{ messages() }}{% endif %}
 
 {% if not connection %}
 <div class="card empty-state">
@@ -65,27 +62,19 @@
 </div>
 {% endif %}
 
+{{ live.banner() }}
 <section class="card">
   <div class="box-head">
     <h2 class="card-title">Front panel</h2>
     <nav class="seg" aria-label="Colour the ports by">
       {% for key, label in modes.items() %}
-      <a class="{% if color == key %}seg-on{% endif %}" href="{{ ports_link(show, key, selected) }}"{% if color == key %} aria-current="true"{% endif %}>{{ label }}</a>
+      <a data-keep-ticks class="{% if color == key %}seg-on{% endif %}" href="{{ ports_link(show, key, selected) }}"{% if color == key %} aria-current="true"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
     <span class="box-gap"></span>
-    <a class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
+    <a data-keep-ticks class="btn btn-quiet" href="{{ ports_link(show, color, selected) }}">Read again</a>
   </div>
-  <div class="faceplate">{{ face.svg }}</div>
-  <ul class="legend face-legend">
-    {% for entry in face.legend %}
-    <li><span class="swatch {{ entry.css }}"></span>{{ entry.label }} <span class="legend-values">{{ entry.count }}</span></li>
-    {% endfor %}
-    {% if labels %}<li><span class="swatch swatch-mark"></span>Has a label</li>{% endif %}
-  </ul>
-  {% if color == "traffic" %}<p class="note">The busier direction over the last 30 seconds, as a share of the link's speed.</p>{% endif %}
-  {% if color == "errors" %}<p class="note">Errors and discards since the switch's counters were last cleared.</p>{% endif %}
-  {% if color in ("vlan", "channel") %}<p class="note">Ports without a link are drawn faded. Colours repeat after eight; hover over a port to be sure.</p>{% endif %}
+  {{ live.face_block() }}
 </section>
 
 {% if bulk_on %}
@@ -100,7 +89,7 @@
       {% for entry in filter_labels %}
       {% if entry is none %}<span class="toolbar-sep"></span>{% else %}
       {% set key, label = entry %}
-      <a class="filter{% if show == key %} filter-on{% endif %}" href="{{ ports_link(key, color) }}">{{ label }} <span class="count">{{ counts[key] }}</span></a>
+      <a data-keep-ticks class="filter{% if show == key %} filter-on{% endif %}" href="{{ ports_link(key, color) }}">{{ label }} <span class="count">{{ counts[key] }}</span></a>
       {% endif %}
       {% endfor %}
     </nav>
@@ -114,66 +103,180 @@
     <thead>
       <tr>
         {% if bulk_on %}<th><span class="sr-only">Tick</span></th>{% endif %}
-        <th>Port</th><th>Description</th><th>State</th><th>Speed</th><th>VLAN</th>
-        <th>Connected</th><th>Transceiver</th><th>Activity</th>
+        <th>Port</th><th class="col-more">Description</th><th>State</th><th>Speed</th><th>VLAN</th>
+        <th class="col-more">Connected</th><th class="col-extra">Transceiver</th><th class="col-extra">Activity</th>
         <th class="num">In</th><th class="num">Out</th><th class="num">Errors</th>
       </tr>
     </thead>
-    <tbody>
-      {% for port in shown %}
-      {% set devices = neighbors.for_port(port.name) if neighbors else none %}
-      {% set speed_css, speed_words = speed_class(port) %}
-      <tr{% if port.name == selected %} class="row-sel"{% endif %}>
-        {% if bulk_on %}<td><input type="checkbox" name="names" value="{{ port.name }}" aria-label="Tick {{ port.name }}" {% if port.name in ticked %}checked{% endif %}></td>{% endif %}
-        <td><a class="port-name" href="{{ ports_link(show, color, port.name) }}">{{ port.name }}</a>{% if channels.get(port.name) %} <a class="reason" href="/port-channels#{{ channels[port.name] }}">in {{ channels[port.name] }}</a>{% endif %}{% if labels.get(port.name) %}<span class="port-label">{{ labels[port.name] }}</span>{% endif %}</td>
-        <td class="cell-desc" title="{{ port.description }}">{{ port.description }}</td>
-        <td>
-          <span class="state {{ 'state-up' if port.up else ('state-off' if not port.admin_up else ('state-err' if 'disabled' in port.reason|lower else 'state-down')) }}">{{ port.state_label }}</span>
-          {% if port.reason and not port.up and port.admin_up %}<span class="reason">{{ port.reason }}</span>{% endif %}
-        </td>
-        <td>{% if port.up %}<span class="speed {{ speed_css }}">{{ speed_words }}</span>{% else %}<span class="dim">{{ port.speed }}</span>{% endif %}</td>
-        <td><span class="mono">{{ port.vlan }}</span></td>
-        <td>
-          {% if devices and devices.neighbors %}
-          {% set n = devices.neighbors[0] %}
-          <span class="device" title="{{ n.protocol }}: {{ n.name }}{% if n.platform %}, {{ n.platform }}{% endif %}">{{ icon("neighbors") }}{{ short_device_name(n.name) }}{% if n.remote_port %} <small>{{ n.remote_port }}</small>{% endif %}</span>
-          {% elif devices and devices.macs %}
-          {% set m = devices.macs|rejectattr("switch_own")|list %}
-          {% if m %}<span class="device">{{ icon("account") }}{{ m[0].maker or m[0].mac }}{% if m|length > 1 %} <small>+{{ m|length - 1 }}</small>{% endif %}</span>{% endif %}
-          {% endif %}
-        </td>
-        <td class="mono">{% if port.transceiver.present %}{{ port.transceiver.type or "present" }}{% else %}<span class="dim">none</span>{% endif %}</td>
-        <td>
-          {% if port.up and port.bandwidth_bits %}
-          {% set in_share = [port.in_bits_per_second / port.bandwidth_bits, 1]|min %}
-          {% set out_share = [port.out_bits_per_second / port.bandwidth_bits, 1]|min %}
-          <svg class="bars" viewBox="0 0 84 10" aria-hidden="true"><rect class="bar-bg" width="84" height="4" rx="1"/><rect class="bar-in" width="{{ [in_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/><rect class="bar-bg" y="6" width="84" height="4" rx="1"/><rect class="bar-out" y="6" width="{{ [out_share * 84, 1.5]|max|round(1) }}" height="4" rx="1"/></svg>
-          {% endif %}
-        </td>
-        <td class="num">{% if port.up %}{{ port.in_bits_per_second|rate }}{% endif %}</td>
-        <td class="num">{% if port.up %}{{ port.out_bits_per_second|rate }}{% endif %}</td>
-        <td class="num">{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>{% else %}<span class="dim">0</span>{% endif %}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="{{ 12 if bulk_on else 11 }}">No ports match this filter.</td></tr>
-      {% endfor %}
+    <tbody data-live-region="rows">
+      {{ live.rows(bulk_on) }}
     </tbody>
   </table>
-  <p class="note">In and Out are the average over the last 30 seconds; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
+  {{ live.ratenote() }}
 </section>
 {% if bulk_on %}
-<div class="bulk-bar">
-  <fieldset class="choice">
-    <legend>Change several ports:</legend>
-    <label class="check"><input type="radio" name="action" value="off" {% if bulk.action == "off" %}checked{% endif %}> Turn off</label>
-    <label class="check"><input type="radio" name="action" value="on" {% if bulk.action == "on" %}checked{% endif %}> Turn on</label>
-    <label class="check"><input type="radio" name="action" value="description" {% if bulk.action == "description" %}checked{% endif %}> Give them the description</label>
-  </fieldset>
-  <label for="bulk_description" class="sr-only">Description</label>
-  <input id="bulk_description" name="description" type="text" value="{{ bulk.description }}" maxlength="254" spellcheck="false" placeholder="Description">
+{% set b = bulk %}
+{# The side panel for the ticked ports: it opens as soon as one port is
+   ticked (CSS :has, no script) and is laid out like a port's own panel, one
+   section per kind of change, all of it in view. The list at the top names
+   the ticked ports; each name unticks its port (static/keep-ticks.js keeps
+   the list in step with the table). #}
+<aside class="drawer bulk-drawer" aria-labelledby="bulk-title">
+  <div class="drawer-head">
+    <div class="drawer-top">
+      <h2 id="bulk-title">Change several ports</h2>
+      <span class="box-gap"></span>
+      <a class="icon-btn" href="{{ ports_link(show, color) }}" title="Clear the ticks and close"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
+    </div>
+    <div class="drawer-sub"><span class="bulk-count">Ports ticked: </span></div>
+    <ul class="pills ticked-list" data-ticked-list aria-label="Ticked ports">
+      {% for port in shown if port.name in ticked %}
+      <li><label class="pill pill-untick" for="{{ live.tick_id(port.name) }}" title="Untick {{ port.name }}">{{ port.name }}<span class="untick-x" aria-hidden="true">×</span></label></li>
+      {% endfor %}
+    </ul>
+    <p class="hint">Press a port above, or its box in the table, to untick it.</p>
+  </div>
+  <div class="drawer-body">
+    {% if bulk_open and not drawer and (error or notice) %}<div class="drawer-part">{{ messages() }}</div>{% endif %}
+    <div class="drawer-part bulk-config">
+      <p class="lead">Fill in only what should change, and every ticked port gets it. Each setting starts at "Leave as it is", so what you do not fill in stays as each port has it.</p>
+    </div>
+    <section class="drawer-part bulk-config">
+      <h3>On or off</h3>
+      <div class="stack form-narrow">
+        <label for="bulk_power">On or off</label>
+        <select id="bulk_power" name="power">
+          <option value="" {% if not b.power %}selected{% endif %}>Leave as it is</option>
+          <option value="on" {% if b.power == "on" %}selected{% endif %}>Turn on</option>
+          <option value="off" {% if b.power == "off" %}selected{% endif %}>Turn off</option>
+        </select>
+      </div>
+    </section>
+    <section class="drawer-part bulk-config">
+      <h3>Description</h3>
+      <div class="stack form-narrow">
+        <label class="check"><input type="checkbox" name="set_description" value="yes" {% if b.set_description %}checked{% endif %}> Change the description to</label>
+        <label for="bulk_description" class="sr-only">Description</label>
+        <input id="bulk_description" name="description" type="text" value="{{ b.description }}" maxlength="254" spellcheck="false" placeholder="Description">
+        <p class="hint">Up to 254 plain characters, no "?" or ";". Tick the box and leave it empty to remove the description.</p>
+      </div>
+    </section>
+    {% if connection.neighbor_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>Connected</h3>
+      <div class="stack form-narrow">
+        <label class="check"><input type="checkbox" name="clear_macs" value="yes" {% if b.clear_macs %}checked{% endif %}> Clear the addresses learned on them</label>
+        <p class="hint">The switch forgets them and learns them again from the next traffic. Static entries stay.</p>
+      </div>
+    </section>
+    {% endif %}
+    {% if connection.vlan_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>VLANs</h3>
+      <div class="stack form-narrow">
+        <label for="bulk_mode">Mode</label>
+        <select id="bulk_mode" name="mode">
+          <option value="" {% if not b.mode %}selected{% endif %}>Leave as it is</option>
+          <option value="access" {% if b.mode == "access" %}selected{% endif %}>Access: one VLAN, untagged</option>
+          <option value="trunk" {% if b.mode == "trunk" %}selected{% endif %}>Trunk: several VLANs, tagged</option>
+        </select>
+        <label for="bulk_access_vlan">Access VLAN (used in access mode)</label>
+        <input id="bulk_access_vlan" name="access_vlan" type="text" inputmode="numeric" value="{{ b.access_vlan }}" placeholder="Leave as it is">
+        <label for="bulk_native_vlan">Native VLAN (trunk mode: carries untagged traffic)</label>
+        <input id="bulk_native_vlan" name="native_vlan" type="text" inputmode="numeric" value="{{ b.native_vlan }}" placeholder="Leave as it is">
+        <label for="bulk_allowed">VLANs carried (trunk mode)</label>
+        <input id="bulk_allowed" name="allowed" type="text" value="{{ b.allowed }}" spellcheck="false" placeholder="Leave as it is">
+        <p class="hint">Such as 10,20-30, or all, or none. A trunk always carries its native VLAN; NXray adds it when it is left out.</p>
+      </div>
+      <p class="note">VLANs are created on the <a href="/vlans">VLANs page</a>.</p>
+    </section>
+    {% endif %}
+    {% if connection.settings_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>Settings</h3>
+      <div class="stack form-narrow">
+        <label for="bulk_layer">Layer</label>
+        <select id="bulk_layer" name="layer">
+          <option value="" {% if not b.layer %}selected{% endif %}>Leave as it is</option>
+          <option value="switched" {% if b.layer == "switched" %}selected{% endif %}>Switched (layer 2)</option>
+          <option value="routed" {% if b.layer == "routed" %}selected{% endif %}>Routed (layer 3), no address</option>
+        </select>
+        <p class="hint">Each routed port needs its own IPv4 address, so set it in the port's own panel.</p>
+        <label for="bulk_speed">Speed</label>
+        <select id="bulk_speed" name="speed">
+          <option value="" {% if not b.speed %}selected{% endif %}>Leave as it is</option>
+          {% for value in bulk_speeds %}
+          <option value="{{ value }}" {% if b.speed == value %}selected{% endif %}>{{ speed_label(value) }}</option>
+          {% endfor %}
+        </select>
+        <label for="bulk_mtu">MTU</label>
+        <input id="bulk_mtu" name="mtu" type="text" inputmode="numeric" value="{{ b.mtu }}" placeholder="Leave as it is">
+        <p class="hint">Switched: 1500 (standard) or 9216 (jumbo frames). Routed: 576 to 9216.</p>
+        <label for="bulk_fec">FEC</label>
+        <select id="bulk_fec" name="fec">
+          <option value="" {% if not b.fec %}selected{% endif %}>Leave as it is</option>
+          {% for value, text in fec_labels.items() %}
+          <option value="{{ value }}" {% if b.fec == value %}selected{% endif %}>{{ text }}</option>
+          {% endfor %}
+        </select>
+        {% for key, words in (("flow_receive", "Flow control, receive"), ("flow_send", "Flow control, send")) %}
+        <label for="bulk_{{ key }}">{{ words }}</label>
+        <select id="bulk_{{ key }}" name="{{ key }}">
+          <option value="" {% if not b[key] %}selected{% endif %}>Leave as it is</option>
+          <option value="on" {% if b[key] == "on" %}selected{% endif %}>On</option>
+          <option value="off" {% if b[key] == "off" %}selected{% endif %}>Off</option>
+        </select>
+        {% endfor %}
+        {% for kind, words in (("broadcast", "broadcast"), ("multicast", "multicast"), ("unicast", "unknown unicast")) %}
+        <label for="bulk_storm_{{ kind }}">Storm control, {{ words }} (% of the link)</label>
+        <input id="bulk_storm_{{ kind }}" name="storm_{{ kind }}" type="text" inputmode="decimal" value="{{ b['storm_' ~ kind] }}" placeholder="Leave as it is">
+        {% endfor %}
+        <p class="hint">0 to 100, up to two decimals, such as 10 or 2.5; "none" for no limit. Switched ports only.</p>
+        <label for="bulk_storm_action">When traffic goes over a level</label>
+        <select id="bulk_storm_action" name="storm_action">
+          <option value="" {% if not b.storm_action %}selected{% endif %}>Leave as it is</option>
+          <option value="none" {% if b.storm_action == "none" %}selected{% endif %}>Drop the extra traffic only</option>
+          <option value="trap" {% if b.storm_action == "trap" %}selected{% endif %}>Drop it and send an SNMP trap</option>
+          <option value="shutdown" {% if b.storm_action == "shutdown" %}selected{% endif %}>Turn the port off</option>
+        </select>
+      </div>
+    </section>
+    {% endif %}
+    {% if connection.neighbor_changes_enabled %}
+    <section class="drawer-part bulk-config">
+      <h3>CDP and LLDP</h3>
+      <div class="stack form-narrow">
+        {% for key, words in (("cdp", "CDP: send and listen"), ("lldp_transmit", "LLDP: send (the device on the port hears this switch)"), ("lldp_receive", "LLDP: listen (this switch hears the device)")) %}
+        <label for="bulk_{{ key }}">{{ words }}</label>
+        <select id="bulk_{{ key }}" name="{{ key }}">
+          <option value="" {% if not b[key] %}selected{% endif %}>Leave as it is</option>
+          <option value="on" {% if b[key] == "on" %}selected{% endif %}>On</option>
+          <option value="off" {% if b[key] == "off" %}selected{% endif %}>Off</option>
+        </select>
+        {% endfor %}
+      </div>
+      {% if neighbors and not neighbors.lldp_enabled %}<p class="note">LLDP is off for the whole switch, so it can be set per port only once it is on{% if role == "admin" %} (<a href="/features">Features page</a>){% endif %}.</p>{% endif %}
+    </section>
+    {% endif %}
+    <div class="drawer-part bulk-config">
+      <p class="note">Not offered here, because each port needs its own: an IPv4 address, the label, and splitting a 100G port. Set those in each port's own panel.</p>
+    </div>
+  </div>
+<div class="drawer-foot bulk-bar">
   <button type="submit" class="btn btn-primary">Change the ticked ports</button>
-  <p class="hint">A confirm page lists every ticked port and what happens to it first. Descriptions: up to 254 plain characters, no "?" or ";"; leave empty to remove them.</p>
+  <span class="toolbar-sep"></span>
+  <label for="bulk_start">Start from port</label>
+  <select id="bulk_start" name="start">
+    {% for port in ports %}<option value="{{ port.name }}" {% if b.start == port.name %}selected{% endif %}>{{ port.name }}</option>{% endfor %}
+  </select>
+  <button type="submit" name="fill" value="yes" class="btn btn-quiet">Fill in the form from it</button>
+  {% if connection.reset_changes_enabled %}
+  <span class="toolbar-sep"></span>
+  <button type="submit" formaction="/ports/reset-bulk" class="btn btn-danger">Reset the ticked ports to their defaults</button>
+  {% endif %}
+  <p class="hint">A confirm page lists every ticked port and what changes on it first; ports already set as asked are left out. Start from port copies a port's VLANs, settings and CDP/LLDP into the form, so you can copy a known-good port onto others. Reset the ticked ports clears everything on each and lists what it removes, instead of using the form above.</p>
 </div>
+</aside>
 </form>
 {% endif %}
 
@@ -182,7 +285,8 @@
 {% set devices = drawer.devices %}
 {% set forms = drawer.forms %}
 {% set ctx = {"csrf": csrf_token, "role": role, "can_change": can_change, "connection": connection, "back": drawer.back, "id": "drawer_"} %}
-<a class="drawer-shade" href="{{ drawer.close }}" aria-label="Close the port panel"></a>
+{# The port's panel sits on the right and the page moves aside for it, as
+   for the ticked ports' panel, so the front panel and table stay in view. #}
 <aside class="drawer" aria-label="{{ port.name }}">
   <div class="drawer-head">
     <div class="drawer-top">
@@ -265,6 +369,9 @@
         </tbody>
       </table>
       {% if learned|length > 6 %}<p class="dim">and {{ learned|length - 6 }} more</p>{% endif %}
+      {% for item in drawer.device_traffic.values() %}
+      <p class="dim">Its traffic now (estimate): sends {{ item.sends_bits|rate }}, receives {{ item.receives_bits|rate }}.</p>
+      {% endfor %}
       {% endif %}
       {{ pf.clear_macs_form(forms, ctx) }}
       {% endif %}
@@ -312,6 +419,10 @@
       <h3>Settings</h3>
       {{ pf.settings_part(forms, ctx) }}
     </section>
+    <section class="drawer-part">
+      <h3>Rate average</h3>
+      {{ pf.rate_interval_part(forms, ctx) }}
+    </section>
     {% if forms.settings and (forms.settings.breakout_capable or forms.settings.is_breakout_port) %}
     <section class="drawer-part">
       <h3>Split port</h3>
@@ -325,6 +436,7 @@
   </div>
   <div class="drawer-foot">
     {% if bulk_on %}{{ pf.power_form(forms, ctx, css="inline", button="btn", off_button="btn btn-danger", words="") }}{% endif %}
+    {{ pf.reset_form(forms, ctx) }}
     <span class="box-gap"></span>
     <a class="btn" href="/ports/detail?name={{ port.name|urlencode }}" title="Charts, counters and every device seen">All of this port →</a>
   </div>

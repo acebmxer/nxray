@@ -45,7 +45,7 @@
   <table class="table table-vlans">
     <thead>
       <tr>
-        <th>VLAN</th><th>Name</th><th>State</th><th>Used by</th><th>VLAN interface</th>
+        <th>VLAN</th><th>Name</th><th>State</th><th>Used by</th><th>VLAN interface</th><th>Traffic now <span class="dim">(estimate)</span></th>
         {% if connection.vlan_changes_enabled and can_change %}<th>Change</th>{% endif %}
       </tr>
     </thead>
@@ -66,6 +66,11 @@
           {% if vlan.id in view.interfaces %}<a href="/routing#Vlan{{ vlan.id }}">Vlan{{ vlan.id }}</a>
           {% elif can_change and connection.vlan_interface_changes_enabled and vlan.id <= vlan_interface_max %}<a href="/routing?vlan={{ vlan.id }}">make one</a>
           {% else %}<span class="dim">none</span>{% endif %}
+        </td>
+        <td>
+          {% if vlan.id in traffic %}{% set rates = traffic[vlan.id] %}
+          <a href="/history#vlan-traffic" title="Its access ports added up: sent by its devices, and sent to them">{{ rates[0]|rate }} in, {{ rates[1]|rate }} out</a>
+          {% else %}<span class="dim">—</span>{% endif %}
         </td>
         {% if connection.vlan_changes_enabled and can_change %}
         <td>
@@ -98,6 +103,13 @@
   switch's default) is not listed. A VLAN that a port uses cannot be deleted:
   move the port to another VLAN on its own page first. Nor can a VLAN with a
   VLAN interface: delete that on the Routing page first.
+</p>
+<p class="note">
+  Traffic now is an estimate: the VLAN's access ports that are up, added up, from
+  {% if history_on %}NXray's last history sample{% else %}history, which is turned off (NXRAY_HISTORY_INTERVAL is 0), so it is not shown{% endif %}.
+  Trunks are left out, since their counters cannot be split by VLAN, so traffic
+  that reaches a VLAN over a trunk (from another switch or a hypervisor, for
+  example) is missing. A VLAN with no access port up shows —. <a href="/history#vlan-traffic">Each VLAN over time</a>.
 </p>
 
 {% set columns, grid_rows = grid %}

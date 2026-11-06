@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Switch accounts — NXray{% endblock %}
+
+{% macro admin_login(id) %}
+<label for="{{ id }}_admin_user">Switch admin username</label>
+<input id="{{ id }}_admin_user" name="admin_user" type="text" autocomplete="off" spellcheck="false" required>
+<label for="{{ id }}_admin_password">Switch admin password</label>
+<input id="{{ id }}_admin_password" name="admin_password" type="password" autocomplete="off" required>
+<p class="hint">Used for this one request and never stored. The switch configuration is saved afterwards, so the change survives a restart; that also keeps any other unsaved change there.</p>
+{% endmacro %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/users">← Users</a></p>
+<h1 class="page-title">Switch accounts{% if user %} of {{ user.username }}{% endif %}</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+{% if notice %}
+<p class="alert alert-ok" role="status">{{ notice }}</p>
+{% endif %}
+
+{% if not user %}
+<p class="lead">There is no such NXray user.</p>
+{% else %}
+<p class="lead">
+  {{ user.username }} is an NXray {{ user.role }} ({{ role_help[user.role] }}){% if user.disabled %}, disabled{% endif %}.
+  A local account on a switch, with the same name and password, lets them sign in
+  over SSH too. Its role follows the NXray role: {% for role, words in role_map.items() %}{{ role }} → {{ words }}{% if not loop.last %}; {% endif %}{% endfor %}.
+</p>
+
+{% if not switches %}
+<p class="note">NXray has no switch set up yet.</p>
+{% endif %}
+
+{% if switches|selectattr("link")|list %}
+<section class="card">
+  <h2 class="card-title">New password for NXray and the switch</h2>
+  <form method="post" action="/users/switch/password" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="user_id" value="{{ user.id }}">
+    <label for="pw_password">New password</label>
+    <input id="pw_password" name="password" type="password" autocomplete="new-password" required minlength="{{ min_password }}">
+    <label for="pw_confirm">New password again</label>
+    <input id="pw_confirm" name="confirm_password" type="password" autocomplete="new-password" required minlength="{{ min_password }}">
+    <p class="hint">Set in NXray and on every switch account below, so both are in step; a locked switch account opens again. The switch takes 8 to 64 letters and digits, with upper case, lower case and digits and no runs like "aaa" or "abc"; NXray checks that first. {{ user.username }} is signed out of NXray everywhere.</p>
+    {{ admin_login("pw") }}
+    <button type="submit" class="btn btn-primary">Set the new password</button>
+  </form>
+</section>
+{% endif %}
+
+{% for s in switches %}
+{% set connection = s.connection %}
+{% set link = s.link %}
+<section class="card">
+  <h2 class="card-title">{{ connection.label }} <span class="dim">({{ connection.host }})</span></h2>
+  {% if link %}
+  <dl class="facts">
+    <dt>Account</dt><dd class="mono">{{ link.account_name }}{% if s.accounts is not none and not s.on_switch %} <span class="reason">no longer on the switch</span>{% endif %}</dd>
+    <dt>Role NXray last gave it</dt><dd>{{ link.roles|join(" + ") or "none" }}</dd>
+    <dt>Role for an NXray {{ user.role }}</dt><dd>{{ s.roles|join(" + ") }}</dd>
+    <dt>State</dt><dd>{% if s.problems %}<span class="badge badge-warn">out of step</span> {{ s.problems|join("; ") }}{% elif link.locked %}locked (random password){% else %}<span class="badge badge-ok">in step</span>{% endif %}</dd>
+  </dl>
+  <div class="form-grid form-after">
+    {% if s.role_out %}
+    <form method="post" action="/users/switch/roles" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="user_id" value="{{ user.id }}">
+      <input type="hidden" name="switch_id" value="{{ connection.id }}">
+      <p class="label">Give it the role {{ s.roles|join(" + ") }}</p>
+      <p class="hint">Adds what is missing and takes off the other roles NXray gives people (network-operator, network-admin, nxray-ports). Any other role stays.</p>
+      {{ admin_login("roles" ~ connection.id) }}
+      <button type="submit" class="btn btn-quiet">Change the role</button>
+    </form>
+    {% endif %}
+    {% if not link.locked %}
+    <form method="post" action="/users/switch/lock" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="user_id" value="{{ user.id }}">
+      <input type="hidden" name="switch_id" value="{{ connection.id }}">
+      <p class="label">Lock it</p>
+      <p class="hint">Gives it a random password nobody knows, so it cannot sign in; the account and its role stay. SSH sessions already open stay open until they end. A new password above opens it again.</p>
+      {{ admin_login("lock" ~ connection.id) }}
+      <label class="check"><input type="checkbox" name="confirm" value="yes" required> Yes, lock {{ link.account_name }} on {{ connection.label }}</label>
+      <button type="submit" class="btn btn-quiet">Lock the switch account</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/users/switch/remove" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="user_id" value="{{ user.id }}">
+      <input type="hidden" name="switch_id" value="{{ connection.id }}">
+      <p class="label">Remove it from the switch</p>
+      <p class="hint">The NXray user stays. The switch refuses while the account has an NX-API session (for 10 minutes after it last used NX-API).</p>
+      {{ admin_login("remove" ~ connection.id) }}
+      <label class="check"><input type="checkbox" name="confirm" value="yes" required> Yes, remove {{ link.account_name }} from {{ connection.label }}</label>
+      <button type="submit" class="btn btn-danger">Remove the switch account</button>
+    </form>
+  </div>
+  <form method="post" action="/users/switch/unlink" class="inline form-after">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="user_id" value="{{ user.id }}">
+    <input type="hidden" name="switch_id" value="{{ connection.id }}">
+    <button type="submit" class="btn btn-quiet">Unlink (leave the account on the switch as it is)</button>
+  </form>
+  {% else %}
+  <p class="lead">{{ user.username }} has no account on this switch that NXray knows of.</p>
+  <div class="form-grid">
+    <form method="post" action="/users/switch/create" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="user_id" value="{{ user.id }}">
+      <input type="hidden" name="switch_id" value="{{ connection.id }}">
+      <p class="label">Make an account on {{ connection.label }}</p>
+      <label for="create{{ connection.id }}_password">Password</label>
+      <input id="create{{ connection.id }}_password" name="password" type="password" autocomplete="new-password" required minlength="{{ min_password }}">
+      <label for="create{{ connection.id }}_confirm">Password again</label>
+      <input id="create{{ connection.id }}_confirm" name="confirm_password" type="password" autocomplete="new-password" required minlength="{{ min_password }}">
+      <p class="hint">NXray keeps no plain password, so this becomes {{ user.username }}'s NXray password too, and both are in step. Letters and digits only, as the switch takes them.</p>
+      {{ admin_login("create" ~ connection.id) }}
+      <label class="check"><input type="checkbox" name="confirm_roles" value="yes" required> Yes, make the account {{ user.username }} on {{ connection.label }} with the role {{ s.roles|join(" + ") }}</label>
+      <button type="submit" class="btn btn-primary">Make the switch account</button>
+    </form>
+    <form method="post" action="/users/switch/link" class="stack form-narrow">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="user_id" value="{{ user.id }}">
+      <input type="hidden" name="switch_id" value="{{ connection.id }}">
+      <p class="label">Or link an account already on the switch</p>
+      {% if s.accounts is none %}
+      <p class="note">The switch did not list its accounts: {{ s.read_error }}</p>
+      {% elif not s.linkable %}
+      <p class="note">Every account on the switch is NXray's own or already linked to someone.</p>
+      {% else %}
+      <label for="link{{ connection.id }}">Account</label>
+      <select id="link{{ connection.id }}" name="account_name">
+        {% for account in s.linkable %}
+        <option value="{{ account.name }}" {% if account.name|lower == user.username|lower %}selected{% endif %}>{{ account.name }} ({{ account.roles|join(", ") }})</option>
+        {% endfor %}
+      </select>
+      <p class="hint">Changes nothing on the switch. Its password shows as out of step until you set a new one above.</p>
+      <button type="submit" class="btn btn-quiet">Link it</button>
+      {% endif %}
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+
+<p class="note">For many people on many switches, TACACS+ or RADIUS (one sign-in kept on a server, used by every switch) is the usual answer; see the Users section of the documentation.</p>
+{% endif %}
+{% endblock %}

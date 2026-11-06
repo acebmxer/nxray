@@ -82,11 +82,14 @@ def generate_password() -> str:
     """
     while True:
         candidate = "".join(secrets.choice(_ALPHABET) for _ in range(PASSWORD_LENGTH))
-        if _strong_enough(candidate):
+        if password_strong_enough(candidate):
             return candidate
 
 
-def _strong_enough(password: str) -> bool:
+def password_strong_enough(password: str) -> bool:
+    """True when NX-OS's password strength check takes the password: upper
+    case, lower case and digits, and no run of three alike ("aaa") or in a
+    row ("abc", "321")."""
     if not (
         any(c.islower() for c in password)
         and any(c.isupper() for c in password)
@@ -111,7 +114,8 @@ def account_names(user_account_body: dict) -> set[str]:
     }
 
 
-def _scrub(text: str, *secrets_to_hide: str) -> str:
+def scrub_secrets(text: str, *secrets_to_hide: str) -> str:
+    """``text`` with every secret given replaced by ***, for a page or a log."""
     for value in secrets_to_hide:
         if value:
             text = text.replace(value, "***")
@@ -166,7 +170,7 @@ def run_setup(
             version, users = client.show("show version", "show user-account")
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, port, "admin"), admin_password)
             ) from exc
 
         if account_name.lower() in account_names(users):
@@ -181,7 +185,7 @@ def run_setup(
         try:
             client.create_user(account_name, password, ACCOUNT_ROLE)
         except NxapiError as exc:
-            message = _scrub(str(exc), password, admin_password)
+            message = scrub_secrets(str(exc), password, admin_password)
             raise SetupError(f"The switch did not create the account: {message}") from exc
         log.info("created switch account %s on %s (%s)", account_name, host, hostname)
 
@@ -199,13 +203,13 @@ def run_setup(
                 if removed
                 else _still_there_message(account_name)
             )
-            raise SetupError(_scrub(detail + outcome, password, admin_password)) from exc
+            raise SetupError(scrub_secrets(detail + outcome, password, admin_password)) from exc
 
         try:
             client.save_config()
         except NxapiError as exc:
             log.warning("switch config not saved after creating %s: %s", account_name, exc)
-            return SetupResult(hostname, False, _scrub(str(exc), password, admin_password))
+            return SetupResult(hostname, False, scrub_secrets(str(exc), password, admin_password))
 
     log.info("saved the switch configuration on %s", host)
     return SetupResult(hostname, True, None)
@@ -271,7 +275,7 @@ def connection_error(exc: NxapiError, target: SwitchTarget) -> str:
             "Press Run setup again on the Switch page to set it up again: it gives the "
             "account a new password, or makes it again if it was removed."
         )
-    return _scrub(message, target.password)
+    return scrub_secrets(message, target.password)
 
 
 def check_connection(

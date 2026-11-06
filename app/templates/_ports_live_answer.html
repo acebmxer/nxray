@@ -1,0 +1,11 @@
+{#- What /live/ports sends: only the regions of the Ports page that change. -#}
+{% import "_ports_live.html" as live with context %}
+{{ live.banner() }}
+{% if ports %}
+{{ live.kpis() }}
+{% if face %}{{ live.face_block() }}{% endif %}
+<table><tbody data-live-region="rows">
+{{ live.rows(bulk_on) }}
+</tbody></table>
+{{ live.ratenote() }}
+{% endif %}

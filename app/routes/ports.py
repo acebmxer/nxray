@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
@@ -23,6 +23,7 @@ from app.dependencies import (
 )
 from app.face import MODES, color_mode, draw_face, short_device_name, speed_class
 from app.history import RANGE_LABELS, port_charts, range_key
+from app.live import PORTS, port_trail_chart
 from app.neighbor_changes import (
     PortDiscovery,
     describe_port_discovery,
@@ -31,13 +32,29 @@ from app.neighbor_changes import (
 )
 from app.neighbors import NeighborView, try_load_neighbors
 from app.nxapi import (
+    DEFAULT_LOAD_INTERVAL,
+    LOAD_INTERVALS,
     NxapiClient,
     NxapiCommandError,
     NxapiError,
     SwitchTarget,
     validate_description,
 )
+from app.port_bulk import (
+    BULK_FIELDS,
+    SPEED_CHOICES,
+    BulkStep,
+    PortPlan,
+    bulk_kinds,
+    change_summary,
+    check_bulk_form,
+    empty_bulk_form,
+    form_from_port,
+    group_warnings,
+    plan_bulk,
+)
 from app.port_labels import LABEL_MAX, get_labels, set_label
+from app.port_reset import plan_bulk_reset, port_reset_summary
 from app.port_settings import (
     BREAKOUT_LABELS,
     FEC_LABELS,
@@ -46,16 +63,21 @@ from app.port_settings import (
     PortSettings,
     describe_port_settings,
     guess_breakout_map,
+    load_interval_label,
     plan_breakout,
+    plan_load_interval,
     plan_port_settings,
     speed_label,
     try_load_port_settings,
 )
+from app.port_settings import settings_form as make_settings_form
 from app.ports import COUNTER_LABELS, Port, load_ports
+from app.preferences import ui_preferences
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, connection_error, read_switch
+from app.traffic import device_traffic, port_device
 from app.vlans import VlanView, describe_port_vlans, load_ports_with_vlans, plan_port_vlans
 
 router = APIRouter()
@@ -203,10 +225,23 @@ def ports_page(
     color: str = "state",
     select: str = "",
     port: str = "",
+    tick: Annotated[list[str] | None, Query()] = None,
 ) -> Response:
     return render_ports_page(
-        request, username, show=show, color=color, tick_all=select == "all", selected=port
+        request,
+        username,
+        show=show,
+        color=color,
+        tick_all=select == "all",
+        ticked=tick,
+        selected=port,
     )
+
+
+def live_ports_link(show: str, color: str, port: str = "") -> str:
+    """The address of the Ports page's refreshing figures, for the same filter,
+    colour mode and open panel as ``ports_link``."""
+    return ports_link(show, color, port).replace("/ports?", "/live/ports?", 1)
 
 
 def ports_link(show: str, color: str, port: str = "") -> str:
@@ -214,6 +249,29 @@ def ports_link(show: str, color: str, port: str = "") -> str:
     the port whose side panel is open."""
     link = f"/ports?show={quote(show)}&color={quote(color)}"
     return link + (f"&port={quote(port, safe='/')}" if port else "")
+
+
+def ports_summary(
+    ports: list[Port] | None, neighbors: NeighborView | None, show: str
+) -> tuple[dict[str, str], list[Port], dict[str, int]]:
+    """(channels, shown, counts) for the Ports page: each port's port-channel
+    name ("" for none), the ports the filter ``show`` keeps, and how many ports
+    each filter would keep."""
+    channels = (
+        {
+            port.name: (pc.name if (pc := neighbors.channel_of(port.name)) else "")
+            for port in ports or []
+        }
+        if neighbors
+        else {}
+    )
+
+    def keeps(name: str, port: Port) -> bool:
+        return FILTERS[name](port, channels.get(port.name, ""))
+
+    shown = [port for port in ports or [] if keeps(show, port)]
+    counts = {name: sum(1 for port in ports or [] if keeps(name, port)) for name in FILTERS}
+    return channels, shown, counts
 
 
 def render_ports_page(
@@ -235,7 +293,8 @@ def render_ports_page(
     """Read the switch fresh and show the Ports page, with an optional message.
 
     ``tick_all`` ticks every port the filter shows; ``ticked`` keeps the ports
-    ticked and ``bulk`` the change picked (action, description) after a refusal.
+    ticked and ``bulk`` what the shared form holds after a refusal (or a fill
+    from one port; see app/port_bulk.py).
     ``selected`` names the port whose side panel is open; ``form_values`` keeps
     what was typed in one of its forms after a refusal (see port_forms), and
     ``found`` is what _read_port_page just read for it, to skip a second read.
@@ -258,20 +317,7 @@ def render_ports_page(
     if show not in FILTERS:
         show = "all"
     labels = _labels(request)
-    channels = (
-        {
-            port.name: (pc.name if (pc := neighbors.channel_of(port.name)) else "")
-            for port in ports or []
-        }
-        if neighbors
-        else {}
-    )
-
-    def keeps(name: str, port: Port) -> bool:
-        return FILTERS[name](port, channels.get(port.name, ""))
-
-    shown: list[Port] = [port for port in ports or [] if keeps(show, port)]
-    counts = {name: sum(1 for port in ports or [] if keeps(name, port)) for name in FILTERS}
+    channels, shown, counts = ports_summary(ports, neighbors, show)
     open_port = next((port for port in ports or [] if port.name == selected), None)
     face = (
         draw_face(
@@ -307,6 +353,7 @@ def render_ports_page(
             ),
             "back": PortsOrigin(show, color).fields,
             "devices": neighbors.for_port(open_port.name) if neighbors else None,
+            "device_traffic": device_traffic([open_port], neighbors) if neighbors else {},
             "chart": charts[0] if charts else None,
             "previous": ports_link(show, color, names[at - 1]),
             "next": ports_link(show, color, names[(at + 1) % len(names)]),
@@ -332,7 +379,10 @@ def render_ports_page(
             "error": error,
             "notice": notice,
             "ticked": {port.name for port in shown} if tick_all else set(ticked or []),
-            "bulk": bulk or {"action": "", "description": ""},
+            "bulk": bulk or empty_bulk_form(),
+            "bulk_speeds": SPEED_CHOICES,
+            "speed_label": speed_label,
+            "fec_labels": FEC_LABELS,
             "filter_labels": FILTER_LABELS,
             "channels": channels,
             "drawer": drawer,
@@ -342,6 +392,21 @@ def render_ports_page(
             "short_device_name": short_device_name,
             "throughput": sum(
                 port.in_bits_per_second + port.out_bits_per_second for port in ports or []
+            ),
+            # Figures that refresh themselves (app/live.py), only on the plain
+            # view: never on a result, a refusal or a form being filled in.
+            **(
+                {
+                    "live_page": PORTS,
+                    "live_url": live_ports_link(show, color, open_port.name if open_port else ""),
+                    "live_at": int(time.time()),
+                    "live_problem": "",
+                    "rates_window": 0,
+                }
+                if ports
+                and status_code == 200
+                and not (error or notice or tick_all or ticked or bulk or form_values)
+                else {"live_at": 0, "live_problem": "", "rates_window": 0}
             ),
         },
         status_code=status_code,
@@ -371,7 +436,7 @@ def port_forms(
     """
     port = next((p for p in ports or [] if p.name == name), None)
     if settings_form is None and port_settings is not None:
-        settings_form = _settings_form(port_settings)
+        settings_form = make_settings_form(port_settings)
     stored_label = _labels(request).get(name, "")
     if label is None:
         label = stored_label
@@ -406,6 +471,9 @@ def port_forms(
         "jumbo_mtu": JUMBO_MTU,
         "neighbors": neighbors,
         "discovery": discovery,
+        "load_intervals": [n for n in LOAD_INTERVALS if n != DEFAULT_LOAD_INTERVAL],
+        "default_load_interval": DEFAULT_LOAD_INTERVAL,
+        "load_interval_label": load_interval_label,
     }
 
 
@@ -433,7 +501,19 @@ def _render_port(
     if status_code is None:
         status_code = 404 if ports is not None and port is None else 200
     devices = neighbors.for_port(name) if neighbors and port else None
+    # The port's traffic is a device's own only when it is alone on an access port.
+    traffic_reason = port_device(port, devices)[1] if port and devices else ""
+    port_traffic = device_traffic([port], neighbors) if port and neighbors else {}
     period = range_key(request.query_params.get("range"))
+    trail_chart = None
+    if port and connection is not None:
+        trail_chart = port_trail_chart(
+            request.app.state.live_cache.trail(connection.id, PORTS),
+            name,
+            measured=ui_preferences(request).live == "live",
+            now=time.time(),
+            floor=request.app.state.settings.live_min_interval,
+        )
     charts = []
     if port:
         with open_db(request.app.state.settings.db_path) as conn:
@@ -457,9 +537,21 @@ def _render_port(
             "range": period,
             "ranges": RANGE_LABELS,
             "devices": devices,
+            "port_traffic": port_traffic,
+            "traffic_reason": traffic_reason,
             "device_ips": {m.mac: neighbors.ips_of(m.mac) for m in devices.macs}
             if neighbors and devices
             else {},
+            "live_at": int(time.time()),
+            "live_problem": "",
+            "rates_window": 0,
+            "trail_chart": trail_chart,
+            # Figures that refresh themselves, only on the plain view.
+            **(
+                {"live_page": PORTS, "live_url": f"/live/port?name={quote(name, safe='')}"}
+                if port and status_code == 200 and not (error or notice or form_values)
+                else {}
+            ),
         },
         status_code=status_code,
     )
@@ -552,67 +644,6 @@ def render_port_page(
         error=error,
         notice=notice,
     )
-
-
-def change_summary(port: Port, action: str, description: str) -> tuple[str, str | None]:
-    """(what the change does, in words; a warning for the confirm page or None)."""
-    if action == "off":
-        warning = (
-            "This port is up now: whatever is plugged into it loses its connection at once."
-            if port.up
-            else None
-        )
-        return f"Turn off {port.name}.", warning
-    if action == "on":
-        return f"Turn on {port.name}.", None
-    before = port.description or "none"
-    after = description or "none"
-    return f'Change the description of {port.name} from "{before}" to "{after}".', None
-
-
-def plan_bulk_change(
-    ports: list[Port], names: list[str], action: str, description: str
-) -> tuple[list[Port], list[str], list[str], list[str]]:
-    """Check a change asked for several ports at once.
-
-    Returns (the ports to change, in front-panel order; what happens to each,
-    one line per port; a warning for each up port about to be turned off;
-    one line per ticked port that already is as asked). Raises ValueError
-    with the reason for a change that cannot be made.
-    """
-    if not names:
-        raise ValueError("tick at least one port")
-    if action not in ACTIONS:
-        raise ValueError("pick a change to make")
-    known = {port.name for port in ports}
-    unknown = sorted(set(names) - known)
-    if unknown:
-        raise ValueError(f"the switch has no port called {', '.join(unknown)}")
-    if action == "description":
-        description = validate_description(description)
-    wanted = set(names)
-    changing: list[Port] = []
-    lines: list[str] = []
-    warnings: list[str] = []
-    already: list[str] = []
-    for port in ports:  # already in front-panel order
-        if port.name not in wanted:
-            continue
-        if action == "off" and not port.admin_up:
-            already.append(f"{port.name} is already off.")
-            continue
-        if action == "on" and port.admin_up:
-            already.append(f"{port.name} is already on.")
-            continue
-        if action == "description" and port.description == description:
-            already.append(f"{port.name} already has that description.")
-            continue
-        summary, warning = change_summary(port, action, description)
-        changing.append(port)
-        lines.append(summary)
-        if warning:
-            warnings.append(f"{port.name}: {warning}")
-    return changing, lines, warnings, already
 
 
 def change_refused(exc: NxapiError, target: SwitchTarget) -> str:
@@ -727,14 +758,148 @@ def port_change(
     )
 
 
-def _bulk_done(action: str, description: str, names: list[str]) -> str:
-    """What a change of several ports did, in words, naming the ports."""
-    listed = ", ".join(names)
-    if action == "description":
-        if description:
-            return f'{listed} now have the description "{description}".'
-        return f"{listed} no longer have a description."
-    return f"Turned {action}: {listed}."
+@router.post("/ports/reset", response_class=HTMLResponse)
+def port_reset(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Reset one port to how it came out of the box (``default interface``). Asks first."""
+    require_csrf(request, csrf)
+    origin = ports_origin(back, show, color)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return answer_port_change(request, username, name, origin, found, **kwargs)
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.changes_enabled:
+        return again(
+            error="Port changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if not connection.reset_changes_enabled:
+        return again(
+            error=(
+                "Resetting a port is off. An NXray admin presses Update the port list on the "
+                "Switch page first: NXray's role on the switch does not allow it yet."
+            ),
+            status_code=400,
+        )
+    vlans = view.ports.get(name) if view else None
+    line, warnings = port_reset_summary(port, current, vlans)
+    if confirm != "yes":
+        back_url, back_label = change_back(origin, name)
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
+                "lines": [line],
+                "warnings": warnings,
+                "action": "/ports/reset",
+                "fields": {"name": port.name, **(origin.fields if origin else {})},
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.reset_ports([name])
+    except NxapiError as exc:
+        log.warning("reset of %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    settings = request.app.state.settings
+    with open_db(settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    log.info("port reset on %s by %s: %s", connection.host, username, name)
+    note_activity(request, username, "Ports", f"{name} reset to defaults", connection.host)
+    return answer_port_change(
+        request,
+        username,
+        name,
+        origin,
+        notice=(
+            f"Done: {name} was reset to its defaults. Not saved yet: Save config keeps it "
+            "over a restart of the switch."
+        ),
+    )
+
+
+# The Switch page switch each kind of change in the shared form needs: the
+# connection's attribute, and the words of the refusal while it is off.
+BULK_SWITCHES = {
+    "port": ("changes_enabled", "Port changes are off."),
+    "vlans": ("vlan_changes_enabled", "VLAN changes are off."),
+    "settings": ("settings_changes_enabled", "Port settings changes are off."),
+    "discovery": ("neighbor_changes_enabled", "Neighbor changes are off."),
+    "macs": ("neighbor_changes_enabled", "Neighbor changes are off."),
+}
+
+
+def _read_bulk(
+    request: Request, target: SwitchTarget, names: list[str], kinds: set[str]
+) -> tuple[ConnectionStatus, tuple | None]:
+    """Read what the shared form is checked against: (ports, VLANs, neighbors,
+    settings by port, CDP/LLDP by port). Each ticked port's settings and
+    CDP/LLDP are read only when the form changes them, and only for ports
+    the switch reported (a show command naming a missing port fails the
+    whole request)."""
+
+    def reader(client: NxapiClient) -> tuple:
+        ports, view = load_ports_with_vlans(client)
+        neighbors = try_load_neighbors(client)
+        settings: dict[str, PortSettings | None] = {}
+        discovery: dict[str, PortDiscovery | None] = {}
+        wanted = set(names)
+        for port in ports:
+            if port.name not in wanted:
+                continue
+            if "settings" in kinds:
+                settings[port.name] = try_load_port_settings(
+                    client, port, view.ports.get(port.name)
+                )
+            if "discovery" in kinds:
+                lldp_on = neighbors.lldp_enabled if neighbors else False
+                discovery[port.name] = load_port_discovery(client, port.name, lldp_on)
+        return ports, view, neighbors, settings, discovery
+
+    return read_switch(target, reader, transport=request.app.state.nxapi_transport)
+
+
+def _bulk_failure(
+    done: list[PortPlan], failed: PortPlan, made: list[BulkStep], reason: str, untried: list[str]
+) -> str:
+    """What a change of several ports did when the switch refused part of it."""
+    parts = []
+    if done:
+        parts.append("Changed: " + " ".join(plan.summary for plan in done))
+    step = failed.steps[len(made)]
+    name = failed.port.name
+    if made:
+        lines = " ".join(line for kept in made for line in kept.lines)
+        parts.append(
+            f"{name} was changed only in part: {lines} Then the switch refused the next part "
+            f"({step.what})."
+        )
+    else:
+        parts.append(f"{name} was not changed.")
+    parts.append(reason)
+    if untried:
+        parts.append(f"Not tried: {', '.join(untried)}.")
+    return " ".join(parts)
 
 
 @router.post("/ports/bulk", response_class=HTMLResponse)
@@ -743,41 +908,90 @@ def ports_bulk_change(
     username: str = Depends(operator_required),
     csrf: str = Form(""),
     names: Annotated[list[str] | None, Form()] = None,
-    action: str = Form(""),
+    power: str = Form(""),
+    set_description: str = Form(""),
     description: str = Form(""),
+    mode: str = Form(""),
+    access_vlan: str = Form(""),
+    native_vlan: str = Form(""),
+    allowed: str = Form(""),
+    layer: str = Form(""),
+    speed: str = Form(""),
+    mtu: str = Form(""),
+    fec: str = Form(""),
+    flow_receive: str = Form(""),
+    flow_send: str = Form(""),
+    storm_broadcast: str = Form(""),
+    storm_multicast: str = Form(""),
+    storm_unicast: str = Form(""),
+    storm_action: str = Form(""),
+    cdp: str = Form(""),
+    lldp_transmit: str = Form(""),
+    lldp_receive: str = Form(""),
+    clear_macs: str = Form(""),
+    start: str = Form(""),
+    fill: str = Form(""),
     show: str = Form("all"),
     color: str = Form("state"),
     confirm: str = Form(""),
 ) -> Response:
-    """Turn several ports off or on, or give them one description.
+    """Apply one shared configuration to every ticked port.
 
-    Without confirm=yes, shows every port and what would happen to it, and
-    asks. The ports are changed one request at a time; the first refusal
-    stops the rest, and the page names what changed and what did not.
+    Every setting left empty stays as each port has it. With fill=yes, fills
+    the form from the port named in ``start`` instead, and changes nothing.
+    Without confirm=yes, shows every port and what would change on it, and
+    asks. The ports are changed one at a time, each kind of change in its
+    own request; the first refusal stops the rest, and the page names what
+    changed, what was refused and what was not tried.
     """
     require_csrf(request, csrf)
+    # The shared form's fields are this function's parameters of the same names.
+    given = locals()
+    raw = {key: str(given[key]) for key in BULK_FIELDS}
     names = list(dict.fromkeys(names or []))
-    bulk = {"action": action, "description": description}
 
-    def again(**kwargs) -> Response:
+    def again(bulk: dict[str, str] = raw, **kwargs) -> Response:
         return render_ports_page(
             request, username, show=show, color=color, ticked=names, bulk=bulk, **kwargs
         )
 
-    connection, target, status, ports, _ = _read_ports(request)
-    if connection is None or target is None or ports is None:
+    connection, target, _ = stored_switch(request)
+    if connection is None or target is None:
         return again()
     if not connection.changes_enabled:
         return again(
             error="Port changes are off. Turn them on on the Switch page first.",
             status_code=400,
         )
+    if fill == "yes":
+        return _fill_bulk_form(request, username, start, raw, again)
+
     try:
-        changing, lines, warnings, already = plan_bulk_change(ports, names, action, description)
+        form = check_bulk_form(raw)
     except ValueError as exc:
         return again(error=f"Not changed: {exc}.", status_code=400)
-    if action == "description":
-        description = validate_description(description)
+    kinds = bulk_kinds(form)
+    for kind in sorted(kinds):
+        attribute, words = BULK_SWITCHES[kind]
+        if not getattr(connection, attribute):
+            return again(error=f"{words} Turn them on on the Switch page first.", status_code=400)
+
+    status, found = _read_bulk(request, target, names, kinds)
+    if found is None:
+        return again(error=status.message, status_code=400)
+    ports, view, neighbors, settings, discovery = found
+    try:
+        changing, already = plan_bulk(
+            ports,
+            names,
+            form,
+            view=view,
+            settings=settings,
+            discovery=discovery,
+            neighbors=neighbors,
+        )
+    except ValueError as exc:
+        return again(error=f"Not changed: {exc}.", status_code=400)
     if not changing:
         return again(notice="Nothing to change: " + " ".join(already))
 
@@ -790,13 +1004,13 @@ def ports_bulk_change(
                 "title": "Ports",
                 "back_url": "/ports",
                 "back_label": "All ports",
-                "lines": lines + [f"Unchanged: {line}" for line in already],
-                "warnings": warnings,
+                "lines": [plan.summary for plan in changing]
+                + [f"Unchanged: {line}" for line in already],
+                "warnings": group_warnings(changing),
                 "action": "/ports/bulk",
                 "fields": {
-                    "names": [port.name for port in changing],
-                    "action": action,
-                    "description": description,
+                    "names": [plan.port.name for plan in changing],
+                    **form,
                     "show": show,
                     "color": color,
                 },
@@ -804,47 +1018,179 @@ def ports_bulk_change(
             },
         )
 
-    changed: list[Port] = []
+    done: list[PortPlan] = []
+    current: PortPlan | None = None
+    made: list[BulkStep] = []
     refusal: str | None = None
     try:
         with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
-            for port in changing:
-                if action == "description":
-                    client.configure_port(port.name, description=description)
-                else:
-                    client.configure_port(port.name, enabled=action == "on")
-                changed.append(port)
+            for plan in changing:
+                current, made = plan, []
+                for step in plan.steps:
+                    step.run(client)
+                    made.append(step)
+                done.append(plan)
     except NxapiError as exc:
-        failed = changing[len(changed)].name
-        log.warning("port change on %s refused: %s", failed, exc)
-        refusal = f"{failed} was not changed. {change_refused(exc, target)}"
+        failed = current or changing[0]
+        log.warning("bulk change on %s refused: %s", failed.port.name, exc)
+        untried = [plan.port.name for plan in changing[len(done) + 1 :]]
+        refusal = _bulk_failure(done, failed, made, change_refused(exc, target), untried)
 
-    if changed:
-        settings = request.app.state.settings
-        with open_db(settings.db_path) as conn:
-            set_unsaved_changes(conn, selected_switch_id(request), True)
-        summary = " ".join(lines[: len(changed)])
-        log.info("port change on %s by %s: %s", connection.host, username, summary)
+    applied = [step for plan in done for step in plan.steps] + (made if refusal else [])
+    if applied:
+        if any(step.config for step in applied):
+            with open_db(request.app.state.settings.db_path) as conn:
+                set_unsaved_changes(conn, selected_switch_id(request), True)
+        summary = " ".join(plan.summary for plan in done)
+        if refusal and made and current is not None:
+            summary += f" {current.port.name} (in part): " + " ".join(
+                line for step in made for line in step.lines
+            )
+        summary = summary.strip()
+        log.info("bulk port change on %s by %s: %s", connection.host, username, summary)
         note_activity(request, username, "Ports", summary, connection.host)
 
-    done_names = [port.name for port in changed]
-    not_saved = "Not saved yet: Save config keeps the changes over a restart of the switch."
+    not_saved = (
+        " Not saved yet: Save config keeps the changes over a restart of the switch."
+        if any(step.config for step in applied)
+        else ""
+    )
     if refusal is None:
+        listed = ", ".join(plan.port.name for plan in done)
+        details = " ".join(plan.summary for plan in done)
+        left = f" Left as they were: {' '.join(already)}" if already else ""
         return render_ports_page(
             request,
             username,
             show=show,
             color=color,
-            notice=f"Done: {_bulk_done(action, description, done_names)} {not_saved}",
+            notice=f"Done: changed {listed}. {details}{left}{not_saved}",
         )
-    untried = [port.name for port in changing[len(changed) + 1 :]]
-    parts = [f"Changed: {_bulk_done(action, description, done_names)}" if changed else ""]
-    parts.append(refusal)
-    if untried:
-        parts.append(f"Not tried: {', '.join(untried)}.")
-    if changed:
-        parts.append(not_saved)
-    return again(error=" ".join(part for part in parts if part), status_code=400)
+    return again(error=refusal + not_saved, status_code=400)
+
+
+@router.post("/ports/reset-bulk", response_class=HTMLResponse)
+def ports_reset_bulk(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    names: Annotated[list[str] | None, Form()] = None,
+    show: str = Form("all"),
+    color: str = Form("state"),
+    confirm: str = Form(""),
+) -> Response:
+    """Reset every ticked port to how it came out of the box, in one request each.
+
+    Asks first, naming every ticked port and what it removes.
+    """
+    require_csrf(request, csrf)
+    names = list(dict.fromkeys(names or []))
+
+    def again(**kwargs) -> Response:
+        return render_ports_page(request, username, show=show, color=color, ticked=names, **kwargs)
+
+    connection, target, _ = stored_switch(request)
+    if connection is None or target is None:
+        return again()
+    if not connection.changes_enabled:
+        return again(
+            error="Port changes are off. Turn them on on the Switch page first.",
+            status_code=400,
+        )
+    if not connection.reset_changes_enabled:
+        return again(
+            error=(
+                "Resetting ports is off. An NXray admin presses Update the port list on the "
+                "Switch page first: NXray's role on the switch does not allow it yet."
+            ),
+            status_code=400,
+        )
+    status, found = _read_bulk(request, target, names, {"settings"})
+    if found is None:
+        return again(error=status.message, status_code=400)
+    ports, view, _neighbors, settings, _discovery = found
+    try:
+        chosen, lines, warnings = plan_bulk_reset(ports, names, view, settings)
+    except ValueError as exc:
+        return again(error=f"Not reset: {exc}.", status_code=400)
+
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": "Ports",
+                "back_url": "/ports",
+                "back_label": "All ports",
+                "lines": lines,
+                "warnings": warnings,
+                "action": "/ports/reset-bulk",
+                "fields": {
+                    "names": [port.name for port in chosen],
+                    "show": show,
+                    "color": color,
+                },
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.reset_ports([port.name for port in chosen])
+    except NxapiError as exc:
+        log.warning("bulk reset refused: %s", exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    listed = ", ".join(port.name for port in chosen)
+    log.info("bulk port reset on %s by %s: %s", connection.host, username, listed)
+    note_activity(request, username, "Ports", f"reset to defaults: {listed}", connection.host)
+    plural = "its" if len(chosen) == 1 else "their"
+    return render_ports_page(
+        request,
+        username,
+        show=show,
+        color=color,
+        notice=(
+            f"Done: reset {listed} to {plural} defaults. Not saved yet: Save config keeps it "
+            "over a restart of the switch."
+        ),
+    )
+
+
+def _fill_bulk_form(
+    request: Request,
+    username: str,
+    start: str,
+    raw: dict[str, str],
+    again: Callable[..., Response],
+) -> Response:
+    """The Ports page with the shared form filled from one port ("Start from
+    port"): its VLANs, settings and CDP/LLDP; on/off and the description stay
+    as they were typed. Changes nothing on the switch."""
+    found = _read_port_page(request, start or None)
+    _, _, status, ports, view, port_settings, _, discovery = found
+    port = next((p for p in ports or [] if p.name == start), None)
+    if ports is None:
+        return again(error=status.message if status else None, status_code=400)
+    if port is None:
+        return again(error="Pick a port to start from.", status_code=400)
+    filled = form_from_port(
+        port, port_settings, view.ports.get(port.name) if view else None, discovery
+    )
+    for key in ("power", "set_description", "description", "clear_macs"):
+        filled[key] = raw.get(key, "")
+    filled["start"] = port.name
+    return again(
+        bulk=filled,
+        notice=(
+            f"The form now holds the VLANs, port settings and CDP/LLDP of {port.name}. "
+            "Nothing was changed yet: change what you need, tick the ports and press "
+            "Change the ticked ports."
+        ),
+    )
 
 
 @router.post("/ports/vlans", response_class=HTMLResponse)
@@ -992,23 +1338,6 @@ def port_label(
 
 
 # ---- port settings and breakout ---------------------------------------------
-
-
-def _settings_form(current: PortSettings) -> dict[str, str]:
-    """The settings form filled with what the switch reports now."""
-    return {
-        "layer": current.layer,
-        "ip_address": current.ip_address,
-        "speed": current.speed,
-        "mtu": str(current.mtu),
-        "fec": current.fec,
-        "flow_receive": current.flow_receive,
-        "flow_send": current.flow_send,
-        "storm_broadcast": current.storm_field("broadcast"),
-        "storm_multicast": current.storm_field("multicast"),
-        "storm_unicast": current.storm_field("unicast"),
-        "storm_action": current.storm_action,
-    }
 
 
 def _breakout_guess(settings: PortSettings | None, ports: list[Port] | None) -> str | None:
@@ -1338,4 +1667,89 @@ def port_discovery_change(
             f"Done: {' '.join(lines)} Not saved yet: Save config keeps it over a restart of "
             "the switch."
         ),
+    )
+
+
+# ---- how long a port averages its rates over ------------------------------------
+
+
+@router.post("/ports/rate-interval", response_class=HTMLResponse)
+def port_rate_interval_change(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    name: str = Form(""),
+    seconds: str = Form(""),
+    back: str = Form(""),
+    show: str = Form(""),
+    color: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Set how many seconds the switch averages one port's In and Out over
+    (``load-interval counter 1``). Asks first."""
+    require_csrf(request, csrf)
+    origin = ports_origin(back, show, color)
+    back_url, back_label = change_back(origin, name)
+    found = _read_port_page(request, name)
+    connection, target, status, ports, view, current, neighbors, discovery = found
+    port = next((p for p in ports or [] if p.name == name), None)
+
+    def again(**kwargs) -> Response:
+        return answer_port_change(request, username, name, origin, found, **kwargs)
+
+    if connection is None or target is None or port is None:
+        return again()
+    if not connection.traffic_changes_enabled:
+        return again(
+            error=(
+                "Traffic measuring changes are off. An NXray admin turns them on on the "
+                "Switch page first."
+            ),
+            status_code=400,
+        )
+    try:
+        plan = plan_load_interval(name, port.load_interval, seconds)
+    except ValueError as exc:
+        return again(error=str(exc), status_code=400)
+    if plan.empty:
+        return again(notice="Nothing to change: the port already averages over that long.")
+    if confirm != "yes":
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "username": username,
+                "title": port.name,
+                "back_url": back_url,
+                "back_label": back_label,
+                "lines": plan.lines,
+                "warnings": plan.warnings,
+                "action": "/ports/rate-interval",
+                "fields": {
+                    "name": port.name,
+                    "seconds": seconds.strip(),
+                    **(origin.fields if origin else {}),
+                },
+                "csrf_token": csrf_token(request),
+            },
+        )
+
+    try:
+        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+            client.set_load_interval(name, plan.seconds)
+    except NxapiError as exc:
+        log.warning("Rate interval change on %s refused: %s", name, exc)
+        return again(error=change_refused(exc, target), status_code=400)
+
+    with open_db(request.app.state.settings.db_path) as conn:
+        set_unsaved_changes(conn, selected_switch_id(request), True)
+    words = " ".join(plan.lines)
+    log.info("Rate interval change on %s by %s: %s", connection.host, username, words)
+    note_activity(request, username, "Ports", f"{name}: {words}", connection.host)
+    return answer_port_change(
+        request,
+        username,
+        name,
+        origin,
+        notice=(f"Done: {words} Not saved yet: Save config keeps it over a restart of the switch."),
     )

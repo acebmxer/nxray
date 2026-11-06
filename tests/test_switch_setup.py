@@ -9,11 +9,11 @@ from app.switch_setup import (
     ACCOUNT_ROLE,
     PASSWORD_LENGTH,
     SetupError,
-    _strong_enough,
     account_names,
     check_connection,
     generate_password,
     load_dashboard_status,
+    password_strong_enough,
     run_setup,
 )
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
@@ -202,15 +202,15 @@ def test_generated_passwords_are_long_varied_and_unique() -> None:
     for password in passwords:
         assert len(password) == PASSWORD_LENGTH
         assert password.isalnum()
-        assert _strong_enough(password)
+        assert password_strong_enough(password)
 
 
 def test_strength_rule_matches_nx_os() -> None:
-    assert _strong_enough("Ab1xQ9zLm")
-    assert not _strong_enough("abcdefgh1")  # no upper case
-    assert not _strong_enough("Abc9QzLm2")  # "abc" run
-    assert not _strong_enough("Ax111zLm2")  # "111" repeat
-    assert not _strong_enough("AbCdEfGhI")  # no digit
+    assert password_strong_enough("Ab1xQ9zLm")
+    assert not password_strong_enough("abcdefgh1")  # no upper case
+    assert not password_strong_enough("Abc9QzLm2")  # "abc" run
+    assert not password_strong_enough("Ax111zLm2")  # "111" repeat
+    assert not password_strong_enough("AbCdEfGhI")  # no digit
 
 
 def test_account_names_reads_one_or_many_rows() -> None:

@@ -2,13 +2,14 @@
 
 A background thread asks each switch NXray has, one after the other, for
 temperatures, power, fans, CPU, memory and every port's traffic and errors,
-and stores the numbers in the ``history`` table under the switch's id. Rows
+and stores the numbers in the ``history`` table under the switch's id, with
+each VLAN's traffic estimated from its access ports (``app/traffic.py``). Rows
 older than ``KEEP_DAYS`` are deleted. The pages read only that table;
 opening them costs the switch nothing.
 
-The three show commands per sample are the ones the dashboard already runs
-on every page load. Each sample is also what alerts are checked against
-(``app/alerts.py``).
+The four show commands per sample are the ones the dashboard and the Ports
+page already run when they open. Each sample is also what alerts are checked
+against (``app/alerts.py``).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -27,9 +29,10 @@ from app.alerts import AlertMonitor, dispatch, switch_label
 from app.charts import SERIES_COLOURS, Line, Point, line_chart
 from app.config import Settings
 from app.db import open_db
-from app.nxapi import NxapiClient
+from app.nxapi import NxapiClient, NxapiError, SwitchTarget
 from app.port_labels import get_labels
 from app.ports import Port, human_rate, parse_ports
+from app.sflow_ports import load_port_vlans
 from app.switch import Environment, Resources, parse_environment, parse_resources
 from app.switch_connection import (
     DecryptionError,
@@ -39,11 +42,18 @@ from app.switch_connection import (
     load_target,
 )
 from app.switch_setup import KEY_CHANGED_MESSAGE, read_switch
+from app.traffic import vlan_traffic
 
 log = logging.getLogger("nxray.history")
 
 KEEP_DAYS = 30
-HISTORY_COMMANDS = ("show environment", "show system resources", "show interface")
+HISTORY_COMMANDS = (
+    "show environment",
+    "show system resources",
+    "show interface",
+    # Each access port's VLAN, for the VLAN traffic estimate.
+    "show interface status",
+)
 
 # What is stored. A row is (metric, item, value); item names the sensor or
 # port and is empty for whole-switch numbers.
@@ -57,6 +67,10 @@ TRAFFIC_OUT = "traffic_out"
 PORT_IN = "port_in"  # item: port name, bits per second; only while the port is up
 PORT_OUT = "port_out"
 PORT_ERRORS = "port_errors"  # item: port name, errors since the previous sample; only when above 0
+# item: VLAN number, bits per second; its access ports that are up added up
+# (app/traffic.py), only for VLANs that have one. An estimate: trunks are left out.
+VLAN_IN = "vlan_in"
+VLAN_OUT = "vlan_out"
 
 Row = tuple[str, str, float]
 
@@ -78,11 +92,11 @@ _PURGE_EVERY_SECONDS = 3600
 
 
 def _read(client: NxapiClient) -> tuple[Environment, Resources, list[Port]]:
-    environment, resources, interfaces = client.show(*HISTORY_COMMANDS)
+    environment, resources, interfaces, statuses = client.show(*HISTORY_COMMANDS)
     return (
         parse_environment(environment),
         parse_resources(resources),
-        parse_ports(interfaces, {}, {}),
+        parse_ports(interfaces, statuses, {}),
     )
 
 
@@ -122,6 +136,9 @@ def build_rows(
         before = previous_errors.get(port.name)
         if before is not None and port.errors > before:
             rows.append((PORT_ERRORS, port.name, float(port.errors - before)))
+    for vlan in vlan_traffic(ports).values():
+        rows.append((VLAN_IN, str(vlan.vlan), float(vlan.in_bits)))
+        rows.append((VLAN_OUT, str(vlan.vlan), float(vlan.out_bits)))
     return rows, errors
 
 
@@ -158,8 +175,12 @@ class Sampler:
         alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
         *,
         background_alerts: bool = True,
+        sflow_collector: Any = None,
     ) -> None:
         self._settings = settings
+        # The sFlow collector (app/sflow.py) to tell which VLAN each port's
+        # untagged frames belong to; None leaves them out.
+        self._sflow_collector = sflow_collector
         self._transport = transport
         self._alert_transport = alert_transport
         self._background_alerts = background_alerts
@@ -229,7 +250,21 @@ class Sampler:
         with open_db(self._settings.db_path) as conn:
             record(conn, switch_id, moment, rows)
         self._alert(connection, moment, reading=data, rows=rows)
+        self._tell_sflow(switch_id, target)
         return None
+
+    def _tell_sflow(self, switch_id: int, target: SwitchTarget) -> None:
+        """Give the sFlow collector each port's untagged VLAN, read from the
+        switch. Only while the collector listens; a failure is logged and never
+        costs the sample."""
+        collector = self._sflow_collector
+        if collector is None or not collector.listening_port:
+            return
+        try:
+            with NxapiClient(target, transport=self._transport()) as client:
+                collector.set_port_vlans(switch_id, load_port_vlans(client))
+        except NxapiError as exc:
+            log.warning("sFlow: could not read the ports' VLANs: %s", exc)
 
     def sample_once(self, now: float | None = None) -> str | None:
         """Sample every switch, one after the other.
@@ -262,6 +297,7 @@ def start_sampler(
     settings: Settings,
     transport: Callable[[], httpx.BaseTransport | None],
     alert_transport: Callable[[], httpx.BaseTransport | None] = lambda: None,
+    sflow_collector: Any = None,
 ) -> threading.Event | None:
     """Sample on its own thread until the returned event is set, checking the
     alerts against each sample.
@@ -273,7 +309,7 @@ def start_sampler(
     if not interval:
         return None
     stop = threading.Event()
-    sampler = Sampler(settings, transport, alert_transport)
+    sampler = Sampler(settings, transport, alert_transport, sflow_collector=sflow_collector)
 
     def _loop() -> None:
         problem: str | None = None
@@ -374,6 +410,8 @@ class ChartView:
     # Shown under a chart that has data / in place of one that has none.
     note: str = ""
     empty: str = "No data in this range yet."
+    # The id of the chart's card, for a link to it ("" for none).
+    anchor: str = ""
 
 
 def _latest_and_highest(fmt: Callable[[float], str]) -> Callable[[Sequence[Point]], str]:
@@ -383,23 +421,27 @@ def _latest_and_highest(fmt: Callable[[float], str]) -> Callable[[Sequence[Point
     return _summary
 
 
-def _chart(
+def chart_view(
     title: str,
     lines: list[Line],
     *,
     start: float,
     end: float,
-    bucket: int,
+    bucket: float,
     fmt: Callable[[float], str],
     summarize: Callable[[Sequence[Point]], str] | None = None,
     note: str = "",
     empty: str = "No data in this range yet.",
     zero_based: bool = True,
     y_max: float | None = None,
+    anchor: str = "",
 ) -> ChartView:
+    """One chart's card: the SVG of ``lines`` over start..end with a legend, or
+    the ``empty`` words when no line has a point. Used by the History page's
+    charts and by the live charts of the last few minutes (app/live.py)."""
     lines = [line for line in lines if line.points]
     if not lines:
-        return ChartView(title, None, [], note, empty)
+        return ChartView(title, None, [], note, empty, anchor)
     summarize = summarize or _latest_and_highest(fmt)
     svg = line_chart(
         lines,
@@ -415,7 +457,7 @@ def _chart(
         LegendEntry(line.label, number % SERIES_COLOURS, summarize(line.points))
         for number, line in enumerate(lines)
     ]
-    return ChartView(title, svg, legend, note, empty)
+    return ChartView(title, svg, legend, note, empty, anchor)
 
 
 def _short(value: float) -> str:
@@ -427,7 +469,7 @@ def _degrees(value: float) -> str:
     return f"{_short(value)}°C"
 
 
-def _percent(value: float) -> str:
+def percent_text(value: float) -> str:
     return f"{_short(value)}%"
 
 
@@ -435,7 +477,7 @@ def _watts(value: float) -> str:
     return f"{_short(value)} W"
 
 
-def _rate(value: float) -> str:
+def rate_text(value: float) -> str:
     """ "500.0 Mb/s" -> "500 Mb/s"."""
     return human_rate(int(value)).replace(".0 ", " ")
 
@@ -460,26 +502,26 @@ def system_charts(
     temperatures = read(TEMPERATURE)
     common = {"start": start, "end": end, "bucket": bucket}
     return [
-        _chart(
+        chart_view(
             "Temperatures",
             [Line(name, points) for name, points in sorted(temperatures.items())],
             fmt=_degrees,
             zero_based=False,
             **common,
         ),
-        _chart(
+        chart_view(
             "CPU and memory",
             [one(CPU, "CPU"), one(MEMORY, "Memory")],
-            fmt=_percent,
+            fmt=percent_text,
             y_max=100,
             **common,
         ),
-        _chart("Power draw", [one(POWER, "Total draw")], fmt=_watts, **common),
-        _chart("Fan speed", [one(FAN, "Fans")], fmt=_percent, y_max=100, **common),
-        _chart(
+        chart_view("Power draw", [one(POWER, "Total draw")], fmt=_watts, **common),
+        chart_view("Fan speed", [one(FAN, "Fans")], fmt=percent_text, y_max=100, **common),
+        chart_view(
             "Traffic through all ports",
             [one(TRAFFIC_IN, "In"), one(TRAFFIC_OUT, "Out")],
-            fmt=_rate,
+            fmt=rate_text,
             **common,
         ),
     ]
@@ -502,14 +544,14 @@ def port_charts(
     errors = read(PORT_ERRORS, total=True)
     seen = bool(errors)
     return [
-        _chart(
+        chart_view(
             "Traffic over time",
             [Line("In", read(PORT_IN)), Line("Out", read(PORT_OUT))],
-            fmt=_rate,
+            fmt=rate_text,
             note="A gap means the port was down, or NXray could not reach the switch.",
             **common,
         ),
-        _chart(
+        chart_view(
             "Errors and discards over time",
             [Line("Errors", fill_zeros(errors, start, end, bucket))] if seen else [],
             fmt=_count,
@@ -518,3 +560,100 @@ def port_charts(
             **common,
         ),
     ]
+
+
+# At most this many VLANs on a chart, one colour each; the busiest are drawn.
+MAX_VLAN_LINES = SERIES_COLOURS
+VLAN_ESTIMATE_NOTE = (
+    "An estimate: each VLAN's access ports added up. Trunks are left out, since "
+    "their counters cannot be split by VLAN, so traffic that reaches a VLAN over a "
+    "trunk (from another switch or a hypervisor, for example) is missing."
+)
+
+
+def _mean(points: Sequence[Point]) -> float:
+    return sum(value for _, value in points) / len(points) if points else 0.0
+
+
+def _vlan_number(item: str) -> int:
+    return int(item) if item.isdigit() else 0
+
+
+def vlan_charts(conn: sqlite3.Connection, switch_id: int, key: str, now: float) -> list[ChartView]:
+    """Each VLAN's estimated traffic on a switch for the range named ``key``,
+    in both directions: the busiest ``MAX_VLAN_LINES`` VLANs, in the same
+    colours on both charts."""
+    span = RANGES[key]
+    start, end, bucket = now - span, now, bucket_seconds(span)
+    common = {"start": start, "end": end, "bucket": bucket}
+    found = {
+        metric: read_series(conn, switch_id, metric, start=start, end=end, bucket=bucket)
+        for metric in (VLAN_IN, VLAN_OUT)
+    }
+    items = set(found[VLAN_IN]) | set(found[VLAN_OUT])
+    ranked = sorted(
+        items,
+        key=lambda item: (
+            -(_mean(found[VLAN_IN].get(item, [])) + _mean(found[VLAN_OUT].get(item, []))),
+            _vlan_number(item),
+        ),
+    )
+    shown = sorted(ranked[:MAX_VLAN_LINES], key=_vlan_number)
+    note = VLAN_ESTIMATE_NOTE
+    left = len(ranked) - len(shown)
+    if left == 1:
+        note += " 1 quieter VLAN is not drawn."
+    elif left:
+        note += f" {left} quieter VLANs are not drawn."
+    empty = (
+        "No VLAN traffic was recorded in this range. A VLAN is counted once one of "
+        "its access ports is up."
+    )
+
+    def lines(metric: str) -> list[Line]:
+        # Every shown VLAN gets a line on both charts, so its colour is the same on each.
+        return [Line(f"VLAN {item}", found[metric].get(item, [])) for item in shown]
+
+    return [
+        chart_view(
+            "Traffic per VLAN: sent by its devices",
+            lines(VLAN_IN),
+            fmt=rate_text,
+            note=note,
+            empty=empty,
+            anchor="vlan-traffic",
+            **common,
+        ),
+        chart_view(
+            "Traffic per VLAN: sent to its devices",
+            lines(VLAN_OUT),
+            fmt=rate_text,
+            note=note,
+            empty=empty,
+            **common,
+        ),
+    ]
+
+
+def latest_vlan_traffic(
+    conn: sqlite3.Connection, switch_id: int, *, now: float, max_age: float
+) -> dict[int, tuple[float, float]]:
+    """Each VLAN's estimated (in, out) bits per second in a switch's newest sample.
+
+    Empty when nothing has been stored, or the newest sample is more than
+    ``max_age`` seconds old: an old figure is not shown as today's.
+    """
+    newest = last_sample_time(conn, switch_id)
+    if newest is None or now - newest > max_age:
+        return {}
+    found: dict[int, list[float]] = {}
+    for row in conn.execute(
+        "SELECT metric, item, value FROM history "
+        "WHERE switch_id = ? AND ts = ? AND metric IN (?, ?)",
+        (switch_id, newest, VLAN_IN, VLAN_OUT),
+    ):
+        if not row["item"].isdigit():
+            continue
+        pair = found.setdefault(int(row["item"]), [0.0, 0.0])
+        pair[0 if row["metric"] == VLAN_IN else 1] = row["value"]
+    return {vlan: (pair[0], pair[1]) for vlan, pair in sorted(found.items())}

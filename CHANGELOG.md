@@ -9,6 +9,300 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
+**A feature release: traffic per VLAN and per device with sFlow, live figures
+on every page, NXray users with their own switch accounts, and Include beta
+versions for self-update.** Coming from 0.1.1 on `:latest`, run
+`docker compose pull` and `docker compose up -d`; on `:0.1.1`, put `:0.2.0`
+in the compose file's `image:` line first. Coming from a beta, replace
+`:beta` with `:latest` or `:0.2.0`. The data volume carries over and the
+database upgrades itself on first start. On each switch, open the Switch page
+and press **Update the port list** so NXray's role gains the new rules (the
+banner on every page says when a switch is behind).
+
+### Added
+
+- **Refresh, last-updated time and Pause on every page.** The top bar's
+  **Refresh** choice, the *Updated* time and **Pause** were only on the
+  dashboard, Ports, a port's page and Neighbors. They are now on every page.
+  VLANs, Port-channels, Traffic, Spanning tree, Routing, Protocols, Security,
+  Features, Switch admin, Alerts, History, Activity, Config and Switch
+  refresh by reading the page again, with sections that were open and wide
+  tables scrolled staying as they were, and pausing while a field is changed
+  and not yet sent. Pages with nothing to refresh (Settings, Users, Account)
+  show the control and say so, so the top bar no longer changes from page to
+  page. The switch is read through the shared cache, so many open pages still
+  cost it one read per interval, and refreshing still does not keep a sign-in
+  alive. See [Live figures](docs/live.md) (#33).
+
+- **Make or delete an NXray user and a switch account separately.** The Users
+  page can now make a switch account on its own (**Add a switch account
+  only**: a local account for someone who uses SSH or the console, with the
+  role you pick, on the switches you tick), and delete either side. **Delete**
+  beside a user opens a page naming their switch accounts: tick none to delete
+  the NXray user only (their switch accounts stay, linked to no one), or tick
+  some to delete those too. **Delete** beside an account in *Local accounts
+  on …* deletes it from the switches you tick, whether or not an NXray user is
+  linked to it (the user stays, only the link goes). Each asks to confirm, uses
+  the switch admin login once and never stores it, and saves the switch
+  configuration. If a switch refuses, the NXray user is kept so you can try
+  again. NXray's own account, the switch's `admin` and the other reserved
+  names, your own account and the last active admin are never deleted (#31).
+- **A banner on every page when the switch's permissions are behind.** After
+  an NXray update adds a kind of change, an admin sees a notice at the top of
+  every page (not only the Switch page) naming the switch and what it can't
+  yet do, with a link to the Switch page where **Turn on …** brings it up to
+  date. It shows only for admins, only for a switch that already had changes
+  turned on, and one banner per switch that is behind. NXray still does not
+  keep the switch's admin login.
+- **Setting up a switch turns changes on in the same step.** The Switch
+  page's setup form (and Add another switch) has a new **Also turn on
+  changes** box, ticked by default, and an **SSH port** field. With it
+  ticked, once NXray's account is made, setup gives it the `nxray-ports`
+  role over SSH with the same admin login, so a new switch no longer needs
+  the admin login typed a second time under **Turn on … changes**. The
+  usual wait of about 11 minutes follows. If that step fails (SSH off or
+  unreachable, a refused line), the switch stays set up with a read-only
+  account, the page says why, and the Turn on button tries again. Untick
+  the box to keep the account read-only. An already connected switch still
+  needs the Turn on button after an update that adds rules. See
+  [What setup does on the switch](docs/switch-setup.md#what-setup-does-on-the-switch)
+  (#22).
+
+- **Reset a port, several ticked ports or a port-channel to its defaults.**
+  A port's own page and its side panel now have a **Reset to defaults**
+  button, the Ports page's **Change several ports** card a **Reset the
+  ticked ports to their defaults** button, and the Port-channels page a
+  **Reset `<name>` to defaults** button for each port-channel. Each sends
+  `default interface <name>` after a confirm page listing everything it
+  removes (description, VLANs, speed, MTU, FEC, flow control, storm control,
+  layer, any IP address) — or says there is nothing to remove when it is
+  already a plain, unconfigured access port; a port-channel's reset names
+  its member ports and says they keep their channel-group membership, which
+  is set on the member, not the port-channel. Warns when a port or
+  port-channel is up, since whatever is plugged in may lose its connection
+  while it resets. This adds rule 232 to role version 16. See
+  [Reset to defaults](docs/switch-setup.md#port-changes) (#21).
+
+- **Traffic per VLAN and per device, measured with sFlow.** NXray can now be
+  the switch's sFlow collector, which gives real traffic per VLAN and per
+  device, trunks and ports with several devices behind them included, on a
+  new **Traffic** page under Monitor: the busiest VLANs with their share, a
+  chart of them over time, and the busiest devices by MAC address (sends and
+  receives, with maker, IP addresses and port) with each one's traffic over
+  time. Off by default: set `NXRAY_SFLOW_PORT=6343` in nxray.env and publish
+  `"6343:6343/udp"` in docker-compose.yml (an older compose file needs the
+  line added). Then, with traffic measuring changes on, the page's **Send
+  sFlow to NXray** form sets the switch up (the sflow feature, the collector
+  and its VRF, the agent address, the sampling rate and the ports), asks
+  first and sends only what changes; **Turn sFlow off on the switch** undoes
+  it. A port in a port-channel is sampled through its port-channel (the
+  switch refuses the port itself), and a refusal part-way marks the switch as
+  having unsaved changes, since the lines before it took effect. This adds
+  rules 230 and 231 to role version 15. NXray counts only
+  datagrams whose agent address is one of its switches and names any other
+  sender. Minutes are kept `NXRAY_SFLOW_KEEP_DAYS` days (7), each with every
+  VLAN and the 100 busiest devices each way. The switch-side lines follow
+  Cisco's NX-OS 9.3 guide; the front-port lines have been tried on an
+  N9K-C92160YC-X, the port-channel line not yet. See
+  [Traffic per VLAN and per device](docs/traffic.md#measured-with-sflow) (#18, #23).
+
+- **The last few minutes, drawn live.** While a refresh is on, a port's page
+  has a **Last 10 minutes** chart of its In and Out (measured from the byte
+  counters on **Live**, the switch's averages otherwise) and the dashboard a
+  **CPU and memory, last 10 minutes** chart, both moving with the figures.
+  The readings are kept in memory only, never written to the history, for as
+  long as someone has a refreshing page open, and a page opened meanwhile
+  draws what is already kept. See [Live figures](docs/live.md) (#19).
+
+- **How long a port averages its rates.** The switch's In and Out are its own
+  average over 30 seconds. A port's page and its side panel now show that
+  average and, with the new **traffic measuring changes** on, have a **Rate
+  average** card to set it to 5, 10 or 15 seconds, 1, 2 or 5 minutes, or back
+  to the default (`load-interval counter 1`). It asks first, changes only the
+  figures (never the traffic), and is not saved until Save config. The rate
+  notes now name the real average instead of always saying 30 seconds. Turning
+  it on adds rules 228 and 229 to NXray's role (role version 15) with no wait:
+  an admin presses **Turn on traffic measuring changes** on the Switch page.
+  The values follow Cisco's NX-OS 9.3 guide and have not yet been tried on a
+  switch; a value the switch refuses is shown with its own words (#19).
+
+- **Live figures.** The dashboard, the Ports page, a port's page and the
+  Neighbors page can refresh their figures by themselves: pick **Live, 3 s, 5 s,
+  10 s, 15 s, 30 s, 60 s** or **Off** (the default) in the top bar, kept per
+  browser. Only the numbers, bars, front panel and table rows change, so an
+  open side panel, scroll position and what you are typing stay; it pauses in a
+  background tab, while a field has the cursor or unsent input, and on
+  **Pause**, and shows when it last updated. NXray reads each switch once per
+  floor however many browsers watch (`NXRAY_LIVE_MIN_INTERVAL`, 2 s;
+  `NXRAY_LIVE_CLIENTS_MIN_INTERVAL`, 10 s for the MAC, ARP and neighbour
+  tables), only with `show` commands, and backs off and says so when the switch
+  does not answer. **Live** works In and Out out from the byte counters
+  between two readings instead of the switch's 30-second average, and labels
+  it. Refreshing does not keep a sign-in alive. See
+  [Live figures](docs/live.md) (#19).
+
+- **Traffic per VLAN and per device, estimated.** The switch counts traffic
+  per port only, so NXray now works out two estimates from the port figures
+  it already reads, and labels them as such. A device alone on an access
+  port gets that port's traffic as its own (sends and receives): on the new
+  **Busiest devices** card and a **Traffic now** column of the MAC address
+  table on the Neighbors page, on a port's Connected devices card and in its
+  side panel. Each VLAN's access ports that are up are added up: a **Traffic
+  now** column on the VLANs page, from history's newest sample, and two
+  **Traffic per VLAN** charts on the History page. Trunks, port-channels and
+  ports with several devices behind them are left out, and the pages say so;
+  [Traffic per VLAN and per device](docs/traffic.md) explains each figure and
+  lists the read-only checks for measuring it instead (VLAN interface and
+  VLAN counters, sFlow). History now reads `show interface status` as well,
+  four read-only commands a sample instead of three, and the Neighbors page
+  reads `show interface` once more (#18).
+
+- **Switch accounts for NXray users.** An NXray user still exists only in
+  NXray by default, but an admin can now also give them a local account on a
+  switch with the same name and password, so people who use the command line
+  can sign in over SSH too: tick the switches when adding someone, or use the
+  new **Switch accounts** page of an existing user to make one, link an
+  account already on the switch, set one new password for NXray and the
+  switch, change its role, lock it or remove it. The role follows the NXray
+  role (viewer `network-operator`, operator `network-operator` +
+  `nxray-ports`, admin `network-admin`) and is shown to confirm before
+  anything is sent. The switch admin login is typed on each form and never
+  stored; the switch's password rules are checked first; each change saves
+  the switch configuration so a restart does not undo it. The Users page
+  lists the switch's local accounts and shows when a switch account is out
+  of step (role, password, disabled), and the Account page says when your
+  own switch password no longer matches. NXray's own switch account and the
+  switch's `admin` are never touched. The docs say when TACACS+ or RADIUS
+  suits better (#17).
+
+- **Change several ports: one whole configuration for every ticked port.**
+  Ticking a port on the Ports page now opens a **Change several ports** side
+  panel on the right, laid out like a port's own panel: one section per kind
+  of change, all in view. Its top lists the ticked ports; press one there, or
+  its box in the table, to untick it, and the panel stays open while you tick
+  more. It sets everything a
+  port's own page can share, on any set of ticked ports, next to each other
+  or not: on or off and a description, VLANs (access or trunk, access VLAN,
+  native VLAN, VLANs carried), port settings (switched or routed, speed,
+  MTU, FEC, flow control, storm-control levels and action), CDP and LLDP,
+  and clearing the learned MAC addresses. Every setting starts at "Leave as
+  it is" and only what you fill in is sent, so changing the MTU leaves the
+  VLANs alone. Each port is checked as on its own page, including the
+  trunk-carries-its-native-VLAN rule; if one cannot take it, nothing is sent
+  and NXray names it and why. The confirm page lists each port's old → new
+  values, leaves out ports already set as asked and warns about anything that
+  cuts traffic; the result names what changed, what was refused and what was
+  not tried. **Start from port** fills the form from an existing port, to copy
+  a known-good one. An IPv4 address, the label and breakout stay per port.
+  The form's fields changed: `action` is now `power` and `set_description`
+  (#16).
+
+- **Include beta versions, from the Settings page.** With self-update on,
+  **Settings → Updates** has an **Include beta versions** switch (admin
+  only) that moves NXray onto the beta channel and back without editing
+  `docker-compose.yml` on the host. Saving it installs nothing: it checks
+  again, and **Update now** does the move. With betas on, NXray goes to
+  `:beta` while the newest beta is ahead of the latest release and back to
+  `:latest` once a release has caught up; with betas off it follows
+  `:latest` as before. Versions are ranked from the GitHub releases list, a
+  release above every beta of its version, and only a newer version is ever
+  offered: an older beta is never offered after its release, and turning
+  betas off on a beta that is newer than the latest release stays on it
+  until a newer release is out. A beta image now reports its own name
+  (`0.2.0-beta.1`) in the page footer and `/healthz`. If the compose file
+  names a fixed tag and so ignores the choice, the Updates card says so and
+  shows the line to change instead of reporting success (#15).
+
+  **Upgrading from 0.1.x: edit `docker-compose.yml` once.** Your compose file
+  is your own and no update changes it. For the switch to work, change its
+  `image:` line from `ghcr.io/acebmxer/nxray:latest` (or `:beta`, or a pinned
+  `:0.1.0`) to `ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}`, then run
+  `docker compose pull` and `docker compose up -d`. Without the edit NXray
+  still updates and runs as before; only the beta switch cannot move it. New
+  installs copy `docker-compose.yml.example`, which already has the line.
+  `nxray.env` and the data volume carry over either way.
+
+### Changed
+
+- **Traffic per VLAN is drawn as a small card for each VLAN, with a filled
+  chart.** On the Traffic page each of the busiest VLANs now has a card of its
+  own: the VLAN's name, its latest figure in large type with the highest and
+  the average beneath, and beside them a short, wide chart of the traffic as a
+  filled area with the scale on the right, instead of one chart with a thin
+  line per VLAN. The cards sit two or three across on a wide screen. sFlow
+  counts each frame once, so there is one figure per VLAN, not an in and an
+  out (#29).
+- **The Switch page keeps "Update the port list" in view while new functions
+  wait to be turned on.** The two jobs used to share one card: when an update
+  added rules the card read **Turn on …**, and once they were on it turned
+  into **Update the port list** in the same place, which looked as if nothing
+  had happened. Now **Turn on …** is a card of its own, shown only while the
+  switch's permissions lack rules this version knows, and **Update the port
+  list** stays below it, with its own explanation (#27).
+- **Cards sit two or three across on a wide screen, on every page.** Each
+  card used to take a full-width row of its own, so a wide screen showed mostly
+  empty space and the page ran far down. From 1300 pixels wide a page's cards
+  flow down two columns, and three from 2350 pixels, like newspaper columns, so
+  a short card does not leave a gap beside a tall one; narrower screens stack
+  them. The front panel, long tables (as many columns as the column fits, or
+  over 20 rows), code blocks, messages and notes still take the whole row, and
+  the places on a protocol or spanning tree card (one per VLAN, port or
+  instance) fill the card in columns. On the Alerts page **Open now** now comes
+  after **What to alert on** and **E-mail**, beside them on a wide screen. No
+  table scrolls sideways any more: cells wrap, the VLAN grid squeezes its
+  columns, and the Ports table drops its Transceiver and Activity columns under
+  1500 pixels wide, and Description and Connected under 1200 (#28).
+
+### Fixed
+
+- **The Ports page no longer shifts when a port's panel opens, and the panel
+  no longer covers the top bar.** The front panel picture and the port list
+  used to shrink to make room when a port (or the ticked ports) opened its
+  side panel, and grow back when it closed. On a screen 1700 pixels wide or
+  more the page now keeps that room on the right all the time, empty while the
+  panel is shut, so nothing moves. On a narrower screen the panel is laid over
+  the page and nothing moves either. The panel now starts below the top bar,
+  so the Refresh choice and the switch picker stay in reach (#32).
+- **The buttons at the foot of a port's panel line up.** **Reset to defaults**
+  sat lower than **Turn off** because its form carried a top margin of its own;
+  both now share one line (#32).
+- **Busiest VLANs no longer lumps untagged traffic under "VLAN not given".**
+  A frame that comes in without a VLAN tag (on an access port, or on a trunk's
+  native VLAN) has no VLAN in the sample the switch sends, so all of it was
+  counted together and VLAN 2's own row came out far too low. NXray now reads
+  each port's access or native VLAN from the switch (about once a minute, with
+  the history sample) and counts such frames in that VLAN. "VLAN not given" is
+  left for a port NXray has not read, such as in the first minute after it
+  starts, or a routed port (#30).
+- **Charts are no longer huge on a wide screen.** A chart stretched to the
+  full page width, so on a wide screen it was taller than the screen and its
+  labels were oversized. A chart is now at most 960 pixels wide. On the
+  History and port pages the charts sit two to a row, and on the Traffic page
+  the Busiest VLANs table sits beside its chart, whenever the screen leaves
+  each at least 680 pixels, and the Send sFlow to NXray form there is no wider
+  than 680 pixels. Narrower screens stack them as before (#26).
+
+- **The Traffic page's sFlow card can read the switch's sFlow status.** It
+  showed "The switch refused a command: 'show sflow': % Permission denied for
+  the role", because the `nxray-ports` role permitted configuring sFlow but
+  never `show sflow`. The role now has rule 233 for it (role version 17); an
+  install already connected gets a **Turn on sFlow status changes** card on the
+  Switch page, which adds the rule with no wait (#25).
+
+- **A ticked port stays ticked while the page refreshes by itself.** With
+  Refresh on anything but Off, a refresh that was already on its way when a
+  tick box was pressed could land afterwards and redraw the rows without
+  the tick, so it took two or three clicks. The page now checks again when
+  the answer arrives and drops it if a box was changed meanwhile (#24).
+
+- **A port's side panel no longer covers the right of the Ports page.**
+  Opening a port from the front panel or the table used to lay its panel over
+  the page, hiding the right-hand ports of the front panel. The page now moves
+  aside for it, as it does for the **Change several ports** panel, so every
+  port stays in view and can be clicked.
+
 ## [0.1.1] - 2026-11-01
 
 **A fix release: every port change can now be made from the port's side
@@ -18,6 +312,15 @@ in the compose file's `image:` line first. Coming from a beta, replace
 `:beta` with `:latest` or `:0.1.1`. The data volume carries over.
 
 ### Fixed
+
+- **The bar at the bottom of the Ports page points to the settings.** Its
+  **Change the ticked ports** button looked like the whole form; the settings
+  (VLANs, port settings, CDP and LLDP) are in the **Change several ports** card
+  further down. The bar now has a **Choose what to change** link to it.
+
+- **Ticked ports stay ticked when you switch the front-panel colour, change
+  the filter or press Read again** on the Ports page. They were cleared
+  before, so ticking two ports and then looking at the VLAN colours lost them.
 
 - **The port side panel makes every change to the port.** On the Ports page,
   a port's side panel used to change only its description and turn it off or

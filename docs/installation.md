@@ -56,9 +56,9 @@ Each NXray account has one of three roles:
 
 | Role | May |
 | --- | --- |
-| admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes, updating the port list), turning switch features on and off on the Features page, the Users page, the Config page (configuration backups, comparing them, rolling the switch back and restarting it with the switch admin login) and the Activity page (who changed what through NXray), plus what an operator may do. |
-| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer), split or join a 100G port, turn CDP and LLDP on or off on a port, set the MAC address aging time, add and remove static MAC addresses, clear learned ones, make, change and delete port-channels and set their LACP options, make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and on routed ports, make and delete VRFs and move interfaces between them, add and remove static routes, run the routing protocols (OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP, MSDP, BFD) and change their settings, route-maps, prefix-lists and key chains, change spanning tree (mode, VLAN priorities and timers, the MST region, port types, guards and costs), change the switch's hostname, banner, clock, NTP, DNS, logging and SNMP settings on the Switch admin page, make, change, delete and apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, size the TCAM regions, set port security on the front ports, set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard, Save config. Also set the labels NXray keeps on ports. |
-| viewer | Look only: the dashboard, ports, VLANs, port-channels, spanning tree, routing, routing protocols, neighbors, history, features, switch admin, the switch's log, ACLs, port security and DHCP and ARP. |
+| admin | Everything: the Switch page (setup, address, Run setup again, turning on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes, updating the port list), turning switch features on and off on the Features page, the Users page, the Config page (configuration backups, comparing them, rolling the switch back and restarting it with the switch admin login) and the Activity page (who changed what through NXray), plus what an operator may do. |
+| operator | Change the switch through NXray: turn ports on or off, edit descriptions, create, rename and delete VLANs, set a port's VLANs and settings (speed, MTU, FEC, flow control, storm control, layer) and how long it averages its rates over, set up sFlow on the Traffic page, split or join a 100G port, turn CDP and LLDP on or off on a port, set the MAC address aging time, add and remove static MAC addresses, clear learned ones, make, change and delete port-channels and set their LACP options, make, change and delete VLAN interfaces and put IPv4 and IPv6 addresses on them and on routed ports, make and delete VRFs and move interfaces between them, add and remove static routes, run the routing protocols (OSPF, OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, VRRPv3, PIM, PIM6, IGMP, MSDP, BFD) and change their settings, route-maps, prefix-lists and key chains, change spanning tree (mode, VLAN priorities and timers, the MST region, port types, guards and costs), change the switch's hostname, banner, clock, NTP, DNS, logging and SNMP settings on the Switch admin page, make, change, delete and apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, size the TCAM regions, set port security on the front ports, set DHCP snooping, the DHCP relay, ARP inspection and IP Source Guard, Save config. Also set the labels NXray keeps on ports. |
+| viewer | Look only: the dashboard, ports, measured traffic, VLANs, port-channels, spanning tree, routing, routing protocols, neighbors, history, features, switch admin, the switch's log, ACLs, port security and DHCP and ARP. |
 
 Admins add accounts, change roles, disable accounts and set new passwords on
 the **Users** page. Everyone changes their own password on the Account page
@@ -67,8 +67,87 @@ on that account's next click, and a new password signs it out everywhere.
 NXray always keeps at least one active admin, and an admin can't change
 their own role or disable themselves.
 
-These are NXray's own accounts. They have nothing to do with the accounts on
-the switch.
+An account on the Users page exists only in NXray. Every change it makes
+reaches the switch through NXray's own switch account, so the switch's own
+logs show NXray's account, and NXray's Activity page shows who did it. Such
+an account cannot sign in to the switch over SSH or the console.
+
+### Switch accounts: the same person on the switch's command line
+
+For people who still use the switch's command line, an admin can also give
+them a local account on a switch, with the same name and password:
+
+- **When adding someone**, tick the switches under **Where** (leave them all
+  unticked for NXray only, the default), type the switch admin username and
+  password, and tick the box that confirms the role on the switch.
+- **For someone who already exists**, press **Switch accounts** in their row.
+  That page makes an account on a switch, links an account that is already
+  there, sets one new password for NXray and every switch account, gives a
+  switch account the right role, locks it, or removes it.
+
+The role on the switch follows the NXray role:
+
+| NXray | Switch |
+| --- | --- |
+| viewer | `network-operator` (look only) |
+| operator | `network-operator` plus `nxray-ports`, the role NXray's own account gets when changes are on, so the person may change over SSH what NXray may; `network-operator` only on a switch where changes are off |
+| admin | `network-admin` |
+
+Only these three roles are added or taken off; any other role an account has
+stays. NXray never links, changes or removes its own switch account, nor the
+names NX-OS keeps for itself (`admin`, `root` and others).
+
+Things to know:
+
+- **The switch admin login** is typed on each form, used for that one
+  request, and never stored, logged or shown. NXray's own switch account
+  cannot make accounts and is not given that power.
+- **Passwords.** NXray keeps only a hash of a password, so it sets the switch
+  password while the plain one is in hand: when the account is made, and
+  when an admin sets a new password for NXray and the switch together. The
+  switch takes 8 to 64 letters and digits, with upper case, lower case and
+  digits and no runs like `aaa` or `abc`; NXray checks that before anything
+  is sent and says which side would refuse. A password set for NXray alone
+  (on the Users page, or by someone on their own Account page) leaves the
+  switch account **out of step**: the Users page, the person's Switch accounts
+  page and their Account page say so, and an admin sets a new password for
+  both.
+- **Out of step** also shows when the NXray role changed (press **Change the
+  role** on the Switch accounts page), when an NXray account is disabled but
+  its switch account can still sign in, and when a switch account is locked
+  but the NXray account is enabled again.
+- **Disabling.** NX-OS has no switch to turn a local account off, so **Lock
+  the switch account** gives it a random password nobody knows; the account
+  and its role stay, and SSH sessions already open stay open until they end.
+  A new password for both sides opens it again.
+- **Saving.** Every change to a switch account saves the switch
+  configuration straight away, which also keeps any other unsaved change
+  there. Without that, a restart of the switch would undo it: a lock would
+  open again, a removed account would come back. If the save fails, the page
+  says a restart undoes the change until you press Save config.
+- **Either side on its own.** Making: **Add an account** with no switch ticked
+  makes an NXray user only; with switches ticked, both; **Add a switch
+  account only** makes a local account with no NXray sign-in, for someone who
+  uses SSH or the console, with the role you pick and on the switches you
+  tick. Deleting: **Delete** beside a user opens a page that lists their
+  switch accounts; tick none to delete the NXray user only (their switch
+  accounts stay, linked to no one), or tick some to delete those too. **Delete**
+  beside an account in *Local accounts on …* deletes a switch account from the
+  switches you tick; a linked NXray user stays and only the link goes. Each
+  asks you to confirm and, for the switch, the switch admin login. If a switch
+  refuses, the NXray user is kept so you can try again. NXray never deletes
+  its own account, the switch's `admin` and the other reserved names, your own
+  account, or the last active admin.
+- **Accounts already on the switch** are listed on the Users page, with the
+  NXray user each belongs to, so you can link one instead of making a
+  duplicate. NXray never makes a second account over an existing one.
+
+**Many people or many switches?** Local accounts suit a few people on a few
+switches. Beyond that, TACACS+ or RADIUS is the usual answer: each person has
+one sign-in kept on a server, every switch asks that server, and leaving the
+company means turning off one account, not one per switch. NXray does not set
+up TACACS+ or RADIUS; that is done on the switch (`aaa` commands) and the
+server.
 
 ### Two-factor sign-in
 
@@ -183,24 +262,56 @@ It works only for a container started by `docker compose` from the published
 image. A copy built from a clone (`docker-compose.dev.yml`) is never reported
 out of date.
 
+### Beta versions
+
+Under **Settings → Updates**, an admin can tick **Include beta versions** and
+press **Save**. Betas are built from the `dev` branch to try what comes next,
+and can change and break between builds. Saving installs nothing: it runs the
+check again, and **Update now** does the move.
+
+- With betas on, NXray goes to the `:beta` tag while the newest beta is ahead
+  of the latest release, and back to `:latest` once a release has caught up.
+- With betas off, it follows `:latest`.
+- Only a newer version is ever offered. Versions are ranked from the GitHub
+  releases list: version numbers first, and a release above every beta of
+  its version (0.2.0 is newer than 0.2.0-beta.3, which is newer than
+  0.2.0-beta.2). Turning betas off on a beta that is newer than the latest
+  release stays on it until a newer release is out, so an install never runs
+  an older build against a database a beta already changed.
+
+With betas on, or a beta running, the check also asks `api.github.com` for
+the list of releases. With self-update off, NXray contacts neither.
+
+**Update now** hands the chosen tag to the short-lived updater as `NXRAY_TAG`,
+and the sample compose file's `image:` line reads it:
+
+    image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}
+
+Nothing on the host is edited. A compose file whose `image:` line names a
+fixed tag (`:latest`, `:beta` or a pinned `:0.1.0`) ignores `NXRAY_TAG`; after
+the update the Updates card then says the container is still on the old tag
+and shows the line to change, instead of reporting success. See **Updating
+from 0.1.x** under Updating.
+
 ## History
 
 Once a switch is set up, NXray reads it every minute (`NXRAY_HISTORY_INTERVAL`
 changes that, `0` turns it off; with several switches it reads each of them,
-one after the other, and keeps their history apart) with three read-only commands, the same ones
-the dashboard runs when it opens: `show environment`, `show system resources`
-and `show interface`. It stores temperatures, total power draw, fan speed, CPU
+one after the other, and keeps their history apart) with four read-only commands, the same ones
+the dashboard and the Ports page run when they open: `show environment`, `show system resources`,
+`show interface` and `show interface status`. It stores temperatures, total power draw, fan speed, CPU
 and memory use, the traffic of every port that is up and each port's new
-errors and discards, and deletes anything older than 30 days. The History page
+errors and discards, each VLAN's traffic estimated from its access ports (see
+[Traffic per VLAN and per device](traffic.md)), and deletes anything older than 30 days. The History page
 draws them for the last hour, 6 hours, 24 hours, 7 days or 30 days, and each
 port's page draws its own traffic and errors. Times are UTC. Opening the pages
 never contacts the switch.
 
 The numbers live in NXray's database on the data volume and take space with
-the number of ports that are up: roughly 7 MB a day with a dozen up, so about
+the number of ports that are up (and, a little, with the number of VLANs that have an access port up): roughly 7 MB a day with a dozen up, so about
 200 MB once 30 days have built up, for each switch. Nothing is recorded while NXray cannot
 reach the switch or is waiting for it to apply a new role after **Turn on port,
-VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config and layer 2 security changes**; the charts show that as a gap. A port's errors are recorded as the
+VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes**; the charts show that as a gap. A port's errors are recorded as the
 increase since the previous sample, so the first sample after NXray starts
 records none.
 
@@ -210,7 +321,7 @@ The **Alerts** page (admins only) sends an e-mail, a webhook or both when a
 switch needs attention, and again when the problem is over. With several
 switches every alert names its switch (`leaf1 (192.0.2.10)`), and the rules
 and destinations are the same for all of them. It is checked
-each time history reads the switch, from the same three commands, so it asks
+each time history reads the switch, from the same four commands, so it asks
 nothing more of the switch; with `NXRAY_HISTORY_INTERVAL=0` nothing is
 checked (changes made through NXray are still sent when asked for).
 
@@ -280,20 +391,50 @@ reuses the list from the last download; `--no-cache` downloads it again.
 
 ## Updating
 
-The sample compose file uses the `:latest` tag, which follows every release,
-so in the `nxray` folder:
+The sample compose file uses the `:latest` tag unless `NXRAY_TAG` says
+otherwise, and `:latest` follows every release, so in the `nxray` folder:
 
     docker compose pull
     docker compose up -d
 
 To stay on one version until you choose to move, put that version in the
-compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.1.0`) and
+compose file's `image:` line (for example `ghcr.io/acebmxer/nxray:0.2.0`) and
 change it when you want to upgrade; then run the same two commands.
 
-To try betas, put `ghcr.io/acebmxer/nxray:beta` in the `image:` line. That tag
-is the beta channel: it moves with every beta published from the `dev` branch,
-so it can change and break between runs, and `:latest` never receives it.
-Each beta is also listed as a pre-release on the GitHub Releases page.
+To try betas, use the `:beta` tag. It is the beta channel: it moves with every
+beta published from the `dev` branch, so it can change and break between
+runs, and `:latest` never receives it. Each beta is also listed as a
+pre-release on the GitHub Releases page. With self-update on, tick **Include
+beta versions** on the Settings page (see [Beta versions](#beta-versions)).
+Without it, put a file named `.env` beside `docker-compose.yml` holding only
+this line:
+
+    NXRAY_TAG=beta
+
+A plain `docker compose up -d` on the host uses whatever the compose file and
+`.env` say. Keep the password hash in `nxray.env`, never in `.env`: compose
+reads `.env` to fill in `$` variables, and the hash is full of them. Delete
+`.env` (or set `NXRAY_TAG=latest`) to go back to releases.
+
+### Updating from 0.1.x
+
+Every install keeps its own `docker-compose.yml`, and an update never changes
+it. Installs set up on 0.1.x (or an earlier beta) have the tag written into
+the `image:` line, so edit it once for **Include beta versions** to work:
+
+1. In the `nxray` folder, change the `image:` line from
+
+       image: ghcr.io/acebmxer/nxray:latest
+
+   (or `:beta`, or a pinned `:0.1.0`) to
+
+       image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}
+
+2. Run `docker compose pull`, then `docker compose up -d`.
+
+Without the edit, 0.2.0 still installs and runs (a `:latest` compose file
+pulls it as usual), but the beta switch cannot move the install: the Updates
+card says so and shows the line to change.
 
 From a clone, run `git pull` and then
 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.

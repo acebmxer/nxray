@@ -16,28 +16,12 @@ again when the problem is over. Each problem is sent once when it starts, not ev
 
 {% if interval %}
 <p class="hint">The switch is checked each time history reads it, every {{ interval }} seconds,
-with the same three read-only commands; nothing more is asked of the switch.</p>
+with the same four read-only commands; nothing more is asked of the switch.</p>
 {% else %}
 <p class="warning">History is off (<code>NXRAY_HISTORY_INTERVAL=0</code>), so NXray never reads the
 switch on its own and no problem is noticed. Changes made through NXray are still sent when that is
 ticked below. Set <code>NXRAY_HISTORY_INTERVAL</code> in <code>nxray.env</code> to check the switch.</p>
 {% endif %}
-
-<section class="card">
-  <h2 class="card-title">Open now</h2>
-  {% if open_problems %}
-  <table class="table">
-    <thead><tr><th>Since</th>{% if several_switches %}<th>Switch</th>{% endif %}<th>Problem</th></tr></thead>
-    <tbody>
-      {% for p in open_problems %}
-      <tr><td class="mono">{{ p.since|utc }}</td>{% if several_switches %}<td>{{ p.switch }}</td>{% endif %}<td class="wrap">{{ p.message }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p>No problem is open.</p>
-  {% endif %}
-</section>
 
 <section class="card">
   <h2 class="card-title">What to alert on</h2>
@@ -126,6 +110,22 @@ ticked below. Set <code>NXRAY_HISTORY_INTERVAL</code> in <code>nxray.env</code> 
       <button type="submit" class="btn btn-quiet">Remove e-mail settings</button>
     </form>
   </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Open now</h2>
+  {% if open_problems %}
+  <table class="table">
+    <thead><tr><th>Since</th>{% if several_switches %}<th>Switch</th>{% endif %}<th>Problem</th></tr></thead>
+    <tbody>
+      {% for p in open_problems %}
+      <tr><td class="mono">{{ p.since|utc }}</td>{% if several_switches %}<td>{{ p.switch }}</td>{% endif %}<td class="wrap">{{ p.message }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No problem is open.</p>
   {% endif %}
 </section>
 

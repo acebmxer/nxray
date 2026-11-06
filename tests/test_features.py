@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 14
+    assert ROLE_VERSION == 17
 
 
 @pytest.mark.parametrize(
@@ -148,56 +148,76 @@ def test_role_has_the_feature_rules() -> None:
         (
             1,
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
-            "route, routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
-            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
-            "protocol, spanning tree, switch admin, security and config and layer 2 security "
-            "changes",
+            "protocol, spanning tree, switch admin, security and config, layer 2 security, "
+            "traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
-            "spanning tree, switch admin, security and config and layer 2 security changes",
+            "spanning tree, switch admin, security and config, layer 2 security, traffic "
+            "measuring, reset to defaults and sFlow status changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
-            "switch admin, security and config and layer 2 security changes",
+            "switch admin, security and config, layer 2 security, traffic measuring, reset to "
+            "defaults and sFlow status changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
-            "admin, security and config and layer 2 security changes",
+            "admin, security and config, layer 2 security, traffic measuring, reset to defaults "
+            "and sFlow status changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-            "config and layer 2 security changes",
+            "config, layer 2 security, traffic measuring, reset to defaults and sFlow status "
+            "changes",
         ),
         (
             8,
-            "static route, routing protocol, spanning tree, switch admin, security and config "
-            "and layer 2 security changes",
+            "static route, routing protocol, spanning tree, switch admin, security and config, "
+            "layer 2 security, traffic measuring, reset to defaults and sFlow status changes",
         ),
         (
             9,
-            "routing protocol, spanning tree, switch admin, security and config and layer 2 "
-            "security changes",
+            "routing protocol, spanning tree, switch admin, security and config, layer 2 "
+            "security, traffic measuring, reset to defaults and sFlow status changes",
         ),
-        (10, "spanning tree, switch admin, security and config and layer 2 security changes"),
-        (11, "switch admin, security and config and layer 2 security changes"),
-        (12, "security and config and layer 2 security changes"),
-        (13, "layer 2 security changes"),
-        (14, ""),
+        (
+            10,
+            "spanning tree, switch admin, security and config, layer 2 security, traffic "
+            "measuring, reset to defaults and sFlow status changes",
+        ),
+        (
+            11,
+            "switch admin, security and config, layer 2 security, traffic measuring, reset to "
+            "defaults and sFlow status changes",
+        ),
+        (
+            12,
+            "security and config, layer 2 security, traffic measuring, reset to defaults and "
+            "sFlow status "
+            "changes",
+        ),
+        (13, "layer 2 security, traffic measuring, reset to defaults and sFlow status changes"),
+        (14, "traffic measuring, reset to defaults and sFlow status changes"),
+        (15, "reset to defaults and sFlow status changes"),
+        (16, "sFlow status changes"),
+        (17, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

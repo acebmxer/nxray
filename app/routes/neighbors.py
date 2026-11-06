@@ -4,7 +4,9 @@ and the MAC address table's changes (aging time, static entries, clearing)."""
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -19,6 +21,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
+from app.live import CLIENTS
 from app.neighbor_changes import (
     CLEAR_SCOPES,
     DROP,
@@ -44,6 +47,7 @@ from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
 from app.switch_setup import ConnectionStatus, read_switch
+from app.traffic import DeviceTraffic, busiest_devices, load_device_traffic
 from app.vlans import VlanView, load_vlans
 
 router = APIRouter()
@@ -71,25 +75,31 @@ def _front_ports(vlans: VlanView | None) -> list[str]:
 
 
 def _read(
-    request: Request, with_vlans: bool
+    request: Request, with_vlans: bool, *, with_traffic: bool = False
 ) -> tuple[
     SwitchConnection | None,
     ConnectionStatus | None,
     NeighborView | None,
     VlanView | None,
+    dict[str, DeviceTraffic],
 ]:
-    """(connection, status, neighbors, VLANs): the VLANs only when asked for,
-    since only the change forms need them."""
+    """(connection, status, neighbors, VLANs, device traffic): the VLANs only
+    when asked for, since only the change forms need them, and the traffic
+    (one more request) only for the page itself."""
     connection, target, problem = stored_switch(request)
     if target is None:
-        return connection, ConnectionStatus(False, problem) if problem else None, None, None
+        return connection, ConnectionStatus(False, problem) if problem else None, None, None, {}
 
-    def reader(client: NxapiClient) -> tuple[NeighborView, VlanView | None]:
-        return load_neighbors(client), load_vlans(client) if with_vlans else None
+    def reader(
+        client: NxapiClient,
+    ) -> tuple[NeighborView, VlanView | None, dict[str, DeviceTraffic]]:
+        view = load_neighbors(client)
+        vlans = load_vlans(client) if with_vlans else None
+        return view, vlans, load_device_traffic(client, view) if with_traffic else {}
 
     status, found = read_switch(target, reader, transport=request.app.state.nxapi_transport)
-    view, vlans = found if found else (None, None)
-    return connection, status, view, vlans
+    view, vlans, traffic = found if found else (None, None, {})
+    return connection, status, view, vlans, traffic
 
 
 def _can_change(request: Request, connection: SwitchConnection | None) -> bool:
@@ -113,9 +123,16 @@ def _render(
     """Read the switch fresh and show the page. ``form`` keeps what was typed
     into a change form after a refusal."""
     connection = stored_switch(request)[0]
-    connection, status, view, vlans = _read(request, _can_change(request, connection))
+    connection, status, view, vlans, traffic = _read(
+        request, _can_change(request, connection), with_traffic=True
+    )
     macs = filter_macs(view.macs, query) if view else []
+    busiest = busiest_devices(traffic)
     ips = {entry.mac: view.ips_of(entry.mac) for entry in macs} if view else {}
+    for item in busiest:
+        if view and item.mac not in ips:
+            ips[item.mac] = view.ips_of(item.mac)
+    makers = {entry.mac: entry.maker_text for entry in view.macs} if view else {}
     statics = static_entries(view) if view else []
     return templates.TemplateResponse(
         request,
@@ -127,6 +144,9 @@ def _render(
             "view": view,
             "macs": macs,
             "ips": ips,
+            "traffic": traffic,
+            "busiest": busiest,
+            "makers": makers,
             "query": query,
             "query_max": QUERY_MAX,
             "error": error,
@@ -140,6 +160,14 @@ def _render(
             "aging_min": MAC_AGING_MIN,
             "aging_max": MAC_AGING_MAX,
             "drop": DROP,
+            "live_at": int(time.time()),
+            "live_problem": "",
+            # Figures that refresh themselves, only on the plain view.
+            **(
+                {"live_page": CLIENTS, "live_url": "/live/neighbors?" + urlencode({"q": query})}
+                if view and status_code == 200 and not (error or notice or form)
+                else {}
+            ),
         },
         status_code=status_code,
     )
@@ -204,7 +232,7 @@ def _start(
         return problem or "The switch could not be read.", None, None, None
     if not connection.neighbor_changes_enabled:
         return NEIGHBOR_CHANGES_OFF, None, None, None
-    connection, status, view, vlans = _read(request, True)
+    connection, status, view, vlans, _ = _read(request, True)
     if view is None or vlans is None:
         return (status.message if status else "The switch could not be read."), None, None, None
     return None, connection, view, vlans

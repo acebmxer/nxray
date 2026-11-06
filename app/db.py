@@ -314,6 +314,53 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN switch_model TEXT NOT NULL DEFAULT '';
     ALTER TABLE switch_connection ADD COLUMN nxos_version TEXT NOT NULL DEFAULT '';
     """,
+    # Self-update channels (app/update.py): include_beta is the Settings switch,
+    # target_tag and target_version say where Update now goes (:latest or :beta,
+    # or the container's own tag when digests are compared).
+    """
+    ALTER TABLE update_state ADD COLUMN include_beta INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE update_state ADD COLUMN target_tag TEXT NOT NULL DEFAULT '';
+    ALTER TABLE update_state ADD COLUMN target_version TEXT NOT NULL DEFAULT '';
+    """,
+    # Switch accounts for NXray users (app/switch_accounts.py): which local
+    # account on which switch belongs to which NXray user, the roles NXray last
+    # gave it, when NXray last set its password (NULL: never, for an account
+    # that was linked as it was) and whether NXray locked it with a random
+    # password. No password is kept. users.password_changed_at is when the
+    # NXray password last changed, so a switch password set before it is out
+    # of step; NULL for accounts older than this.
+    """
+    CREATE TABLE switch_accounts (
+        user_id          INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+        switch_id        INTEGER NOT NULL,
+        account_name     TEXT NOT NULL,
+        roles            TEXT NOT NULL,
+        password_set_at  REAL,
+        locked           INTEGER NOT NULL DEFAULT 0,
+        linked_at        REAL NOT NULL,
+        PRIMARY KEY (user_id, switch_id),
+        UNIQUE (switch_id, account_name)
+    );
+    ALTER TABLE users ADD COLUMN password_changed_at REAL;
+    """,
+    # sFlow (app/sflow.py): each switch's measured traffic per minute, per VLAN
+    # (kind vlan) and per device (mac_out: what a MAC address sent, mac_in: what
+    # was sent to it), in bytes estimated from the samples and the number of
+    # samples behind it. sflow_agent is the agent address NXray set on the switch,
+    # which the datagrams carry; '' until then (the NX-API address is used).
+    """
+    CREATE TABLE sflow_traffic (
+        switch_id INTEGER NOT NULL,
+        minute    INTEGER NOT NULL,
+        kind      TEXT NOT NULL,
+        item      TEXT NOT NULL,
+        bytes     INTEGER NOT NULL,
+        samples   INTEGER NOT NULL,
+        PRIMARY KEY (switch_id, minute, kind, item)
+    );
+    CREATE INDEX idx_sflow_traffic_minute ON sflow_traffic (minute);
+    ALTER TABLE switch_connection ADD COLUMN sflow_agent TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 

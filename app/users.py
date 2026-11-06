@@ -26,8 +26,10 @@ page: after the password, sign-in asks for a six-digit code from an
 authenticator app, or one of ten one-time backup codes. An admin can turn it
 off for someone who lost their phone and their backup codes.
 
-These are NXray sign-ins only. They are unrelated to the account NXray uses
-on the switch (app/switch_setup.py).
+These are NXray sign-ins. They are unrelated to the account NXray uses on
+the switch (app/switch_setup.py). An admin can also give a person a local
+account on a switch with the same name and password, so they can sign in
+over SSH too; app/switch_accounts.py keeps which is which.
 """
 
 from __future__ import annotations
@@ -87,6 +89,9 @@ class User:
     totp_enabled: bool = False
     totp_last_step: int = 0
     totp_backup_codes: tuple[str, ...] = ()  # SHA-256 hashes, never the codes
+    # When the password last changed (None before NXray kept it); a switch
+    # account whose password NXray set before this is out of step.
+    password_changed_at: float | None = None
 
     @property
     def backup_codes_left(self) -> int:
@@ -114,6 +119,7 @@ def _row_to_user(row: sqlite3.Row) -> User:
         totp_enabled=bool(row["totp_enabled"]),
         totp_last_step=int(row["totp_last_step"]),
         totp_backup_codes=tuple(json.loads(row["totp_backup_codes"] or "[]")),
+        password_changed_at=row["password_changed_at"],
     )
 
 
@@ -182,10 +188,11 @@ def create_user(
     check_new_password(password, confirm)
     if get_user(conn, username) is not None:
         raise UserError(f"There is already an account called {username}.")
+    now = time.time()
     cursor = conn.execute(
-        "INSERT INTO users (username, password_hash, role, disabled, created_at) "
-        "VALUES (?, ?, ?, 0, ?)",
-        (username, hash_password(password), role, time.time()),
+        "INSERT INTO users (username, password_hash, role, disabled, created_at, "
+        "password_changed_at) VALUES (?, ?, ?, 0, ?, ?)",
+        (username, hash_password(password), role, now, now),
     )
     conn.commit()
     user = get_user_by_id(conn, int(cursor.lastrowid or 0))
@@ -199,6 +206,31 @@ def _active_admins_besides(conn: sqlite3.Connection, user_id: int) -> int:
         (user_id,),
     ).fetchone()
     return int(row["n"])
+
+
+def check_can_delete(conn: sqlite3.Connection, user_id: int) -> User:
+    """The account, or UserError when NXray would not delete it: it is gone
+    already, or it is the only active admin left."""
+    user = get_user_by_id(conn, user_id)
+    if user is None:
+        raise UserError("That account no longer exists.")
+    if user.is_admin and not user.disabled and _active_admins_besides(conn, user_id) == 0:
+        raise UserError(
+            f"{user.username} is the only admin left, so it cannot be deleted. "
+            "Make another account admin first."
+        )
+    return user
+
+
+def delete_user(conn: sqlite3.Connection, user_id: int) -> User:
+    """Delete an NXray account and sign it out at once. Its links to switch
+    accounts go with it; the accounts on the switches are not touched here.
+    Who may delete which account is decided by the route."""
+    user = check_can_delete(conn, user_id)
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    destroy_user_sessions(conn, user.username)
+    return user
 
 
 def set_role(conn: sqlite3.Connection, user_id: int, role: str) -> User:
@@ -249,7 +281,8 @@ def set_password(
     if user is None:
         raise UserError("That account no longer exists.")
     conn.execute(
-        "UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), user_id)
+        "UPDATE users SET password_hash = ?, password_changed_at = ? WHERE id = ?",
+        (hash_password(password), time.time(), user_id),
     )
     conn.commit()
     destroy_user_sessions(conn, user.username, keep=keep_session)

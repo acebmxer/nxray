@@ -9,11 +9,19 @@ services:
     #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
     #
     # :latest tracks every release, so "docker compose pull" moves you onto a
-    # new version. Pin one instead to stay put until you choose to move:
+    # new version. NXRAY_TAG picks another tag without editing this line:
+    # self-update's "Include beta versions" switch sets it to beta or latest
+    # for its own pull, and a .env file beside this one holding only
     #
-    #   image: ghcr.io/acebmxer/nxray:0.1.0
+    #   NXRAY_TAG=beta
     #
-    image: ghcr.io/acebmxer/nxray:latest
+    # puts a plain "docker compose up -d" on the beta channel too. (Only that
+    # line: the password hash stays in nxray.env, see env_file below.) Pin a
+    # version instead to stay put until you choose to move:
+    #
+    #   image: ghcr.io/acebmxer/nxray:0.2.0
+    #
+    image: ghcr.io/acebmxer/nxray:${NXRAY_TAG:-latest}
     container_name: nxray
     restart: unless-stopped
     env_file:
@@ -51,6 +59,11 @@ services:
       # in nxray.env to the same, so plain-HTTP visits are sent to the right
       # port.
       - "8443:8443"
+      # sFlow from the switch, for measured traffic per VLAN and per device
+      # (the Traffic page). Only with NXRAY_SFLOW_PORT=6343 in nxray.env; keep
+      # both numbers the same as that setting. Uncomment to use it:
+      #
+      #   - "6343:6343/udp"
     volumes:
       # Holds the SQLite database, the session signing key and, with
       # built-in HTTPS on, its certificate.

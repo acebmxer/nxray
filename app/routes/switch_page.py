@@ -26,7 +26,13 @@ from app.dependencies import (
     templates,
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
-from app.port_changes import ROLE_NAME, ROLE_VERSION, enable_port_changes, missing_changes
+from app.port_changes import (
+    ROLE_NAME,
+    ROLE_VERSION,
+    EnableResult,
+    enable_port_changes,
+    missing_changes,
+)
 from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
@@ -37,6 +43,7 @@ from app.routes.routing import render_routing_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
+from app.routes.traffic import render_traffic_page
 from app.routes.vlans import render_vlans_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
@@ -141,6 +148,40 @@ def _check_address(host: str, port: str) -> tuple[int, str | None]:
     return port_number, None
 
 
+def _check_ssh_port(ssh_port: str) -> tuple[int, str | None]:
+    """The SSH port as a number, and what is wrong with it (None: nothing)."""
+    try:
+        port_number = int(ssh_port)
+    except ValueError:
+        port_number = 0
+    if not 1 <= port_number <= 65535:
+        return 0, "The SSH port is a number from 1 to 65535 (normally 22)."
+    return port_number, None
+
+
+# Added to a message when the role was written while interface-vlan is off.
+_VLAN_INTERFACES_OFF = (
+    " VLAN interfaces are off on the switch (interface-vlan), and the switch only "
+    "takes them into the role while they are on, so NXray cannot make them yet: "
+    "turn interface-vlan on on the Features page, then press Update the port list "
+    "here."
+)
+
+
+def _changes_on_at_setup(role: EnableResult) -> str:
+    """What setup tells the admin after it also gave the account the role."""
+    minutes = role.pause_seconds // 60
+    words = (
+        f" Changes are on too: the account has the {ROLE_NAME} role, so NXray can make "
+        "every change this version offers. The switch applies the role once it has not "
+        "heard from NXray for a while, so NXray now waits about "
+        f"{minutes} minutes before contacting it again."
+    )
+    if not role.vlan_interfaces:
+        words += _VLAN_INTERFACES_OFF
+    return words
+
+
 @router.post("/switch/setup", response_class=HTMLResponse)
 def switch_setup(
     request: Request,
@@ -152,14 +193,23 @@ def switch_setup(
     admin_password: str = Form(""),
     account_name: str = Form(DEFAULT_ACCOUNT_NAME),
     confirm_save: str = Form(""),
+    turn_on_changes: str = Form(""),
+    ssh_port: str = Form("22"),
 ) -> Response:
     require_csrf(request, csrf)
     settings = request.app.state.settings
     host = host.strip()
     account_name = account_name.strip()
     admin_user = admin_user.strip()
+    turn_on = turn_on_changes == "yes"
     # Everything but the admin password goes back into the form on an error.
-    add_form = {"host": host, "port": port.strip(), "account_name": account_name}
+    add_form = {
+        "host": host,
+        "port": port.strip(),
+        "account_name": account_name,
+        "ssh_port": ssh_port.strip(),
+        "turn_on_changes": "yes" if turn_on else "",
+    }
 
     def fail(message: str) -> Response:
         return _render(request, username, error=message, add_form=add_form, status_code=400)
@@ -167,12 +217,19 @@ def switch_setup(
     port_number, problem = _check_address(host, port)
     if problem:
         return fail(problem)
+    ssh_port_number = 0
+    if turn_on:
+        ssh_port_number, problem = _check_ssh_port(ssh_port)
+        if problem:
+            return fail(problem)
     if not admin_user or not admin_password:
         return fail("Enter the switch's admin username and password.")
     if confirm_save != "yes":
         return fail("Tick the box to confirm NXray may save the switch configuration.")
 
     added: list[int] = []
+    role: EnableResult | None = None
+    role_error = ""
 
     def store(password: str, switch_hostname: str) -> None:
         with open_db(settings.db_path) as conn:
@@ -207,6 +264,23 @@ def switch_setup(
             store=store,
             transport=request.app.state.nxapi_transport,
         )
+        # The account exists now; giving it the role uses the same admin
+        # login, so a new switch needs it typed only once. A failure here
+        # leaves the switch set up, read-only, with the Turn on button.
+        if turn_on:
+            try:
+                role = enable_port_changes(
+                    host=host,
+                    nxapi_port=port_number,
+                    ssh_port=ssh_port_number,
+                    admin_user=admin_user,
+                    admin_password=admin_password,
+                    account_name=account_name,
+                    transport=request.app.state.nxapi_transport,
+                    ssh_opener=request.app.state.ssh_opener,
+                )
+            except SetupError as exc:
+                role_error = str(exc)
     except SetupError as exc:
         return fail(str(exc))
     finally:
@@ -218,6 +292,14 @@ def switch_setup(
         record_test_result(
             conn, switch_id, ok=True, message="Setup signed in with the new account."
         )
+        if role is not None:
+            set_changes_enabled(
+                conn,
+                switch_id,
+                pause_seconds=role.pause_seconds,
+                role_version=ROLE_VERSION,
+                vlan_interfaces=role.vlan_interfaces,
+            )
     # The new switch is the one the pages show from now on.
     choose_switch(request, switch_id)
     note_activity(
@@ -227,26 +309,46 @@ def switch_setup(
         f"Set up the switch {result.switch_hostname} with the account {account_name}",
         host,
     )
+    if role is not None:
+        note_activity(
+            request,
+            username,
+            "Switch",
+            f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION}",
+            host,
+        )
 
+    failed = not result.config_saved
     if result.config_saved:
-        notice = (
+        done = (
             f"Set up. NXray created the account {account_name} on {result.switch_hostname} "
             "and saved the switch configuration."
         )
-        return remember_switch(request, _render(request, username, notice=notice))
-    return remember_switch(
-        request,
-        _render(
-            request,
-            username,
-            error=(
-                f"NXray created the account {account_name} on {result.switch_hostname} and "
-                "can use it, but saving the switch configuration failed, so the account is "
-                "lost if the switch restarts. Run copy running-config startup-config on the "
-                f"switch. Details: {result.save_error}"
-            ),
-        ),
-    )
+    else:
+        done = (
+            f"NXray created the account {account_name} on {result.switch_hostname} and "
+            "can use it, but saving the switch configuration failed, so the account is "
+            "lost if the switch restarts. Run copy running-config startup-config on the "
+            f"switch. Details: {result.save_error}"
+        )
+    if role is not None:
+        done += _changes_on_at_setup(role)
+        if not role.config_saved:
+            failed = True
+            done += (
+                " Saving the switch configuration after giving the role failed, so the role "
+                "is lost if the switch restarts. Run copy running-config startup-config on "
+                f"the switch. Details: {role.save_error}"
+            )
+    elif role_error:
+        failed = True
+        done += (
+            f" Turning changes on failed, so the account can only read for now: {role_error} "
+            "Fix that, then turn them on below."
+        )
+    if failed:
+        return remember_switch(request, _render(request, username, error=done))
+    return remember_switch(request, _render(request, username, notice=done))
 
 
 @router.post("/switch/test", response_class=HTMLResponse)
@@ -508,12 +610,9 @@ def switch_enable_changes(
     def fail(message: str) -> Response:
         return _render(request, username, error=message, status_code=400)
 
-    try:
-        ssh_port_number = int(ssh_port)
-    except ValueError:
-        ssh_port_number = 0
-    if not 1 <= ssh_port_number <= 65535:
-        return fail("The SSH port is a number from 1 to 65535 (normally 22).")
+    ssh_port_number, problem = _check_ssh_port(ssh_port)
+    if problem:
+        return fail(problem)
     if not admin_user or not admin_password:
         return fail("Enter the switch's admin username and password.")
     if confirm_save != "yes":
@@ -600,18 +699,28 @@ def switch_enable_changes(
         "ARP page, and make MAC ACLs, object groups and VLAN access maps and size the TCAM "
         "regions on the ACLs page"
     )
+    traffic_words = (
+        "set how long the front ports average their In and Out rates over on each port's page, "
+        "and have the switch send sFlow samples to NXray on the Traffic page"
+    )
+    reset_words = (
+        "put a port or a port-channel back to how it came out of the box, on its own page or "
+        "the Port-channels page"
+    )
     if not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
-            "static route, routing protocol, spanning tree, switch admin, security and config and "
-            "layer 2 security changes are on: "
+            "static route, routing protocol, spanning tree, switch admin, security and config, "
+            "layer 2 security, traffic measuring, reset to defaults and sFlow status changes "
+            "are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, {security_words}, and {layer2_words}. "
+            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, and "
+            f"{reset_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -651,7 +760,11 @@ def switch_enable_changes(
             parts.append(admin_words)
         if connection.role_version < 13:
             parts.append(security_words)
-        parts.append(layer2_words)
+        if connection.role_version < 14:
+            parts.append(layer2_words)
+        if connection.role_version < 15:
+            parts.append(traffic_words)
+        parts.append(reset_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -659,12 +772,7 @@ def switch_enable_changes(
             "The switch applies this at once, so there is no wait."
         )
     if not result.vlan_interfaces:
-        done += (
-            " VLAN interfaces are off on the switch (interface-vlan), and the switch only "
-            "takes them into the role while they are on, so NXray cannot make them yet: "
-            "turn interface-vlan on on the Features page, then press Update the port list "
-            "here."
-        )
+        done += _VLAN_INTERFACES_OFF
     if result.config_saved:
         return _render(request, username, notice=done + " The switch configuration was saved.")
     return _render(
@@ -719,6 +827,8 @@ def switch_save(
             )
         if back == "vlans":
             return render_vlans_page(request, username, error=error, notice=notice)
+        if back == "traffic":
+            return render_traffic_page(request, username, error=error, notice=notice)
         if back == "features":
             return render_features_page(request, username, error=error, notice=notice)
         if back == "neighbors":

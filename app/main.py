@@ -18,9 +18,11 @@ from app.dependencies import (
     RedirectToLogin,
     add_security_headers,
     current_role,
+    share_switch_reads,
     templates,
 )
 from app.history import start_sampler
+from app.live import LiveCache
 from app.logging_conf import configure_logging
 from app.routes import (
     activity,
@@ -31,6 +33,7 @@ from app.routes import (
     features,
     health,
     history,
+    live,
     neighbors,
     port_channels,
     ports,
@@ -40,12 +43,15 @@ from app.routes import (
     security,
     settings_page,
     spanning_tree,
+    switch_accounts,
     switch_admin,
     switch_page,
+    traffic,
     users,
     vlans,
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
+from app.sflow import SflowCollector, start_collector
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
 
@@ -82,13 +88,21 @@ async def lifespan(app: FastAPI):
 
     start_background_checker(settings)
     stop_sampler = start_sampler(
-        settings, lambda: app.state.nxapi_transport, lambda: app.state.alert_transport
+        settings,
+        lambda: app.state.nxapi_transport,
+        lambda: app.state.alert_transport,
+        app.state.sflow_collector,
+    )
+    stop_sflow = start_collector(
+        settings.sflow_port, app.state.sflow_collector, settings.db_path, settings.sflow_keep_days
     )
 
     yield
 
     if stop_sampler is not None:
         stop_sampler.set()
+    if stop_sflow is not None:
+        stop_sflow.set()
     log.info("NXray stopped")
 
 
@@ -108,6 +122,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings or load_settings()
     # Tests put an httpx.MockTransport here so no request reaches a real switch.
     app.state.nxapi_transport = None
+    # The newest switch readings the self-refreshing pages share (app/live.py).
+    app.state.live_cache = LiveCache()
+    # sFlow samples added up per switch and minute (app/sflow.py); listened for
+    # only with NXRAY_SFLOW_PORT set.
+    app.state.sflow_collector = SflowCollector()
     # ...and a pretend SSH shell opener here (app/switch_ssh.py).
     app.state.ssh_opener = None
     # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
@@ -137,13 +156,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=403,
         )
 
+    app.middleware("http")(share_switch_reads)
     app.middleware("http")(add_security_headers)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(dashboard.router)
+    app.include_router(live.router)
     app.include_router(ports.router)
     app.include_router(history.router)
+    app.include_router(traffic.router)
     app.include_router(switch_page.router)
     app.include_router(vlans.router)
     app.include_router(neighbors.router)
@@ -158,6 +180,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(alerts.router)
     app.include_router(features.router)
     app.include_router(users.router)
+    app.include_router(switch_accounts.router)
     app.include_router(settings_page.router)
     app.include_router(preferences.router)
     return app

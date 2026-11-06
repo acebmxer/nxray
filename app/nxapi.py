@@ -17,12 +17,15 @@ Read-only ``show`` commands go through ``show()``. The few configuration
 commands NXray needs have their own methods (``create_user``,
 ``give_role``, ``delete_user``, ``configure_port``, ``configure_vlan``,
 ``delete_vlan``, ``configure_port_vlans``, ``configure_port_settings``,
-``breakout_port``, ``join_port``, ``set_feature``, ``set_port_discovery``,
+``breakout_port``, ``join_port``, ``set_load_interval``, ``configure_sflow``,
+``set_feature``,
+``set_port_discovery``,
 ``set_mac_aging``, ``add_static_mac``, ``remove_static_mac``,
 ``clear_learned_macs``, ``join_port_channel``, ``leave_port_channel``,
 ``delete_port_channel``, ``configure_port_channel``, ``set_port_lacp``,
 ``set_lacp_system_priority``, ``configure_vlan_interface``,
-``delete_vlan_interface``, ``set_interface_addresses``, ``save_config``), each building
+``delete_vlan_interface``, ``set_interface_addresses``, ``reset_ports``,
+``reset_port_channel``, ``save_config``), each building
 its commands from checked values, so nothing that renders a page can change
 the switch by accident and no caller can pass free text to the switch's
 configuration.
@@ -33,7 +36,8 @@ from __future__ import annotations
 import ipaddress
 import re
 import threading
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,6 +72,10 @@ ALLOWED_ROLES = frozenset({"network-operator"})
 # The role that allows port and VLAN changes (app/port_changes.py builds it).
 # The only role NXray ever adds to its account afterwards.
 PORT_CHANGES_ROLE = "nxray-ports"
+
+# The roles NXray gives the switch accounts of people (app/switch_accounts.py):
+# viewer, operator (with nxray-ports) and admin. Never NXray's own account.
+PERSON_ROLES = frozenset({"network-operator", "network-admin", PORT_CHANGES_ROLE})
 
 # A front-panel port: Ethernet1/3, or a breakout port such as Ethernet1/49/2.
 _PORT_NAME = re.compile(r"^Ethernet[0-9]{1,2}/[0-9]{1,3}(?:/[0-9]{1,2})?$")
@@ -114,6 +122,21 @@ MTU_MIN = 576
 MTU_MAX = 9216
 # How a 100G port is split: four 10G or four 25G ports.
 BREAKOUT_MAPS = ("10g-4x", "25g-4x")
+# How many seconds the switch averages a port's In and Out rate over
+# (``load-interval counter 1 <seconds>``). Cisco's NX-OS 9.3 Interfaces
+# Configuration Guide for the Nexus 9000 gives 5 to 300 seconds; NXray offers
+# a few steps of it, and ``no load-interval counter 1`` goes back to the
+# switch's default of 30. Not yet tried on cisco-25gb: a value the switch does
+# not take is refused by it, and the page says so.
+LOAD_INTERVALS = (5, 10, 15, 30, 60, 120, 300)
+DEFAULT_LOAD_INTERVAL = 30
+# sFlow (``NxapiClient.configure_sflow``): one frame in every N is sampled.
+# Cisco's NX-OS 9.3 System Management Configuration Guide gives 4096 to
+# 1000000000 for the Nexus 9000, 4096 by default; NXray offers a few steps.
+# Not yet tried on cisco-25gb.
+SFLOW_SAMPLING_RATES = (4096, 8192, 16384, 32768, 65536)
+SFLOW_DEFAULT_RATE = 4096
+SFLOW_DEFAULT_PORT = 6343
 
 # What may follow "feature": the commands ``feature ?`` lists on an
 # N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
@@ -240,6 +263,31 @@ def is_valid_host(value: str) -> bool:
         return True
     except ValueError:
         return bool(_HOSTNAME.match(value))
+
+
+def check_switch_password(password: str) -> str:
+    """Return the password if NXray may send it to the switch, or raise ValueError.
+
+    8 to 64 letters and digits only: nothing the NX-OS command line could read
+    as a separator, a quote or a request for help ("?"). The message never
+    repeats the password.
+    """
+    if not _SAFE_PASSWORD.match(password):
+        raise ValueError(
+            "a switch password is 8 to 64 letters and digits, with no other characters"
+        )
+    return password
+
+
+def _person_roles(roles: Iterable[str], *, allow_empty: bool = False) -> list[str]:
+    """The roles, each one NXray gives people (PERSON_ROLES), in the order given."""
+    found = list(dict.fromkeys(roles))
+    for role in found:
+        if role not in PERSON_ROLES:
+            raise ValueError(f"role {role!r} is not one NXray gives a person's switch account")
+    if not found and not allow_empty:
+        raise ValueError("a switch account needs a role")
+    return found
 
 
 def validate_account_name(name: str) -> str:
@@ -480,6 +528,43 @@ def validate_vrf_name(name: str) -> str:
     return cleaned
 
 
+def validate_sflow_address(text: str) -> str:
+    """An IPv4 address for sFlow's collector or agent, or raise ValueError.
+
+    The switch takes IPv4 addresses there; NXray refuses any address that
+    cannot be one host's (0.0.0.0, broadcast, multicast, loopback).
+    """
+    try:
+        address = ipaddress.IPv4Address(text.strip())
+    except ValueError as exc:
+        raise ValueError(f"{text.strip()!r} is not an IPv4 address") from exc
+    if (
+        address.is_unspecified
+        or address.is_multicast
+        or address.is_loopback
+        or address == ipaddress.IPv4Address("255.255.255.255")
+    ):
+        raise ValueError(f"{address} cannot be one host's address")
+    return str(address)
+
+
+def validate_sflow_vrf(name: str) -> str:
+    """The VRF the switch reaches the collector in: default, management or one of its own."""
+    cleaned = name.strip()
+    if cleaned.lower() in ("default", "management"):
+        return cleaned.lower()
+    return validate_vrf_name(cleaned)
+
+
+def sflow_data_source(name: str) -> str:
+    """``Ethernet1/5`` -> ``ethernet 1/5`` and ``port-channel41`` -> ``port-channel 41``,
+    as ``sflow data-source interface`` takes them. The switch refuses a port
+    that is in a port-channel; its port-channel is the data source instead."""
+    if name.startswith("port-channel"):
+        return f"port-channel {validate_channel_number(name.removeprefix('port-channel'))}"
+    return "ethernet " + validate_port_name(name).removeprefix("Ethernet")
+
+
 def validate_storm_level(value: str | float) -> str:
     """A storm-control level as the switch writes it ("10.00"), or raise ValueError."""
     text = str(value).strip()
@@ -692,6 +777,17 @@ def error_message(error: Any) -> str:
     return message.strip() if isinstance(message, str) and message.strip() else "unknown error"
 
 
+# Set for the length of one request from a page refreshing itself (app/live.py,
+# ``shared_show_reads``): ``show`` and ``show_text`` then hand their read to it
+# instead of asking the switch, so any number of open pages cost the switch one
+# read per interval. ``(key, text, read)``: ``key`` names the switch, account and
+# command(s); ``text`` is True for printed text (a slower floor); ``read()`` asks
+# the switch. None, the default, reads the switch every time.
+shared_reads: ContextVar[Callable[[tuple[str, ...], bool, Callable[[], Any]], Any] | None] = (
+    ContextVar("nxray_shared_reads", default=None)
+)
+
+
 class NxapiClient:
     """A connection to one switch's NX-API.
 
@@ -720,18 +816,33 @@ class NxapiClient:
     def close(self) -> None:
         self._http.close()
 
+    def _shared[T](self, key: tuple[str, ...], text: bool, read: Callable[[], T]) -> T:
+        """Run ``read``, through the request's shared reads when it has any."""
+        share = shared_reads.get()
+        if share is None:
+            return read()
+        target = self._target
+        return share((target.host, str(target.port), target.username, *key), text, read)  # type: ignore[no-any-return]
+
     def show(self, *commands: str) -> list[dict[str, Any]]:
         """Run show commands in one request; one parsed body per command."""
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
-        return self._send(cleaned, cleaned, self._target.timeout)
+        return self._shared(
+            ("show", *cleaned),
+            False,
+            lambda: self._send(cleaned, cleaned, self._target.timeout),
+        )
 
     def show_text(self, command: str) -> str:
         """One show command's printed text, for commands with no structured form
         (``show running-config spanning-tree``). NX-API gives that text only with
         the ``cli_ascii`` method; the ``cli`` method answers it with nothing."""
         cleaned = validate_show_command(command)
+        return self._shared(("text", cleaned), True, lambda: self._read_text(cleaned))
+
+    def _read_text(self, cleaned: str) -> str:
         payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
         entry = payload[0] if isinstance(payload, list) and payload else payload
         if not isinstance(entry, dict):
@@ -779,6 +890,53 @@ class NxapiClient:
         rest of setup failed, so a retry is not blocked by a leftover. The
         switch refuses it while the account has an NX-API session.
         """
+        validate_account_name(name)
+        command = f"no username {name}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    # ---- people's switch accounts (app/switch_accounts.py) ----------------
+    # Separate from create_user and delete_user, which exist only for NXray's
+    # own account. Each needs an admin login; app/switch_accounts.py refuses
+    # NXray's own account before any of them is called.
+
+    def create_person_account(self, name: str, password: str, roles: Iterable[str]) -> None:
+        """Make a person's local switch account with its roles, in one request:
+        ``username <name> password <pw> role <first>``, then ``username <name>
+        role <r>`` for each other role. The password never appears in an error."""
+        validate_account_name(name)
+        check_switch_password(password)
+        wanted = _person_roles(roles)
+        commands = [f"username {name} password {password} role {wanted[0]}"]
+        labels = [f"username {name} password ... role {wanted[0]}"]
+        for role in wanted[1:]:
+            commands.append(f"username {name} role {role}")
+            labels.append(commands[-1])
+        self._send(commands, labels, self._target.timeout, allow_text=True)
+
+    def set_person_password(self, name: str, password: str) -> None:
+        """``username <name> password <pw>``: a person's switch account gets a new
+        password and keeps its roles."""
+        validate_account_name(name)
+        check_switch_password(password)
+        command = f"username {name} password {password}"
+        label = f"username {name} password ..."
+        self._send([command], [label], self._target.timeout, allow_text=True)
+
+    def set_person_roles(self, name: str, *, add: Iterable[str], remove: Iterable[str]) -> None:
+        """Add and take off roles of a person's switch account, in one request:
+        ``username <name> role <r>`` first, then ``no username <name> role <r>``,
+        so the account never has no role on the way."""
+        validate_account_name(name)
+        added = _person_roles(add, allow_empty=True)
+        removed = _person_roles(remove, allow_empty=True)
+        commands = [f"username {name} role {role}" for role in added]
+        commands += [f"no username {name} role {role}" for role in removed]
+        if not commands:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def remove_person_account(self, name: str) -> None:
+        """``no username <name>``: remove a person's switch account."""
         validate_account_name(name)
         command = f"no username {name}"
         self._send([command], [command], self._target.timeout, allow_text=True)
@@ -940,6 +1098,67 @@ class NxapiClient:
         command = f"no interface breakout module {module} port {port} map {mapping}"
         self._send([command], [command], self._target.timeout, allow_text=True)
 
+    def set_load_interval(self, name: str, seconds: int | None) -> None:
+        """How long one port's In and Out rates are averaged over.
+
+        ``load-interval counter 1 <seconds>`` for one of LOAD_INTERVALS, or
+        ``no load-interval counter 1`` (None) to go back to the switch's default.
+        Only the first counter, the one NXray reads, is ever changed.
+        """
+        validate_port_name(name)
+        if seconds is None:
+            line = "no load-interval counter 1"
+        elif seconds in LOAD_INTERVALS and not isinstance(seconds, bool):
+            line = f"load-interval counter 1 {int(seconds)}"
+        else:
+            raise ValueError(f"the rate is averaged over one of {LOAD_INTERVALS} seconds")
+        commands = [f"interface {name}", line]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def configure_sflow(
+        self,
+        *,
+        sampling_rate: int | None = None,
+        collector: str | None = None,
+        vrf: str | None = None,
+        collector_port: int | None = None,
+        agent: str | None = None,
+        add_ports: Iterable[str] = (),
+        remove_ports: Iterable[str] = (),
+    ) -> None:
+        """Set where the switch sends its sFlow samples and which ports it samples,
+        in one request; only the values given are sent.
+
+        ``collector`` goes with ``vrf`` (``sflow collector-ip <ip> vrf <vrf>``).
+        ``add_ports`` and ``remove_ports`` are front ports or port-channels, each
+        one ``sflow data-source interface ethernet <n>`` (``port-channel <n>``)
+        or its ``no`` form. The switch refuses all of it while the sflow feature
+        is off, and refuses a port that is in a port-channel.
+        """
+        commands = []
+        if sampling_rate is not None:
+            if sampling_rate not in SFLOW_SAMPLING_RATES or isinstance(sampling_rate, bool):
+                raise ValueError(f"the sampling rate is one of {SFLOW_SAMPLING_RATES}")
+            commands.append(f"sflow sampling-rate {int(sampling_rate)}")
+        if (collector is None) != (vrf is None):
+            raise ValueError("the collector's address and VRF go together")
+        if collector is not None and vrf is not None:
+            commands.append(
+                f"sflow collector-ip {validate_sflow_address(collector)} "
+                f"vrf {validate_sflow_vrf(vrf)}"
+            )
+        if collector_port is not None:
+            if isinstance(collector_port, bool) or not 1 <= int(collector_port) <= 65535:
+                raise ValueError("the collector's UDP port is 1 to 65535")
+            commands.append(f"sflow collector-port {int(collector_port)}")
+        if agent is not None:
+            commands.append(f"sflow agent-ip {validate_sflow_address(agent)}")
+        commands += [f"sflow data-source interface {sflow_data_source(p)}" for p in add_ports]
+        commands += [f"no sflow data-source interface {sflow_data_source(p)}" for p in remove_ports]
+        if not commands:
+            raise ValueError("nothing to change")
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
     def set_feature(self, command: str, enabled: bool) -> None:
         """``feature <command>`` or ``no feature <command>``, for one known feature.
 
@@ -1079,6 +1298,30 @@ class NxapiClient:
         some; NXray refuses that before it gets here (app/port_channels.py).
         """
         command = f"no interface port-channel{validate_channel_number(number)}"
+        self._send([command], [command], self._target.timeout, allow_text=True)
+
+    def reset_ports(self, names: Iterable[str]) -> None:
+        """``default interface <name>`` for one or more front-panel ports, in one request.
+
+        Puts each port back to how it came out of the box: no description,
+        a plain access port in VLAN 1, the switch's default speed, MTU, FEC,
+        flow control, storm control and layer, and no IP address. Every name
+        is checked first, so this can only ever send one such command per port.
+        """
+        names = [validate_port_name(name) for name in names]
+        if not names:
+            raise ValueError("no ports given")
+        commands = [f"default interface {name}" for name in names]
+        self._send(commands, commands, self._target.timeout, allow_text=True)
+
+    def reset_port_channel(self, number: int) -> None:
+        """``default interface port-channel<n>``: the port-channel's own settings
+
+        (its description, LACP minimum links, admin state and layer) go back
+        to the switch's defaults. Its members keep their channel-group
+        membership, which is set on each member port, not on the port-channel.
+        """
+        command = f"default interface port-channel{validate_channel_number(number)}"
         self._send([command], [command], self._target.timeout, allow_text=True)
 
     def configure_port_channel(

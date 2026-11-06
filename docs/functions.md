@@ -44,11 +44,12 @@ prose columns; those are a reviewer's job.
 | Turn switch output into page data | `app/switch.py` (health), `app/ports.py` (ports), `app/neighbors.py` (neighbors and tables) |
 | Read the switch with NXray's account from a route | `dependencies.stored_switch`, then `switch_setup.read_switch` |
 | Show a byte count or a bit rate | the `bytes` and `rate` template filters (`ports.human_bytes`, `ports.human_rate`) |
-| Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`); several at once: `routes/ports.plan_bulk_change` |
+| Change a port on the switch | `app/nxapi.py`, `NxapiClient.configure_port` (checked by `validate_port_name`, `validate_description`); several at once, with one shared configuration: `app/port_bulk.py`, `plan_bulk` |
 | Read or change a port's speed, MTU, FEC, flow control, storm control, layer, or split it | `app/port_settings.py` (`plan_port_settings`, `plan_breakout`); commands from `NxapiClient.configure_port_settings`, `breakout_port`, `join_port` |
 | Type configuration lines NX-API refuses (they contain `;`) | `app/switch_ssh.py`, `run_config` |
 | Give NXray's account the port-changes role | `app/port_changes.py`, `enable_port_changes` |
 | Draw the front panel, or colour a port by state, speed, VLAN, port-channel, traffic or errors | `app/face.py`, `draw_face` |
+| Refresh figures on a page by themselves, or share one switch reading between browsers | `app/live.py`, `LiveCache.get`; the answers are in `app/routes/live.py`; `app/static/live.js` is the browser side ([Live figures](live.md)) |
 | Know a browser's theme (system, light, dark) or menu width | `app/preferences.py`, `ui_preferences` (a template global) |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
@@ -71,8 +72,10 @@ prose columns; those are a reviewer's job.
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
-| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`); the SVG itself is `app/charts.py`, `line_chart` |
+| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`, `vlan_charts`); the SVG itself is `app/charts.py`, `line_chart` |
+| Estimate a device's or a VLAN's traffic from the ports' | `app/traffic.py` (`device_traffic`, `port_device`, `vlan_traffic`); each VLAN's over time is stored by `history.build_rows` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
+| Rank NXray versions, or pick between the `:beta` and `:latest` tags | `app/update.py`, `parse_version` / `pick_target` |
 
 ---
 
@@ -107,7 +110,7 @@ behind.
 | `csrf_token` | `(request) -> str` | This session's anti-forgery token, derived from the session id and the switch the page is for (`switch_choice.selected_switch_id`), so a form shown for one switch is refused once another is picked | routes rendering forms | v0.1.0 |
 | `csrf_valid` | `(request, token: str) -> bool` | True when a form carries this session's token for the switch this request is for | `dependencies.require_csrf` | v0.1.0 |
 | `csrf_valid_any_switch` | `(request, token, switch_ids) -> bool` | True when the token is this session's for any of those switches or none; only for forms that change no switch (the switch picker, the theme and menu buttons) | `routes/switch_page.switches_select`, `routes/preferences.preferences` | v0.1.0 |
-| `current_user` | `(request) -> str \| None` | Resolves the cookie to a username and slides the expiry | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
+| `current_user` | `(request, *, touch=True) -> str \| None` | Resolves the cookie to a username and slides the expiry (not with `touch=False`) | `dependencies.login_required`, `routes/auth.login_form` | v0.1.0 |
 | `destroy_session` | `(conn, session_id: str) -> None` | Deletes a session immediately | `routes/auth.logout`, `security.get_session_user` | v0.1.0 |
 | `destroy_user_sessions` | `(conn, username, *, keep=None) -> int` | Signs an account out everywhere except one session | `users.set_password`, `users.set_disabled` | v0.1.0 |
 | `get_session_user` | `(conn, session_id: str) -> str \| None` | Username for a live session; ends one that expired or whose account is gone or disabled | `security.current_user` | v0.1.0 |
@@ -138,6 +141,8 @@ really invalidates rather than merely asking the browser to forget.
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
+| `share_switch_reads` | `(request, call_next) -> Response` | HTTP middleware: a whole-page refresh (`X-Requested-With: nxray-live` on a page `refreshes_whole_page` names) reads the switch through the live cache, so many open pages cost one read per interval; any other request reads the switch itself | `main.create_app` | v0.2.0 |
+| `live_login_required` | `(request) -> str` | Like `login_required` for self-refreshing figures: does not slide the session | `routes/live` | v0.2.0 |
 | `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`), and sends it as an alert when the Alerts page asks for changes (`alerts.notify_change`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
 | `paused_message` | `(seconds: int) -> str` | What the pages say while NXray leaves the switch alone after a role change | `stored_switch`, Switch page | v0.1.0 |
@@ -145,6 +150,7 @@ really invalidates rather than merely asking the browser to forget.
 | `selected_connection` | `(request) -> SwitchConnection \| None` | The switch this request is for, without its login | `routes/alerts` | v0.1.0 |
 | `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The switch this request is for (`switch_choice.selected_switch_id`), its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
 | `switch_picker` | `(request) -> tuple[list[SwitchConnection], int \| None]` | Every switch and the one this page is for; a template global for the top bar's picker | `base.html` | v0.1.0 |
+| `role_behind` | `(request) -> list[tuple[SwitchConnection, str]]` | Switches whose NXray role lacks rules this version can use, with the missing kinds of change in words; admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.0 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
@@ -160,6 +166,7 @@ raises, all handled in `main.create_app`.
 | --- | --- | --- | --- | --- |
 | `breakout_numbers` | `(name: str) -> tuple[int, int]` | Module and port of a port or split port: Ethernet1/50/2 gives (1, 50) | `NxapiClient.breakout_port`, `join_port` | v0.1.0 |
 | `build_payload` | `(commands: list[str], method="cli") -> list[dict]` | The JSON-RPC request body for running commands in order; `method="cli_ascii"` asks for the printed text instead | `NxapiClient._send`, `show_text` | v0.1.0 |
+| `check_switch_password` | `(password: str) -> str` | A password NXray may send to the switch: 8 to 64 letters and digits; the message never repeats it | `NxapiClient.create_person_account`, `set_person_password`, `switch_accounts.check_switch_side_password` | v0.2.0 |
 | `error_message` | `(error) -> str` | The most specific message in a JSON-RPC error | `nxapi.parse_response` | v0.1.0 |
 | `is_valid_host` | `(value: str) -> bool` | True for a bare hostname or IP, nothing attached | `routes/switch_page` (setup, address, repair) | v0.1.0 |
 | `format_vlan_list` | `(vlans: Iterable[int]) -> str` | `[1, 10, 11, 12]` -> `1,10-12`, as the switch writes it; `[]` -> `none` | `NxapiClient.configure_port_vlans`, `vlans` | v0.1.0 |
@@ -180,6 +187,9 @@ raises, all handled in `main.create_app`.
 | `validate_ip_interface` | `(text: str) -> str` | An IPv4 address with its prefix length a port can have (`192.0.2.1/24`); refuses the network and broadcast address | `NxapiClient.configure_port_settings`, `port_settings.plan_port_settings` | v0.1.0 |
 | `validate_show_command` | `(command: str) -> str` | Refuses anything but a single `show` command | `NxapiClient.show` | v0.1.0 |
 | `validate_checkpoint_name` | `(name: str) -> str` | Refuses any checkpoint name but NXray's own, `nxray-<number>` | `NxapiClient.create_checkpoint`, `delete_checkpoint`, `rollback_to_checkpoint` | v0.1.0 |
+| `sflow_data_source` | `(name) -> str` | `Ethernet1/5` -> `ethernet 1/5` and `port-channel41` -> `port-channel 41`, as `sflow data-source interface` takes them | `NxapiClient.configure_sflow` | v0.2.0 |
+| `validate_sflow_address` | `(text) -> str` | An IPv4 address for sFlow's collector or agent; refuses 0.0.0.0, broadcast, multicast and loopback | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
+| `validate_sflow_vrf` | `(name) -> str` | The VRF the switch reaches the collector in: `default`, `management` or a VRF name | `NxapiClient.configure_sflow`, `sflow_switch.plan_sflow` | v0.2.0 |
 | `validate_storm_level` | `(value) -> str` | A storm-control level 0-100 with up to two decimals, written as the switch writes it (`10.00`) | `NxapiClient.configure_port_settings`, `port_settings` | v0.1.0 |
 | `validate_vlan_id` | `(value: int \| str) -> int` | A VLAN number 1-4094, else `ValueError` | VLAN client methods, `vlans`, `routes/vlans` | v0.1.0 |
 | `validate_vlan_name` | `(name: str) -> str` | A VLAN name the switch stores: 1-32 letters, digits, `.`, `-`, `_` | `NxapiClient.configure_vlan`, `routes/vlans` | v0.1.0 |
@@ -191,7 +201,13 @@ raises, all handled in `main.create_app`.
 `NxapiClient(target).show(*commands)` runs show commands in one request.
 The only configuration methods are `create_user(name, password, role)`
 (letters-and-digits password, role `network-operator` only),
-`give_role(name, role)` (role `nxray-ports` only), `delete_user(name)`,
+`give_role(name, role)` (role `nxray-ports` only), `delete_user(name)`
+(those three for NXray's own account only), `create_person_account(name,
+password, roles)`, `set_person_password(name, password)`,
+`set_person_roles(name, add=, remove=)` and `remove_person_account(name)`
+(a person's switch account; letters-and-digits password, roles from
+`PERSON_ROLES` only; app/switch_accounts.py refuses NXray's own account and
+reserved names before calling them),
 `configure_port(name, description=, enabled=)` (one
 port's description and on/off, nothing else), `configure_vlan(vlan_id,
 name=None)` (create or rename), `delete_vlan(vlan_id)` (never VLAN 1),
@@ -201,7 +217,13 @@ layer=, remove_ip=, ip_address=, speed=, mtu=, fec=, flow_receive=,
 flow_send=, storm_levels=, storm_action=, old_storm_action=)` (one port's
 settings, only the ones given), `breakout_port(name, mapping)` and
 `join_port(name, mapping)` (split a 100G port into four, or join them;
-`10g-4x` or `25g-4x` only), `set_feature(command, enabled)` (`feature X` or
+`10g-4x` or `25g-4x` only), `set_load_interval(name, seconds)` (how long one
+port averages its In and Out over: `load-interval counter 1 <seconds>` for one
+of `LOAD_INTERVALS`, or `no load-interval counter 1` for None),
+`configure_sflow(sampling_rate=, collector=, vrf=, collector_port=, agent=,
+add_ports=, remove_ports=)` (where the switch sends its sFlow samples, how
+often, and which front ports and port-channels it samples; only the values given; the collector
+with its VRF), `set_feature(command, enabled)` (`feature X` or
 `no feature X` for a name in `FEATURE_COMMANDS`; never `no feature nxapi` or
 `no feature ssh`), `set_port_discovery(name, cdp=, lldp_transmit=,
 lldp_receive=)` (CDP and LLDP on one port, only the ones given),
@@ -236,7 +258,11 @@ the Switch admin page; the lines come from `switch_admin.build_admin_change`),
 `dhcp_security.build_dhcp_change`), `create_checkpoint(name)` and
 `delete_checkpoint(name)` (NXray's own `nxray-<n>` switch checkpoints),
 `rollback_to_checkpoint(name)` (sent only with the switch admin login the
-Config page asks for; NX-OS rolls back all or nothing)
+Config page asks for; NX-OS rolls back all or nothing),
+`reset_ports(names)` (`default interface <name>` for one or more front
+ports: back to how they came out of the box) and `reset_port_channel(number)`
+(the same for a port-channel's own settings; its members keep their
+channel-group membership)
 and `save_config()`; each builds its commands from checked values.
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
@@ -304,9 +330,10 @@ none reads or changes "the" switch by default.
 | `set_address` | `(conn, switch_id, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
 | `set_switch_identity` | `(conn, connection, system: SystemInfo) -> None` | Stores the model and NX-OS version the switch just reported (for the strip at the top of every page); writes only when they changed | `routes/dashboard`, `routes/switch_page` (test, address) | v0.1.0 |
 | `set_switch_hostname` | `(conn, switch_id, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
-| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_config_saved` | `(conn, switch_id, saved: bool) -> None` | Records whether the switch config was saved after setup or Run setup again | `routes/switch_page.switch_setup`, `switch_repair` | v0.1.0 |
+| `set_sflow_agent` | `(conn, switch_id, agent) -> None` | Remembers the sFlow agent address NXray set on a switch, so the collector knows its datagrams | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
 | `set_unsaved_changes` | `(conn, switch_id, unsaved: bool) -> None` | Remembers whether NXray changed the switch since the last Save config | `routes/ports`, `routes/vlans`, `routes/features`, `routes/neighbors`, `routes/port_channels`, `routes/switch_page.switch_save` | v0.1.0 |
 
 `SwitchConnection.changes_enabled` and `paused_seconds()` say whether port
@@ -334,14 +361,15 @@ the switch takes only while interface-vlan is on.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `remember_preferences` | `(request, response, *, theme="", menu="") -> Response` | Sets the `nxray_theme` / `nxray_menu` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
-| `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`) and menu width (`wide`, `narrow`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
+| `remember_preferences` | `(request, response, *, theme="", menu="", live="") -> Response` | Sets the `nxray_theme` / `nxray_menu` / `nxray_live` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
+| `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`), menu width (`wide`, `narrow`) and refresh interval (`LIVE_CHOICES`, default `off`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
 
 ## `app/switch_setup.py` — creating NXray's account
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_names` | `(user_account_body) -> set[str]` | Lower-cased local account names from `show user-account` | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
+| `password_strong_enough` | `(password) -> bool` | True when NX-OS's password strength check takes it: upper, lower, digits, no runs like `aaa` or `abc` | `generate_password`, `switch_accounts.check_switch_side_password` | v0.2.0 |
 | `check_connection` | `(target, transport=None) -> ConnectionStatus` | Signs in with NXray's account and reads `show version` | Switch page Test connection | v0.1.0 |
 | `connection_error` | `(exc, target) -> str` | The message for a failed call with NXray's own account, password scrubbed | `check_connection`, `read_switch` | v0.1.0 |
 | `describe_error` | `(exc, host, port, who) -> str` | Plain-words message for an NX-API failure, with the fix | `run_setup`, `connection_error` | v0.1.0 |
@@ -349,6 +377,7 @@ the switch takes only while interface-vlan is on.
 | `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
+| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin` | v0.2.0 |
 | `verify_account` | `(host, port, name, password, transport) -> None` | Signs in with a login NXray just set, retrying briefly; raises the `NxapiError` if it never works | `run_setup`, `switch_repair.run_repair` | v0.1.0 |
 
 `SetupError` carries the message the page shows. The admin login lives only
@@ -386,15 +415,16 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH, gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
 | `role_lines` | `(ports, account_name, vlan_interfaces=True) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off) | `enable_port_changes` | v0.1.0 |
 
 `ROLE_RULES` (ports), `VLAN_RULES`, `SETTINGS_RULES`, `FEATURE_RULES`,
-`NEIGHBOR_RULES`, `CHANNEL_RULES`, `LAYER3_RULES`, `VRF_RULES` and `ROUTE_RULES` are the role's only
-rules, and its port list names the front ports one by one plus every
+`NEIGHBOR_RULES`, `CHANNEL_RULES`, `LAYER3_RULES`, `VRF_RULES`, `ROUTE_RULES`,
+`PROTOCOL_RULES`, `STP_RULES`, `ADMIN_RULES`, `SECURITY_RULES`, `LAYER2_RULES` and
+`TRAFFIC_RULES` are the role's only rules, and its port list names the front ports one by one plus every
 port-channel (`CHANNEL_PERMIT`) and every VLAN interface
 (`VLAN_INTERFACE_PERMIT`); `ROLE_NAME` is `nxray-ports`, shared by every NXray
 install on a switch. `ROLE_VERSION` counts the rule sets (1 ports, 2 ports and
@@ -403,7 +433,10 @@ the MAC address table, 6 also port-channels and LACP, 7 also VLAN interfaces
 and IPv4 and IPv6 addresses, with `VLAN_INTERFACE_PERMIT` in the port list, 8
 also VRFs, 9 also static routes, 10 also routing protocols, 11 also spanning
 tree, 12 also switch admin and reading the running configuration, 13 also ACLs,
-port security, reading the saved configuration and NXray's checkpoints). `EnableResult.had_role`
+port security, reading the saved configuration and NXray's checkpoints, 14 also
+DHCP snooping and relay, ARP inspection, IP Source Guard, MAC ACLs, object
+groups, VLAN access maps and TCAM regions, 15 also how long the front ports
+average their rates over, `TRAFFIC_RULES`). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -450,11 +483,14 @@ among the VLANs it carries, so the switch drops its untagged traffic.
 | --- | --- | --- | --- | --- |
 | `describe_port_settings` | `(current, change, *, up) -> tuple[list[str], list[str]]` | A port's settings change in words, plus warnings (link drops, layer change, smaller MTU, shutdown action) | `routes/ports.port_settings_change` | v0.1.0 |
 | `guess_breakout_map` | `(sibling_speeds: list[str]) -> str \| None` | The split four ports were made with (`10g-4x`, `25g-4x`) from their speed column, or None | `routes/ports` | v0.1.0 |
+| `load_interval_label` | `(seconds: int) -> str` | `30` -> `30 seconds (the switch's default)`, `60` -> `1 minute`, `0` -> `unknown` | `plan_load_interval`, port page | v0.2.0 |
 | `load_port_settings` | `(client, port, vlans) -> PortSettings` | One port's settings, from one request of `settings_commands` | `try_load_port_settings` | v0.1.0 |
 | `parse_ip_addresses` | `(body) -> dict[str, tuple[str, str]]` | Each port's IPv4 address with prefix, and its VRF, from `show ip interface vrf all` | `parse_port_settings` | v0.1.0 |
 | `parse_port_settings` | `(port, vlans, capabilities_body, flowcontrol_body, storm_body, ip_body, ipv6_body=None) -> PortSettings` | One port's speed, duplex, MTU, FEC, flow control, storm control, layer, addresses (main and extra IPv4, IPv6) and breakout | `load_port_settings` | v0.1.0 |
 | `plan_breakout` | `(settings, action, mapping) -> BreakoutPlan` | Checks a split or join against the port, with its lines and warnings for the confirm page | `routes/ports.port_breakout` | v0.1.0 |
+| `plan_load_interval` | `(name, current, choice) -> LoadIntervalPlan` | Checks a rate-average choice (one of `LOAD_INTERVALS`, or `default`) against what the port has; `empty` when it already has it, else the confirm page's line and a warning for a shorter average | `routes/ports.port_rate_interval_change` | v0.2.0 |
 | `plan_port_settings` | `(current, form) -> SettingsChange` | Checks the settings form against the port (speeds it can run, MTU for its layer, FEC, levels) and keeps only what changes | `routes/ports.port_settings_change` | v0.1.0 |
+| `settings_form` | `(current) -> dict[str, str]` | The settings form filled with what the switch reports now (empty storm level = no limit), as `plan_port_settings` takes it | `routes/ports.port_forms`, `port_bulk.plan_port` | v0.2.0 |
 | `settings_commands` | `(name: str) -> tuple[str, ...]` | The per-port show commands a port's settings need | `load_port_settings` | v0.1.0 |
 | `speed_label` | `(mbps: str) -> str` | `10000` -> `10 Gb/s`, `auto` -> `Auto` | `describe_port_settings`, port page | v0.1.0 |
 | `speed_mbps` | `(text: str) -> str` | The switch's speed words as the `speed` command takes them: `10G` -> `10000` | `parse_port_settings`, `guess_breakout_map` | v0.1.0 |
@@ -490,13 +526,17 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `account_password` | `(request, username, csrf, current_password, new_password, confirm_password) -> Response` | `POST /account/password`: needs the current password (throttled like sign-in), signs out your other sessions | router | v0.1.0 |
 | `dashboard` | `(request, username) -> Response` | `GET /`, the switch's health read live | router | v0.1.0 |
 | `change_refused` | `(exc, target) -> str` | The message for a port, VLAN or settings change the switch did not make; a port the role does not name points to Update the port list | `port_change`, `ports_bulk_change`, `port_vlans_change`, `port_settings_change`, `port_breakout`, `port_discovery_change`, `routes/vlans`, `routes/features`, `routes/neighbors` | v0.1.0 |
-| `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A port change in words, and a warning when turning off an up port | `port_change`, `plan_bulk_change` | v0.1.0 |
-| `plan_bulk_change` | `(ports, names, action, description) -> tuple[list[Port], list[str], list[str], list[str]]` | Checks a change asked for several ports (known ports, an action, a valid description): the ports to change in front-panel order, a line for each, a warning for each up port being turned off, and the ticked ports already as asked | `ports_bulk_change` | v0.1.0 |
 | `feature_set` | `(request, username, csrf, name, state, confirm) -> Response` | `POST /features/set`: asks to confirm, then turns one feature on or off; admin only; refuses what `Feature.refusal` names | router | v0.1.0 |
 | `features_page` | `(request, username) -> Response` | `GET /features`: every switch feature by group with its state, read live; every role looks, admins change | router | v0.1.0 |
+| `device_rows` | `(sends, receives, neighbors) -> list[DeviceRow]` | The Traffic page's busiest devices both ways, with each one's maker, IP addresses and port from the MAC and ARP tables | `routes/traffic._render` | v0.2.0 |
+| `render_traffic_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Traffic page with a message | `routes/switch_page.switch_save` | v0.2.0 |
+| `traffic_page` | `(request, username) -> Response` | `GET /traffic?range=&mac=`: traffic per VLAN and per device measured with sFlow, the collector's state and sFlow on the switch; every role looks | router | v0.2.0 |
+| `traffic_sflow_off` | `(request, username, csrf, confirm) -> Response` | `POST /traffic/sflow-off`: asks to confirm, then turns the sflow feature off; needs traffic measuring changes | router | v0.2.0 |
+| `traffic_sflow_setup` | `(request, username, csrf, collector, vrf, collector_port, agent, sampling_rate, scope, ports, confirm) -> Response` | `POST /traffic/sflow`: asks to confirm, then turns sflow on if needed and sends only what changes; stores the agent address; needs traffic measuring changes | router | v0.2.0 |
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
 | `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
+| `settings_update_beta` | `(request, username, csrf, include_beta) -> Response` | `POST /settings/update/beta`: stores **Include beta versions** and checks again; refused while an update runs | router | v0.2.0 |
 | `settings_update_apply` | `(request, username, csrf) -> Response` | `POST /settings/update/apply`: refuses unless an update is waiting and none is running, then starts it | router | v0.1.0 |
 | `settings_update_check` | `(request, username, csrf) -> Response` | `POST /settings/update/check`: compares ghcr.io with this container now | router | v0.1.0 |
 | `settings_update_dismiss` | `(request, username, csrf) -> Response` | `POST /settings/update/dismiss`: hides the last update result | router | v0.1.0 |
@@ -512,6 +552,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `channel_create` | `(request, username, csrf, number, ports, mode, fast_rate, description, confirm) -> Response` | `POST /port-channels/create`: asks to confirm, then makes a port-channel from free ports | router | v0.1.0 |
 | `channel_delete` | `(request, username, csrf, number, confirm) -> Response` | `POST /port-channels/delete`: refuses a port-channel that still has ports (naming them), else asks to confirm and deletes it | router | v0.1.0 |
 | `channel_remove` | `(request, username, csrf, port, confirm) -> Response` | `POST /port-channels/remove`: asks to confirm, then takes a port out of its port-channel | router | v0.1.0 |
+| `channel_reset` | `(request, username, csrf, number, confirm) -> Response` | `POST /port-channels/reset`: asks to confirm, then resets a port-channel's own settings (`default interface`); needs reset changes (role version 16) | router | v0.2.0 |
 | `channel_settings` | `(request, username, csrf, number, description, min_links, confirm) -> Response` | `POST /port-channels/settings`: asks to confirm, then sets a port-channel's description and LACP minimum links | router | v0.1.0 |
 | `port_channels_page` | `(request, username) -> Response` | `GET /port-channels`: every port-channel with its ports, how they joined, their LACP rate and priority and the device at the other end, read live; operators and admins change them | router | v0.1.0 |
 | `port_lacp` | `(request, username, csrf, port, rate, priority, confirm) -> Response` | `POST /port-channels/port-lacp`: asks to confirm, then sets one member's LACP rate and port priority; a rate change only while the port is off | router | v0.1.0 |
@@ -521,6 +562,9 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_change` | `(request, username, csrf, name, action, description, back, show, color, confirm) -> Response` | `POST /ports/change`: asks to confirm, then changes one port's description or on/off; `back=ports` answers on the Ports page with the port's side panel open | router | v0.1.0 |
 | `port_discovery_change` | `(request, username, csrf, name, cdp, lldp_transmit, lldp_receive, lldp_shown, back, show, color, confirm) -> Response` | `POST /ports/discovery`: asks to confirm, then turns CDP and LLDP sending and listening on or off on one port; an unticked box means off | router | v0.1.0 |
 | `port_detail` | `(request, name, username) -> Response` | `GET /ports/detail?name=`, one port with its VLANs, settings and connected devices; 404 for an unknown name | router | v0.1.0 |
+| `port_rate_interval_change` | `(request, username, csrf, name, seconds, back, show, color, confirm) -> Response` | `POST /ports/rate-interval`: asks to confirm, then sets how long the switch averages one port's In and Out over; needs traffic measuring changes (role version 15) | router | v0.2.0 |
+| `port_reset` | `(request, username, csrf, name, back, show, color, confirm) -> Response` | `POST /ports/reset`: asks to confirm, then resets one port to how it came out of the box (`default interface`); needs reset changes (role version 16); `back=ports` answers on the Ports page with the port's side panel open | router | v0.2.0 |
+| `ports_reset_bulk` | `(request, username, csrf, names, show, color, confirm) -> Response` | `POST /ports/reset-bulk`: asks to confirm, naming every ticked port and what it removes, then resets each; needs reset changes (role version 16) | router | v0.2.0 |
 | `port_settings_change` | `(request, username, csrf, name, layer, ip_address, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, back, show, color, confirm) -> Response` | `POST /ports/settings`: asks to confirm, then sends only the settings that change | router | v0.1.0 |
 | `port_vlans_change` | `(request, username, csrf, name, mode, access_vlan, native_vlan, allowed, back, show, color, confirm) -> Response` | `POST /ports/vlans`: asks to confirm, then sets one port's mode and VLANs | router | v0.1.0 |
 | `port_label` | `(request, username, csrf, name, label, back, show, color) -> Response` | `POST /ports/label`: stores or removes a port's label in NXray, operator or admin; the switch is not called to change anything | router | v0.1.0 |
@@ -528,11 +572,13 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `port_forms` | `(request, name, ports, view, port_settings, neighbors, discovery, *, description=None, vlan_form=None, settings_form=None, label=None) -> dict` | What the forms that change one port need (`_port_forms.html`), for its own page and its side panel alike; the keyword values keep what was typed after a refusal | `_render_port`, `render_ports_page` | v0.1.1 |
 | `answer_port_change` | `(request, username, name, origin, found=None, **kwargs) -> Response` | The page a change of one port answers on: its own page, or the Ports page with its side panel open when `origin` is set | the `routes/ports` change routes, `learned_macs_clear` | v0.1.1 |
 | `change_back` | `(origin, name) -> tuple[str, str]` | Where a confirm page's Cancel goes for a change of one port, and its words: the side panel or the port's page | the `routes/ports` change routes, `learned_macs_clear` | v0.1.1 |
+| `live_ports_link` | `(show, color, port="") -> str` | The address of the Ports page's refreshing figures for the same filter, colour and open panel | `render_ports_page` | v0.2.0 |
+| `ports_summary` | `(ports, neighbors, show) -> (channels, shown, counts)` | Each port's port-channel, the ports a filter keeps and how many each filter keeps | `render_ports_page`, `routes/live.live_ports` | v0.2.0 |
 | `ports_link` | `(show, color, port="") -> str` | The Ports page's address with a filter, a colour mode and the port whose side panel is open | `render_ports_page`, `ports.html` | v0.1.0 |
-| `ports_page` | `(request, username, show, color, select, port) -> Response` | `GET /ports?show=<filter>&color=state\|speed\|vlan\|channel\|traffic\|errors&select=all&port=<name>`: the front panel and the table (`select=all` ticks every port shown; `port` opens that port's side panel); only `vlan` and an open side panel also read the VLANs (the panel also its port's settings and CDP/LLDP); every mode reads the neighbors and MAC address table | router | v0.1.0 |
-| `preferences` | `(request, username, csrf, theme, menu, next) -> Response` | `POST /preferences`, the theme and menu-width buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
-| `ports_bulk_change` | `(request, username, csrf, names, action, description, show, color, confirm) -> Response` | `POST /ports/bulk`: asks to confirm, listing every ticked port, then turns them off or on or sets one description, one request per port; the first refusal stops the rest and the page names what changed, what was refused and what was not tried | router | v0.1.0 |
-| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", form_values=None, found=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and the picked change after a refusal; with `selected`, that port's side panel is open with every change form, `form_values` keeping what was typed in one after a refusal | `ports_page`, `ports_bulk_change`, `answer_port_change`, `switch_save` | v0.1.0 |
+| `ports_page` | `(request, username, show, color, select, port, tick) -> Response` | `GET /ports?show=<filter>&color=state\|speed\|vlan\|channel\|traffic\|errors&select=all&tick=<name>&port=<name>`: the front panel and the table (`select=all` ticks every port shown; each `tick` keeps that port ticked, as `static/keep-ticks.js` asks when a colour tab, filter or Read again is followed; `port` opens that port's side panel); only `vlan` and an open side panel also read the VLANs (the panel also its port's settings and CDP/LLDP); every mode reads the neighbors and MAC address table | router | v0.1.0 |
+| `preferences` | `(request, username, csrf, theme, menu, live, next) -> Response` | `POST /preferences`, the theme, menu-width and refresh buttons (any role): sets the cookie and goes back to `next` | router | v0.1.0 |
+| `ports_bulk_change` | `(request, username, csrf, names, power, set_description, description, mode, access_vlan, native_vlan, allowed, layer, speed, mtu, fec, flow_receive, flow_send, storm_broadcast, storm_multicast, storm_unicast, storm_action, cdp, lldp_transmit, lldp_receive, clear_macs, start, fill, show, color, confirm) -> Response` | `POST /ports/bulk`: applies one shared configuration (see `app/port_bulk.py`) to every ticked port; each kind of change needs its own switch on the Switch page; asks to confirm, listing every port with old → new, then sends each port's changes one request per kind, through the same `NxapiClient` methods as a single port; the first refusal stops the rest and the page names what changed (in part, too), what was refused and what was not tried. With `fill=yes`, fills the form from the port named in `start` and changes nothing | router | v0.2.0 |
+| `render_ports_page` | `(request, username, *, show="all", color="state", error=None, notice=None, tick_all=False, ticked=None, bulk=None, selected="", form_values=None, found=None, status_code=200) -> Response` | Reads the switch and shows the Ports page with a message, keeping ticked ports and what the shared form holds after a refusal or a fill from one port; with `selected`, that port's side panel is open with every change form, `form_values` keeping what was typed in one after a refusal | `ports_page`, `ports_bulk_change`, `answer_port_change`, `switch_save` | v0.1.0 |
 | `render_port_page` | `(request, username, name, *, error=None, notice=None) -> Response` | Reads the switch and shows one port's page with a message | `port_detail`, `switch_save` | v0.1.0 |
 | `render_neighbors_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Neighbors page with a message | `switch_save` | v0.1.0 |
 | `render_features_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch and shows the Features page with a message | `switch_save` | v0.1.0 |
@@ -603,9 +649,31 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `switches_select` | `(request, username, csrf, switch_id, next) -> Response` | `POST /switches/select`, the top bar's switch picker (any role): remembers the switch and goes back to `next` | router | v0.1.0 |
 | `switch_repair` | `(request, username, csrf, host, port, admin_user, admin_password, confirm_save) -> Response` | `POST /switch/repair`, the Run setup again button; one switch change at a time | router | v0.1.0 |
 | `switch_save` | `(request, username, csrf, back, port, protocol, show, color) -> Response` | `POST /switch/save`, the Save config button; answers on the page it was pressed on (a port's page, Ports with its filter, colour mode and open side panel, VLANs, Features, Neighbors, Port-channels, Routing, else Switch) | router | v0.1.0 |
-| `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save) -> Response` | `POST /switch/setup`, one at a time: adds a switch (never one at an address already stored) and shows it | router | v0.1.0 |
+| `switch_setup` | `(request, username, csrf, host, port, admin_user, admin_password, account_name, confirm_save, turn_on_changes, ssh_port) -> Response` | `POST /switch/setup`, one at a time: adds a switch (never one at an address already stored) and shows it; with Also turn on changes ticked, also gives the account the `nxray-ports` role with the same admin login, keeping the switch set up read-only if that step fails | router | v0.1.0 |
 | `switch_test` | `(request, username, csrf) -> Response` | `POST /switch/test`, the Test connection button | router | v0.1.0 |
-| `users_create` | `(request, username, csrf, new_username, password, confirm_password, role) -> Response` | `POST /users/create`, admin only | router | v0.1.0 |
+| `users_create` | `(request, username, csrf, new_username, password, confirm_password, role, switches, admin_user, admin_password, confirm_switch) -> Response` | `POST /users/create`, admin only; with switches ticked ("NXray and the switch") also makes a local account on each with the same name and password, after checking the switch's rules first and asking to confirm the role | router | v0.1.0 |
+| `switch_status` | `(conn, user) -> list[dict]` | The user's switch accounts, each with its connection, link and what is out of step | `_render_users`, `account_page`, `account_password` | v0.2.0 |
+| `user_switch_page` | `(request, user_id, username) -> Response` | `GET /users/switch`: one user's accounts on every switch, with the forms that change them; admin only | router | v0.2.0 |
+| `render_user_switch` | `(request, username, user_id, *, error=None, notice=None, status_code=200) -> Response` | Reads each switch's local accounts with NXray's own account and shows the user's Switch accounts page | the `/users/switch` routes | v0.2.0 |
+| `read_accounts` | `(request, connection) -> tuple[list[SwitchAccount] \| None, str \| None]` | A switch's local accounts read with NXray's own account, or why not | `render_user_switch`, `user_switch_link`, `routes/users._render_users` | v0.2.0 |
+| `user_switch_create` | `(request, username, csrf, user_id, switch_id, password, confirm_password, admin_user, admin_password, confirm_roles) -> Response` | `POST /users/switch/create`: makes an existing user's account on one switch; the password typed becomes the NXray one too | router | v0.2.0 |
+| `user_switch_link` | `(request, username, csrf, user_id, switch_id, account_name) -> Response` | `POST /users/switch/link`: links an account already on the switch; changes nothing there | router | v0.2.0 |
+| `user_switch_password` | `(request, username, csrf, user_id, password, confirm_password, admin_user, admin_password) -> Response` | `POST /users/switch/password`: one new password for NXray and every linked switch account, both sides' rules checked first; opens a locked account; a switch that refuses stays out of step | router | v0.2.0 |
+| `user_switch_roles` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password) -> Response` | `POST /users/switch/roles`: gives the switch account the role its NXray role maps to; other roles stay | router | v0.2.0 |
+| `user_switch_lock` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password, confirm) -> Response` | `POST /users/switch/lock`: a random password nobody knows, saved so a restart keeps it locked | router | v0.2.0 |
+| `user_switch_remove` | `(request, username, csrf, user_id, switch_id, admin_user, admin_password, confirm) -> Response` | `POST /users/switch/remove`: removes the account from the switch and the link; the NXray user stays | router | v0.2.0 |
+| `user_switch_unlink` | `(request, username, csrf, user_id, switch_id) -> Response` | `POST /users/switch/unlink`: forgets the link; the switch is not touched | router | v0.2.0 |
+| `create_with_switches` | `(request, username, user, password, switch_ids, admin_user, admin_password) -> tuple[list[str], list[str]]` | After an NXray user was added with switches ticked: makes its account on each; what was made, and what was not and why | `users_create` | v0.2.0 |
+| `switch_account_create` | `(request, username, csrf, account_name, password, confirm_password, role, switches, admin_user, admin_password, confirm_switch) -> Response` | `POST /users/switch-account/create`: a local account on the ticked switches with no NXray user, checked on the switch's side first; the role is an NXray role's switch roles | router | v0.2.0 |
+| `switch_account_delete_page` | `(request, name, switch_id, username) -> Response` | `GET /users/switch-account/delete`: every switch that has the account, who it is linked to there, and the confirm form | router | v0.2.0 |
+| `switch_account_delete` | `(request, username, csrf, name, switches, admin_user, admin_password, confirm) -> Response` | `POST /users/switch-account/delete`: deletes a local account from the ticked switches; a linked NXray user stays, only the link goes | router | v0.2.0 |
+| `render_switch_account_delete` | `(request, username, name, *, ticked=None, error=None, notice=None, status_code=200) -> Response` | The delete-a-switch-account page | `switch_account_delete_page`, `switch_account_delete` | v0.2.0 |
+| `delete_on_switches` | `(request, username, name, connections, admin_user, admin_password) -> tuple[list[str], list[str]]` | Removes the account from each switch and any link to an NXray user there; what went and what stayed with why | `switch_account_delete`, `user_delete` | v0.2.0 |
+| `user_delete_page` | `(request, user_id, username) -> Response` | `GET /users/delete`: what deleting an NXray user takes with it, with their linked switch accounts to tick | router | v0.2.0 |
+| `user_delete` | `(request, username, csrf, user_id, switches, admin_user, admin_password, confirm) -> Response` | `POST /users/delete`: deletes the ticked switch accounts first, then the NXray user; a refusing switch keeps the user | router | v0.2.0 |
+| `render_user_delete` | `(request, username, user_id, *, error=None, status_code=200) -> Response` | The delete-an-NXray-user page | `user_delete_page`, `user_delete` | v0.2.0 |
+| `own_session` | `(request, target) -> str \| None` | This session's id when the target is the signed-in account, so a new password leaves it signed in | `routes/users`, `user_switch_create`, `user_switch_password` | v0.1.0 |
+| `switch_ids` | `(values) -> list[int]` | The ticked switches of the Add an account form, as ids | `users_create` | v0.2.0 |
 | `users_2fa_off` | `(request, username, csrf, user_id) -> Response` | `POST /users/2fa-off`: an admin turns off someone else's two-factor, no code needed | router | v0.1.0 |
 | `users_disable` | `(request, username, csrf, user_id, disabled) -> Response` | `POST /users/disable`: disables (signs out) or enables an account; not your own | router | v0.1.0 |
 | `users_page` | `(request, username) -> Response` | `GET /users`, every account, admin only | router | v0.1.0 |
@@ -667,6 +735,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `list_users` | `(conn) -> list[User]` | Every account, oldest first | `routes/users.users_page` | v0.1.0 |
 | `new_backup_codes` | `(conn, user_id) -> list[str]` | Ten new backup codes; the old ones stop working | `routes/users.account_2fa_codes` | v0.1.0 |
 | `set_disabled` | `(conn, user_id, disabled) -> User` | Disables (and signs out) or enables an account; keeps the last active admin | `routes/users.users_disable`, `resetpw.main` | v0.1.0 |
+| `check_can_delete` | `(conn, user_id) -> User` | The account, or UserError when it is gone or is the only active admin | `delete_user`, `routes/switch_accounts.user_delete` | v0.2.0 |
+| `delete_user` | `(conn, user_id) -> User` | Deletes an account, its links to switch accounts and its sessions; keeps the last active admin | `routes/switch_accounts.user_delete` | v0.2.0 |
 | `set_password` | `(conn, user_id, password, *, keep_session=None) -> None` | Stores a new password and signs the account out everywhere but `keep_session` | `routes/users`, `resetpw.main` | v0.1.0 |
 | `set_role` | `(conn, user_id, role) -> User` | Changes an account's role; keeps the last active admin | `routes/users.users_role` | v0.1.0 |
 | `turn_off_two_factor` | `(conn, user_id) -> User` | Turns two-factor off and forgets the key and backup codes | `routes/users`, `resetpw.main` | v0.1.0 |
@@ -675,6 +745,37 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 `ROLES` is the three roles, `ROLE_HELP` says what each may do in words, and
 `User.can_change` / `User.is_admin` are what the route guards test.
 `User.backup_codes_left` is how many unused backup codes an account has.
+
+## `app/switch_accounts.py` — switch accounts for NXray users
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `bring_roles_in_step` | `(client, name, wanted) -> tuple[str, ...]` | Adds the wanted roles the account lacks and takes off the other roles NXray gives people; any other role stays | `routes/switch_accounts.user_switch_roles` | v0.2.0 |
+| `check_switch_name` | `(name) -> str` | The NXray username as a switch account name, or `ValueError` naming the switch's rule (format, reserved names) | `routes/users.users_create`, `routes/switch_accounts` | v0.2.0 |
+| `check_switch_side_password` | `(password) -> None` | Raises `ValueError` saying it is the switch's rule: letters and digits only, and its strength check | `routes/users.users_create`, `routes/switch_accounts` | v0.2.0 |
+| `create_on_switch` | `(client, name, password, roles) -> None` | Makes the account, unless the switch already has one by that name (to be linked instead, never overwritten) | `routes/switch_accounts` | v0.2.0 |
+| `get_link` | `(conn, user_id, switch_id) -> AccountLink \| None` | One user's account on one switch, as NXray last left it | `routes/switch_accounts` | v0.2.0 |
+| `guard_account` | `(name, connection) -> None` | Refuses NXray's own account on that switch and the names the switch keeps for itself (its admin among them) | every switch account change | v0.2.0 |
+| `list_links` | `(conn, *, user_id=None) -> list[AccountLink]` | Every link, or one user's | `routes/users`, `routes/switch_accounts` | v0.2.0 |
+| `load_switch_accounts` | `(client) -> list[SwitchAccount]` | The switch's local accounts from `show user-account` | `create_on_switch`, `bring_roles_in_step`, `routes/switch_accounts.read_accounts` | v0.2.0 |
+| `remove_from_switch` | `(client, name) -> None` | Removes a local account, or says the switch has none by that name | `routes/switch_accounts.delete_on_switches` | v0.2.0 |
+| `lock_password` | `() -> str` | A random password nobody sees, which locks a switch account | `routes/switch_accounts.user_switch_lock` | v0.2.0 |
+| `out_of_step` | `(user, link, connection) -> list[str]` | What differs between the NXray user and its switch account (role, password, disabled versus locked), in words | `routes/users`, `routes/switch_accounts` | v0.2.0 |
+| `parse_user_accounts` | `(body) -> list[SwitchAccount]` | Every local account and its roles from `show user-account`, by name | `load_switch_accounts` | v0.2.0 |
+| `remove_link` | `(conn, user_id, switch_id) -> None` | Forgets a link; the switch is not touched | `routes/switch_accounts` | v0.2.0 |
+| `reserved` | `(name) -> bool` | True for a name NX-OS keeps for itself, or the switch's own admin account | `check_switch_name`, `guard_account`, the Users pages | v0.2.0 |
+| `run_as_admin` | `(connection, admin_user, admin_password, change, *, secrets=(), transport=None) -> AccountChange` | Signs in with the admin login typed on the form, makes the change, saves the configuration; secrets scrubbed from every message; a failed save is returned, not raised | `routes/switch_accounts` | v0.2.0 |
+| `save_link` | `(conn, user_id, switch_id, account_name, roles, *, password_set) -> None` | Records which switch account belongs to the user; refuses one another user has | `routes/switch_accounts` | v0.2.0 |
+| `save_words` | `(change, connection) -> str` | What the page says about saving the switch configuration after a change (a restart undoes an unsaved one) | `routes/switch_accounts` | v0.2.0 |
+| `switch_roles` | `(role, changes_on) -> tuple[str, ...]` | The switch roles for an NXray role: viewer network-operator, operator network-operator + nxray-ports (where changes are on), admin network-admin | `routes/users`, `routes/switch_accounts`, `out_of_step` | v0.2.0 |
+| `update_link` | `(conn, user_id, switch_id, *, roles=None, password_set=False, locked=None) -> None` | Notes what NXray just changed on a linked account | `routes/switch_accounts` | v0.2.0 |
+
+The commands come from `NxapiClient.create_person_account`,
+`set_person_password`, `set_person_roles` and `remove_person_account`, kept
+apart from `create_user` and `delete_user`, which exist only for NXray's own
+account. Each takes only the roles in `PERSON_ROLES`. No switch password is
+stored: `switch_accounts.password_set_at` and `users.password_changed_at` are
+times, so out of step is worked out without one.
 
 ## `app/resetpw.py` — password reset from the command line
 
@@ -693,18 +794,63 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `apply_update` | `(db_path) -> str \| None` | Marks an update running, starts the throwaway container that pulls and recreates, and watches it on a thread; an error text or `None` | `routes/settings_page.settings_update_apply` | v0.1.0 |
-| `check_for_updates` | `(conn, *, dev_build=False) -> str` | Compares ghcr.io's digest for this container's tag with what runs; `"available"`, `"current"` or why nothing was compared | `routes/settings_page.settings_update_check`, `start_background_checker` | v0.1.0 |
+| `check_for_updates` | `(conn, *, dev_build=False) -> str` | Compares ghcr.io's digest for this container's tag with what runs, or, with betas on or a beta running, ranks the GitHub releases with `pick_target`; `"available"`, `"current"` or why nothing was compared | `routes/settings_page.settings_update_check`, `settings_update_beta`, `start_background_checker` | v0.1.0 |
 | `clear_result` | `(conn) -> None` | Forgets the last update result | `routes/settings_page.settings_update_dismiss` | v0.1.0 |
 | `current_state` | `(conn) -> UpdateState` | The update row, with an old success hidden | `routes/settings_page`, `watch_update` | v0.1.0 |
 | `deployed_digests` | `(image_id) -> set[str] \| None` | Registry digests of the image the container runs; `None` for an image built locally | `check_for_updates` | v0.1.0 |
 | `deployment` | `() -> Deployment \| None` | Asks Docker what this container was made from and which compose project owns it | `check_for_updates`, `start_update` | v0.1.0 |
 | `finish_pending_update` | `(conn) -> None` | At start: an update still running means this is its replacement, so record success | `main.lifespan` | v0.1.0 |
+| `github_releases` | `() -> list[str] \| None` | The version names of NXray's published releases and betas from api.github.com, drafts left out; `None` on any failure | `check_for_updates` | v0.2.0 |
 | `ghcr_digest` | `(tag) -> str \| None` | The digest ghcr.io has for a tag; `None` on any failure | `check_for_updates` | v0.1.0 |
+| `is_beta` | `(text) -> bool` | Whether a version names a beta (`0.2.0-beta.1`) | `check_for_updates`, `routes/settings_page` | v0.2.0 |
 | `own_container` | `() -> str` | The name Docker knows this container by (its hostname) | `deployment` | v0.1.0 |
+| `parse_version` | `(text) -> Version \| None` | A sortable key for `0.2.0`, `v0.2.0` or `0.2.0-beta.3`: numbers first, a release above its betas; `None` for anything else | `pick_target`, `is_beta` | v0.2.0 |
+| `pick_target` | `(running, releases, include_beta) -> Target \| None` | The tag to move to (`:beta` while a beta is ahead of the latest release and betas are on, else `:latest`) and its version; `None` unless it is newer than `running` | `check_for_updates` | v0.2.0 |
 | `reap_stalled_update` | `(conn) -> None` | Fails an update that never replaced the container | `routes/settings_page` | v0.1.0 |
+| `running_version` | `() -> str` | The version of the code in this container (`app.__version__`, which a beta image carries with its beta name) | `check_for_updates`, `routes/settings_page` | v0.2.0 |
+| `set_include_beta` | `(conn, include) -> None` | Stores the **Include beta versions** choice; installs nothing | `routes/settings_page.settings_update_beta` | v0.2.0 |
 | `start_background_checker` | `(settings) -> None` | Checks once a day on a thread; does nothing with self-update off | `main.lifespan` | v0.1.0 |
-| `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator | `apply_update` | v0.1.0 |
+| `start_update` | `(conn) -> str \| None` | Refuses an image or container compose did not make, else marks the update running and launches the recreator with the chosen tag as `NXRAY_TAG` | `apply_update` | v0.1.0 |
 | `watch_update` | `(db_path) -> None` | Waits for the recreator; records a failure (or a no-op success) if this container is still alive | `apply_update` | v0.1.0 |
+
+## `app/live.py` — figures that refresh themselves
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `health_figures` | `(value) -> (cpu, memory)` | What the trail keeps of a dashboard reading: CPU and memory in use, in percent (None when not given) | `routes/live.live_dashboard` | v0.2.0 |
+| `health_trail_chart` | `(trail, *, now, floor) -> ChartView` | The dashboard's CPU and memory chart of the last `TRAIL_SECONDS`, from the trail; says how to fill it when empty | `routes/dashboard`, `routes/live.live_dashboard` | v0.2.0 |
+| `measure_rates` | `(previous, ports, now) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over 120 s | `routes/live.shared_readings` | v0.2.0 |
+| `port_figures` | `(reading) -> dict[str, PortFigures]` | What the trail keeps of one port reading: each port's state, the switch's averages and the measured rates (None without an earlier reading) | `routes/live.shared_readings` | v0.2.0 |
+| `port_trail_chart` | `(trail, name, *, measured, now, floor) -> ChartView` | One port's In and Out over the last `TRAIL_SECONDS` from the trail, measured (Live) or the switch's averages; a down port or an unmeasured reading leaves a gap | `routes/ports._render_port`, `routes/live.live_port` | v0.2.0 |
+| `refreshes_whole_page` | `(method, path) -> bool` | True for a page shown by GET that reads the switch and nothing else changes on (VLANs, Traffic, Routing, Switch ...), which the Refresh box re-reads as a whole; a template global | `base.html`, `dependencies.share_switch_reads` | v0.2.0 |
+| `shared_show_reads` | `(cache, floor, text_floor) -> share` | The function `nxapi.shared_reads` holds for one whole-page refresh: each switch, account and command is read at most once per floor (`text_floor` for printed text), a rejected command is remembered as rejected, and each caller gets its own copy | `dependencies.share_switch_reads` | v0.2.0 |
+| `pick_interval` | `(choice, floor) -> int` | Seconds between refreshes for a picked choice, never below the floor; 0 for Off or anything unknown | tests; `live.js` repeats the rule in the browser | v0.2.0 |
+
+| `trail_spacing` | `(trail, floor) -> float` | The usual gap between a trail's readings (the median, never below `floor`), so a chart breaks its line only at a real gap | `port_trail_chart`, `health_trail_chart` | v0.2.0 |
+
+`PortReading` (class) is one reading: `ports` (the switch's 30 s averages), `live` (counter-based rates), `window` seconds between the two readings, `at`.
+
+`LiveCache` (class) keeps the newest reading per (switch id, kind):
+`get(switch_id, kind, floor, reader)` runs `reader(previous)` only when the
+reading is older than `floor`, one read at a time per key, keeps the last good
+value and waits longer after each failure; with `figures=`, each fresh reading
+also puts `figures(value)` on the entry's trail, the last `TRAIL_SECONDS` kept in
+memory only and handed back as `LiveAnswer.trail`. `trail(switch_id, kind)`
+returns that trail without reading the switch or counting as someone watching
+(for a page opened while another browser's refresh runs). `LIVE_CHOICES` is the
+list shown in the top bar. Held in `app.state.live_cache`.
+
+## `app/routes/live.py` — the refresh answers
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `live_neighbors` | `(request, username, q) -> Response` | `GET /live/neighbors`: who announces themselves, the busiest devices and the MAC table narrowed by `q`; ports and tables read at the slower clients pace | router, `live.js` | v0.2.0 |
+| `live_port` | `(request, username, name, rates) -> Response` | `GET /live/port`: one port's state, rates, counters and devices; 204 for an unknown port | router, `live.js` | v0.2.0 |
+| `live_ports` | `(request, username, show, color, port, rates) -> Response` | `GET /live/ports`: the Ports page's counts, front panel and port rows (no VLAN colouring) | router, `live.js` | v0.2.0 |
+| `live_dashboard` | `(request, username) -> Response` | `GET /live/dashboard`: the dashboard's figures alone, read through the cache; 204 with no switch | router, `live.js` | v0.2.0 |
+| `live_problem_message` | `(answer) -> str` | The banner for a failed read, saying the figures shown are older and when NXray tries again | `live_dashboard` | v0.2.0 |
+| `shared_readings` | `(request, switch_id, target, ports_floor=None) -> (LiveAnswer, NeighborView \| None)` | The newest port reading and neighbour/MAC reading through the cache, shared by every live page; `ports_floor` slows the port read for pages that need it less often | `live_ports`, `live_port`, `live_neighbors` | v0.2.0 |
+| `no_cache` | `(response) -> Response` | Marks a response not to be stored by the browser | `live_dashboard` | v0.2.0 |
 
 ## `app/history.py` — history
 
@@ -712,25 +858,89 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | --- | --- | --- | --- | --- |
 | `bucket_seconds` | `(span: int) -> int` | How wide one chart point is: a minute at least, and at most 500 points | `system_charts`, `port_charts` | v0.1.0 |
 | `build_rows` | `(environment, resources, ports, previous_errors) -> (rows, error_totals)` | The rows one sample stores; a port's errors as the increase since the last sample | `Sampler.sample_switch` | v0.1.0 |
+| `chart_view` | `(title, lines, *, start, end, bucket, fmt, summarize=None, note="", empty=..., zero_based=True, y_max=None, anchor="") -> ChartView` | One chart's card: the SVG with a legend (now and highest unless `summarize` says otherwise), or the `empty` words when no line has a point | `system_charts`, `port_charts`, `vlan_charts`, `live.port_trail_chart`, `live.health_trail_chart` | v0.2.0 |
 | `fill_zeros` | `(points, start, end, bucket) -> list` | Every bucket of a range, 0 where there is no point | `port_charts` | v0.1.0 |
-| `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page` | v0.1.0 |
+| `last_sample_time` | `(conn, switch_id) -> float \| None` | When a switch's newest row was stored | `routes/history.history_page`, `latest_vlan_traffic` | v0.1.0 |
+| `latest_vlan_traffic` | `(conn, switch_id, *, now, max_age) -> dict[int, (in, out)]` | Each VLAN's estimated traffic in a switch's newest sample; empty when that sample is older than `max_age` | `routes/vlans._vlan_traffic` | v0.2.0 |
+| `percent_text` | `(value: float) -> str` | An axis value in percent, at most one decimal: `45.56` -> `45.6%` | the charts | v0.2.0 |
 | `port_charts` | `(conn, switch_id, port, key, now) -> list[ChartView]` | One port's traffic and errors charts for a range | `routes/ports._render_port` | v0.1.0 |
 | `purge` | `(conn, now, keep_days=30) -> int` | Deletes every switch's rows older than the retention; how many went | `start_sampler` | v0.1.0 |
+| `rate_text` | `(value: float) -> str` | An axis rate: `500000000` -> `500 Mb/s` | the charts | v0.2.0 |
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
 | `read_series` | `(conn, switch_id, metric, *, start, end, bucket, item=None, total=False) -> dict` | A switch's rows of a metric averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
 | `record` | `(conn, switch_id, moment, rows) -> None` | Stores one sample's rows for a switch | `Sampler.sample_switch` | v0.1.0 |
 | `start_sampler` | `(settings, transport, alert_transport=lambda: None) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, checking the alerts against each sample and purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
 | `system_charts` | `(conn, switch_id, key, now) -> list[ChartView]` | The History page's charts of a switch for a range | `routes/history.history_page` | v0.1.0 |
+| `vlan_charts` | `(conn, switch_id, key, now) -> list[ChartView]` | Each VLAN's estimated traffic in and out for a range, the busiest `MAX_VLAN_LINES` VLANs in the same colours on both charts | `routes/history.history_page` | v0.2.0 |
 
 `Sampler` (class) samples every switch in turn: `sample_once(now=None)` reads
 each one and returns what failed in words (None when all went well), and
 `sample_switch(switch_id, now=None)` reads one. It keeps each switch's error
 totals and `alerts.AlertMonitor` apart.
 
+## `app/traffic.py` — traffic per device and per VLAN, estimated
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `busiest_devices` | `(traffic, limit=10) -> list[DeviceTraffic]` | The devices with the most traffic, busiest first; idle ones left out | `routes/neighbors._render` | v0.2.0 |
+| `device_traffic` | `(ports, neighbors) -> dict[str, DeviceTraffic]` | By MAC address: every device alone on an access port that is up, with that port's rates as its own | `load_device_traffic`, `routes/ports` | v0.2.0 |
+| `load_device_traffic` | `(client, neighbors) -> dict[str, DeviceTraffic]` | `device_traffic` with the ports read fresh (`show interface` only); empty when the switch refuses it | `routes/neighbors._read` | v0.2.0 |
+| `port_device` | `(port, devices) -> (MacEntry \| None, str)` | The one device a port's traffic belongs to, or why there is none (trunk, port-channel, several addresses) in words | `device_traffic`, `routes/ports._render_port` | v0.2.0 |
+| `vlan_traffic` | `(ports) -> dict[int, VlanTraffic]` | By VLAN: the access ports that are up, added up; trunks and routed ports left out | `history.build_rows` | v0.2.0 |
+
+These are estimates from per-port counters; what each leaves out is in
+[Traffic per VLAN and per device](traffic.md). `DeviceTraffic` names the rates
+from the device's side (it *sends* what comes in on the port).
+
+## `app/sflow.py` — the sFlow collector: traffic per VLAN and per device, measured
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `agent_addresses` | `(connections) -> dict[str, int]` | Which agent address is which switch, from (id, host, stored agent): the stored agent, else the host when it is an IP address | `load_agents` | v0.2.0 |
+| `decode_datagram` | `(data: bytes) -> Datagram` | One sFlow version 5 datagram's flow samples (formats 1 and 3: raw header, Ethernet frame and extended switch records), bounds-checked; raises `SflowError` | `SflowCollector.receive` | v0.2.0 |
+| `device_label` | `(item) -> str` | A device item in words (`Other devices` for the left-over) | the Traffic page | v0.2.0 |
+| `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts`, `vlan_cards` | v0.2.0 |
+| `latest_minute` | `(conn, switch_id) -> float \| None` | When a switch's newest stored minute began | `routes/traffic` | v0.2.0 |
+| `load_agents` | `(db_path) -> dict[str, int]` | `agent_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
+| `minute_rows` | `(switch_id, minute, totals) -> list[SflowRow]` | One minute's rows: every VLAN, the busiest `MAX_DEVICES_PER_MINUTE` devices each way, the rest as `other` | `SflowCollector.drain` | v0.2.0 |
+| `parse_frame_header` | `(header: bytes) -> dict` | MAC addresses, 802.1Q VLAN and IPv4 or IPv6 addresses from the first bytes of an Ethernet frame | `decode_datagram` | v0.2.0 |
+| `purge_sflow` | `(conn, now, keep_days) -> int` | Deletes rows older than `NXRAY_SFLOW_KEEP_DAYS` | `run_collector` | v0.2.0 |
+| `run_collector` | `(sock, collector, db_path, keep_days, stop, clock=time.time) -> None` | The listener's loop: receive, write the minutes that are over every 10 s, look the switches up again every 30 s, purge hourly; writes what is left when stopped | `start_collector` | v0.2.0 |
+| `sflow_charts` | `(conn, switch_id, key, now, mac="") -> list[ChartView]` | One device's sends and receives over a range when `mac` is given, else none | `routes/traffic` | v0.2.0 |
+| `start_collector` | `(port, collector, db_path, keep_days) -> Event \| None` | Listens on UDP `port` on a thread; None when the port is 0 or cannot be opened (logged) | `main.lifespan` | v0.2.0 |
+| `store_rows` | `(conn, rows) -> None` | Adds rows to `sflow_traffic`; a minute written twice adds up | `run_collector` | v0.2.0 |
+| `top_items` | `(conn, switch_id, kind, *, start, end, limit=20) -> list[TopItem]` | The busiest VLANs or devices over a range, with their average in bits per second | `sflow_charts`, `vlan_cards`, `routes/traffic` | v0.2.0 |
+| `vlan_cards` | `(conn, switch_id, key, now) -> list[VlanCard]` | A card per busiest VLAN over a range, busiest first: latest, highest and average figures and a filled-area chart | `routes/traffic` | v0.2.0 |
+| `vlan_label` | `(item) -> str` | `VLAN 10`, or `VLAN not given` | the Traffic page, `vlan_cards` | v0.2.0 |
+
+`SflowCollector` (class, `app.state.sflow_collector`) adds samples up in memory
+per switch and minute: `receive(data, now=None)` counts a datagram only when its
+agent address is one of NXray's switches (`set_agents`), else notes the address
+(`unknown_agents()`); `drain(now, everything=False)` hands out the minutes that
+are over; `status(switch_id)` is what was heard since NXray started. Kinds are
+`VLAN` (`vlan`), `MAC_SENDS` (`mac_out`) and `MAC_RECEIVES` (`mac_in`).
+
+## `app/sflow_ports.py` — which VLAN an untagged frame belongs to
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_port_vlans` | `(switchport, ifindex) -> dict[int, int]` | SNMP ifIndex -> the VLAN of an untagged frame on that port (an access port's VLAN, a trunk's native VLAN) from `show interface switchport` and `show interface snmp-ifindex`; routed ports have none | `load_port_vlans` | v0.2.0 |
+| `load_port_vlans` | `(client) -> dict[int, int]` | `parse_port_vlans` over what the switch says now, in one request | `history.Sampler` | v0.2.0 |
+
+## `app/sflow_switch.py` — sFlow on the switch
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `load_sflow_config` | `(client) -> SflowConfig` | `show feature` and `show port-channel summary`, then `show sflow` as text while the feature is on | `routes/traffic._read` | v0.2.0 |
+| `parse_sflow_text` | `(text, port_channels=()) -> SflowConfig` | `show sflow`'s sampling rate, collector and VRF, port, agent and sampled ports and port-channels (ranges expanded); 0.0.0.0 reads as not set | `load_sflow_config` | v0.2.0 |
+| `plan_sflow` | `(current, ports, form) -> SflowPlan` | Checks the setup form (addresses, VRF, port, rate, which ports) and keeps only what changes, with the confirm page's lines and warnings; a port in a port-channel is sampled through its port-channel | `routes/traffic.traffic_sflow_setup` | v0.2.0 |
+| `sflow_form` | `(current, *, collector, agent, port, front=()) -> dict` | The setup form filled with what the switch has, else with NXray's guesses; every front port sampled reads as "every front port" | `routes/traffic._render` | v0.2.0 |
+
 ## `app/charts.py` — SVG line charts
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `area_chart` | `(points, *, start, end, bucket, fmt, colour=0, label="") -> Markup` | One series as a short filled-area SVG from zero, the value axis on the right, breaking at gaps | `sflow.vlan_cards` | v0.2.0 |
 | `line_chart` | `(lines, *, start, end, bucket, fmt, zero_based=True, y_max=None, label="") -> Markup` | Draws lines over a time range as inline SVG, breaking a line where samples are missing | `history._chart` | v0.1.0 |
 | `nice_ticks` | `(low, high, target=5) -> list[float]` | Round axis values covering a range | `line_chart` | v0.1.0 |
 | `time_label` | `(moment, step) -> str` | An axis label: the clock time, or the date for a midnight or labels a day apart (UTC) | `line_chart` | v0.1.0 |
@@ -755,6 +965,26 @@ totals and `alerts.AlertMonitor` apart.
 The colours are CSS classes (`f-up`, `f-t2`, `f-vlan s3`, ...) in
 `static/style.css`; the SVG carries no inline style, so the strict
 Content-Security-Policy holds.
+
+## `app/port_bulk.py` — one shared configuration for several ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `bulk_kinds` | `(form) -> set[str]` | Which kinds of change the shared form asks for: `port` (on/off, description), `vlans`, `settings`, `discovery`, `macs`; each needs its own switch on the Switch page | `check_bulk_form`, `plan_port`, `routes/ports.ports_bulk_change` | v0.2.0 |
+| `change_summary` | `(port, action, description) -> tuple[str, str \| None]` | A change of one port's on/off or description in words, and a warning when turning off an up port | `plan_port`, `routes/ports.port_change` | v0.1.0 |
+| `check_bulk_form` | `(form) -> dict[str, str]` | Checks what does not depend on the port (choices offered, description, VLAN numbers and list, storm levels, no VLANs with routed) and returns the form cleaned up; empty means leave as it is | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `empty_bulk_form` | `() -> dict[str, str]` | The shared form with every setting at "leave as it is" | `routes/ports.render_ports_page`, `form_from_port` | v0.2.0 |
+| `form_from_port` | `(port, settings, vlans, discovery) -> dict[str, str]` | The shared form filled with one port's VLANs, settings and CDP/LLDP ("Start from port"); never on/off, description, address, or the speed of an up port | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `group_warnings` | `(plans) -> list[str]` | Each confirm-page warning once, naming the ports it is about | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `plan_bulk` | `(ports, names, form, *, view, settings, discovery, neighbors) -> tuple[list[PortPlan], list[str]]` | Plans the shared form for every ticked port, in front-panel order, and the ports already as asked; raises naming every port that cannot take it, so nothing is sent | `routes/ports.ports_bulk_change` | v0.2.0 |
+| `plan_port` | `(port, form, *, view, settings, discovery, neighbors, port_names) -> PortPlan` | Plans the shared form for one port with the single-port planners (`plan_port_settings`, `plan_port_vlans`, `plan_port_discovery`, `plan_clear`): its steps (one request each, settings first so a layer change sets what the VLANs start from), lines, warnings and notes | `plan_bulk` | v0.2.0 |
+
+Each `PortPlan.steps` entry is a `BulkStep` that calls one of the existing
+`NxapiClient` methods (`configure_port_settings`, `configure_port_vlans`,
+`set_port_discovery`, `configure_port`, `clear_learned_macs`), so the bulk
+form sends nothing a port's own page could not, and the role NXray's
+account is given already allows all of it. Not offered for several ports:
+an IPv4 address (two ports cannot share one), the label and breakout.
 
 ## `app/port_labels.py` — port labels
 
@@ -837,6 +1067,18 @@ A port-channel's LACP minimum links appears only in `show running-config`,
 which NXray's role may not read, so its form has no current value.
 NXray refuses to delete a port-channel that still has ports; the switch itself
 would take them out silently.
+
+## `app/port_reset.py` — resetting a port or a port-channel to its defaults
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `port_reset_summary` | `(port, settings, vlans) -> tuple[str, list[str]]` | The confirm line for resetting one port: everything it removes (description, VLANs, speed, MTU, FEC, flow control, storm control, layer, IP address), or that it is already a plain access port; a warning when it is up | `routes/ports.port_reset`, `plan_bulk_reset` | v0.2.0 |
+| `plan_bulk_reset` | `(ports, names, view, settings) -> tuple[list[Port], list[str], list[str]]` | Every ticked port, in front-panel order, with one confirm line each and every warning once; `ValueError` naming any ticked port the switch does not have | `routes/ports.ports_reset_bulk` | v0.2.0 |
+| `channel_reset_summary` | `(channel) -> tuple[str, list[str]]` | The confirm line for resetting a port-channel's own settings (its description); warns which member ports it affects and that they keep their channel-group membership | `routes/port_channels.channel_reset` | v0.2.0 |
+
+`NxapiClient.reset_ports` and `reset_port_channel` (app/nxapi.py) send
+`default interface <name>`; the role rule for it is `RESET_RULES`
+(app/port_changes.py, `ROLE_VERSION` 16).
 
 ## `app/protocols.py` — routing protocols as data: fields, settings, scopes
 

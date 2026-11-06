@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from "_chart.html" import chart, range_links %}
+{% block title %}Traffic — NXray{% endblock %}
+
+{% macro setup_card() %}
+{% set role = current_role(request) %}
+{% if config is not none and can_change %}
+<section class="card card-form" id="setup">
+  <h2 class="card-title">Send sFlow to NXray</h2>
+  {% if not connection.traffic_changes_enabled %}
+  <p class="lead">Traffic measuring changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to set sFlow up from here.</p>
+  {% else %}
+  <form method="post" action="/traffic/sflow" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="collector">NXray's address, as the switch reaches it</label>
+    <input id="collector" name="collector" type="text" value="{{ form.collector }}" inputmode="decimal" spellcheck="false" required>
+    <p class="hint">An IPv4 address of the machine NXray runs on. Filled in from the address your browser used, which is often right.</p>
+    <label for="vrf">VRF the switch reaches it in</label>
+    <input id="vrf" name="vrf" type="text" value="{{ form.vrf }}" spellcheck="false">
+    <p class="hint"><code>management</code> when NXray is on the same network as the switch's management port (mgmt0), <code>default</code> when it is reached through the front ports.</p>
+    <label for="collector_port">UDP port</label>
+    <input id="collector_port" name="collector_port" type="text" inputmode="numeric" value="{{ form.collector_port }}">
+    <p class="hint">The left number of the <code>/udp</code> line in docker-compose.yml{% if sflow_port %} (NXray listens on {{ sflow_port }} inside its container){% endif %}.</p>
+    <label for="agent">The switch's agent address</label>
+    <input id="agent" name="agent" type="text" value="{{ form.agent }}" inputmode="decimal" spellcheck="false" required>
+    <p class="hint">One of the switch's own IPv4 addresses; every datagram carries it, and NXray uses it to tell which switch sent it. Its management address is the usual choice.</p>
+    <label for="sampling_rate">Sample one frame in</label>
+    <select id="sampling_rate" name="sampling_rate">
+      {% for rate in rates %}<option value="{{ rate }}" {% if form.sampling_rate == rate|string %}selected{% endif %}>{{ rate }}{% if loop.first %} (the switch's default){% endif %}</option>{% endfor %}
+    </select>
+    <fieldset class="stack">
+      <legend>Ports to sample</legend>
+      {% for key, words in scopes.items() %}
+      <label class="check"><input type="radio" name="scope" value="{{ key }}" {% if form.scope == key %}checked{% endif %}> {{ words }}</label>
+      {% endfor %}
+      <input id="ports" name="ports" type="text" value="{{ form.ports }}" spellcheck="false" aria-label="Ports to sample" placeholder="Ethernet1/1, Ethernet1/3-6, port-channel41">
+      <p class="hint">For "These ports": front ports and port-channels separated by commas; a range such as Ethernet1/3-6 works. A port in a port-channel is sampled through its port-channel, which covers all its ports. Each frame is counted on the port it comes in on, so sampling every port counts each frame once.</p>
+    </fieldset>
+    <button type="submit" class="btn btn-primary">Set up sFlow</button>
+  </form>
+  <p class="note">It asks you to confirm first, and sends only what changes. Turns the sflow feature on when it is off.</p>
+  {% if config.feature_on %}
+  <form method="post" action="/traffic/sflow-off" class="inline-actions">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-quiet">Turn sFlow off on the switch</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+{% set role = current_role(request) %}
+<h1 class="page-title">Traffic</h1>
+
+{% if not connection %}
+<div class="card empty-state">
+  <span class="empty-mark">◇</span>
+  <h2>No switch connected yet</h2>
+  <p>Measured traffic is shown once a switch is set up.</p>
+  {% if role == "admin" %}
+  <p class="actions"><a class="btn btn-primary" href="/switch">Set up the switch</a></p>
+  {% else %}
+  <p class="note">An NXray admin sets it up on the Switch page.</p>
+  {% endif %}
+</div>
+{% else %}
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+{% if connection.unsaved_changes and can_change %}
+<div class="warning warning-row">
+  <span>NXray changed the switch since its configuration was last saved.</span>
+  <form method="post" action="/switch/save" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="traffic">
+    <button type="submit" class="btn btn-quiet">Save config</button>
+  </form>
+</div>
+{% endif %}
+
+<p class="lead">Traffic per VLAN and per device, <strong>measured</strong> from samples the switch sends with sFlow: trunks and ports with several devices behind them included. For the estimates NXray works out from the port counters alone, see the <a href="/vlans">VLANs</a> and <a href="/neighbors">Neighbors</a> pages.</p>
+
+<div class="grid">
+  <section class="card">
+    <h2 class="card-title">NXray's collector</h2>
+    {% if listening_port %}
+    <p class="lead"><span class="badge badge-ok">Listening</span> on UDP port {{ listening_port }}. Keeps {{ keep_days }} day{{ "" if keep_days == 1 else "s" }} of measured traffic.</p>
+    {% elif sflow_port %}
+    <p class="alert alert-error" role="alert">NXray could not listen on UDP port {{ sflow_port }}: another program may use it. NXray's log says why.</p>
+    {% else %}
+    <p class="lead"><span class="badge badge-unknown">Off</span> NXRAY_SFLOW_PORT is not set, so NXray does not listen for sFlow. Set <code>NXRAY_SFLOW_PORT=6343</code> in nxray.env, uncomment the <code>"6343:6343/udp"</code> line in docker-compose.yml, and run <code>docker compose up -d</code>.</p>
+    {% endif %}
+    <dl class="facts">
+      <dt>From this switch</dt>
+      <dd>{% if heard %}{{ "{:,}".format(heard.samples) }} samples in {{ "{:,}".format(heard.datagrams) }} datagrams since NXray started; the last at {{ heard.last_at|utc }}{% if heard.sampling_rate %}, one frame in {{ heard.sampling_rate }}{% endif %}{% else %}nothing since NXray started{% endif %}</dd>
+      <dt>Newest stored minute</dt><dd>{% if newest %}{{ newest|utc }}{% else %}none yet{% endif %}</dd>
+    </dl>
+    {% if unknown_agents %}
+    <p class="warning">sFlow also came from {% for address, at in unknown_agents[:5] %}{{ address }}{% if not loop.last %}, {% endif %}{% endfor %}, which {{ "is" if unknown_agents|length == 1 else "are" }} not one of NXray's switches, so it was not counted. If it is this switch, its agent address differs from what NXray knows: set it below.</p>
+    {% endif %}
+    <p class="note">sFlow has no password: NXray counts only datagrams that name one of its switches as the agent, but anyone who can reach this port could send made-up ones. Keep it on a network you trust.</p>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">sFlow on the switch</h2>
+    {% if config is none %}
+    <p class="alert alert-error" role="alert">{{ status.message if status else "The switch could not be read." }}</p>
+    {% elif not config.feature_on %}
+    <p class="lead"><span class="badge badge-unknown">Off</span> The sflow feature is off on the switch, so it sends no samples.</p>
+    {% else %}
+    <dl class="facts">
+      <dt>Feature</dt><dd><span class="badge {{ 'badge-ok' if config.sending else 'badge-warn' }}">{{ "Sending" if config.sending else "On, not sending" }}</span></dd>
+      <dt>Samples go to</dt><dd>{% if config.collector %}{{ config.collector }} port {{ config.collector_port or 6343 }}{% if config.collector_vrf %} (VRF {{ config.collector_vrf }}){% endif %}{% else %}nowhere yet{% endif %}</dd>
+      <dt>Agent address</dt><dd>{{ config.agent or "not set" }}</dd>
+      <dt>Sampling</dt><dd>{% if config.sampling_rate %}one frame in {{ config.sampling_rate }}{% else %}unknown{% endif %}</dd>
+      <dt>Ports sampled</dt><dd>{% if config.data_sources %}{{ config.data_sources|length }}: {{ config.data_sources[:8]|join(", ") }}{% if config.data_sources|length > 8 %} and {{ config.data_sources|length - 8 }} more{% endif %}{% else %}none{% endif %}</dd>
+    </dl>
+    {% endif %}
+  </section>
+</div>
+
+{#- The setup form comes first until the switch sends, then after the figures. -#}
+{% set setup_first = not (config and config.sending) %}
+{% if setup_first %}{{ setup_card() }}{% endif %}
+
+{{ range_links("/traffic", range, ranges) }}
+
+<div class="card-grid">
+<section class="card" id="top-vlans">
+  <h2 class="card-title">Busiest VLANs</h2>
+  {% if vlans %}
+  <table class="table">
+    <thead><tr><th>VLAN</th><th class="num">Average</th><th class="num">Share</th><th class="num">Samples</th></tr></thead>
+    <tbody>
+      {% for top in vlans %}
+      <tr><td>{{ vlan_label(top.item) }}</td><td class="num">{{ top.bits_per_second|rate }}</td><td class="num">{{ (100 * top.bits_per_second / vlan_total)|round(1) }}%</td><td class="num">{{ "{:,}".format(top.samples) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">The average over the range, both ways together, from each sampled frame's length times the sampling rate. A frame that came in without a VLAN tag is counted in the VLAN of its port (an access port's VLAN, a trunk's native VLAN). "VLAN not given" is what is left: samples from a port NXray has not read yet, such as in the first minute after NXray starts, or from a routed port.</p>
+  {% else %}
+  <p class="lead">No sFlow samples from this switch in this range.</p>
+  {% endif %}
+</section>
+
+</div>
+
+<section id="vlans">
+  <h2 class="vlan-heading">Traffic per VLAN, measured</h2>
+  {% if vlan_cards %}
+  <div class="vlan-cards">
+    {% for card in vlan_cards %}
+    <section class="card vlan-card">
+      <div class="vlan-figures">
+        <h3 class="vlan-name">{{ card.label }}</h3>
+        <p class="vlan-now">{{ card.now }}</p>
+        <p class="note">highest {{ card.highest }}<br>average {{ card.average }}</p>
+      </div>
+      {{ card.svg }}
+    </section>
+    {% endfor %}
+  </div>
+  <p class="note">The busiest {{ vlan_cards|length }} VLANs, from the switch's sFlow samples: each sampled frame's length times the sampling rate, counted on the port it came in on, so one figure per VLAN (not an in and an out). Trunks are included.</p>
+  {% else %}
+  <p class="lead">No sFlow samples from this switch in this range.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="top-devices">
+  <h2 class="card-title">Busiest devices</h2>
+  {% if devices %}
+  <table class="table">
+    <thead><tr><th>MAC address</th><th>Maker</th><th>IP addresses</th><th>Port</th><th class="num">Sends</th><th class="num">Receives</th><th></th></tr></thead>
+    <tbody>
+      {% for row in devices %}
+      <tr{% if row.mac == mac %} class="row-on"{% endif %}>
+        <td class="mono">{{ row.mac }}</td>
+        <td>{{ row.maker }}</td>
+        <td class="mono">{{ row.ips|join(", ") }}</td>
+        <td>{% if row.port.startswith("Ethernet") %}<a href="/ports/detail?name={{ row.port|urlencode }}">{{ row.port }}</a>{% else %}{{ row.port }}{% endif %}</td>
+        <td class="num">{{ row.sends|rate }}</td>
+        <td class="num">{{ row.receives|rate }}</td>
+        <td><a href="/traffic?range={{ range }}&amp;mac={{ row.mac|urlencode }}#device">Over time</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">Averages over the range. Sends: frames from the device into the switch; receives: frames to it. The port, IP addresses and maker come from the switch's MAC address and ARP tables now. Broadcast and multicast are left out of receives.</p>
+  {% else %}
+  <p class="lead">No sFlow samples from this switch in this range.</p>
+  {% endif %}
+</section>
+
+{% for view in charts %}
+{% if view.anchor == "device" %}{{ chart(view) }}{% endif %}
+{% endfor %}
+
+<p class="note">An estimate from samples: the more frames, the closer. Each minute keeps every VLAN and the 100 busiest devices each way. Times are UTC.</p>
+
+{% if not setup_first %}{{ setup_card() }}{% endif %}
+{% endif %}
+{% endblock %}

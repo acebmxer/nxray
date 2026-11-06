@@ -1,5 +1,5 @@
 {% macro chart(view) %}
-<section class="card">
+<section class="card"{% if view.anchor %} id="{{ view.anchor }}"{% endif %}>
   <h2 class="card-title">{{ view.title }}</h2>
   {% if view.svg %}
   {{ view.svg }}

@@ -1,0 +1,7 @@
+{% macro admin_login(id) %}
+<label for="{{ id }}_admin_user">Switch admin username</label>
+<input id="{{ id }}_admin_user" name="admin_user" type="text" autocomplete="off" spellcheck="false">
+<label for="{{ id }}_admin_password">Switch admin password</label>
+<input id="{{ id }}_admin_password" name="admin_password" type="password" autocomplete="off">
+<p class="hint">Used for this one request and never stored. The switch configuration is saved afterwards, so the change survives a restart; that also keeps any other unsaved change there.</p>
+{% endmacro %}

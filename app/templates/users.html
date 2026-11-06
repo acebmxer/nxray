@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_admin_login.html" import admin_login %}
 {% block title %}Users — NXray{% endblock %}
 
 {% block content %}
@@ -12,14 +13,16 @@
 {% endif %}
 
 <p class="lead">
-  Who can sign in to NXray, and what each may do. These are NXray accounts
-  only; they have nothing to do with the accounts on the switch.
+  Who can sign in to NXray, and what each may do. An account here exists only
+  in NXray, unless you also give it a local account on a switch with the same
+  name and password, so that person can sign in over SSH too (the Switch
+  column).
 </p>
 
 <section class="card card-flush">
   <table class="table table-users">
     <thead>
-      <tr><th>Username</th><th>Role</th><th>Status</th><th>Two-factor</th><th>New password</th></tr>
+      <tr><th>Username</th><th>Role</th><th>Status</th><th>Two-factor</th><th>New password</th>{% if connections %}<th>Switch</th>{% endif %}<th>Delete</th></tr>
     </thead>
     <tbody>
       {% for user in users %}
@@ -76,6 +79,18 @@
             <button type="submit" class="btn btn-quiet">Set</button>
           </form>
         </td>
+        {% if connections %}
+        <td>
+          {% for item in statuses[user.id] %}
+          <div>{{ item.link.account_name }} on {{ item.connection.label }}
+            {% if item.problems %}<span class="badge badge-warn" title="{{ item.problems|join('; ') }}">out of step</span>{% elif item.link.locked %}<span class="badge">locked</span>{% else %}<span class="badge badge-ok">in step</span>{% endif %}</div>
+          {% else %}
+          <span class="dim">NXray only</span>
+          {% endfor %}
+          <div><a href="/users/switch?user_id={{ user.id }}">Switch accounts</a></div>
+        </td>
+        {% endif %}
+        <td>{% if own %}<span class="dim">not your own</span>{% else %}<a class="btn btn-danger" href="/users/delete?user_id={{ user.id }}">Delete</a>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -111,7 +126,77 @@
       <option value="{{ role }}" {% if role == form.role %}selected{% endif %}>{{ role }}: {{ role_help[role] }}</option>
       {% endfor %}
     </select>
+    {% if connections %}
+    <fieldset class="choice form-after">
+      <legend>Where</legend>
+      <p class="hint">Leave every switch unticked for NXray only. Ticked, the person also gets a local account on that switch with the same name and password, to sign in over SSH.</p>
+      {% for connection in connections %}
+      <label class="check"><input type="checkbox" name="switches" value="{{ connection.id }}" {% if connection.id in (form.switches or []) %}checked{% endif %}> Also on {{ connection.label }} ({{ connection.host }})</label>
+      {% endfor %}
+    </fieldset>
+    <p class="hint">On the switch, the role becomes: {% for role in roles %}<strong>{{ role }}</strong> → {{ role_map[role] }}{% if not loop.last %}; {% endif %}{% endfor %}. An operator gets network-operator only on a switch where changes are off. The switch takes names of up to 28 letters, digits, dots, dashes or underscores starting with a letter, and passwords of letters and digits only, with upper case, lower case and digits and no runs like "aaa" or "abc".</p>
+    <label for="admin_user">Switch admin username (for the ticked switches)</label>
+    <input id="admin_user" name="admin_user" type="text" value="{{ form.admin_user or '' }}" autocomplete="off" spellcheck="false">
+    <label for="admin_password">Switch admin password</label>
+    <input id="admin_password" name="admin_password" type="password" autocomplete="off">
+    <p class="hint">Used for this one request and never stored. NXray's own switch account cannot make accounts.</p>
+    <label class="check"><input type="checkbox" name="confirm_switch" value="yes"> Yes, make this account on the ticked switches with the role shown above, and save each switch's configuration afterwards (that also keeps any other unsaved change there)</label>
+    {% endif %}
     <button type="submit" class="btn btn-primary">Add account</button>
   </form>
 </section>
+{% if connections %}
+<section class="card">
+  <h2 class="card-title">Add a switch account only</h2>
+  <form method="post" action="/users/switch-account/create" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <p class="hint">A local account on the switch for someone who uses SSH or the console, with no NXray sign-in. To give a person both, use Add an account above.</p>
+    <label for="sa_name">Account name</label>
+    <input id="sa_name" name="account_name" type="text" value="{{ switch_form.account_name }}" autocomplete="off" spellcheck="false" required maxlength="28">
+    <label for="sa_password">Password</label>
+    <input id="sa_password" name="password" type="password" autocomplete="new-password" required>
+    <label for="sa_confirm">Password again</label>
+    <input id="sa_confirm" name="confirm_password" type="password" autocomplete="new-password" required>
+    <p class="hint">Letters and digits only, 8 to 64, with upper case, lower case and digits and no runs like "aaa" or "abc". The names the switch keeps for itself are refused.</p>
+    <label for="sa_role">Role on the switch</label>
+    <select id="sa_role" name="role">
+      {% for role in roles %}
+      <option value="{{ role }}" {% if role == switch_form.role %}selected{% endif %}>{{ role_map[role] }}</option>
+      {% endfor %}
+    </select>
+    <fieldset class="choice form-after">
+      <legend>Where</legend>
+      {% for connection in connections %}
+      <label class="check"><input type="checkbox" name="switches" value="{{ connection.id }}" {% if connection.id in switch_form.switches %}checked{% endif %}> {{ connection.label }} ({{ connection.host }})</label>
+      {% endfor %}
+    </fieldset>
+    {{ admin_login("sa") }}
+    <label class="check"><input type="checkbox" name="confirm_switch" value="yes"> Yes, make this account on the ticked switches with the role shown, and save each switch's configuration afterwards</label>
+    <button type="submit" class="btn btn-primary">Make the switch account</button>
+  </form>
+</section>
+{% endif %}
+{% for item in switch_lists %}
+<section class="card">
+  <h2 class="card-title">Local accounts on {{ item.connection.label }}</h2>
+  {% if item.accounts is none %}
+  <p class="note">The switch did not list its accounts: {{ item.read_error }}</p>
+  {% else %}
+  <table class="table">
+    <thead><tr><th>Account</th><th>Roles</th><th>NXray user</th><th>Delete</th></tr></thead>
+    <tbody>
+      {% for account in item.accounts %}
+      {% set owner = owners.get((item.connection.id, account.name|lower)) %}
+      <tr>
+        <td class="mono">{{ account.name }}</td>
+        <td>{{ account.roles|join(", ") }}</td>
+        <td>{% if account.name|lower == item.connection.username|lower %}<span class="dim">NXray's own account; never changed here</span>{% elif reserved(account.name) %}<span class="dim">kept by the switch; never changed here</span>{% elif owner %}{{ owner }}{% else %}<span class="dim">none (link it from a user's Switch accounts page)</span>{% endif %}</td>
+        <td>{% if account.name|lower != item.connection.username|lower and not reserved(account.name) %}<a class="btn btn-danger" href="/users/switch-account/delete?name={{ account.name|urlencode }}&amp;switch_id={{ item.connection.id }}">Delete</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endfor %}
 {% endblock %}

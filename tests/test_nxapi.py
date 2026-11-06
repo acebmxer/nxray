@@ -428,3 +428,63 @@ def test_show_still_refuses_text_bodies() -> None:
     with _client(lambda request: httpx.Response(200, json=reply)) as client:
         with pytest.raises(NxapiProtocolError):
             client.show("show version")
+
+
+# ---- people's switch accounts (#17) -----------------------------------------
+
+
+def test_person_account_commands() -> None:
+    requests: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        entries = json.loads(request.content)
+        requests.append([entry["params"]["cmd"] for entry in entries])
+        return httpx.Response(200, json=[_ok(entry["id"], None) for entry in entries])
+
+    with _client(handler) as client:
+        client.create_person_account("otto", "Kx7mQ2vLp9", ["network-operator", "nxray-ports"])
+        client.set_person_password("otto", "Tz4nW8rBq3")
+        client.set_person_roles("otto", add=["network-admin"], remove=["network-operator"])
+        client.remove_person_account("otto")
+    assert requests == [
+        [
+            "username otto password Kx7mQ2vLp9 role network-operator",
+            "username otto role nxray-ports",
+        ],
+        ["username otto password Tz4nW8rBq3"],
+        ["username otto role network-admin", "no username otto role network-operator"],
+        ["no username otto"],
+    ]
+
+
+def test_person_account_error_hides_the_password() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        (entry,) = json.loads(request.content)
+        error = {"code": -32602, "message": "Invalid input", "data": {"msg": "bad"}}
+        return httpx.Response(200, json={"jsonrpc": "2.0", "error": error, "id": entry["id"]})
+
+    with _client(handler) as client, pytest.raises(NxapiCommandError) as caught:
+        client.set_person_password("otto", "Tz4nW8rBq3")
+    assert "Tz4nW8rBq3" not in str(caught.value)
+    assert "username otto password ..." in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda c: c.create_person_account("otto ; reload", "Kx7mQ2vLp9", ["network-operator"]),
+        lambda c: c.create_person_account("otto", "Kx7mQ2vLp9", ["priv-15"]),
+        lambda c: c.create_person_account("otto", "Kx7mQ2vLp9", []),
+        lambda c: c.create_person_account("otto", "has space 9A", ["network-operator"]),
+        lambda c: c.set_person_password("otto", "semi;colon1A"),
+        lambda c: c.set_person_password("admin", "Kx7mQ2vLp9"),
+        lambda c: c.set_person_roles("otto", add=["vdc-admin"], remove=[]),
+        lambda c: c.set_person_roles("otto", add=[], remove=[]),
+        lambda c: c.remove_person_account("root"),
+    ],
+)
+def test_person_account_methods_refuse_before_sending(call) -> None:
+    seen: list[str] = []
+    with _recording_client(seen) as client, pytest.raises(ValueError):
+        call(client)
+    assert seen == []

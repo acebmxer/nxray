@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_admin_login.html" import admin_login %}
+{% block title %}Delete an account — NXray{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/users">← Users</a></p>
+<h1 class="page-title">Delete {% if user %}{{ user.username }}{% else %}an account{% endif %}</h1>
+
+{% if error %}
+<p class="alert alert-error" role="alert">{{ error }}</p>
+{% endif %}
+
+{% if not user %}
+<p class="lead">There is no such NXray user.</p>
+{% elif own %}
+<p class="lead">This is your own account. Another admin deletes it.</p>
+{% else %}
+<section class="card">
+  <h2 class="card-title">What will go</h2>
+  <p class="lead">{{ user.username }} ({{ user.role }}) is deleted from NXray and signed out at once. This cannot be undone from NXray.</p>
+  <form method="post" action="/users/delete" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="user_id" value="{{ user.id }}">
+    {% if links %}
+    <fieldset class="choice">
+      <legend>Their accounts on switches</legend>
+      <p class="hint">Tick an account to delete it from its switch too. An unticked one stays on the switch, linked to no NXray user, and keeps its password and roles.</p>
+      {% for link, connection in links %}
+      <label class="check"><input type="checkbox" name="switches" value="{{ connection.id }}"> Also delete <span class="mono">{{ link.account_name }}</span> from {{ connection.label }} ({{ connection.host }})</label>
+      {% endfor %}
+    </fieldset>
+    {{ admin_login("del") }}
+    <p class="hint">The switch admin login is needed only when an account above is ticked. If a switch refuses, {{ user.username }} is kept in NXray, so you can try again.</p>
+    {% else %}
+    <p class="hint">{{ user.username }} has no switch account that NXray knows of, so nothing changes on a switch.</p>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="confirm" value="yes"> Yes, delete {{ user.username }} from NXray</label>
+    <button type="submit" class="btn btn-danger">Delete</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

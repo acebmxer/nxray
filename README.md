@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-2553%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-2927%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -43,8 +43,9 @@ collects errors, turn switch features
 such as LLDP on and off, change the switch's address or repair NXray's switch login
 from the web interface, and give other people their own NXray accounts as
 admin, operator or viewer, each with optional two-factor sign-in, turn on
-built-in HTTPS, update from the Settings page, and see 30 days of temperatures,
-power, CPU, memory and port traffic as graphs.
+built-in HTTPS, update from the Settings page, see 30 days of temperatures,
+power, CPU, memory and port traffic as graphs, and measure traffic per VLAN and
+per device, trunks included, with NXray as the switch's sFlow collector.
 
 ## Screenshots
 
@@ -64,6 +65,8 @@ Taken against the test suite's pretend switch, with made-up devices.
 | [Installation](docs/installation.md) | Getting the container running |
 | [Configuration](docs/configuration.md) | Every setting, its default and what it does |
 | [Switch setup](docs/switch-setup.md) | What setup does on the switch, and how to undo it |
+| [Live figures](docs/live.md) | Pages that refresh themselves: the intervals, what it costs the switch, what Live measures |
+| [Traffic per VLAN and per device](docs/traffic.md) | What the estimates mean and what they leave out, and measuring them with sFlow on the Traffic page |
 | [Function index](docs/functions.md) | Every function in the codebase, in one place |
 | [Contributing](CONTRIBUTING.md) | Development setup and conventions |
 | [Security](SECURITY.md) | Threat model and reporting a vulnerability |
@@ -94,13 +97,14 @@ Then open `http://<that machine>:8080` and sign in. The full steps are in
 ## How it talks to the switch
 
 Through NX-API, the switch's own HTTPS interface: the same commands you
-type over SSH, answered as structured data. NXray uses its own read-only
-account on the switch, never `admin`: the Switch page signs in with the admin
-login once, creates that account with a long random password, saves the
-switch configuration, and keeps only that account's login. The admin
-password is never stored. See [Switch setup](docs/switch-setup.md).
+type over SSH, answered as structured data. NXray uses its own account on
+the switch, never `admin`: the Switch page signs in with the admin login
+once, creates that account with a long random password, gives it a role that
+allows only the changes NXray makes (untick **Also turn on changes** to keep
+it read-only), saves the switch configuration, and keeps only that account's
+login. The admin password is never stored. See [Switch setup](docs/switch-setup.md).
 
-Once a switch is set up, NXray also reads it every minute (three read-only
+Once a switch is set up, NXray also reads it every minute (four read-only
 commands) to record history; see [Installation](docs/installation.md#history).
 
 Turning on port changes is the one step that uses SSH: NX-API cannot create
@@ -136,7 +140,9 @@ along the way that no stage below covers is added to the stage it fits best.
    default: *(built)*. Published images on GHCR: *(built)*. Self-update, off by
 default: *(built)*.
 9. **History**: temperatures, power, fans, CPU, memory and port traffic and
-   errors over time, as graphs. *(built)*
+   errors over time, as graphs. *(built)* Traffic per VLAN and per device,
+   estimated from the ports' own counters: *(built)*. Measured per VLAN and
+   per device, trunks included, with NXray as an sFlow collector: *(built)*.
 10. **Switch face**: a picture of the front panel with every port colored by
     state, speed, VLAN, port-channel, traffic or errors; hover for details,
     click to open the port's side panel, which makes every change to the port;

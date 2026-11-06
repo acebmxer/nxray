@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi.testclient import TestClient
 
 from app.dependencies import SECURITY_HEADERS
@@ -29,8 +31,11 @@ def test_framing_is_refused(client: TestClient) -> None:
 def test_pages_use_no_inline_script_or_style(logged_in: TestClient) -> None:
     # The Content-Security-Policy forbids inline script and style, so a page
     # that used either would silently break in the browser.
+    # A script file served by NXray itself is allowed ('self'); script written
+    # into the page is not.
     for path in ("/", "/login"):
         body = logged_in.get(path, follow_redirects=True).text.lower()
-        assert "<script" not in body, path
+        for tag in re.findall(r"<script[^>]*>", body):
+            assert 'src="/static/' in tag, path
         assert "<style" not in body, path
         assert " style=" not in body, path

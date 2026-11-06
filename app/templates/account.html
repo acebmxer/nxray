@@ -15,7 +15,12 @@
   <dl class="facts">
     <dt>Username</dt><dd>{{ username }}</dd>
     {% if account %}<dt>Role</dt><dd>{{ account.role }}: {{ role_help[account.role] }}</dd>{% endif %}
+    {% for item in switch_accounts %}
+    <dt>On {{ item.connection.label }}</dt>
+    <dd>the switch account {{ item.link.account_name }}{% if item.problems %} <span class="badge badge-warn">out of step</span> {{ item.problems|join("; ") }}{% endif %}</dd>
+    {% endfor %}
   </dl>
+  {% if switch_accounts %}<p class="note">Changing your password here changes it in NXray only. An NXray admin sets a new password for NXray and the switch together on the Users page.</p>{% endif %}
 </section>
 
 <section class="card">

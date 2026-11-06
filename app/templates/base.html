@@ -8,6 +8,7 @@
   <title>{% block title %}NXray{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  {% if username %}<script src="/static/live.js" defer></script>{% endif %}
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -24,6 +25,7 @@
   ("Monitor", "/ports", "Ports", "ports", "/ports", false),
   ("Monitor", "/neighbors", "Neighbors", "neighbors", "/neighbors", false),
   ("Monitor", "/history", "History", "history", "/history", false),
+  ("Monitor", "/traffic", "Traffic", "traffic", "/traffic", false),
   ("Monitor", "/alerts", "Alerts", "alerts", "/alerts", true),
   ("Configure", "/vlans", "VLANs", "vlans", "/vlans", false),
   ("Configure", "/port-channels", "Port-channels", "channels", "/port-channels", false),
@@ -111,6 +113,25 @@
       {% if here and here.unsaved_changes %}
       <span class="strip-unsaved" title="NXray changed the switch since its configuration was last saved">Unsaved changes</span>
       {% endif %}
+      {#- The Refresh control is on every page. A page with its own small answer says so
+          (live_page, live_url); a page that reads the switch and nothing else refreshes whole;
+          the rest (settings, users, a result) say there is nothing to refresh. -#}
+      {% set live_own = live_page is defined and live_page %}
+      {% set live_whole = not live_own and refreshes_whole_page(request.method, request.url.path) %}
+      {% set live_floor = request.app.state.settings.live_clients_min_interval if live_own and live_page == "clients" else request.app.state.settings.live_min_interval %}
+      <form method="post" action="/preferences" class="live-picker" data-live-picker{% if live_own %} data-live-url="{{ live_url }}"{% elif live_whole %} data-live-url="{{ back_to }}" data-live-whole{% else %} data-live-none{% endif %} data-live-floor="{{ live_floor }}" aria-label="Refresh">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <input type="hidden" name="next" value="{{ back_to }}">
+        <span class="live-stamp" data-live-stamp aria-live="off"></span>
+        <button type="button" class="btn btn-quiet live-pause" data-live-pause hidden>Pause</button>
+        <label for="live_choice" class="live-label">Refresh</label>
+        <select id="live_choice" name="live">
+          {% for key, words in live_choices.items() %}
+          <option value="{{ key }}"{% if prefs.live == key %} selected{% endif %}>{{ words }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-quiet live-set">Set</button>
+      </form>
       {% if picker_switches|length > 1 %}
       <form method="post" action="/switches/select" class="switch-picker">
         <input type="hidden" name="csrf" value="{{ form_token(request) }}">
@@ -126,6 +147,15 @@
       {% endif %}
     </header>
     <main class="{% block main_class %}wrap{% endblock %}">
+      {% for behind, behind_words in role_behind(request) %}
+      <p class="alert alert-warn" role="status">
+        NXray's account on {{ behind.switch_hostname or behind.host }} is behind this version of
+        NXray: it can't yet do {{ behind_words }}.
+        <a href="/switch">Open the Switch page</a>{% if picker_switches|length > 1 %}
+        (with that switch chosen in the top bar){% endif %}
+        and press the Turn on button to update it.
+      </p>
+      {% endfor %}
       {% block content %}{% endblock %}
     </main>
   </div>

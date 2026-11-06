@@ -43,10 +43,44 @@ When you press **Create the account and connect**, NXray:
    that were not saved yet**, which is why the page asks you to tick a box
    first. If saving fails, NXray still connects and tells you to run the
    command yourself.
+6. With **Also turn on changes** ticked (it is, unless you untick it), turns
+   on every kind of change straight away, with the same admin login and the
+   **SSH port** on the form: exactly the steps under
+   [Port changes](#port-changes) below, including the wait of about 11
+   minutes. If this step fails (SSH off or unreachable, a refused line), the
+   switch stays set up with a read-only account, the page says why, and the
+   **Turn on** button on the Switch page tries again. Untick the box to keep
+   the account read-only.
 
 The admin password is used only during these steps. NXray does not store
 it, log it or show it. The new account's password is stored encrypted in
 NXray's database.
+
+## What NXray users get on the switch
+
+Nothing, unless an admin asks for it. An account on NXray's Users page exists
+only in NXray: everything it changes reaches the switch through NXray's own
+account, and it cannot sign in over SSH. An admin can also give a person a
+local account on the switch with the same name and password (see
+[Switch accounts](installation.md#switch-accounts-the-same-person-on-the-switchs-command-line)).
+NXray then signs in with the switch admin login typed on that form, used for
+that one request and never stored, and runs only these, built from checked
+values:
+
+- `username <name> password <password> role <role>`, then `username <name>
+  role <role>` for a second role, to make an account (after `show
+  user-account`, so an existing account is never overwritten);
+- `username <name> password <password>` for a new password, or a random one
+  nobody knows to lock the account;
+- `username <name> role <role>` and `no username <name> role <role>` to bring
+  its role in step, for the roles `network-operator`, `network-admin` and
+  `nxray-ports` only;
+- `no username <name>` to remove it;
+- then `copy running-config startup-config`, so a restart keeps the change.
+
+NXray's own account and the names NX-OS keeps for itself (`admin` among
+them) are never changed this way. NXray's own role (`nxray-ports`) gains no
+rule for any of this.
 
 ## Test connection and Forget this switch
 
@@ -135,15 +169,16 @@ new role, because signing in would make the wait start over.
 
 ## Port changes
 
-Port changes are off after setup: NXray's account can only read. To turn
-them on, open the **Switch** page, type the admin username and password
+Setup turns changes on unless **Also turn on changes** was unticked. With it
+unticked, or if that step failed, NXray's account can only read. To turn
+them on later, open the **Switch** page, type the admin username and password
 under **Port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config and layer 2 security changes**, tick the box and press
+security and config, layer 2 security, traffic measuring and reset to defaults changes**, tick the box and press
 **Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN
 interface, VRF, static route, routing protocol, spanning tree, switch admin,
-security and config and layer 2 security changes**. One press turns on all
-fourteen, with a single wait.
+security and config, layer 2 security, traffic measuring and reset to defaults changes**. One press turns on all
+sixteen, with a single wait.
 NXray then:
 
 1. Reads `show interface brief`, `show user-account` and `show nxapi` over
@@ -380,6 +415,12 @@ NXray then:
          rule 225 permit command conf t ; vlan filter *
          rule 226 permit command conf t ; no vlan filter *
          rule 227 permit command conf t ; hardware access-list tcam region *
+         rule 228 permit command conf t ; interface * ; load-interval *
+         rule 229 permit command conf t ; interface * ; no load-interval *
+         rule 230 permit command conf t ; sflow *
+         rule 231 permit command conf t ; no sflow *
+         rule 232 permit command conf t ; default interface *
+         rule 233 permit command show sflow
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -418,7 +459,12 @@ console, terminal, timestamps), SNMP contact and location, read-only SNMP
 communities and trap receivers, and read the running configuration; make,
 change and delete IPv4 and IPv6 ACLs and apply them to those interfaces and
 ports; set port security on the front ports; read the saved configuration and
-make, list and delete checkpoints; and save the configuration. The switch
+make, list and delete checkpoints; set DHCP snooping, the DHCP relay, ARP
+inspection and IP Source Guard, MAC ACLs, object groups, VLAN access maps and
+the TCAM regions' sizes; set how long the front ports average their In and Out
+rates over, and set up sFlow (where the samples go, how often, from which front
+ports); put a front port or a port-channel back to how it came out of the box
+(`default interface`); and save the configuration. The switch
 refuses it everything else: mgmt0, shutting a VLAN down or suspending it,
 accounts, SNMP users and read-write SNMP communities, rolling the switch back
 (the Config page asks for the admin login each time for that), and other
@@ -431,8 +477,7 @@ timeout (10 minutes unless changed). So after turning port changes on,
 NXray does not contact the switch for that long plus a minute, about 11
 minutes, and every page says so. This happens once: after it, port, VLAN,
 port settings, feature, neighbor, port-channel, VLAN interface, VRF, static
-route, routing protocol, spanning tree, switch admin, security and config and
-layer 2 security changes take effect straight away. When the role gains the port-channels or the VLAN
+route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring and reset to defaults changes take effect straight away. When the role gains the port-channels or the VLAN
 interfaces, NXray checks it and
 saves the configuration over SSH rather than NX-API: on an N9K-C92160YC-X
 with NX-OS 9.3(16), NX-API once stopped answering every account for about 15
@@ -441,9 +486,10 @@ went through without it.
 
 **Installs that turned port changes on before VLANs, port settings,
 features, neighbor, port-channel, VLAN interface, VRF, static route,
-routing protocol, spanning tree, switch admin or security and config changes
-existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
-to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134 or 1 to 170. The Switch
+routing protocol, spanning tree, switch admin, security and config, layer 2
+security, traffic measuring, reset to defaults or sFlow status changes existed.** Their role has rules 1 to 5, 1 to 11, 1 to 27, 1 to 29, 1 to 40, 1
+to 47, 1 to 50, 1 to 54, 1 to 62, 1 to 128, 1 to 134, 1 to 170, 1 to 190, 1 to
+227, 1 to 231 or 1 to 232. The Switch
 page then shows a card named for what is missing (for example **Switch admin
 and security and config changes** or **Security and config changes**): type the
 admin login,
@@ -469,15 +515,59 @@ up to 254 plain characters; NX-API refuses `?` and `;`.
 **Changing several ports at once.** With port changes on, the Ports page has
 a tick box on each row for operators and admins (**Tick every port shown**
 ticks the ports the filter shows, so Down then Tick every port shown picks
-every port without a link). **Change several ports** turns the ticked ports
-off or on, or gives them all one description. The confirm page lists every
-ticked port and what happens to it, warns for each port that is up and about
-to be turned off, and names the ticked ports already as asked, which are
-left alone. NXray then changes the ports one at a time, in front-panel
-order. If the switch refuses one, NXray stops there, and the page names the
-ports that changed, the one refused and why, and the ones not tried; the
-ticks are kept to try again. The Ports page has a **Save config** button
-too.
+every port without a link). The ticked ports do not need to be next to each
+other: `Ethernet1/3`, `Ethernet1/7`, `Ethernet1/12` and `Ethernet1/40` work
+as well as a row of four. The **Change several ports** card under the table
+is one configuration that every ticked port gets:
+
+- **On or off and description**: turn them on or off; tick **Change the
+  description to** to give them one description (left empty, it removes
+  theirs); **Clear the addresses learned on them** (with neighbor changes on).
+- **VLANs** (with VLAN changes on): access or trunk, the access VLAN, the
+  native VLAN and the VLANs a trunk carries. The native VLAN is always added
+  to the VLANs carried, as on a port's own page.
+- **Port settings** (with port settings changes on): switched or routed,
+  speed, MTU, FEC, flow control (receive and send), the storm-control levels
+  (broadcast, multicast, unknown unicast; `none` for no limit) and the
+  storm-control action.
+- **CDP and LLDP** (with neighbor changes on): CDP, LLDP sending, LLDP
+  listening. LLDP needs the lldp feature on for the whole switch.
+
+Every setting starts at **Leave as it is**, and only what you fill in is
+sent: changing the MTU of six ports leaves their VLANs alone. A setting that
+only applies to one mode is left alone on the other (a native VLAN on an
+access port, storm control on a routed port), and the confirm page says so.
+Not offered for several ports, because each port needs its own: an IPv4
+address on a routed port (a port made routed here has none; set it on the
+port's page), the label, and splitting a 100G port, which the switch allows
+only on some ports.
+
+Every value is checked for each ticked port exactly as on that port's own
+page (the speeds the port can run at, the MTU for its layer, VLANs that
+exist), and if any ticked port cannot take the configuration, nothing is
+sent and the page names each such port and why. The confirm page lists
+every port that changes with each setting's old and new value, and leaves
+out the ports already set as asked. It warns about anything that cuts
+traffic: turning off a port that is up, moving a port to another VLAN,
+switching between access and trunk, changing the layer, a speed or FEC
+change on an up port, a smaller MTU, and the storm-control shutdown action;
+each warning names the ports it is about.
+
+NXray then changes the ports one at a time, in front-panel order, each kind
+of change (settings, VLANs, CDP and LLDP, description and on/off, clearing
+addresses) in its own request, with the same commands as a port's own page,
+so the role NXray's account was given already allows them all. If the switch
+refuses one, NXray stops there, and the page names the ports that changed,
+what was already made on the port it stopped at, what was refused and why,
+and the ports not tried; the ticks and the form are kept to try again. The
+Ports page has a **Save config** button too.
+
+**Start from port** fills the form with one port's VLANs, settings and CDP
+and LLDP, to copy a known-good port onto others. It changes nothing on the
+switch; you check the form, tick the ports and press **Change the ticked
+ports**. It never copies on or off, the description or an address, nor the
+speed of a port that is up (the switch then reports the speed it runs at,
+which may come from auto).
 
 **A port's VLANs.** The same page shows the port's mode and VLANs. **Change
 VLANs** sets the mode (access: one untagged VLAN; trunk: several tagged
@@ -910,6 +1000,54 @@ guides and have not yet been tried on a switch. An install whose role predates
 the DHCP and ARP page gets a **Turn on layer 2 security changes** card; it adds
 rules 191 to 227 with no wait. They also follow Cisco's NX-OS 9.3 Security
 Configuration Guide and have not yet been tried on a switch.
+An install whose role predates the rate average and sFlow gets a **Turn on
+traffic measuring changes** card; it adds rules 228 to 231 with no wait. They
+follow Cisco's NX-OS 9.3 Interfaces and System Management Configuration Guides;
+rule 230 (`sflow` lines) has worked on an N9K-C92160YC-X, the others have not
+yet been tried on a switch.
+An install whose role predates resetting a port or a port-channel gets a
+**Turn on reset to defaults changes** card; it adds rule 232 with no wait.
+This follows Cisco's NX-OS 9.3 Interfaces Configuration Guide and has not yet
+been tried on a switch.
+An install whose role predates reading sFlow's status gets a **Turn on sFlow
+status changes** card; it adds rule 233 (`show sflow`) with no wait. Without
+it the switch refuses `show sflow` for every NXray account, and the Traffic
+page's sFlow card shows "Permission denied for the role".
+
+**How long a port averages its rates.** The switch works out a port's In and
+Out as an average over the last 30 seconds unless told otherwise. With traffic
+measuring changes on (role version 15), a port's page and its side panel have
+a **Rate average** card: pick 5, 10, 15 seconds, 1, 2 or 5 minutes, or the
+switch's default of 30 seconds, and press **Change the rate average**. NXray
+asks you to confirm, then sends `interface <port>` and `load-interval counter
+1 <seconds>` (or `no load-interval counter 1` for the default). Only the first
+of the switch's three counters is changed, the one NXray reads; the traffic
+itself is not touched, only the figures. A shorter average follows bursts
+more closely, so the figures jump about more. Cisco's guide gives 5 to 300
+seconds for the Nexus 9000; if the switch refuses one of these values, the
+page shows the switch's own words. Not saved until you press **Save config**.
+NXray's **Live** refresh works its rates out from the byte counters instead,
+whatever the average (see [Live figures](live.md)).
+
+**Reset to defaults (#21).** With reset changes on (role version 16), a port's
+own page and its side panel have a **Reset to defaults** button, and the
+Ports page's **Change several ports** card has **Reset the ticked ports to
+their defaults**; the Port-channels page has **Reset `<name>` to defaults**
+for each port-channel. All three send `default interface <name>` after a
+confirm page that names everything the port, each ticked port, or the
+port-channel loses: its description, VLANs (mode, access or native VLAN, the
+VLANs a trunk carries), speed, MTU, FEC, flow control, storm control, layer
+(switched or routed, with any IPv4 address) — or says there is nothing to
+remove when it is already a plain, unconfigured access port. A port goes back
+to a plain access port in VLAN 1, turned on; a port-channel's own description
+and LACP minimum links reset, but its members keep their channel-group
+membership, which is set on each member port, not on the port-channel, so the
+confirm page names them and warns that only the port-channel's own settings
+change. The confirm page also warns when a port or port-channel is up: the
+device on it may lose its connection while it resets. NXray refuses rather
+than resetting only part of several ticked ports: an unticked, unknown or
+untickable port stops the whole request and names the reason. Like other
+changes, this is not saved until you press **Save config**.
 
 **Activity.** The **Activity** page (admins only) lists every change made
 through NXray, newest first, with the account, the page it was made on, the
@@ -952,6 +1090,7 @@ account, page or text, or download it as CSV. Lines are kept for a year.
 | still has ...; take them out first | NXray deletes only an empty port-channel. Take its ports out first |
 | Not turned off: ... still uses ... | The feature is in use (an LACP port-channel, a VLAN interface). Remove that first |
 | NXray's role on the switch does not name this port | The port came from a split or a join. Press **Update the port list** on the Switch page |
+| Resetting a port is off / Resetting ports is off / Resetting a port-channel is off | Port changes were turned on before NXray could reset ports and port-channels. Press **Turn on reset to defaults changes** on the Switch page |
 
 ## The certificate and the SSH host key
 

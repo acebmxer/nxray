@@ -44,6 +44,7 @@ from app.port_channels import (
     plan_remove,
     plan_system_priority,
 )
+from app.port_reset import channel_reset_summary
 from app.routes.ports import change_refused
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
@@ -375,6 +376,56 @@ def channel_delete(
     if refused := _send(request, lambda client: client.delete_port_channel(channel)):
         return _refused(request, username, f"deleting port-channel{channel}", refused)
     return _done(request, username, lines[0], f"port-channel{channel} deleted", connection)
+
+
+@router.post("/port-channels/reset", response_class=HTMLResponse)
+def channel_reset(
+    request: Request,
+    username: str = Depends(operator_required),
+    csrf: str = Form(""),
+    number: str = Form(""),
+    confirm: str = Form(""),
+) -> Response:
+    """Reset a port-channel's own settings to how they came out of the box.
+
+    Its members keep their channel-group membership. Without confirm=yes, asks first.
+    """
+    require_csrf(request, csrf)
+    problem, connection, view = _start(request)
+    if problem is not None:
+        return _render(request, username, error=problem, status_code=400)
+    assert connection is not None and view is not None
+    if not connection.reset_changes_enabled:
+        return _render(
+            request,
+            username,
+            error=(
+                "Resetting a port-channel is off. An NXray admin presses Update the port "
+                "list on the Switch page first: NXray's role on the switch does not allow "
+                "it yet."
+            ),
+            status_code=400,
+        )
+    try:
+        number_int = int(str(number).strip())
+    except ValueError:
+        return _bad(request, username, "Not reset", ValueError("not a number"))
+    channel = view.channel(number_int)
+    if channel is None:
+        return _bad(request, username, "Not reset", ValueError(f"no port-channel{number_int}"))
+    line, warnings = channel_reset_summary(channel)
+    if confirm != "yes":
+        return _confirm(
+            request,
+            username,
+            action="/port-channels/reset",
+            lines=[line],
+            warnings=warnings,
+            fields={"number": str(channel.number)},
+        )
+    if refused := _send(request, lambda client: client.reset_port_channel(channel.number)):
+        return _refused(request, username, f"resetting {channel.name}", refused)
+    return _done(request, username, line, f"{channel.name} reset to defaults", connection)
 
 
 @router.post("/port-channels/settings", response_class=HTMLResponse)

@@ -23,6 +23,8 @@ from app.db import open_db
 from app.switch_choice import selected_switch_id
 
 SESSION_COOKIE = "nxray_session"
+# The header value app/static/live.js sends with every refresh it asks for.
+LIVE_REQUEST = "nxray-live"
 
 # Carries an account from the password step of a two-factor sign-in to the
 # code step (/login/2fa). Not a session: it proves only that the password was
@@ -280,13 +282,16 @@ def csrf_valid_any_switch(request: Request, token: str, switch_ids: list[int]) -
     )
 
 
-def current_user(request: Request) -> str | None:
+def current_user(request: Request, *, touch: bool = True) -> str | None:
     """Return the logged-in username for a request, or None.
 
     Reads the signed cookie, resolves it against the sessions table (which
     also checks the account still exists and is not disabled), and slides the
-    expiry forward.
+    expiry forward, unless ``touch`` is False: a page refreshing itself must
+    not keep a sign-in alive for ever.
     """
+    # A whole page the browser re-reads by itself (live.js) is the same.
+    touch = touch and request.headers.get("x-requested-with") != LIVE_REQUEST
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
         return None
@@ -300,5 +305,6 @@ def current_user(request: Request) -> str | None:
         username = get_session_user(conn, session_id)
         if username is None:
             return None
-        touch_session(conn, session_id, settings.session_hours)
+        if touch:
+            touch_session(conn, session_id, settings.session_hours)
     return username

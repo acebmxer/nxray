@@ -50,6 +50,22 @@
 <p class="lead">Port changes are off. {% if ctx.role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn this port on or off, edit its description and set its VLANs.</p>
 {% endmacro %}
 
+{% macro reset_form(f, ctx) %}
+{% if ctx.can_change and ctx.connection.changes_enabled and ctx.connection.reset_changes_enabled %}
+<form method="post" action="/ports/reset" class="inline-actions">
+  <input type="hidden" name="csrf" value="{{ ctx.csrf }}">
+  <input type="hidden" name="name" value="{{ f.port.name }}">
+  {{ origin(ctx) }}
+  <button type="submit" class="btn btn-danger">Reset to defaults</button>
+</form>
+<p class="note">Clears everything NXray can set on this port (its description, VLANs, speed, MTU, FEC, flow control, storm control, layer, and any IP address) and leaves it a plain, unconfigured access port in VLAN 1, turned on. Asks you to confirm first and lists what it removes.</p>
+{% elif ctx.can_change and ctx.connection.changes_enabled %}
+<p class="lead">Resetting ports is off. {% if ctx.role == "admin" %}<a href="/switch">Turn it on on the Switch page</a>{% else %}An NXray admin can turn it on on the Switch page{% endif %} to reset a port to its defaults.</p>
+{% elif ctx.can_change %}
+{{ changes_off(ctx) }}
+{% endif %}
+{% endmacro %}
+
 {% macro label_form(f, ctx) %}
 {% if ctx.can_change %}
 <form method="post" action="/ports/label" class="stack form-narrow">
@@ -199,6 +215,31 @@
 {% elif ctx.can_change and ctx.connection.changes_enabled %}
 <p class="lead">Port settings changes are off. {% if ctx.role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to change this port's speed, MTU, FEC, flow control, storm control and layer.</p>
 {% endif %}
+{% endif %}
+{% endmacro %}
+
+{% macro rate_interval_part(f, ctx) %}
+{% set port = f.port %}
+<dl class="facts">
+  <dt>In and Out averaged over</dt><dd>{{ f.load_interval_label(port.load_interval) }}</dd>
+</dl>
+{% if ctx.can_change and ctx.connection.traffic_changes_enabled %}
+<form method="post" action="/ports/rate-interval" class="stack form-narrow form-after">
+  <input type="hidden" name="csrf" value="{{ ctx.csrf }}">
+  <input type="hidden" name="name" value="{{ port.name }}">
+  {{ origin(ctx) }}
+  <label for="{{ ctx.id }}rate-seconds">Average In and Out over</label>
+  <select id="{{ ctx.id }}rate-seconds" name="seconds">
+    {% for n in f.load_intervals %}
+    <option value="{{ n }}" {% if port.load_interval == n %}selected{% endif %}>{{ f.load_interval_label(n) }}</option>
+    {% endfor %}
+    <option value="default" {% if port.load_interval == f.default_load_interval or port.load_interval not in f.load_intervals %}selected{% endif %}>{{ f.load_interval_label(f.default_load_interval) }}</option>
+  </select>
+  <p class="hint">How long the switch averages this port's In and Out rates over (<code>load-interval counter 1</code>). Shorter follows bursts more closely. Only the figures change, not the traffic.</p>
+  <button type="submit" class="btn btn-primary">Change the rate average</button>
+</form>
+{% elif ctx.can_change and ctx.connection.changes_enabled %}
+<p class="note">Traffic measuring changes are off. {% if ctx.role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to change how long the switch averages a port's rates over.</p>
 {% endif %}
 {% endmacro %}
 

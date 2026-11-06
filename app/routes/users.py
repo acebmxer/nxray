@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -17,6 +18,12 @@ from app.dependencies import (
     require_csrf,
     templates,
 )
+from app.routes.switch_accounts import (
+    create_with_switches,
+    own_session,
+    read_accounts,
+    switch_ids,
+)
 from app.security import (
     client_ip,
     csrf_token,
@@ -25,6 +32,15 @@ from app.security import (
     session_id_from_request,
     verify_password,
 )
+from app.switch_accounts import (
+    ROLE_MAP_WORDS,
+    check_switch_name,
+    check_switch_side_password,
+    list_links,
+    out_of_step,
+    reserved,
+)
+from app.switch_connection import list_connections
 from app.totp import provisioning_uri, qr_svg, spaced_secret
 from app.users import (
     MIN_PASSWORD_LENGTH,
@@ -55,17 +71,65 @@ log = logging.getLogger("nxray.users")
 NO_STORE = {"Cache-Control": "no-store"}
 
 
+def switch_status(conn: sqlite3.Connection, user: User) -> list[dict]:
+    """The user's switch accounts, each with what is out of step with NXray."""
+    connections = {connection.id: connection for connection in list_connections(conn)}
+    found = []
+    for link in list_links(conn, user_id=user.id):
+        connection = connections.get(link.switch_id)
+        if connection is not None:
+            found.append(
+                {
+                    "connection": connection,
+                    "link": link,
+                    "problems": out_of_step(user, link, connection),
+                }
+            )
+    return found
+
+
+def _switch_note(request: Request, user: User) -> str:
+    """After a change in NXray only: which of the user's switch accounts are now
+    out of step, and where to bring them in step. Empty when none is."""
+    with open_db(request.app.state.settings.db_path) as conn:
+        current = get_user_by_id(conn, user.id) or user
+        status = [item for item in switch_status(conn, current) if item["problems"]]
+    if not status:
+        return ""
+    where = ", ".join(
+        f"{item['link'].account_name} on {item['connection'].label}" for item in status
+    )
+    return (
+        f" Out of step on the switch: {where} ({'; '.join(status[0]['problems'])}). "
+        f"Bring it in step on the Switch accounts page of {current.username}."
+    )
+
+
 def _render_users(
     request: Request,
     username: str,
     *,
     error: str | None = None,
     notice: str | None = None,
-    form: dict[str, str] | None = None,
+    form: dict | None = None,
+    switch_form: dict | None = None,
     status_code: int = 200,
 ) -> Response:
     with open_db(request.app.state.settings.db_path) as conn:
         users = list_users(conn)
+        connections = list_connections(conn)
+        statuses = {user.id: switch_status(conn, user) for user in users}
+    names = {user.id: user.username for user in users}
+    owners: dict[tuple[int, str], str] = {}
+    for user_id, items in statuses.items():
+        for item in items:
+            owners[(item["connection"].id, item["link"].account_name.lower())] = names[user_id]
+    switch_lists = []
+    for connection in connections:
+        accounts, read_error = read_accounts(request, connection)
+        switch_lists.append(
+            {"connection": connection, "accounts": accounts, "read_error": read_error}
+        )
     return templates.TemplateResponse(
         request,
         "users.html",
@@ -74,10 +138,17 @@ def _render_users(
             "users": users,
             "roles": ROLES,
             "role_help": ROLE_HELP,
+            "role_map": ROLE_MAP_WORDS,
             "min_password": MIN_PASSWORD_LENGTH,
             "error": error,
             "notice": notice,
             "form": form or {"new_username": "", "role": "viewer"},
+            "switch_form": switch_form or {"account_name": "", "role": "viewer", "switches": []},
+            "connections": connections,
+            "statuses": statuses,
+            "switch_lists": switch_lists,
+            "owners": owners,
+            "reserved": reserved,
             "csrf_token": csrf_token(request),
         },
         status_code=status_code,
@@ -105,24 +176,69 @@ def users_create(
     password: str = Form(""),
     confirm_password: str = Form(""),
     role: str = Form(""),
+    switches: Annotated[list[str] | None, Form()] = None,
+    admin_user: str = Form(""),
+    admin_password: str = Form(""),
+    confirm_switch: str = Form(""),
 ) -> Response:
+    """Add an NXray account; with switches ticked, also a local account on each
+    ("NXray and the switch"), made with the admin login typed here."""
     require_csrf(request, csrf)
+    chosen = switch_ids(switches)
+    form = {
+        "new_username": new_username.strip(),
+        "role": role,
+        "switches": chosen,
+        "admin_user": admin_user.strip(),
+    }
+
+    def refuse(message: str) -> Response:
+        return _render_users(request, username, error=message, form=form, status_code=400)
+
+    if chosen:
+        # Check the switch's side first, so nothing is made when it would refuse.
+        try:
+            check_new_password(password, confirm_password)
+        except UserError as exc:
+            return refuse(str(exc))
+        try:
+            check_switch_name(new_username.strip())
+            check_switch_side_password(password)
+        except ValueError as exc:
+            return refuse(
+                f"Not added: NXray takes this, but {exc}. Untick the switches for NXray only."
+            )
+        if not admin_user.strip() or not admin_password:
+            return refuse("Not added: type the switch admin username and password.")
+        if confirm_switch != "yes":
+            return refuse(
+                "Not added: tick the box to confirm the account and its role on the switch."
+            )
     with open_db(request.app.state.settings.db_path) as conn:
         try:
             created = create_user(conn, new_username, password, confirm_password, role)
         except UserError as exc:
-            return _render_users(
-                request,
-                username,
-                error=str(exc),
-                form={"new_username": new_username.strip(), "role": role},
-                status_code=400,
-            )
+            return refuse(str(exc))
     log.info("%s added the NXray account %s (%s)", username, created.username, created.role)
     note_activity(
         request, username, "Users", f"Added the account {created.username} as {created.role}"
     )
-    return _render_users(request, username, notice=f"Added {created.username} as {created.role}.")
+    notice = f"Added {created.username} as {created.role}."
+    if not chosen:
+        return _render_users(request, username, notice=notice)
+    made, failed = create_with_switches(
+        request, username, created, password, chosen, admin_user, admin_password
+    )
+    if made:
+        notice += " Also on the switch: " + " ".join(made)
+    error = None
+    if failed:
+        error = (
+            f"{created.username} was added to NXray, but not to every switch: "
+            + " ".join(failed)
+            + f" Try again on the Switch accounts page of {created.username}."
+        )
+    return _render_users(request, username, notice=notice, error=error)
 
 
 def _change_other(request: Request, user_id: str) -> tuple[int, str | None]:
@@ -159,7 +275,11 @@ def users_role(
             return _render_users(request, username, error=str(exc), status_code=400)
     log.info("%s made %s %s", username, changed.username, changed.role)
     note_activity(request, username, "Users", f"Made {changed.username} {changed.role}")
-    return _render_users(request, username, notice=f"{changed.username} is now {changed.role}.")
+    return _render_users(
+        request,
+        username,
+        notice=f"{changed.username} is now {changed.role}.{_switch_note(request, changed)}",
+    )
 
 
 @router.post("/users/disable", response_class=HTMLResponse)
@@ -189,7 +309,7 @@ def users_disable(
         log.info("%s enabled the NXray account %s", username, changed.username)
         note_activity(request, username, "Users", f"Enabled the account {changed.username}")
         notice = f"{changed.username} can sign in again."
-    return _render_users(request, username, notice=notice)
+    return _render_users(request, username, notice=notice + _switch_note(request, changed))
 
 
 @router.post("/users/password", response_class=HTMLResponse)
@@ -212,7 +332,7 @@ def users_password(
             )
         try:
             check_new_password(new_password, confirm_password)
-            set_password(conn, target.id, new_password, keep_session=_own_session(request, target))
+            set_password(conn, target.id, new_password, keep_session=own_session(request, target))
         except UserError as exc:
             return _render_users(request, username, error=str(exc), status_code=400)
     log.info("%s set a new password for %s", username, target.username)
@@ -220,7 +340,10 @@ def users_password(
     return _render_users(
         request,
         username,
-        notice=f"New password set for {target.username}. It was signed out everywhere.",
+        notice=(
+            f"New password set for {target.username} in NXray. It was signed out everywhere."
+            + _switch_note(request, target)
+        ),
     )
 
 
@@ -266,14 +389,6 @@ def users_2fa_off(
     )
 
 
-def _own_session(request: Request, target: User) -> str | None:
-    """This session's id when the target is the signed-in account, so it stays signed in."""
-    account = current_account(request)
-    if account is not None and target.id == account.id:
-        return session_id_from_request(request)
-    return None
-
-
 def _render_account(
     request: Request,
     username: str,
@@ -286,12 +401,14 @@ def _render_account(
     # just have changed the account (two-factor on or off).
     with open_db(request.app.state.settings.db_path) as conn:
         account = get_user(conn, username)
+        switch_accounts = switch_status(conn, account) if account else []
     return templates.TemplateResponse(
         request,
         "account.html",
         {
             "username": username,
             "account": account,
+            "switch_accounts": switch_accounts,
             "role_help": ROLE_HELP,
             "min_password": MIN_PASSWORD_LENGTH,
             "error": error,
@@ -367,11 +484,17 @@ def account_password(
         set_password(conn, account.id, new_password, keep_session=session_id_from_request(request))
     log.info("%s changed their NXray password", username)
     note_activity(request, username, "Account", "Changed their own password")
-    return _render_account(
-        request,
-        username,
-        notice="Password changed. Your other sessions were signed out; this one stays.",
-    )
+    with open_db(request.app.state.settings.db_path) as conn:
+        linked = switch_status(conn, account)
+    notice = "Password changed. Your other sessions were signed out; this one stays."
+    if linked:
+        where = ", ".join(f"{i['link'].account_name} on {i['connection'].label}" for i in linked)
+        notice += (
+            f" Your switch account ({where}) still has your old password: only an NXray admin "
+            "can change it there, by setting a new password for NXray and the switch together "
+            "on the Users page."
+        )
+    return _render_account(request, username, notice=notice)
 
 
 # ---- two-factor sign-in, on the Account page ----------------------------------------

@@ -17,10 +17,12 @@ from app import __version__
 from app.activity import record_activity, utc_time
 from app.alerts import notify_change, switch_label
 from app.db import open_db
-from app.nxapi import SwitchTarget
+from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
+from app.nxapi import SwitchTarget, shared_reads
+from app.port_changes import ROLE_VERSION, missing_changes
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
-from app.security import csrf_token, csrf_valid, current_user
+from app.security import LIVE_REQUEST, csrf_token, csrf_valid, current_user
 from app.switch_choice import selected_switch_id
 from app.switch_connection import (
     DecryptionError,
@@ -68,6 +70,31 @@ async def add_security_headers(
     return response
 
 
+async def share_switch_reads(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """HTTP middleware: a page that refreshes itself as a whole (``live.js`` asks
+    with ``X-Requested-With: nxray-live``) reads the switch through the shared
+    cache, so many open pages cost the switch one read per interval. Every
+    other request, a page opened or a form sent, reads the switch itself."""
+    if request.headers.get("x-requested-with") != LIVE_REQUEST or not refreshes_whole_page(
+        request.method, request.url.path
+    ):
+        return await call_next(request)
+    settings = request.app.state.settings
+    token = shared_reads.set(
+        shared_show_reads(
+            request.app.state.live_cache,
+            settings.live_min_interval,
+            settings.live_clients_min_interval,
+        )
+    )
+    try:
+        return await call_next(request)
+    finally:
+        shared_reads.reset(token)
+
+
 class RedirectToLogin(Exception):
     """Raised by login_required; turned into a 303 by the exception handler.
 
@@ -100,6 +127,17 @@ def require_csrf(request: Request, token: str) -> None:
 def login_required(request: Request) -> str:
     """Return the logged-in username, or send an anonymous caller to /login."""
     username = current_user(request)
+    if username is None:
+        raise RedirectToLogin(request.url.path)
+    return username
+
+
+def live_login_required(request: Request) -> str:
+    """Like ``login_required`` for the self-refreshing figures: it does not
+    slide the session's expiry. Signed out, it redirects to the sign-in page
+    like any other route, and the page's script, seeing the redirect, stops
+    asking."""
+    username = current_user(request, touch=False)
     if username is None:
         raise RedirectToLogin(request.url.path)
     return username
@@ -213,9 +251,32 @@ def switch_picker(request: Request) -> tuple[list[SwitchConnection], int | None]
     return request.state.picker
 
 
+def role_behind(request: Request) -> list[tuple[SwitchConnection, str]]:
+    """Switches whose NXray role lacks rules this version of NXray can use, with
+    the missing kinds of change in words, for the banner on every page.
+
+    Only for an admin, who alone can fix it on the Switch page, and only for a
+    switch that already had changes turned on (``role_version`` above 0); one
+    that never had them is simply off, not behind. Empty on the Switch page,
+    which has its own card for this.
+    """
+    account = current_account(request)
+    if account is None or not account.is_admin or request.url.path.startswith("/switch"):
+        return []
+    switches, _ = switch_picker(request)
+    return [
+        (switch, missing_changes(switch.role_version))
+        for switch in switches
+        if 0 < switch.role_version < ROLE_VERSION
+    ]
+
+
 templates.env.globals["switch_picker"] = switch_picker
+templates.env.globals["role_behind"] = role_behind
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
+templates.env.globals["live_choices"] = LIVE_CHOICES
+templates.env.globals["refreshes_whole_page"] = refreshes_whole_page
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 
