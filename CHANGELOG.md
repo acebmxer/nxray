@@ -9,6 +9,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
+**A feature release: traffic per VLAN and per device with sFlow, live figures
+on every page, NXray users with their own switch accounts, and Include beta
+versions for self-update.** Coming from 0.1.1 on `:latest`, run
+`docker compose pull` and `docker compose up -d`; on `:0.1.1`, put `:0.2.0`
+in the compose file's `image:` line first. Coming from a beta, replace
+`:beta` with `:latest` or `:0.2.0`. The data volume carries over and the
+database upgrades itself on first start. On each switch, open the Switch page
+and press **Update the port list** so NXray's role gains the new rules (the
+banner on every page says when a switch is behind).
+
 ### Added
 
 - **Refresh, last-updated time and Pause on every page.** The top bar's
