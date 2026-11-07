@@ -9,6 +9,16 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switching a port from trunk to access now clears its trunk settings.** The
+  port kept its trunk native VLAN and trunk allowed VLANs in the running
+  config, and the VLAN form kept showing them. NXray now sets them back to the
+  defaults (native VLAN 1, every VLAN carried), which the switch leaves out of
+  the configuration. The confirm page lists it, and the bulk port change does
+  the same. An access port that still carries such leftovers gets them cleared
+  the next time its VLANs are changed (#35).
+
 ## [0.2.0] - 2026-11-05
 
 **A feature release: traffic per VLAN and per device with sFlow, live figures
