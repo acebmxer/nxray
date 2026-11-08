@@ -9,6 +9,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Light / Dark / System choice is now in the top bar**, to the right of
+  the Refresh control, instead of at the bottom of the menu. It also shows
+  when the menu is narrowed (#37).
+
 ### Fixed
 
 - **Switching a port from trunk to access now clears its trunk settings.** The

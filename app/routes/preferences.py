@@ -1,4 +1,4 @@
-"""The theme and menu-width buttons at the foot of the menu, and the refresh picker."""
+"""The theme and menu-width buttons, and the refresh picker."""
 
 from __future__ import annotations
 

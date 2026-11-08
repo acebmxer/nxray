@@ -1,4 +1,4 @@
-"""The theme and menu-width buttons at the foot of the menu (app/preferences.py)."""
+"""The theme buttons in the top bar and the menu-width button (app/preferences.py)."""
 
 from __future__ import annotations
 

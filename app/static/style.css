@@ -206,9 +206,9 @@ code {
 
 .side-foot { border-top: 1px solid var(--line); padding: 8px; display: grid; gap: 2px; }
 .theme-choice {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 0 0 6px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, auto);
+  margin: 0 12px 0 0;
   border: 1px solid var(--line);
   border-radius: var(--r);
   overflow: hidden;
@@ -216,8 +216,9 @@ code {
 .theme-choice button {
   border: 0;
   background: transparent;
-  padding: 4px 0;
-  font-size: 11.5px;
+  padding: 0 10px;
+  height: 24px;
+  font-size: 12px;
   color: var(--text-2);
   cursor: pointer;
 }
@@ -227,7 +228,7 @@ code {
 .version { padding: 6px 10px 2px; font-size: 11px; color: var(--text-3); white-space: nowrap; }
 
 .shell-narrow .nav-heading, .shell-narrow .nav-words, .shell-narrow .brand-name,
-.shell-narrow .theme-choice, .shell-narrow .version { display: none; }
+.shell-narrow .version { display: none; }
 .shell-narrow .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .shell-narrow .nav-group:first-child { border-top: 0; }
 .shell-narrow .navlink { justify-content: center; padding: 0; }
