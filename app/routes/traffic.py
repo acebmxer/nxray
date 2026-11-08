@@ -316,7 +316,7 @@ def traffic_sflow_setup(
     with open_db(settings.db_path) as conn:
         set_sflow_agent(conn, connection.id, form["agent"])
         set_unsaved_changes(conn, connection.id, True)
-    request.app.state.sflow_collector.set_agents(load_agents(settings.db_path))
+    request.app.state.sflow_collector.set_agents(*load_agents(settings.db_path))
     words = " ".join(plan.lines)
     log.info("sFlow setup on %s by %s: %s", connection.host, username, words)
     note_activity(request, username, "Traffic", f"sFlow: {words}", connection.host)

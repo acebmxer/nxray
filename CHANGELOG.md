@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The sFlow collector no longer trusts the agent address written inside a
+  datagram (#43).** A datagram now counts only when it was also sent from an
+  address of that same switch, so a packet from another host that names a
+  switch as its agent is ignored and its sender is listed on the Traffic page.
+
 - **A trailing line break is no longer accepted in a switch password, account
   name, port name or switch host (#42).** The checks now refuse a value that
   ends in a line break, like any other character outside the allowed set.

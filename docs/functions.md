@@ -910,11 +910,12 @@ from the device's side (it *sends* what comes in on the port).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `agent_addresses` | `(connections) -> dict[str, int]` | Which agent address is which switch, from (id, host, stored agent): the stored agent, else the host when it is an IP address | `load_agents` | v0.2.0 |
+| `sender_addresses` | `(connections) -> dict[str, int]` | Every address a switch's sFlow datagrams may be sent from: its stored agent and its NX-API host, when they are IP addresses | `load_agents` | v0.3.0 |
 | `decode_datagram` | `(data: bytes) -> Datagram` | One sFlow version 5 datagram's flow samples (formats 1 and 3: raw header, Ethernet frame and extended switch records), bounds-checked; raises `SflowError` | `SflowCollector.receive` | v0.2.0 |
 | `device_label` | `(item) -> str` | A device item in words (`Other devices` for the left-over) | the Traffic page | v0.2.0 |
 | `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts`, `vlan_cards` | v0.2.0 |
 | `latest_minute` | `(conn, switch_id) -> float \| None` | When a switch's newest stored minute began | `routes/traffic` | v0.2.0 |
-| `load_agents` | `(db_path) -> dict[str, int]` | `agent_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
+| `load_agents` | `(db_path) -> tuple[dict[str, int], dict[str, int]]` | `agent_addresses` and `sender_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
 | `minute_rows` | `(switch_id, minute, totals) -> list[SflowRow]` | One minute's rows: every VLAN, the busiest `MAX_DEVICES_PER_MINUTE` devices each way, the rest as `other` | `SflowCollector.drain` | v0.2.0 |
 | `parse_frame_header` | `(header: bytes) -> dict` | MAC addresses, 802.1Q VLAN and IPv4 or IPv6 addresses from the first bytes of an Ethernet frame | `decode_datagram` | v0.2.0 |
 | `purge_sflow` | `(conn, now, keep_days) -> int` | Deletes rows older than `NXRAY_SFLOW_KEEP_DAYS` | `run_collector` | v0.2.0 |

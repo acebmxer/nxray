@@ -48,6 +48,7 @@ from app.sflow import (
     parse_frame_header,
     purge_sflow,
     run_collector,
+    sender_addresses,
     sflow_charts,
     start_collector,
     store_rows,
@@ -227,10 +228,10 @@ def test_another_makers_samples_are_skipped() -> None:
 
 def test_only_known_switches_are_counted() -> None:
     collector = SflowCollector()
-    assert collector.receive(_one(), now=60.0) == 0
+    assert collector.receive(_one(), now=60.0, sender=AGENT) == 0
     assert collector.unknown_agents() == [(AGENT, 60.0)]
     collector.set_agents({AGENT: 1})
-    assert collector.receive(_one(), now=61.0) == 1
+    assert collector.receive(_one(), now=61.0, sender=AGENT) == 1
     status = collector.status(1)
     assert status and status.samples == 1 and status.sampling_rate == 4096
     assert collector.status(2) is None
@@ -239,16 +240,16 @@ def test_only_known_switches_are_counted() -> None:
 def test_a_damaged_datagram_is_counted_as_such() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
-    assert collector.receive(b"\0\0\0\5garbage", now=60.0) == 0
+    assert collector.receive(b"\0\0\0\5garbage", now=60.0, sender=AGENT) == 0
     assert collector.malformed == 1
 
 
 def test_minutes_are_handed_out_once_they_are_over() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
-    collector.receive(_one(vlan=10, size=1000), now=60.0)
-    collector.receive(_one(vlan=10, size=500), now=70.0)
-    collector.receive(_one(vlan=20, dst=BROADCAST), now=119.0)
+    collector.receive(_one(vlan=10, size=1000), now=60.0, sender=AGENT)
+    collector.receive(_one(vlan=10, size=500), now=70.0, sender=AGENT)
+    collector.receive(_one(vlan=20, dst=BROADCAST), now=119.0, sender=AGENT)
     assert collector.drain(now=119.5) == []
     rows = {(r.kind, r.item): r for r in collector.drain(now=120.0)}
     assert rows[(VLAN, "10")].bytes == 1500 * 4096 and rows[(VLAN, "10")].samples == 2
@@ -263,7 +264,7 @@ def test_minutes_are_handed_out_once_they_are_over() -> None:
 def test_everything_is_handed_out_at_shutdown() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
-    collector.receive(_one(vlan=0), now=60.0)
+    collector.receive(_one(vlan=0), now=60.0, sender=AGENT)
     rows = collector.drain(now=61.0, everything=True)
     assert (VLAN, UNKNOWN_VLAN) in {(r.kind, r.item) for r in rows}
 
@@ -354,6 +355,40 @@ def test_forgetting_a_switch_forgets_its_traffic(db: sqlite3.Connection) -> None
     assert latest_minute(db, 1) is None
 
 
+def test_a_datagram_from_another_sender_is_not_counted() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    # The agent field names the switch, but the packet came from somewhere else.
+    assert collector.receive(_one(), now=60.0, sender="198.51.100.7") == 0
+    assert collector.status(1) is None
+    assert collector.unknown_agents() == [("198.51.100.7", 60.0)]
+    assert collector.receive(_one(), now=61.0, sender=AGENT) == 1
+
+
+def test_a_switch_may_send_from_its_nxapi_address() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1}, {AGENT: 1, "192.0.2.99": 1})
+    assert collector.receive(_one(), now=60.0, sender="192.0.2.99") == 1
+
+
+def test_one_switch_cannot_speak_for_another() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1, "192.0.2.50": 2})
+    assert collector.receive(_one(), now=60.0, sender="192.0.2.50") == 0
+    assert collector.status(1) is None and collector.status(2) is None
+
+
+def test_a_mapped_ipv6_sender_is_the_same_address() -> None:
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    assert collector.receive(_one(), now=60.0, sender=f"::ffff:{AGENT}") == 1
+
+
+def test_sender_addresses_hold_the_agent_and_the_host() -> None:
+    found = sender_addresses([(1, "192.0.2.99", AGENT), (2, "switch.example", "")])
+    assert found == {AGENT: 1, "192.0.2.99": 1}
+
+
 # ---- the listener -------------------------------------------------------------
 
 
@@ -363,7 +398,8 @@ def test_the_listener_counts_stores_and_stops(tmp_path) -> None:
     with open_db(path) as conn:
         conn.execute(
             "INSERT INTO switch_connection (host, port, username, password_encrypted, "
-            "switch_hostname, created_at, config_saved) VALUES (?, 443, 'nxray', '', '', 0, 1)",
+            "switch_hostname, created_at, config_saved, sflow_agent) "
+            "VALUES ('127.0.0.1', 443, 'nxray', '', '', 0, 1, ?)",
             (AGENT,),
         )
         conn.commit()
@@ -854,8 +890,8 @@ def test_the_page_shows_what_was_measured(logged_in: TestClient, enabled: FakeSw
     collector: SflowCollector = logged_in.app.state.sflow_collector  # type: ignore[attr-defined]
     collector.set_agents({AGENT: 1})
     earlier = time.time() - 180
-    collector.receive(_one(vlan=10, size=1000), now=earlier)
-    collector.receive(_one(vlan=20, size=100, src=CLIENT, dst=SERVER), now=earlier)
+    collector.receive(_one(vlan=10, size=1000), now=earlier, sender=AGENT)
+    collector.receive(_one(vlan=20, size=100, src=CLIENT, dst=SERVER), now=earlier, sender=AGENT)
     settings = logged_in.app.state.settings  # type: ignore[attr-defined]
     with open_db(settings.db_path) as conn:
         store_rows(conn, collector.drain())
@@ -871,7 +907,7 @@ def test_the_page_shows_what_was_measured(logged_in: TestClient, enabled: FakeSw
 
 def test_samples_from_another_address_are_named(logged_in: TestClient, enabled: FakeSwitch) -> None:
     collector: SflowCollector = logged_in.app.state.sflow_collector  # type: ignore[attr-defined]
-    collector.receive(_one(), now=time.time())
+    collector.receive(_one(), now=time.time(), sender=AGENT)
     assert "sFlow also came from 192.0.2.10" in _text(logged_in.get("/traffic").text)
 
 
@@ -913,16 +949,16 @@ def test_an_untagged_frame_counts_in_its_ports_vlan() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
     collector.set_port_vlans(1, {5: 2})
-    collector.receive(_untagged(5))
-    collector.receive(_untagged(9))  # a port NXray cannot place
-    collector.receive(_one(vlan=10))  # tagged: the tag wins
+    collector.receive(_untagged(5), sender=AGENT)
+    collector.receive(_untagged(9), sender=AGENT)  # a port NXray cannot place
+    collector.receive(_one(vlan=10), sender=AGENT)  # tagged: the tag wins
     assert _vlan_totals(collector) == {"2": 1, "unknown": 1, "10": 1}
 
 
 def test_an_untagged_frame_stays_unplaced_without_the_ports() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
-    collector.receive(_untagged(5))
+    collector.receive(_untagged(5), sender=AGENT)
     assert _vlan_totals(collector) == {"unknown": 1}
 
 
@@ -930,7 +966,7 @@ def test_each_switch_has_its_own_ports() -> None:
     collector = SflowCollector()
     collector.set_agents({AGENT: 1})
     collector.set_port_vlans(2, {5: 7})
-    collector.receive(_untagged(5))
+    collector.receive(_untagged(5), sender=AGENT)
     assert _vlan_totals(collector) == {"unknown": 1}
 
 
