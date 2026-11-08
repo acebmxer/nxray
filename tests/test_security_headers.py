@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from fastapi.testclient import TestClient
 
-from app.dependencies import SECURITY_HEADERS
+from app.config import Settings
+from app.dependencies import HSTS_VALUE, SECURITY_HEADERS
+from tests.conftest import with_settings
 
 
 def _assert_headers(response) -> None:
@@ -39,3 +42,17 @@ def test_pages_use_no_inline_script_or_style(logged_in: TestClient) -> None:
             assert 'src="/static/' in tag, path
         assert "<style" not in body, path
         assert " style=" not in body, path
+
+
+def test_no_hsts_while_https_is_off(client: TestClient) -> None:
+    assert "strict-transport-security" not in client.get("/login").headers
+
+
+def test_hsts_is_sent_on_every_kind_of_response_when_https_is_on(
+    settings: Settings, make_client: Callable[[Settings], TestClient]
+) -> None:
+    client = make_client(with_settings(settings, https_only=True))
+    for path in ("/login", "/", "/healthz", "/static/style.css", "/no-such-page"):
+        header = client.get(path).headers.get("strict-transport-security")
+        assert header == HSTS_VALUE, path
+    assert "includesubdomains" not in HSTS_VALUE.lower()

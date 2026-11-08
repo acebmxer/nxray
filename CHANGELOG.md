@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **HTTPS responses now carry `Strict-Transport-Security` (#47).** With
+  `NXRAY_ENABLE_HTTPS` or `NXRAY_HTTPS` on, the browser is told to keep to
+  https:// for a year after its first visit, so a later typed `http://` address
+  can no longer be intercepted before the redirect. Browsers ignore the
+  header on a certificate they do not trust (the built-in self-signed one), but
+  for a trusted certificate that later expires they offer no click-through.
+
 - **Sign-ins are now logged (#45).** The container log records a wrong
   password or code, a lockout, a refused disabled account, a successful
   sign-in and a sign-out, each with the address and the account name, so an

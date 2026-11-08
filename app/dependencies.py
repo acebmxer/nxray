@@ -59,6 +59,11 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "same-origin",
 }
 
+# Sent only when HTTPS is on (NXRAY_ENABLE_HTTPS or NXRAY_HTTPS): after one
+# visit the browser keeps to https:// for a year. No includeSubDomains or
+# preload: NXray does not know what else runs on the same domain.
+HSTS_VALUE = "max-age=31536000"
+
 
 async def add_security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -67,6 +72,8 @@ async def add_security_headers(
     response = await call_next(request)
     for name, value in SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    if request.app.state.settings.https_only:
+        response.headers.setdefault("Strict-Transport-Security", HSTS_VALUE)
     return response
 
 
