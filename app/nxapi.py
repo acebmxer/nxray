@@ -262,7 +262,7 @@ def is_valid_host(value: str) -> bool:
         ipaddress.ip_address(value)
         return True
     except ValueError:
-        return bool(_HOSTNAME.match(value))
+        return bool(_HOSTNAME.fullmatch(value))
 
 
 def check_switch_password(password: str) -> str:
@@ -272,7 +272,7 @@ def check_switch_password(password: str) -> str:
     as a separator, a quote or a request for help ("?"). The message never
     repeats the password.
     """
-    if not _SAFE_PASSWORD.match(password):
+    if not _SAFE_PASSWORD.fullmatch(password):
         raise ValueError(
             "a switch password is 8 to 64 letters and digits, with no other characters"
         )
@@ -292,7 +292,7 @@ def _person_roles(roles: Iterable[str], *, allow_empty: bool = False) -> list[st
 
 def validate_account_name(name: str) -> str:
     """Return the name, or raise ValueError if NXray would not use it on a switch."""
-    if not _ACCOUNT_NAME.match(name):
+    if not _ACCOUNT_NAME.fullmatch(name):
         raise ValueError(
             "an account name is 1-28 characters: a letter first, then letters, "
             "digits, dots, dashes or underscores"
@@ -304,7 +304,7 @@ def validate_account_name(name: str) -> str:
 
 def validate_port_name(name: str) -> str:
     """Return the name, or raise ValueError if it is not a front-panel Ethernet port."""
-    if not _PORT_NAME.match(name):
+    if not _PORT_NAME.fullmatch(name):
         raise ValueError(f"{name!r} is not a front-panel port name such as Ethernet1/3")
     return name
 
@@ -861,7 +861,7 @@ class NxapiClient:
         The password never appears in an error message.
         """
         validate_account_name(name)
-        if not _SAFE_PASSWORD.match(password):
+        if not _SAFE_PASSWORD.fullmatch(password):
             raise ValueError("the password must be 8-64 letters and digits")
         if role not in ALLOWED_ROLES:
             raise ValueError(f"role {role!r} is not one NXray gives its account")

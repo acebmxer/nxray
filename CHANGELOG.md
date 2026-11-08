@@ -9,6 +9,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A trailing line break is no longer accepted in a switch password, account
+  name, port name or switch host (#42).** The checks now refuse a value that
+  ends in a line break, like any other character outside the allowed set.
+
 ## [0.2.1] - 2026-11-08
 
 **A small release: choose how much access NXray's switch account gets, a Restart button that needs no admin login, and two fixes.** Run **Update the port list** on the Switch page once per switch to pick up the new role rules (role version 18). No `docker-compose.yml` change is needed.

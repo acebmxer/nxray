@@ -16,9 +16,12 @@ from app.nxapi import (
     NxapiUnreachable,
     SwitchTarget,
     build_payload,
+    check_switch_password,
     error_message,
     is_valid_host,
     parse_response,
+    validate_account_name,
+    validate_port_name,
     validate_show_command,
 )
 
@@ -54,6 +57,7 @@ def test_valid_hosts(value: str) -> None:
         "-bad.example",
         "a" * 254,
         "host name",
+        "switch\n",
     ],
 )
 def test_invalid_hosts(value: str) -> None:
@@ -84,6 +88,19 @@ def test_url_brackets_ipv6() -> None:
     target = SwitchTarget(host="2001:db8::1", port=443, username="u", password="p", timeout=1)
     assert target.url == "https://[2001:db8::1]:443/ins"
     assert TARGET.url == "https://192.0.2.10:443/ins"
+
+
+@pytest.mark.parametrize(
+    "check, value",
+    [
+        (check_switch_password, "abcd1234\n"),
+        (validate_account_name, "bob\n"),
+        (validate_port_name, "Ethernet1/3\n"),
+    ],
+)
+def test_a_trailing_line_break_is_refused(check, value: str) -> None:
+    with pytest.raises(ValueError):
+        check(value)
 
 
 def test_password_never_appears_in_repr() -> None:
