@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections.abc import Callable
 
@@ -192,3 +193,80 @@ def test_local_next_is_followed(client: TestClient) -> None:
 def test_login_form_does_not_echo_an_off_site_next(client: TestClient) -> None:
     body = client.get("/login", params={"next": "https://evil.example.com/"}).text
     assert "evil.example.com" not in body
+
+
+# ---- the sign-in log ---------------------------------------------------------------------
+
+
+def _auth_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "nxray.auth"]
+
+
+def test_failed_sign_in_is_logged_with_address_and_name_but_not_the_password(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+    _login(client, "mallory", "hunter2-secret")
+    assert [r.levelno for r in caplog.records if r.name == "nxray.auth"] == [logging.WARNING]
+    line = _auth_lines(caplog)[-1]
+    assert "sign-in failed" in line and "ip=testclient" in line and "user='mallory'" in line
+    assert "hunter2-secret" not in caplog.text
+
+
+def test_a_line_break_in_the_name_cannot_forge_a_log_line(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+    _login(client, "x\nsigned in ip=1.2.3.4 user='admin'", "wrong")
+    assert len(_auth_lines(caplog)) == 1
+    assert "\n" not in _auth_lines(caplog)[0]
+
+
+def test_a_very_long_name_is_cut_short_in_the_log(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+    _login(client, "a" * 5000, "wrong")
+    assert len(_auth_lines(caplog)[0]) < 200
+
+
+def test_lockout_success_and_sign_out_are_logged(
+    settings: Settings,
+    make_client: Callable[[Settings], TestClient],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    strict = make_client(with_settings(settings, login_max_attempts=2))
+    # Building the app replaced the root handlers, caplog's included.
+    logging.getLogger().addHandler(caplog.handler)
+    caplog.set_level(logging.INFO)
+    for _ in range(2):
+        _login(strict, TEST_USER, "wrong")
+    _login(strict, TEST_USER, TEST_PASSWORD)
+    assert "sign-in blocked" in _auth_lines(caplog)[-1]
+
+
+def test_sign_in_and_sign_out_are_logged(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+    _login(client, TEST_USER, TEST_PASSWORD)
+    client.post("/logout")
+    lines = _auth_lines(caplog)
+    assert f"signed in ip=testclient user='{TEST_USER}'" in lines[0]
+    assert f"signed out ip=testclient user='{TEST_USER}'" in lines[1]
+
+
+def test_disabled_account_sign_in_is_logged(
+    settings: Settings,
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with open_db(settings.db_path) as conn:
+        create_user(conn, "otto", "otto-password", "otto-password", "operator")
+        otto = get_user(conn, "otto")
+        assert otto is not None
+        set_disabled(conn, otto.id, True)
+    caplog.set_level(logging.INFO)
+    _login(client, "otto", "otto-password")
+    assert "account disabled" in _auth_lines(caplog)[-1]
+    assert "user='otto'" in _auth_lines(caplog)[-1]

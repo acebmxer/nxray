@@ -11,6 +11,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Sign-ins are now logged (#45).** The container log records a wrong
+  password or code, a lockout, a refused disabled account, a successful
+  sign-in and a sign-out, each with the address and the account name, so an
+  admin or a log watcher such as fail2ban can see who is guessing. The name is
+  quoted and cut short, and no password or code is ever written.
+
 - **The data folder and the database are now private to NXray's user (#44).**
   The folder is set to mode 700 and the database files (with the stored switch
   configurations) to 600 from the moment they exist, and the session key is

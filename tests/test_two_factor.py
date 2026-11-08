@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import re
 import sqlite3
 import time
@@ -308,6 +309,26 @@ def test_off_site_next_is_dropped_at_the_code_step(logged_in: TestClient) -> Non
         "/login/2fa", data={"code": _next_code(secret), "next": "https://evil.example.com/"}
     )
     assert done.headers["location"] == "/"
+
+
+def _auth_log(caplog: pytest.LogCaptureFixture) -> str:
+    return [r.getMessage() for r in caplog.records if r.name == "nxray.auth"][-1]
+
+
+def test_wrong_code_and_backup_code_sign_in_are_logged(
+    logged_in: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    _, codes = _turn_on(logged_in)
+    client = _fresh(logged_in)
+    caplog.set_level(logging.INFO)
+    _password_step(client)
+    client.post("/login/2fa", data={"code": "123456"})
+    assert "sign-in failed (wrong code) ip=testclient" in _auth_log(caplog)
+    assert "123456" not in caplog.text
+    client.post("/login/2fa", data={"code": codes[0]})
+    assert "signed in with a backup code" in _auth_log(caplog)
+    assert "left=9" in _auth_log(caplog)
+    assert codes[0] not in caplog.text
 
 
 def test_wrong_codes_are_throttled_and_a_new_password_step_does_not_reset_the_count(

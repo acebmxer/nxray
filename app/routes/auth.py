@@ -33,6 +33,24 @@ from app.users import AccountDisabled, User, authenticate, check_second_factor, 
 router = APIRouter()
 log = logging.getLogger("nxray.auth")
 
+_NAME_LOG_LIMIT = 64
+
+
+def _audit(level: int, event: str, ip: str, username: str | None = None, detail: str = "") -> None:
+    """Write one sign-in event to the log, one line, as ``event ip=... user=...``.
+
+    Meant for an admin and for a log watcher such as fail2ban, so the address
+    is always there. The name is what the caller typed, so it is quoted with
+    repr (a line break or control character in it cannot start a fake log
+    line) and cut short. Never pass a password or a code.
+    """
+    parts = [event, f"ip={ip}"]
+    if username is not None:
+        parts.append(f"user={username[:_NAME_LOG_LIMIT]!r}")
+    if detail:
+        parts.append(detail)
+    log.log(level, " ".join(parts))
+
 
 def _set_session_cookie(response: Response, request: Request, session_id: str) -> None:
     settings = request.app.state.settings
@@ -68,6 +86,7 @@ def login_submit(
 
     with open_db(settings.db_path) as conn:
         if is_rate_limited(conn, ip, settings.login_max_attempts, settings.login_lockout_minutes):
+            _audit(logging.WARNING, "sign-in blocked (too many failures)", ip, username)
             return templates.TemplateResponse(
                 request,
                 "login.html",
@@ -85,6 +104,7 @@ def login_submit(
             user = authenticate(conn, username, password)
         except AccountDisabled:
             record_login_failure(conn, ip)
+            _audit(logging.WARNING, "sign-in refused (account disabled)", ip, username)
             return templates.TemplateResponse(
                 request,
                 "login.html",
@@ -96,6 +116,7 @@ def login_submit(
             )
         if user is None:
             record_login_failure(conn, ip)
+            _audit(logging.WARNING, "sign-in failed (wrong username or password)", ip, username)
             return templates.TemplateResponse(
                 request,
                 "login.html",
@@ -108,6 +129,7 @@ def login_submit(
             # pass. Earlier failures are NOT cleared here, or someone who has
             # the password could reset the count before every few code
             # guesses by signing in again.
+            _audit(logging.INFO, "password accepted, code needed", ip, user.username)
             response = redirect(f"/login/2fa?next={quote(next_url, safe='/')}")
             response.set_cookie(
                 key=PENDING_2FA_COOKIE,
@@ -123,6 +145,7 @@ def login_submit(
         clear_login_failures(conn, ip)
         session_id = create_session(conn, user.username, settings.session_hours)
 
+    _audit(logging.INFO, "signed in", ip, user.username)
     response = redirect(next_url)
     _set_session_cookie(response, request, session_id)
     return response
@@ -187,6 +210,7 @@ def login_2fa_submit(request: Request, code: str = Form(""), next: str = Form("/
     with open_db(settings.db_path) as conn:
         # Checked before the cookie, so a blocked address learns nothing.
         if is_rate_limited(conn, ip, settings.login_max_attempts, settings.login_lockout_minutes):
+            _audit(logging.WARNING, "code step blocked (too many failures)", ip)
             return _two_factor_page(
                 request,
                 next_url,
@@ -203,6 +227,7 @@ def login_2fa_submit(request: Request, code: str = Form(""), next: str = Form("/
         used = check_second_factor(conn, user, code[:64], settings.secret_key)
         if used is None:
             record_login_failure(conn, ip)
+            _audit(logging.WARNING, "sign-in failed (wrong code)", ip, user.username)
             return _two_factor_page(
                 request,
                 next_url,
@@ -217,8 +242,13 @@ def login_2fa_submit(request: Request, code: str = Form(""), next: str = Form("/
         session_id = create_session(conn, user.username, settings.session_hours)
         left = len(user.totp_backup_codes) - 1 if used == "backup" else None
 
-    if left is not None:
-        log.info("%s signed in with a backup code (%d left)", user.username, left)
+    _audit(
+        logging.INFO,
+        "signed in" if left is None else "signed in with a backup code",
+        ip,
+        user.username,
+        "" if left is None else f"left={left}",
+    )
     response = redirect(next_url if left is None else "/account?backup_used=1")
     _set_session_cookie(response, request, session_id)
     response.delete_cookie(PENDING_2FA_COOKIE, path="/login/2fa")
@@ -232,8 +262,11 @@ def logout(request: Request) -> Response:
     if cookie:
         session_id = unsign_session_id(cookie, settings.secret_key)
         if session_id:
+            username = current_user(request, touch=False)
             with open_db(settings.db_path) as conn:
                 destroy_session(conn, session_id)
+            if username is not None:
+                _audit(logging.INFO, "signed out", client_ip(request), username)
 
     response = redirect("/login")
     response.delete_cookie(SESSION_COOKIE, path="/")
