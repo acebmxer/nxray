@@ -123,8 +123,8 @@ def test_changes_off_before_role_version_14(
     assert "Layer 2 security changes are off" in _text(logged_in.get("/security/dhcp").text)
     switch_page = _text(logged_in.get("/switch").text)
     assert (
-        "Turn on layer 2 security, traffic measuring, reset to defaults and sFlow status changes"
-        in switch_page
+        "Turn on layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
+        "restart changes" in switch_page
     )
     refused = _change(logged_in, DHCP, scope="switch", setting="snooping", action="set")
     assert refused.status_code == 400
@@ -145,7 +145,8 @@ def test_role_version_13_turns_on_layer2_without_a_wait(
     enabled.ssh_lines.clear()
     text = _enable(logged_in)
     assert (
-        "Layer 2 security, traffic measuring, reset to defaults and sFlow status changes are "
+        "Layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart "
+        "changes are "
         "on: nxray may "
         "now also set DHCP "
         "snooping" in text
@@ -154,7 +155,7 @@ def test_role_version_13_turns_on_layer2_without_a_wait(
     assert "rule 227 permit command conf t ; hardware access-list tcam region *" in (
         enabled.ssh_lines
     )
-    assert not any("reload" in line for line in enabled.ssh_lines)
+    assert "rule 235 permit command reload" in enabled.ssh_lines
 
 
 def test_dhcp_snooping_arp_inspection_and_source_guard(
@@ -286,7 +287,11 @@ def test_acl_v14_parts(logged_in: TestClient, enabled: FakeSwitch) -> None:
     assert "Nothing changes until the switch restarts" in _text(asked.text)
 
 
-def test_restart_asks_saves_first_and_reloads(logged_in: TestClient, enabled: FakeSwitch) -> None:
+def test_restart_asks_saves_first_and_reloads(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    # A role from before the restart rules: the restart goes over SSH with the admin login.
+    _db(settings, "UPDATE switch_connection SET role_version = 17")
     asked = logged_in.post("/config/reload", data={"csrf": _csrf(logged_in)})
     assert asked.status_code == 200
     text = _text(asked.text)
@@ -315,7 +320,11 @@ def test_restart_asks_saves_first_and_reloads(logged_in: TestClient, enabled: Fa
     assert "Restarted the switch, after saving its configuration" in activity
 
 
-def test_restart_without_saving_and_bad_input(logged_in: TestClient, enabled: FakeSwitch) -> None:
+def test_restart_without_saving_and_bad_input(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    # A role from before the restart rules: the restart goes over SSH with the admin login.
+    _db(settings, "UPDATE switch_connection SET role_version = 17")
     bad_port = logged_in.post(
         "/config/reload",
         data={"csrf": _csrf(logged_in), "confirm": "yes", "admin_user": "admin",
@@ -333,7 +342,11 @@ def test_restart_without_saving_and_bad_input(logged_in: TestClient, enabled: Fa
     assert enabled.saved_at_reload == [False]
 
 
-def test_restart_by_an_account_that_may_not(logged_in: TestClient, enabled: FakeSwitch) -> None:
+def test_restart_by_an_account_that_may_not(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    # A role from before the restart rules: the restart goes over SSH with the admin login.
+    _db(settings, "UPDATE switch_connection SET role_version = 17")
     refused = logged_in.post(
         "/config/reload",
         data={"csrf": _csrf(logged_in), "confirm": "yes", "admin_user": "nxray",

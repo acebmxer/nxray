@@ -17,6 +17,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   save the changes first?" when something is unsaved, and "Are you sure you
   want to restart the switch?" (without the Save first box) when nothing is.
 
+- **Restart needs no admin login any more, and goes straight ahead when
+  nothing is unsaved (#39).** NXray's role gets the restart rules (role
+  version 18): run Update the port list on the Switch page once to pick them
+  up. Until then the restart page asks for the admin login as before. With
+  unsaved changes it still asks whether to save first. Not yet tried on a
+  real switch.
+
 ### Changed
 
 - **The Light / Dark / System choice is now in the top bar**, to the right of

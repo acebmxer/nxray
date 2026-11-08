@@ -273,61 +273,65 @@ def test_role_has_the_port_channel_rules_and_names_every_port_channel() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in CHANNEL_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 17
+    assert ROLE_VERSION == 18
     # Inside "interface policy deny", after the front ports: outside it the switch refuses it.
     policy = lines.index("interface policy deny")
     assert lines.index(CHANNEL_PERMIT) > lines.index("permit interface Ethernet1/1") > policy
     assert lines[lines.index(CHANNEL_PERMIT) + 1] == VLAN_INTERFACE_PERMIT
     assert lines[lines.index(CHANNEL_PERMIT) + 2] == "exit"
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 234))
+    assert numbers == list(range(1, 236))
 
 
 def test_missing_changes_names_port_channel_changes() -> None:
     assert missing_changes(5) == (
         "port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
         "switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults and sFlow status changes"
+        "defaults, sFlow status and switch restart changes"
     )
     assert missing_changes(6) == (
-        "VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, "
-        "security and config, layer 2 security, traffic measuring, reset to defaults and sFlow "
-        "status changes"
+        "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
+        "admin, security and config, layer 2 security, traffic measuring, reset to "
+        "defaults, sFlow status and switch restart changes"
     )
     assert (
         missing_changes(7)
         == "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes"
+        "config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
+        "restart changes"
     )
     assert (
         missing_changes(8)
         == "static route, routing protocol, spanning tree, switch admin, security and config, "
-        "layer 2 security, traffic measuring, reset to defaults and sFlow status changes"
+        "layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart "
+        "changes"
     )
     assert missing_changes(9) == (
         "routing protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring, reset to defaults and sFlow status changes"
+        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
     )
     assert missing_changes(10) == (
         "spanning tree, switch admin, security and config, layer 2 security, traffic measuring, "
-        "reset to defaults and sFlow status changes"
+        "reset to defaults, sFlow status and switch restart changes"
     )
     assert missing_changes(11) == (
         "switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults and sFlow status changes"
+        "defaults, sFlow status and switch restart changes"
     )
     assert missing_changes(12) == (
-        "security and config, layer 2 security, traffic measuring, reset to defaults and sFlow "
-        "status changes"
+        "security and config, layer 2 security, traffic measuring, reset to defaults,"
+        " sFlow status and switch restart changes"
     )
-    assert (
-        missing_changes(13)
-        == "layer 2 security, traffic measuring, reset to defaults and sFlow status changes"
+    assert missing_changes(13) == (
+        "layer 2 security, traffic measuring, reset to defaults, "
+        "sFlow status and switch restart changes"
     )
-    assert missing_changes(14) == "traffic measuring, reset to defaults and sFlow status changes"
-    assert missing_changes(15) == "reset to defaults and sFlow status changes"
-    assert missing_changes(16) == "sFlow status changes"
-    assert missing_changes(17) == ""
+    assert missing_changes(14) == (
+        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
+    )
+    assert missing_changes(15) == "reset to defaults, sFlow status and switch restart changes"
+    assert missing_changes(16) == "sFlow status and switch restart changes"
+    assert missing_changes(18) == ""
 
 
 def _restricted(fake: FakeSwitch, permits: set[str]) -> NxapiClient:

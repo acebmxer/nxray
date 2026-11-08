@@ -63,7 +63,7 @@ rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
-15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule.
+15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -461,11 +461,10 @@ SECURITY_RULES = (
 # fixed bindings, switch-wide and on the ports and interfaces; MAC ACLs and MAC
 # port ACLs; object groups; VLAN access maps and the VLAN filters that apply
 # them; and the TCAM regions' sizes. A bare line ("ip dhcp snooping") gets its
-# own rule next to the "*" one, as rules 183 and 184 do. Reloading the switch is
-# left out on purpose: NXray reloads with the switch admin login typed on the
-# Config page. Written after Cisco's NX-OS 9.3 Security Configuration Guide and
-# the shapes of the rules proven before; not yet tried on a switch. The port list
-# stays as it was, so this needs no SSH save and no wait.
+# own rule next to the "*" one, as rules 183 and 184 do. Written after Cisco's
+# NX-OS 9.3 Security Configuration Guide and the shapes of the rules proven
+# before; not yet tried on a switch. The port list stays as it was, so this
+# needs no SSH save and no wait.
 LAYER2_RULES = (
     "rule 191 permit command conf t ; ip dhcp snooping",
     "rule 192 permit command conf t ; ip dhcp snooping *",
@@ -540,11 +539,21 @@ RESET_RULES = ("rule 232 permit command conf t ; default interface *",)
 # The port list stays as it was, so this needs no SSH save and no wait.
 SFLOW_STATUS_RULES = ("rule 233 permit command show sflow",)
 
+# Restart rules, added in ROLE_VERSION 18: ``terminal dont-ask`` (so ``reload``
+# asks nothing) and ``reload``, sent by NXray over NX-API as two commands of
+# one request. Before this, restarting needed the switch admin login typed
+# each time. Written from the NX-OS command reference; not yet tried on a
+# switch. The port list stays as it was, so this needs no SSH save and no wait.
+RELOAD_RULES = (
+    "rule 234 permit command terminal dont-ask",
+    "rule 235 permit command reload",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 17
+ROLE_VERSION = 18
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -564,6 +573,7 @@ _ADDED_BY_VERSION = {
     15: "traffic measuring",
     16: "reset to defaults",
     17: "sFlow status",
+    18: "switch restart",
 }
 
 
@@ -638,6 +648,7 @@ def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True
         *TRAFFIC_RULES,
         *RESET_RULES,
         *SFLOW_STATUS_RULES,
+        *RELOAD_RULES,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,

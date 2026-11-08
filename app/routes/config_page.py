@@ -476,6 +476,7 @@ def _reload_form(
     ssh_port: str = "22",
     save: bool = True,
     error: str | None = None,
+    needs_login: bool = True,
 ) -> Response:
     return templates.TemplateResponse(
         request,
@@ -483,6 +484,7 @@ def _reload_form(
         {
             "username": username,
             "unsaved": unsaved,
+            "needs_login": needs_login,
             "warning": RELOAD_WARNING,
             "admin_user": admin_user,
             "ssh_port": ssh_port,
@@ -518,8 +520,13 @@ def config_reload(
     unsaved = None
     if configs is not None and configs.startup is not None:
         unsaved = sum(diff_counts(config_diff(configs.startup, configs.running)))
+    own_restart = connection.can_restart
     if confirm != "yes":
-        return _reload_form(request, username, unsaved)
+        if own_restart and unsaved == 0:
+            # Nothing to save and no login to ask for: restart at once.
+            confirm = "yes"
+        else:
+            return _reload_form(request, username, unsaved, needs_login=not own_restart)
     admin_user = admin_user.strip()
     keep = save == "yes"
 
@@ -532,13 +539,16 @@ def config_reload(
             ssh_port=ssh_port,
             save=keep,
             error=message,
+            needs_login=not own_restart,
         )
 
-    if not admin_user or not admin_password:
-        return again("Enter the switch's admin username and password.")
-    port = int(ssh_port) if ssh_port.isascii() and ssh_port.isdigit() else 0
-    if not 1 <= port <= 65535:
-        return again("The SSH port is a number from 1 to 65535.")
+    port = 22
+    if not own_restart:
+        if not admin_user or not admin_password:
+            return again("Enter the switch's admin username and password.")
+        port = int(ssh_port) if ssh_port.isascii() and ssh_port.isdigit() else 0
+        if not 1 <= port <= 65535:
+            return again("The SSH port is a number from 1 to 65535.")
     if keep:
         try:
             with NxapiClient(target, transport=transport) as client:
@@ -550,24 +560,31 @@ def config_reload(
             )
         with open_db(request.app.state.settings.db_path) as conn:
             set_unsaved_changes(conn, selected_switch_id(request), False)
-    try:
-        reload_switch(
-            host=connection.host,
-            port=port,
-            username=admin_user,
-            password=admin_password,
-            timeout=SSH_TIMEOUT,
-            opener=request.app.state.ssh_opener,
-        )
-    except SshAuthError:
-        return again("Not restarted: the switch refused that admin username or password.")
-    except SshCommandError as exc:
-        message = str(exc).replace(admin_password, "***")
-        log.warning("reload refused: %s", message)
-        return again(f"Not restarted: the switch refused it: {message}")
-    except SshError as exc:
-        message = str(exc).replace(admin_password, "***")
-        return again(f"Not restarted: {message}")
+    if own_restart:
+        try:
+            with NxapiClient(target, transport=transport) as client:
+                client.reload_switch()
+        except NxapiError as exc:
+            return again(f"Not restarted: {connection_error(exc, target)}")
+    else:
+        try:
+            reload_switch(
+                host=connection.host,
+                port=port,
+                username=admin_user,
+                password=admin_password,
+                timeout=SSH_TIMEOUT,
+                opener=request.app.state.ssh_opener,
+            )
+        except SshAuthError:
+            return again("Not restarted: the switch refused that admin username or password.")
+        except SshCommandError as exc:
+            message = str(exc).replace(admin_password, "***")
+            log.warning("reload refused: %s", message)
+            return again(f"Not restarted: the switch refused it: {message}")
+        except SshError as exc:
+            message = str(exc).replace(admin_password, "***")
+            return again(f"Not restarted: {message}")
     log.info("restarted %s by %s", connection.host, username)
     note_activity(
         request,

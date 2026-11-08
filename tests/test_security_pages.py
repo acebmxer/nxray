@@ -117,8 +117,8 @@ def test_changes_off_before_role_version_13(
     _db(settings, "UPDATE switch_connection SET role_version = 12")
     assert "Security and config changes are off" in _text(logged_in.get("/security/acls").text)
     assert (
-        "Turn on security and config, layer 2 security, traffic measuring, reset to defaults "
-        "and sFlow status changes" in _text(logged_in.get("/switch").text)
+        "Turn on security and config, layer 2 security, traffic measuring, reset to "
+        "defaults, sFlow status and switch restart changes" in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, ACL, scope="ipv4_acl", action="create", id_name="web")
     assert refused.status_code == 400
@@ -142,11 +142,9 @@ def test_role_version_12_turns_on_security_without_a_wait(
     )
     text = _text(response.text)
     assert (
-        "Security and config, layer 2 security, traffic measuring, reset to defaults and sFlow "
-        "status "
-        "changes are on: nxray may "
-        "now also make and "
-        "delete" in text
+        "Security and config, layer 2 security, traffic measuring, reset to defaults,"
+        " sFlow status and switch restart changes are on: nxray may now also make and"
+        " delete" in text
     )
     assert "there is no wait" in text
     assert "rule 188 permit command checkpoint *" in enabled.ssh_lines

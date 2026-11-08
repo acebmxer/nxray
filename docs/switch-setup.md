@@ -969,13 +969,15 @@ table lists what DHCP snooping learned (`show ip dhcp snooping binding`) and
 the fixed ones. Turning on snooping, ARP inspection or IP Source Guard can cut
 devices off at once; each confirm page says how.
 
-**Restarting the switch.** The Config page's **Restart the switch** asks
-whether to save first and for the switch admin login and SSH port, then saves
-with NXray's own account (when asked) and types `terminal dont-ask` and
-`reload` over SSH with the admin login, once; the password is never stored.
-NXray's own role has no rule to restart the switch. The switch dropping the
-SSH session is how NXray knows it went down; it answers again after several
-minutes.
+**Restarting the switch.** The **Restart** buttons (top bar, menu foot and the
+Config page) open the restart page. When the role has the restart rules (role
+version 18, from Update the port list), NXray types `terminal dont-ask` and
+`reload` over NX-API with its own account: nothing unsaved restarts at once;
+with unsaved changes the page asks whether to save first (NXray's own account).
+No admin login is asked. Before that update, the page asks for the switch admin
+login and SSH port and types the same two lines over SSH, once; the password
+is never stored. The switch dropping the connection is how NXray knows it went
+down; it answers again after several minutes.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows

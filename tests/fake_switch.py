@@ -1240,6 +1240,14 @@ class FakeSwitch:
             self.saved = True
             self.startup_text = self.running_config()
             return _ok(ident, None), context
+        if cmd in ("terminal dont-ask", "reload"):
+            if not (is_admin or self._role_allows(user, cmd, None)):
+                return denied, context
+            if cmd == "reload":
+                # As NX-OS over NX-API: the switch goes down and the request gets no answer.
+                self.reloads += 1
+                self.saved_at_reload.append(self.saved)
+            return _ok(ident, None), context
         if not is_admin:
             return denied, context
         if match := re.fullmatch(r"username (\S+) password (\S+) role (\S+)", cmd):

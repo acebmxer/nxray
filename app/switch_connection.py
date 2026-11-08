@@ -151,6 +151,12 @@ class SwitchConnection:
         putting a port or a port-channel back to how it came out of the box."""
         return self.changes_enabled and self.role_version >= 16
 
+    @property
+    def can_restart(self) -> bool:
+        """True once that role includes the restart rules (role version 18 or
+        later): NXray restarts the switch itself, with no admin login typed."""
+        return self.changes_enabled and self.role_version >= 18
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:
