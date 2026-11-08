@@ -16,6 +16,7 @@ from app.switch import (
     DASHBOARD_COMMANDS,
     Dashboard,
     TempSensor,
+    duration_text,
     fan_speed_percent,
     health_problems,
     load_dashboard,
@@ -204,3 +205,17 @@ def test_health_problems_names_each_problem() -> None:
         "Fan Fan1(sys_fan1) reports Absent.",
         "Power supply 1 reports no status.",
     ]
+
+
+def test_duration_text_drops_zero_parts_and_keeps_fractions() -> None:
+    # The OSPF and multicast pages both read durations through this one function.
+    assert duration_text("P7DT11H59M45S") == "7d 11h 59m 45s"
+    assert duration_text("P0DT2H0M5S") == "2h 5s"
+    assert duration_text("P0DT0H0M5.5S") == "5.5s"
+    assert duration_text("PT0S") == "0s"
+
+
+def test_duration_text_returns_anything_else_unchanged() -> None:
+    assert duration_text("never") == "never"
+    assert duration_text("P") == "P"
+    assert duration_text(None) == ""

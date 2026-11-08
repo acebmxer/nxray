@@ -69,7 +69,7 @@ from app.protocols import (
     vrf_field,
 )
 from app.routing import long_name
-from app.switch import row_vrf, text
+from app.switch import duration_text, row_vrf, text
 
 # ---- shared fields -------------------------------------------------------------
 
@@ -559,16 +559,6 @@ def _address_summary(value: Any) -> str:
     return f"{match.group(1)}/{match.group(2)}" if match else found
 
 
-def _duration(value: Any) -> str:
-    """ "P2DT13H19M57S" (ISO 8601, as MSDP gives it) -> "2d 13h 19m 57s"."""
-    found = text(value)
-    match = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", found)
-    if not match or not found.strip("PT"):
-        return found
-    parts = [f"{n}{unit}" for n, unit in zip(match.groups(), "dhms", strict=True) if n]
-    return " ".join(parts) or "0s"
-
-
 def _incoming(value: Any) -> str:
     """A multicast route's incoming interface, or "" for "Null" (none yet)."""
     found = text(value)
@@ -1035,7 +1025,7 @@ def parse_msdp(bodies: list[dict[str, Any]]) -> ProtocolView:
         found = per_vrf.setdefault(vrf_name, {"facts": [], "values": {}})
         if reconnect.isdigit() and "reconnect_interval" not in found["values"]:
             found["values"]["reconnect_interval"] = {"seconds": reconnect}
-        uptime = _duration(row.get("peer-uptime"))
+        uptime = duration_text(row.get("peer-uptime"))
         facts = (
             ("VRF", vrf_name),
             ("State", state),

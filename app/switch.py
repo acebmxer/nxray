@@ -11,6 +11,7 @@ hides that so no parser has to remember it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -82,6 +83,27 @@ def row_vrf(row: dict[str, Any], *keys: str) -> str:
         if found := text(row.get(key)):
             return found
     return "default"
+
+
+# An ISO 8601 duration as the switch writes it: P7DT11H59M45S, PT5S, P0DT0H0M5.5S.
+ISO_DURATION = re.compile(
+    r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$"
+)
+
+
+def duration_text(value: Any) -> str:
+    """ "P7DT11H59M45S" -> "7d 11h 59m 45s"; zero parts left out, "0s" if all are zero.
+
+    Seconds may be fractional ("PT5.5S" -> "5.5s"); anything that is not a duration comes
+    back unchanged. ``protocols.route_age`` and ``neighbors.readable_duration`` are
+    different on purpose: they round to the largest parts, for ages in a table.
+    """
+    raw = text(value)
+    match = ISO_DURATION.match(raw)
+    if not match or not any(match.groupdict().values()):
+        return raw
+    shown = [f"{v}{k}" for k, v in match.groupdict().items() if v and float(v)]
+    return " ".join(shown) or "0s"
 
 
 def to_int(value: Any) -> int | None:

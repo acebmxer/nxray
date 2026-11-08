@@ -38,7 +38,6 @@ commands, and were never seen live.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from app.protocols import (
@@ -54,7 +53,7 @@ from app.protocols import (
     vrf_field,
 )
 from app.routing import long_name
-from app.switch import is_true, text
+from app.switch import ISO_DURATION, duration_text, is_true, text
 
 # ---- fields ---------------------------------------------------------------------
 
@@ -864,9 +863,6 @@ def _interface_settings(version: int) -> tuple[Setting, ...]:
 
 # ---- reading ------------------------------------------------------------------------
 
-_DURATION = re.compile(
-    r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$"
-)
 _STATE = {
     "DOWN": "down",
     "LOOPBACK": "loopback",
@@ -885,21 +881,11 @@ def _body(bodies: list[dict[str, Any]], index: int) -> dict[str, Any]:
 
 
 def _seconds(value: Any) -> float | None:
-    match = _DURATION.match(text(value))
+    match = ISO_DURATION.match(text(value))
     if not match or not any(match.groupdict().values()):
         return None
     parts = {k: float(v) if v else 0.0 for k, v in match.groupdict().items()}
     return parts["d"] * 86400 + parts["h"] * 3600 + parts["m"] * 60 + parts["s"]
-
-
-def _duration(value: Any) -> str:
-    """ "P7DT11H59M45S" -> "7d 11h 59m 45s"; anything else as it is."""
-    raw = text(value)
-    match = _DURATION.match(raw)
-    if not match or not any(match.groupdict().values()):
-        return raw
-    shown = [f"{v}{k}" for k, v in match.groupdict().items() if v and float(v)]
-    return " ".join(shown) or "0s"
 
 
 def _area_type(row: dict[str, Any]) -> str:
@@ -987,8 +973,9 @@ def _process_facts(row: dict[str, Any], areas: list[dict[str, Any]]) -> tuple[tu
     facts.append(
         (
             "SPF timers",
-            f"start {_duration(row.get('spf_start_time'))}, hold "
-            f"{_duration(row.get('spf_hold_time'))}, max {_duration(row.get('spf_max_time'))}",
+            f"start {duration_text(row.get('spf_start_time'))}, "
+            f"hold {duration_text(row.get('spf_hold_time'))}, "
+            f"max {duration_text(row.get('spf_max_time'))}",
         )
     )
     if distance := text(row.get("admin_dist")):
@@ -1005,7 +992,7 @@ def _process_facts(row: dict[str, Any], areas: list[dict[str, Any]]) -> tuple[tu
         facts.append(
             (
                 "Graceful restart",
-                f"on{planned}, grace period {_duration(row.get('gr_grace_period'))}",
+                f"on{planned}, grace period {duration_text(row.get('gr_grace_period'))}",
             )
         )
     else:
@@ -1112,7 +1099,7 @@ def _neighbors(body: dict[str, Any]) -> list[tuple[str, ...]]:
                     text(row.get("addr")),
                     long_name(text(row.get("intf"))),
                     f"{state}/{role}" if role else state,
-                    _duration(row.get("uptime")),
+                    duration_text(row.get("uptime")),
                     vrf,
                     tag,
                 )

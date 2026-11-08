@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **A duration on the OSPF and multicast pages is now read one way (#51).**
+  The two pages each had their own formatter; the multicast one kept a zero
+  part such as `0d` and left a fractional-seconds time unchanged. Both use
+  `duration_text` in `app/switch.py` now.
+
 - **The small helpers that read a value from the switch's JSON now exist once
   (#50).** `text`, whole-number, true/yes and VRF-name readers were copied
   across a dozen modules and disagreed on what they accept. They now live in

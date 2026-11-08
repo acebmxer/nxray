@@ -291,6 +291,7 @@ self-signed certificate is accepted on purpose.
 | `text` | `(value) -> str` | A value from NX-OS JSON as stripped text; `""` for missing or null | every parser | v0.2.1 |
 | `int_or` | `(value, default=0) -> int` | A whole number from text such as `"10"`; `default` if it is not one (a sign is fine) | `vlans`, `ports` | v0.2.1 |
 | `digits_int` | `(value) -> int \| None` | A whole number from text made only of digits; None for anything else, a sign included | `routing` | v0.2.1 |
+| `duration_text` | `(value) -> str` | An ISO 8601 duration (`P7DT11H59M45S`) as `7d 11h 59m 45s`: zero parts left out, seconds may be fractional, anything else unchanged | `protocols_ospf`, `protocols_multicast` | v0.2.1 |
 | `is_true` | `(value) -> bool` | True only for the word `true`, in any case | `protocols_igp`, `protocols_ospf` | v0.2.1 |
 | `is_enabled` | `(value) -> bool` | True for `true`, `yes` or `enabled`, in any case | `protocols_bgp` | v0.2.1 |
 | `row_vrf` | `(row, *keys) -> str` | The VRF a row names, from the first of `keys` that holds text; `default` if none | `protocols_bgp`, `protocols_multicast` | v0.2.1 |
