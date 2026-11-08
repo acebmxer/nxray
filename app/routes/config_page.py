@@ -66,8 +66,8 @@ ROLLBACK_WARNING = (
 
 RELOAD_WARNING = (
     "The switch restarts: every port goes down and all traffic through it stops for "
-    "several minutes, NXray included, until it is back. What is not saved is lost, unless "
-    "Save first is ticked. TCAM region sizes set since the last restart take effect."
+    "several minutes, NXray included, until it is back. "
+    "TCAM region sizes set since the last restart take effect."
 )
 
 

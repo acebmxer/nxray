@@ -205,6 +205,7 @@ code {
 .who { color: var(--text-3); font-weight: 400; }
 
 .side-foot { border-top: 1px solid var(--line); padding: 8px; display: grid; gap: 2px; }
+.strip-restart { margin: 0 12px 0 0; }
 .theme-choice {
   display: inline-grid;
   grid-template-columns: repeat(3, auto);

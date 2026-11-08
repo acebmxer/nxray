@@ -269,3 +269,14 @@ def test_save_config_from_the_config_page(logged_in: TestClient, enabled: FakeSw
     enabled.hostname = "core-9"
     saved = _post(logged_in, "/switch/save", back="config")
     assert "The running configuration is saved" in _text(saved.text)
+
+
+def test_restart_page_asks_the_right_question(logged_in: TestClient, enabled: FakeSwitch) -> None:
+    saved = _post(logged_in, "/config/reload")
+    text = _text(saved.text)
+    assert "Are you sure you want to restart the switch" in text
+    assert "Save first" not in text and "Do you want to save" not in text
+    enabled.hostname = "core-9"
+    unsaved = _text(_post(logged_in, "/config/reload").text)
+    assert "Do you want to save the changes first" in unsaved
+    assert "Save first" in unsaved and "Are you sure" not in unsaved

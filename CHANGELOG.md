@@ -9,6 +9,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Added
+
+- **A "Restart" button in the top bar and at the foot of the menu** (admins
+  only), so restarting the switch no longer needs a trip to the Config page.
+  Both open the same confirm page (#38). That page now asks "Do you want to
+  save the changes first?" when something is unsaved, and "Are you sure you
+  want to restart the switch?" (without the Save first box) when nothing is.
+
 ### Changed
 
 - **The Light / Dark / System choice is now in the top bar**, to the right of
