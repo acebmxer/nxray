@@ -91,11 +91,12 @@ prose columns; those are a reviewer's job.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `connect` | `(db_path: Path) -> Connection` | Opens a connection with WAL and foreign keys on | `db.open_db` | v0.1.0 |
+| `connect` | `(db_path: Path) -> Connection` | Opens a connection with WAL and foreign keys on; creates a new file mode 600 | `db.open_db` | v0.1.0 |
 | `current_version` | `(conn) -> int` | The applied schema version, 0 for a new file | `db.migrate` | v0.1.0 |
 | `init_db` | `(db_path: Path) -> int` | Creates or upgrades the database, returns its version | `main.lifespan` | v0.1.0 |
 | `migrate` | `(conn) -> int` | Applies pending migrations in order | `db.init_db` | v0.1.0 |
 | `open_db` | `(db_path: Path) -> Iterator[Connection]` | Context manager: one connection per unit of work, always closed | routes, `security.current_user`, `main.lifespan` | v0.1.0 |
+| `restrict_files` | `(db_path: Path) -> None` | Sets the database and its `-wal`/`-shm` files to mode 600 (owner only); skips a file it does not own | `db.init_db` | v0.3.0 |
 
 Migrations are append-only. Editing an applied one leaves existing databases
 behind.

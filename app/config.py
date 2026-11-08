@@ -7,6 +7,7 @@ a setting is called, what it defaults to, and what validates it.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 from dataclasses import dataclass, field
@@ -110,7 +111,11 @@ def _load_or_create_secret_key(data_dir: Path) -> str:
             return stored
 
     generated = secrets.token_urlsafe(48)
-    key_file.write_text(generated, encoding="utf-8")
+    # Created mode 600, not written first and restricted after. An empty file
+    # left by an earlier start is opened as it is, and made 600 as well.
+    fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(generated)
     key_file.chmod(0o600)
     return generated
 
@@ -119,9 +124,13 @@ def load_settings() -> Settings:
     """Build the settings object, or raise ConfigError with a fix to apply."""
     data_dir = Path(_env_str("NXRAY_DATA_DIR", "/data"))
     try:
-        data_dir.mkdir(parents=True, exist_ok=True)
+        data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError as exc:
         raise ConfigError(f"cannot create data directory {data_dir}: {exc}") from exc
+    # The folder holds the database, the session key and the TLS key: owner only.
+    # A folder the app does not own (a bind mount) is left as it is.
+    with contextlib.suppress(OSError):
+        data_dir.chmod(0o700)
 
     password_hash = _env_str("NXRAY_ADMIN_PASSWORD_HASH")
     if not password_hash:

@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The data folder and the database are now private to NXray's user (#44).**
+  The folder is set to mode 700 and the database files (with the stored switch
+  configurations) to 600 from the moment they exist, and the session key is
+  created 600 instead of being restricted after it is written. Existing
+  installs are tightened at the next start; a bind-mounted folder NXray does
+  not own is left as it is, so set its mode on the host.
+
 - **The sFlow collector no longer trusts the agent address written inside a
   datagram (#43).** A datagram now counts only when it was also sent from an
   address of that same switch, so a packet from another host that names a
