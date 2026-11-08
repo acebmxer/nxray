@@ -305,6 +305,7 @@ BUILTIN_ROLES = ("network-admin", "network-operator")
 @dataclass
 class Role:
     entities: set[str] = field(default_factory=set)  # what each "permit command" rule names
+    rules: dict[int, tuple[str, str]] = field(default_factory=dict)  # number -> (action, command)
     interface_policy_deny: bool = False
     interfaces: set[str] = field(default_factory=set)  # lower-cased port names
 
@@ -1239,6 +1240,14 @@ class FakeSwitch:
                 self._copying = False
             self.saved = True
             self.startup_text = self.running_config()
+            return _ok(ident, None), context
+        if cmd in ("terminal dont-ask", "reload"):
+            if not (is_admin or self._role_allows(user, cmd, None)):
+                return denied, context
+            if cmd == "reload":
+                # As NX-OS over NX-API: the switch goes down and the request gets no answer.
+                self.reloads += 1
+                self.saved_at_reload.append(self.saved)
             return _ok(ident, None), context
         if not is_admin:
             return denied, context
@@ -2178,8 +2187,15 @@ class FakeShell:
         if current == "role" and self.role is not None:
             if line.startswith("description "):
                 return ""
-            if match := re.fullmatch(r"rule \d+ permit command (.+)", line):
-                self.role.entities.add(match.group(1))
+            if match := re.fullmatch(r"rule (\d+) (permit|deny) command (.+)", line):
+                # As NX-OS: a rule typed under a number already used replaces it.
+                self.role.rules[int(match.group(1))] = (match.group(2), match.group(3))
+                self.role.entities = {c for a, c in self.role.rules.values() if a == "permit"}
+                return ""
+            if match := re.fullmatch(r"no rule (\d+)", line):
+                # Accepted for a rule that is not there, as on cisco-25gb.
+                self.role.rules.pop(int(match.group(1)), None)
+                self.role.entities = {c for a, c in self.role.rules.values() if a == "permit"}
                 return ""
             if line == "interface policy deny":
                 self.role.interface_policy_deny = True

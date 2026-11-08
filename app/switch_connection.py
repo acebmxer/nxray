@@ -21,6 +21,16 @@ from app.switch import SystemInfo
 # How long one NX-API call may take before the switch counts as unreachable.
 SWITCH_TIMEOUT = 10.0
 
+# How much access NXray's switch account gets (issue #40). See app/port_changes.py.
+ROLE_LIMITED = "limited"
+ROLE_BROAD = "broad"
+ROLE_STORED = "stored"
+ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
+
+# The role version kept for a broad role: it permits every configuration command,
+# so no later NXray version can add a rule it lacks. Above any real ROLE_VERSION.
+BROAD_ROLE_VERSION = 1000
+
 
 @dataclass(frozen=True)
 class SwitchConnection:
@@ -47,6 +57,11 @@ class SwitchConnection:
     nxos_version: str = ""
     # The sFlow agent address NXray set on the switch; "" until then.
     sflow_agent: str = ""
+    # ROLE_LIMITED, ROLE_BROAD or ROLE_STORED; with ROLE_STORED the switch admin login
+    # (admin_user, and the SSH port to use) is kept encrypted, see ``stored_admin_login``.
+    role_mode: str = ROLE_LIMITED
+    admin_user: str = ""
+    admin_ssh_port: int = 22
 
     @property
     def label(self) -> str:
@@ -151,6 +166,12 @@ class SwitchConnection:
         putting a port or a port-channel back to how it came out of the box."""
         return self.changes_enabled and self.role_version >= 16
 
+    @property
+    def can_restart(self) -> bool:
+        """True once that role includes the restart rules (role version 18 or
+        later): NXray restarts the switch itself, with no admin login typed."""
+        return self.changes_enabled and self.role_version >= 18
+
     def paused_seconds(self, now: float | None = None) -> int:
         """Seconds NXray still leaves the switch alone; 0 when not paused."""
         if self.paused_until is None:
@@ -218,6 +239,9 @@ def _connection(row: sqlite3.Row) -> SwitchConnection:
         switch_model=row["switch_model"],
         nxos_version=row["nxos_version"],
         sflow_agent=row["sflow_agent"],
+        role_mode=row["role_mode"],
+        admin_user=row["admin_user"],
+        admin_ssh_port=row["admin_ssh_port"],
     )
 
 
@@ -252,9 +276,12 @@ def set_changes_enabled(
     pause_seconds: float,
     role_version: int,
     vlan_interfaces: bool | None = None,
+    role_mode: str | None = None,
 ) -> None:
     """Record that port changes are on with the given role version, and whether
     its port list names the VLAN interfaces (None keeps what is stored).
+    ``role_mode`` (None keeps it) is stored with ``BROAD_ROLE_VERSION`` as the
+    version for a broad role; the admin login is kept by ``set_admin_login``.
 
     Switch calls pause for ``pause_seconds`` (0: no new pause). A pause
     still running from an earlier change is kept, never shortened: the
@@ -267,14 +294,16 @@ def set_changes_enabled(
            SET changes_enabled_at = ?,
                paused_until = MAX(COALESCE(paused_until, 0), ?),
                role_version = ?,
-               role_vlan_interfaces = COALESCE(?, role_vlan_interfaces)
+               role_vlan_interfaces = COALESCE(?, role_vlan_interfaces),
+               role_mode = COALESCE(?, role_mode)
          WHERE id = ?
         """,
         (
             time.time(),
             until,
-            role_version,
+            BROAD_ROLE_VERSION if role_mode == ROLE_BROAD else role_version,
             None if vlan_interfaces is None else int(vlan_interfaces),
+            role_mode,
             switch_id,
         ),
     )
@@ -285,10 +314,60 @@ def set_changes_off(conn: sqlite3.Connection, switch_id: int) -> None:
     """Record that port changes are off (the role is gone from the switch)."""
     conn.execute(
         "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0, "
-        "role_vlan_interfaces = 0 WHERE id = ?",
+        "role_vlan_interfaces = 0, role_mode = 'limited', admin_user = '', "
+        "admin_password_encrypted = '', admin_ssh_port = 22 WHERE id = ?",
         (switch_id,),
     )
     conn.commit()
+
+
+def set_admin_login(
+    conn: sqlite3.Connection,
+    switch_id: int,
+    *,
+    admin_user: str,
+    admin_password: str,
+    ssh_port: int,
+    secret_key: str,
+) -> None:
+    """Keep the switch admin login, encrypted, for ROLE_STORED."""
+    conn.execute(
+        "UPDATE switch_connection SET admin_user = ?, admin_password_encrypted = ?, "
+        "admin_ssh_port = ? WHERE id = ?",
+        (admin_user, encrypt(admin_password, secret_key), ssh_port, switch_id),
+    )
+    conn.commit()
+
+
+def delete_admin_login(conn: sqlite3.Connection, switch_id: int) -> None:
+    """Forget the stored switch admin login. A switch in ROLE_STORED goes back to
+    ROLE_LIMITED: the same rules, applied by an admin typing the login again."""
+    conn.execute(
+        "UPDATE switch_connection SET admin_user = '', admin_password_encrypted = '', "
+        "admin_ssh_port = 22, role_mode = CASE WHEN role_mode = 'stored' THEN 'limited' "
+        "ELSE role_mode END WHERE id = ?",
+        (switch_id,),
+    )
+    conn.commit()
+
+
+def stored_admin_login(
+    conn: sqlite3.Connection, switch_id: int, secret_key: str
+) -> tuple[str, str, int] | None:
+    """The stored switch admin login as (username, password, SSH port), or None
+    when none is stored. Raises DecryptionError when the secret key changed."""
+    row = conn.execute(
+        "SELECT admin_user, admin_password_encrypted, admin_ssh_port FROM switch_connection "
+        "WHERE id = ?",
+        (switch_id,),
+    ).fetchone()
+    if row is None or not row["admin_password_encrypted"]:
+        return None
+    return (
+        row["admin_user"],
+        decrypt(row["admin_password_encrypted"], secret_key),
+        row["admin_ssh_port"],
+    )
 
 
 def replace_login(
@@ -430,9 +509,15 @@ def load_target(conn: sqlite3.Connection, switch_id: int | None, secret_key: str
 
 
 __all__ = [
+    "BROAD_ROLE_VERSION",
+    "ROLE_BROAD",
+    "ROLE_LIMITED",
+    "ROLE_MODES",
+    "ROLE_STORED",
     "SWITCH_TIMEOUT",
     "DecryptionError",
     "SwitchConnection",
+    "delete_admin_login",
     "delete_connection",
     "find_by_address",
     "get_connection",
@@ -442,9 +527,11 @@ __all__ = [
     "replace_login",
     "save_connection",
     "set_address",
+    "set_admin_login",
     "set_changes_enabled",
     "set_changes_off",
     "set_config_saved",
     "set_switch_hostname",
     "set_unsaved_changes",
+    "stored_admin_login",
 ]

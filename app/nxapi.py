@@ -1646,6 +1646,20 @@ class NxapiClient:
         if "fail" in text.lower() or "error" in text.lower():
             raise NxapiCommandError(f"{command!r}: {text.strip()}")
 
+    def reload_switch(self) -> None:
+        """Restart the switch: ``terminal dont-ask``, then ``reload``, as two commands
+        of one request so the first still applies to the second.
+
+        The switch drops the connection as it goes down, so no answer after the
+        request was sent is the answer that means it is restarting. A refusal
+        or an error answer raises NxapiCommandError.
+        """
+        commands = ["terminal dont-ask", "reload"]
+        try:
+            self._send(commands, commands, self._target.timeout, allow_text=True)
+        except NxapiUnreachable:
+            return
+
     def _send(
         self,
         commands: list[str],

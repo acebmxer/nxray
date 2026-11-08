@@ -269,3 +269,51 @@ def test_save_config_from_the_config_page(logged_in: TestClient, enabled: FakeSw
     enabled.hostname = "core-9"
     saved = _post(logged_in, "/switch/save", back="config")
     assert "The running configuration is saved" in _text(saved.text)
+
+
+def test_restart_page_asks_the_right_question(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    # A role from before the restart rules: the confirm page asks for the admin login.
+    _db(settings, "UPDATE switch_connection SET role_version = 17")
+    saved = _post(logged_in, "/config/reload")
+    text = _text(saved.text)
+    assert "Are you sure you want to restart the switch" in text
+    assert "Save first" not in text and "Do you want to save" not in text
+    assert 'name="admin_user"' in saved.text
+    enabled.hostname = "core-9"
+    unsaved = _text(_post(logged_in, "/config/reload").text)
+    assert "Do you want to save the changes first" in unsaved
+    assert "Save first" in unsaved and "Are you sure" not in unsaved
+
+
+def test_restart_goes_straight_ahead_when_nothing_is_unsaved(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    done = _text(_post(logged_in, "/config/reload").text)
+    assert "the switch is restarting" in done
+    assert enabled.reloads == 1
+    assert enabled.saved_at_reload == [True]
+
+
+def test_restart_with_unsaved_changes_asks_without_a_login(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.hostname = "core-9"
+    page = _post(logged_in, "/config/reload")
+    assert "Do you want to save the changes first" in _text(page.text)
+    assert 'name="admin_user"' not in page.text
+    assert enabled.reloads == 0
+    kept = _post(logged_in, "/config/reload", confirm="yes", save="yes")
+    assert "restarting, with its configuration saved first" in _text(kept.text)
+    assert enabled.reloads == 1
+    assert enabled.saved_at_reload == [True]
+
+
+def test_restart_is_refused_when_the_role_lacks_the_rule(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    _db(settings, "UPDATE switch_connection SET role_version = 17")
+    page = _post(logged_in, "/config/reload", confirm="yes")
+    assert "Enter the switch" in _text(page.text)
+    assert enabled.reloads == 0

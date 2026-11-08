@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-import threading
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -27,12 +26,14 @@ from app.dependencies import (
 )
 from app.nxapi import NxapiClient, NxapiError, is_valid_host
 from app.port_changes import (
+    ROLE_MODE_WORDS,
     ROLE_NAME,
     ROLE_VERSION,
     EnableResult,
     enable_port_changes,
     missing_changes,
 )
+from app.role_upgrade import SETUP_LOCK
 from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.neighbors import render_neighbors_page
@@ -49,7 +50,12 @@ from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
 from app.switch_choice import choose_switch, remember_switch, resolve_switch_id, selected_switch_id
 from app.switch_connection import (
+    ROLE_BROAD,
+    ROLE_LIMITED,
+    ROLE_MODES,
+    ROLE_STORED,
     DecryptionError,
+    delete_admin_login,
     delete_connection,
     find_by_address,
     get_connection,
@@ -59,11 +65,13 @@ from app.switch_connection import (
     replace_login,
     save_connection,
     set_address,
+    set_admin_login,
     set_changes_enabled,
     set_changes_off,
     set_config_saved,
     set_switch_identity,
     set_unsaved_changes,
+    stored_admin_login,
 )
 from app.switch_repair import ROLE_GIVEN, ROLE_KEPT, ROLE_MISSING, run_repair
 from app.switch_setup import (
@@ -79,10 +87,11 @@ log = logging.getLogger("nxray.switch")
 
 DEFAULT_ACCOUNT_NAME = "nxray"
 
-# One setup at a time. Two at once (a double-clicked button) could both find
-# the name free, and the second "username" command would silently change the
-# first one's password on the switch.
-_setup_lock = threading.Lock()
+# SETUP_LOCK (app/role_upgrade.py): one change to NXray's account on a switch at a
+# time. Two at once (a double-clicked button) could both find the name free, and
+# the second "username" command would silently change the first one's password on
+# the switch. The tests reach it by its old name here.
+_setup_lock = SETUP_LOCK
 
 
 def _render(
@@ -121,6 +130,8 @@ def _render(
             "csrf_token": csrf_token(request),
             "role_name": ROLE_NAME,
             "role_version": ROLE_VERSION,
+            "role_mode_words": ROLE_MODE_WORDS,
+            "role_modes": ROLE_MODES,
             "missing_changes": missing_changes(connection.role_version) if connection else "",
             "paused": paused_message(connection.paused_seconds())
             if connection and connection.paused_seconds()
@@ -168,14 +179,34 @@ _VLAN_INTERFACES_OFF = (
 )
 
 
-def _changes_on_at_setup(role: EnableResult) -> str:
+def _mode_words(mode: str) -> str:
+    """What a role mode lets NXray's account do and what it costs, in a sentence."""
+    if mode == ROLE_BROAD:
+        return (
+            "The role permits any configuration change on the listed ports except accounts, "
+            "roles, AAA and the boot image, so new features need no role update. The account "
+            "can change any other setting on the switch."
+        )
+    if mode == ROLE_STORED:
+        return (
+            "The role has the listed rules only. The switch admin login is stored, encrypted, "
+            "and NXray adds new rules itself after an update. A copy of NXray's database "
+            "exposes that login, not only the low-privilege account."
+        )
+    return (
+        "The role has the listed rules only. After an update that adds rules, an admin "
+        "presses Update the port list."
+    )
+
+
+def _changes_on_at_setup(role: EnableResult, mode: str = ROLE_LIMITED) -> str:
     """What setup tells the admin after it also gave the account the role."""
     minutes = role.pause_seconds // 60
     words = (
         f" Changes are on too: the account has the {ROLE_NAME} role, so NXray can make "
         "every change this version offers. The switch applies the role once it has not "
         "heard from NXray for a while, so NXray now waits about "
-        f"{minutes} minutes before contacting it again."
+        f"{minutes} minutes before contacting it again. {_mode_words(mode)}"
     )
     if not role.vlan_interfaces:
         words += _VLAN_INTERFACES_OFF
@@ -195,6 +226,7 @@ def switch_setup(
     confirm_save: str = Form(""),
     turn_on_changes: str = Form(""),
     ssh_port: str = Form("22"),
+    role_mode: str = Form(ROLE_LIMITED),
 ) -> Response:
     require_csrf(request, csrf)
     settings = request.app.state.settings
@@ -209,6 +241,7 @@ def switch_setup(
         "account_name": account_name,
         "ssh_port": ssh_port.strip(),
         "turn_on_changes": "yes" if turn_on else "",
+        "role_mode": role_mode,
     }
 
     def fail(message: str) -> Response:
@@ -217,6 +250,8 @@ def switch_setup(
     port_number, problem = _check_address(host, port)
     if problem:
         return fail(problem)
+    if role_mode not in ROLE_MODES:
+        return fail("Pick how much access NXray's account gets.")
     ssh_port_number = 0
     if turn_on:
         ssh_port_number, problem = _check_ssh_port(ssh_port)
@@ -246,7 +281,7 @@ def switch_setup(
                 )
             )
 
-    if not _setup_lock.acquire(blocking=False):
+    if not SETUP_LOCK.acquire(blocking=False):
         return fail("A setup is already running. Wait for it to finish, then reload this page.")
     try:
         with open_db(settings.db_path) as conn:
@@ -276,6 +311,7 @@ def switch_setup(
                     admin_user=admin_user,
                     admin_password=admin_password,
                     account_name=account_name,
+                    mode=role_mode,
                     transport=request.app.state.nxapi_transport,
                     ssh_opener=request.app.state.ssh_opener,
                 )
@@ -284,7 +320,7 @@ def switch_setup(
     except SetupError as exc:
         return fail(str(exc))
     finally:
-        _setup_lock.release()
+        SETUP_LOCK.release()
 
     switch_id = added[0]
     with open_db(settings.db_path) as conn:
@@ -299,7 +335,17 @@ def switch_setup(
                 pause_seconds=role.pause_seconds,
                 role_version=ROLE_VERSION,
                 vlan_interfaces=role.vlan_interfaces,
+                role_mode=role_mode,
             )
+            if role_mode == ROLE_STORED:
+                set_admin_login(
+                    conn,
+                    switch_id,
+                    admin_user=admin_user,
+                    admin_password=admin_password,
+                    ssh_port=ssh_port_number,
+                    secret_key=settings.secret_key,
+                )
     # The new switch is the one the pages show from now on.
     choose_switch(request, switch_id)
     note_activity(
@@ -314,7 +360,8 @@ def switch_setup(
             request,
             username,
             "Switch",
-            f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION}",
+            f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION} "
+            f"({ROLE_MODE_WORDS[role_mode].lower()})",
             host,
         )
 
@@ -332,7 +379,7 @@ def switch_setup(
             f"switch. Details: {result.save_error}"
         )
     if role is not None:
-        done += _changes_on_at_setup(role)
+        done += _changes_on_at_setup(role, role_mode)
         if not role.config_saved:
             failed = True
             done += (
@@ -424,7 +471,7 @@ def switch_address(
                 "address to check it. Use Run setup again below with the new address instead."
             )
 
-    if not _setup_lock.acquire(blocking=False):
+    if not SETUP_LOCK.acquire(blocking=False):
         return fail("A switch change is already running. Wait for it, then reload this page.")
     try:
         new_target = dataclasses.replace(target, host=host, port=port_number)
@@ -445,7 +492,7 @@ def switch_address(
             record_test_result(conn, connection.id, ok=True, message=status.message)
             set_switch_identity(conn, connection, status.system)
     finally:
-        _setup_lock.release()
+        SETUP_LOCK.release()
 
     log.info("switch address changed from %s to %s", connection.host, host)
     note_activity(
@@ -515,7 +562,7 @@ def switch_repair(
                 secret_key=settings.secret_key,
             )
 
-    if not _setup_lock.acquire(blocking=False):
+    if not SETUP_LOCK.acquire(blocking=False):
         return fail("A switch change is already running. Wait for it, then reload this page.")
     try:
         result = run_repair(
@@ -531,7 +578,7 @@ def switch_repair(
     except SetupError as exc:
         return fail(str(exc))
     finally:
-        _setup_lock.release()
+        SETUP_LOCK.release()
 
     with open_db(settings.db_path) as conn:
         set_config_saved(conn, connection.id, result.config_saved)
@@ -589,6 +636,7 @@ def switch_repair(
     )
 
 
+@router.post("/switch/role-mode", response_class=HTMLResponse)
 @router.post("/switch/enable-changes", response_class=HTMLResponse)
 def switch_enable_changes(
     request: Request,
@@ -598,18 +646,33 @@ def switch_enable_changes(
     admin_password: str = Form(""),
     ssh_port: str = Form("22"),
     confirm_save: str = Form(""),
+    role_mode: str = Form(""),
 ) -> Response:
+    """Give NXray's account the role, add the rules a newer NXray knows, update its
+    port list, or change its role mode. A blank ``role_mode`` keeps the current one.
+    With the admin login stored and none typed, the stored one signs in."""
     require_csrf(request, csrf)
     settings = request.app.state.settings
     admin_user = admin_user.strip()
     with open_db(settings.db_path) as conn:
         connection = get_connection(conn, selected_switch_id(request))
+        stored = None
+        if connection is not None and connection.role_mode == ROLE_STORED:
+            try:
+                stored = stored_admin_login(conn, connection.id, settings.secret_key)
+            except DecryptionError:
+                stored = None  # the secret key changed: the admin types the login again
     if connection is None:
         return redirect("/switch")
 
     def fail(message: str) -> Response:
         return _render(request, username, error=message, status_code=400)
 
+    new_mode = role_mode or connection.role_mode
+    if new_mode not in ROLE_MODES:
+        return fail("Pick how much access NXray's account gets.")
+    if stored is not None and not admin_user and not admin_password:
+        admin_user, admin_password, ssh_port = stored[0], stored[1], str(stored[2])
     ssh_port_number, problem = _check_ssh_port(ssh_port)
     if problem:
         return fail(problem)
@@ -617,9 +680,10 @@ def switch_enable_changes(
         return fail("Enter the switch's admin username and password.")
     if confirm_save != "yes":
         return fail("Tick the box to confirm NXray may save the switch configuration.")
+    mode_before = connection.role_mode if connection.changes_enabled else None
 
     # Shares the setup lock: both change NXray's account on the switch.
-    if not _setup_lock.acquire(blocking=False):
+    if not SETUP_LOCK.acquire(blocking=False):
         return fail("A switch change is already running. Wait for it, then reload this page.")
     try:
         result = enable_port_changes(
@@ -631,27 +695,43 @@ def switch_enable_changes(
             account_name=connection.username,
             role_version=connection.role_version,
             vlan_interfaces_listed=connection.role_vlan_interfaces,
+            mode=new_mode,
+            previous_mode=mode_before,
             transport=request.app.state.nxapi_transport,
             ssh_opener=request.app.state.ssh_opener,
         )
     except SetupError as exc:
         return fail(str(exc))
     finally:
-        _setup_lock.release()
+        SETUP_LOCK.release()
 
     with open_db(settings.db_path) as conn:
+        # Any other mode than ROLE_STORED keeps no admin login.
+        if new_mode == ROLE_STORED:
+            set_admin_login(
+                conn,
+                connection.id,
+                admin_user=admin_user,
+                admin_password=admin_password,
+                ssh_port=ssh_port_number,
+                secret_key=settings.secret_key,
+            )
+        else:
+            delete_admin_login(conn, connection.id)
         set_changes_enabled(
             conn,
             connection.id,
             pause_seconds=result.pause_seconds,
             role_version=ROLE_VERSION,
             vlan_interfaces=result.vlan_interfaces,
+            role_mode=new_mode,
         )
     note_activity(
         request,
         username,
         "Switch",
-        f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION}",
+        f"Gave NXray's account the {ROLE_NAME} role, version {ROLE_VERSION} "
+        f"({ROLE_MODE_WORDS[new_mode].lower()})",
         connection.host,
     )
     account = connection.username
@@ -707,13 +787,25 @@ def switch_enable_changes(
         "put a port or a port-channel back to how it came out of the box, on its own page or "
         "the Port-channels page"
     )
-    if not result.had_role:
+    if mode_before != new_mode and (new_mode == ROLE_BROAD or mode_before is not None):
+        wait = (
+            " The switch applies a new role once it has not heard from NXray for a while, so "
+            f"NXray now waits about {result.pause_seconds // 60} minutes before "
+            "contacting it again."
+            if not result.had_role
+            else " The switch applies this at once, so there is no wait."
+        )
+        done = (
+            f"{account} now has the {ROLE_MODE_WORDS[new_mode].lower()}. {_mode_words(new_mode)}"
+            f"{wait}"
+        )
+    elif not result.had_role:
         minutes = result.pause_seconds // 60
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security, traffic measuring, reset to defaults and sFlow status changes "
-            "are on: "
+            "layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
+            "restart changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
@@ -782,6 +874,44 @@ def switch_enable_changes(
             done + " Saving the switch configuration failed, so this is lost if the switch "
             "restarts. Run copy running-config startup-config on the switch. "
             f"Details: {result.save_error}"
+        ),
+    )
+
+
+@router.post("/switch/forget-admin-login", response_class=HTMLResponse)
+def switch_forget_admin_login(
+    request: Request,
+    username: str = Depends(admin_required),
+    csrf: str = Form(""),
+) -> Response:
+    """Delete the stored switch admin login. The role keeps its rules; the switch
+    goes from the stored-login mode back to the limited one."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    with open_db(settings.db_path) as conn:
+        connection = get_connection(conn, selected_switch_id(request))
+        if connection is None:
+            return redirect("/switch")
+        try:
+            had_login = stored_admin_login(conn, connection.id, settings.secret_key) is not None
+        except DecryptionError:
+            had_login = True  # unreadable, but there: delete it
+        delete_admin_login(conn, connection.id)
+    if not had_login:
+        return _render(request, username, notice="NXray had no admin login stored for this switch.")
+    note_activity(
+        request,
+        username,
+        "Switch",
+        "Deleted the stored switch admin login; NXray's account is back on the limited role",
+        connection.host,
+    )
+    return _render(
+        request,
+        username,
+        notice=(
+            "The stored admin login is deleted. NXray's role keeps its rules, and after an "
+            "update that adds rules an admin presses Update the port list again."
         ),
     )
 

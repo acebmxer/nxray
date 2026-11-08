@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-2927%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-2956%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -102,7 +102,9 @@ the switch, never `admin`: the Switch page signs in with the admin login
 once, creates that account with a long random password, gives it a role that
 allows only the changes NXray makes (untick **Also turn on changes** to keep
 it read-only), saves the switch configuration, and keeps only that account's
-login. The admin password is never stored. See [Switch setup](docs/switch-setup.md).
+login. The admin password is never stored, unless you choose the role mode that
+stores it (see [How much access NXray's account gets](docs/switch-setup.md#how-much-access-nxrays-account-gets)).
+See [Switch setup](docs/switch-setup.md).
 
 Once a switch is set up, NXray also reads it every minute (four read-only
 commands) to record history; see [Installation](docs/installation.md#history).

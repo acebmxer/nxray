@@ -398,15 +398,15 @@ def test_role_has_the_layer2_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in LAYER2_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 17
-    assert (
-        missing_changes(13)
-        == "layer 2 security, traffic measuring, reset to defaults and sFlow status changes"
+    assert ROLE_VERSION == 18
+    assert missing_changes(13) == (
+        "layer 2 security, traffic measuring, reset to defaults, "
+        "sFlow status and switch restart changes"
     )
     description = next(line for line in lines if line.startswith("description "))
     assert len(description.removeprefix("description ")) <= 128
-    # Restarting is never in the role.
-    assert not any("reload" in line for line in lines)
+    # Restarting is in the role: terminal dont-ask, then reload.
+    assert "rule 235 permit command reload" in lines
 
 
 # ---- restarting ----------------------------------------------------------------------

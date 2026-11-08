@@ -14,6 +14,40 @@
 <p class="alert alert-warn" role="status">{{ paused }}</p>
 {% endif %}
 
+{% macro mode_choice(selected) %}
+  <fieldset class="stack">
+    <legend>How much access NXray's account gets</legend>
+    <label class="check">
+      <input type="radio" name="role_mode" value="limited" {% if selected == "limited" %}checked{% endif %}>
+      Limited role (default)
+    </label>
+    <p class="hint">
+      Only the rules NXray lists. After an update that adds rules, an admin
+      presses Update the port list on this page; the banner says when.
+    </p>
+    <label class="check">
+      <input type="radio" name="role_mode" value="broad" {% if selected == "broad" %}checked{% endif %}>
+      Broad role with a deny list
+    </label>
+    <p class="hint">
+      Any configuration command and any show command, except configuration of
+      accounts, roles, AAA, TACACS+, RADIUS and the boot image. New features need
+      no role update, and the account is still limited to the ports the role
+      names. Tradeoff: the account can change any other setting on the switch.
+    </p>
+    <label class="check">
+      <input type="radio" name="role_mode" value="stored" {% if selected == "stored" %}checked{% endif %}>
+      Limited role, and store the switch admin login
+    </label>
+    <p class="hint">
+      The same rules as the limited role. NXray keeps the switch admin login
+      typed below, encrypted like its own account's password, and adds new rules
+      itself after an update. Tradeoff: a stolen NXray database then exposes the
+      switch's real admin login, not only the low-privilege account.
+    </p>
+  </fieldset>
+{% endmacro %}
+
 {% macro setup_form(f, p) %}
   <form method="post" action="/switch/setup" class="stack form-narrow">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -55,6 +89,7 @@
       heard from for a while. Untick it to keep the account read-only; you can
       turn changes on later on this page.
     </p>
+    {{ mode_choice(f.get("role_mode") or "limited") }}
 
     <label for="{{ p }}ssh_port">SSH port</label>
     <input id="{{ p }}ssh_port" name="ssh_port" type="text" inputmode="numeric"
@@ -146,10 +181,16 @@
   </p>
 </section>
 
-{% macro admin_form(button, wait) %}
+{% macro admin_form(button, wait, pick_mode=false) %}
   <form method="post" action="/switch/enable-changes" class="stack form-narrow">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
 
+    {% if connection.role_mode == "stored" %}
+    <p class="hint">
+      NXray signs in with the stored admin login ({{ connection.admin_user }}, SSH
+      port {{ connection.admin_ssh_port }}). No login is needed.
+    </p>
+    {% else %}
     <label for="ch_admin_user">Switch admin username</label>
     <input id="ch_admin_user" name="admin_user" type="text" value="admin" required
            autocomplete="off" spellcheck="false">
@@ -160,6 +201,8 @@
 
     <label for="ssh_port">SSH port</label>
     <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="22" required>
+    {% endif %}
+    {% if pick_mode %}{{ mode_choice("limited") }}{% endif %}
 
     {% if wait %}
     <p class="warning">
@@ -168,7 +211,7 @@
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
       message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes take effect straight
+      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes take effect straight
       away, with no further waits.
     </p>
     <label class="check">
@@ -192,7 +235,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -257,6 +300,73 @@
   </p>
 </section>
 
+{% if connection.changes_enabled %}
+<section class="card">
+  <h2 class="card-title">How much access NXray's account gets</h2>
+  <p class="lead">
+    Now: <strong>{{ role_mode_words[connection.role_mode] }}</strong>.
+    {% if connection.role_mode == "broad" %}
+    The role permits any configuration command and any show command on the ports
+    it names, except configuration of accounts, roles, AAA, TACACS+, RADIUS and
+    the boot image. New features need no role update, but the account can
+    change any other setting on the switch.
+    {% elif connection.role_mode == "stored" %}
+    The role has the listed rules only, and the switch admin login
+    ({{ connection.admin_user }}) is stored, encrypted. NXray adds new rules
+    itself after an update; a stolen NXray database would expose that login.
+    {% else %}
+    The role has the listed rules only. After an update that adds rules, an
+    admin presses Update the port list; the banner says when.
+    {% endif %}
+  </p>
+  <p class="lead">
+    Changing it signs in to the switch over SSH with the admin login below,
+    writes the role again (rules the new choice does not have are removed), and
+    saves the configuration. Only the choice to store the login keeps the
+    password.
+  </p>
+  <form method="post" action="/switch/role-mode" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    {{ mode_choice(connection.role_mode) }}
+
+    <label for="rm_admin_user">Switch admin username</label>
+    <input id="rm_admin_user" name="admin_user" type="text" value="{{ connection.admin_user or 'admin' }}" required
+           autocomplete="off" spellcheck="false">
+
+    <label for="rm_admin_password">Switch admin password</label>
+    <input id="rm_admin_password" name="admin_password" type="password" required
+           autocomplete="off">
+
+    <label for="rm_ssh_port">SSH port</label>
+    <input id="rm_ssh_port" name="ssh_port" type="text" inputmode="numeric"
+           value="{{ connection.admin_ssh_port }}" required>
+
+    <p class="warning">
+      Afterwards NXray runs <code>copy running-config startup-config</code>, which
+      also saves any other unsaved changes on the switch. There is no wait: the
+      switch applies new rules in a role the account already has at once.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="confirm_save" value="yes" required>
+      I understand: save the switch configuration.
+    </label>
+
+    <button type="submit" class="btn btn-primary">Change how much access NXray's account gets</button>
+  </form>
+  {% if connection.role_mode == "stored" %}
+  <form method="post" action="/switch/forget-admin-login" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-quiet">Delete the stored admin login</button>
+  </form>
+  <p class="note">
+    Deleting it leaves the role as it is and puts NXray's account back on the
+    limited role: after an update that adds rules, an admin types the login
+    again on this page.
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if connection.role_version < role_version %}
 <section class="card">
   <h2 class="card-title">{{ missing_changes[:1]|upper }}{{ missing_changes[1:] }}</h2>
@@ -293,9 +403,11 @@
     and set up sFlow, so the switch sends samples of its traffic to NXray (on
     the Traffic page).
     NXray's role on the switch ({{ role_name }}) was made
-    before that and does not allow it yet. NXray signs in to the switch over SSH
-    once more with the admin login below and adds the rules to the role. The
-    admin password is used for this only and never stored.
+    before that and does not allow it yet. {% if connection.role_mode == "stored" %}NXray
+    adds the rules itself when it starts, with the stored admin login; press the
+    button to do it now, or if that did not work.{% else %}NXray signs in to the
+    switch over SSH once more with the admin login below and adds the rules to
+    the role. The admin password is used for this only and never stored.{% endif %}
   </p>
   {{ admin_form("Turn on " ~ missing_changes, false) }}
 </section>
@@ -315,16 +427,18 @@
     VLAN interfaces. After a 100G
     port is split into four, or four split ports are joined again, the role
     does not name the new ports yet, and the switch refuses NXray's changes to
-    them. NXray signs in to the switch over SSH with the admin login below and
-    adds the ports the switch has now. The admin password is used for this
-    only and never stored.
+    them. {% if connection.role_mode == "stored" %}NXray signs in to the switch
+    over SSH with the stored admin login and adds the ports the switch has
+    now.{% else %}NXray signs in to the switch over SSH with the admin login
+    below and adds the ports the switch has now. The admin password is used for
+    this only and never stored.{% endif %}
   </p>
   {{ admin_form("Update the port list", false) }}
 </section>
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes on gives it a role
+    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports, port-channels
     and VLAN interfaces only,
     turning a port on or off, editing its description, setting its mode
@@ -366,9 +480,10 @@
   <p class="lead">
     NX-API cannot create this kind of role, so NXray signs in to the switch over
     SSH once with the admin login below, types the role in, and checks it took.
-    The admin password is used for this only and never stored.
+    The admin password is used for this only and never stored, unless you pick
+    the option to store it.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults and sFlow status changes", true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes", true, true) }}
 </section>
 {% endif %}
 
@@ -447,7 +562,7 @@
     role network-operator) with a long random password, gives it the
     {{ role_name }} role over SSH unless you untick Also turn on changes, and
     from then on uses only that account. The admin password is used for this
-    setup only and is never stored. Afterwards the pages show the new switch;
+    setup only and is never stored, unless you pick the option to store it. Afterwards the pages show the new switch;
     pick another in the top bar.
   </p>
   {{ setup_form(add_form, "add_") }}
@@ -460,7 +575,7 @@
     own account (read-only role network-operator) with a long random password,
     gives it the {{ role_name }} role over SSH unless you untick Also turn on
     changes, and from then on uses only that account. The admin password is
-    used for this setup only and is never stored.
+    used for this setup only and is never stored, unless you pick the option to store it.
   </p>
 
   {{ setup_form(form, "") }}

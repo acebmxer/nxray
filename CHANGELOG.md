@@ -9,6 +9,58 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-08
+
+**A small release: choose how much access NXray's switch account gets, a Restart button that needs no admin login, and two fixes.** Run **Update the port list** on the Switch page once per switch to pick up the new role rules (role version 18). No `docker-compose.yml` change is needed.
+
+### Added
+
+- **Choose how much access NXray's switch account gets, per switch (#40).**
+  Pick it in the setup form or later on the Switch page: the **limited role**
+  (default, as before), a **broad role with a deny list** (any configuration
+  and show command on the listed ports except accounts, roles, AAA, TACACS+,
+  RADIUS and the boot image, so new features need no role update), or the
+  limited role with the **switch admin login stored** (encrypted), so NXray
+  adds new rules itself when it starts. Changing the choice asks for the admin
+  login and removes the rules the new choice does not have; **Delete the
+  stored admin login** returns to the limited role. The broad role's denies for
+  `role`, `aaa`, `tacacs-server`, `radius-server` and `boot` are not yet tried
+  on a real switch.
+
+- **A "Restart" button in the top bar and at the foot of the menu** (admins
+  only), so restarting the switch no longer needs a trip to the Config page.
+  Both open the same confirm page (#38). That page now asks "Do you want to
+  save the changes first?" when something is unsaved, and "Are you sure you
+  want to restart the switch?" (without the Save first box) when nothing is.
+
+- **Restart needs no admin login any more, and goes straight ahead when
+  nothing is unsaved (#39).** NXray's role gets the restart rules (role
+  version 18): run Update the port list on the Switch page once to pick them
+  up. Until then the restart page asks for the admin login as before. With
+  unsaved changes it still asks whether to save first. Not yet tried on a
+  real switch.
+
+### Changed
+
+- **The Light / Dark / System choice is now in the top bar**, to the right of
+  the Refresh control, instead of at the bottom of the menu. It also shows
+  when the menu is narrowed (#37).
+
+### Fixed
+
+- **Selected text on a self-refreshing page is kept (#41).** On the Config page
+  and the other pages that refresh whole, text selected with the mouse was
+  cleared within a second or two, so it could not be copied. A refresh now waits
+  while text in the page is selected.
+
+- **Switching a port from trunk to access now clears its trunk settings.** The
+  port kept its trunk native VLAN and trunk allowed VLANs in the running
+  config, and the VLAN form kept showing them. NXray now sets them back to the
+  defaults (native VLAN 1, every VLAN carried), which the switch leaves out of
+  the configuration. The confirm page lists it, and the bulk port change does
+  the same. An access port that still carries such leftovers gets them cleared
+  the next time its VLANs are changed (#35).
+
 ## [0.2.0] - 2026-11-05
 
 **A feature release: traffic per VLAN and per device with sFlow, live figures

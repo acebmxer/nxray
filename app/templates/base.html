@@ -70,14 +70,13 @@
       {% endfor %}
     </nav>
     <div class="side-foot">
-      <form method="post" action="/preferences" class="theme-choice" aria-label="Colours">
-        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
-        <input type="hidden" name="next" value="{{ back_to }}">
-        {% for key, words in themes.items() %}
-        <button type="submit" name="theme" value="{{ key }}"{% if prefs.theme == key %} class="on" aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ words }}</button>
-        {% endfor %}
-      </form>
       <a class="navlink{% if path.startswith('/account') %} navlink-on{% endif %}" href="/account" title="Your account">{{ icon("account") }}<span class="nav-words">{{ username }}{% if nav_role %} <span class="who">({{ nav_role }})</span>{% endif %}</span></a>
+      {% if nav_role == "admin" %}
+      <form method="post" action="/config/reload" class="inline">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <button type="submit" class="navlink navlink-button" title="Restart the switch">{{ icon("restart") }}<span class="nav-words">Restart</span></button>
+      </form>
+      {% endif %}
       <form method="post" action="/logout" class="inline">
         <button type="submit" class="navlink navlink-button" title="Log out">{{ icon("logout") }}<span class="nav-words">Log out</span></button>
       </form>
@@ -131,6 +130,19 @@
           {% endfor %}
         </select>
         <button type="submit" class="btn btn-quiet live-set">Set</button>
+      </form>
+      {% if nav_role == "admin" and here %}
+      <form method="post" action="/config/reload" class="inline strip-restart">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <button type="submit" class="btn btn-quiet" title="Restart the switch">Restart</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/preferences" class="theme-choice" aria-label="Colours">
+        <input type="hidden" name="csrf" value="{{ form_token(request) }}">
+        <input type="hidden" name="next" value="{{ back_to }}">
+        {% for key, words in themes.items() %}
+        <button type="submit" name="theme" value="{{ key }}"{% if prefs.theme == key %} class="on" aria-pressed="true"{% else %} aria-pressed="false"{% endif %}>{{ words }}</button>
+        {% endfor %}
       </form>
       {% if picker_switches|length > 1 %}
       <form method="post" action="/switches/select" class="switch-picker">

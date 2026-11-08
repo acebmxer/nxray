@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -24,6 +25,7 @@ from app.dependencies import (
 from app.history import start_sampler
 from app.live import LiveCache
 from app.logging_conf import configure_logging
+from app.role_upgrade import upgrade_stored_roles
 from app.routes import (
     activity,
     alerts,
@@ -87,6 +89,19 @@ async def lifespan(app: FastAPI):
     )
 
     start_background_checker(settings)
+    # A switch whose admin login is stored gets this version's new role rules at
+    # once; on its own thread, since the switch may be slow or unreachable.
+    threading.Thread(
+        target=upgrade_stored_roles,
+        args=(settings,),
+        kwargs={
+            "transport": app.state.nxapi_transport,
+            "ssh_opener": app.state.ssh_opener,
+            "alert_transport": app.state.alert_transport,
+        },
+        name="nxray-role-upgrade",
+        daemon=True,
+    ).start()
     stop_sampler = start_sampler(
         settings,
         lambda: app.state.nxapi_transport,

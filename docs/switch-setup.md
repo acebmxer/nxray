@@ -969,13 +969,15 @@ table lists what DHCP snooping learned (`show ip dhcp snooping binding`) and
 the fixed ones. Turning on snooping, ARP inspection or IP Source Guard can cut
 devices off at once; each confirm page says how.
 
-**Restarting the switch.** The Config page's **Restart the switch** asks
-whether to save first and for the switch admin login and SSH port, then saves
-with NXray's own account (when asked) and types `terminal dont-ask` and
-`reload` over SSH with the admin login, once; the password is never stored.
-NXray's own role has no rule to restart the switch. The switch dropping the
-SSH session is how NXray knows it went down; it answers again after several
-minutes.
+**Restarting the switch.** The **Restart** buttons (top bar, menu foot and the
+Config page) open the restart page. When the role has the restart rules (role
+version 18, from Update the port list), NXray types `terminal dont-ask` and
+`reload` over NX-API with its own account: nothing unsaved restarts at once;
+with unsaved changes the page asks whether to save first (NXray's own account).
+No admin login is asked. Before that update, the page asks for the switch admin
+login and SSH port and types the same two lines over SSH, once; the password
+is never stored. The switch dropping the connection is how NXray knows it went
+down; it answers again after several minutes.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows
@@ -1067,6 +1069,33 @@ account, page or text, or download it as CSV. Lines are kept for a year.
 
 (with your account name in place of `nxray`). Remove the role itself with
 `no role name nxray-ports` only when no NXray install on the switch uses it.
+
+### How much access NXray's account gets
+
+Each switch has a role mode, chosen in the setup form (next to **Also turn on
+changes**) and changeable later on the Switch page under **How much access
+NXray's account gets**. Changing it asks for the switch admin login, writes the
+`nxray-ports` role again, removes the rules the new mode does not have, and
+saves the configuration. The port list (`interface policy deny` and the ports it
+names) is the same in every mode, so the account stays limited to those ports.
+
+| Mode | The role | After an NXray update that adds rules |
+| --- | --- | --- |
+| **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server` and `boot` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Limited role, admin login stored** | The listed rules, as in the limited mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
+
+In the broad role a rule with a higher number wins over a lower one, so the
+denies are numbered right after the permit for `conf t ; *`, and the other
+permits after them. Checked on a switch (NX-OS 9.3(16)): the `username` deny,
+and that the port list still limits the account. Not yet tried: the denies for
+`role`, `aaa`, `tacacs-server`, `radius-server` and `boot`, and the `no` forms.
+
+With the login stored, it is kept encrypted with the same key as NXray's own
+account password (see [Configuration](configuration.md)), with the SSH port
+typed with it. **Delete the stored admin login** removes it and puts the switch
+back on the limited role, whose rules are the same; the role on the switch is
+not touched. **Forget this switch** removes it too.
 
 ## When it stops working
 

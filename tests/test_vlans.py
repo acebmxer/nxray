@@ -245,6 +245,28 @@ def test_plan_adds_the_native_vlan_to_the_vlans_carried() -> None:
     assert same.empty
 
 
+def test_plan_to_access_sets_the_trunk_settings_back_to_the_defaults() -> None:
+    # Switching trunk to access left the trunk native and allowed VLANs in the
+    # running config (#35).
+    trunk = _port("Ethernet1/20", "trunk", native=253, allowed={253, 254})
+    view = _view(1, 2, 253, 254)
+    change = plan_port_vlans(
+        trunk, view, mode="access", access_vlan="2", native_vlan="253", allowed="253-254"
+    )
+    assert (change.mode, change.access_vlan, change.native_vlan) == ("access", 2, 1)
+    assert change.allowed_vlans == list(range(1, 4095)) and change.trunk_reset
+    lines, _ = describe_port_vlans(trunk, change)
+    assert lines[0] == "Mode: trunk → access."
+    assert lines[-1].startswith("Trunk settings cleared: native VLAN 253 and VLANs carried 253-254")
+    assert len(lines) == 3
+
+    # An access port with nothing left over has nothing to reset.
+    plain = _port("Ethernet1/21", "access", access=2)
+    assert plan_port_vlans(
+        plain, view, mode="access", access_vlan="2", native_vlan="1", allowed=""
+    ).empty
+
+
 def test_native_carried() -> None:
     assert _port("Ethernet1/5", "trunk", native=2, allowed={253, 254}).native_carried is False
     assert _port("Ethernet1/5", "trunk", native=2, allowed={2, 253}).native_carried is True
@@ -319,6 +341,13 @@ def test_vlan_commands_are_built_from_checked_values() -> None:
         client.configure_port_vlans("Ethernet1/3", mode="trunk", allowed_vlans=[1, 10, 11, 20])
         client.configure_port_vlans("Ethernet1/3", native_vlan=10, allowed_vlans=[])
         client.configure_port_vlans("Ethernet1/3", mode="access", access_vlan=20)
+        client.configure_port_vlans(
+            "Ethernet1/3",
+            mode="access",
+            access_vlan=20,
+            native_vlan=1,
+            allowed_vlans=sorted(ALL_VLANS),
+        )
     assert seen == [
         ["vlan 20"],
         ["vlan 20", "name storage"],
@@ -334,6 +363,13 @@ def test_vlan_commands_are_built_from_checked_values() -> None:
             "switchport trunk allowed vlan none",
         ],
         ["interface Ethernet1/3", "switchport mode access", "switchport access vlan 20"],
+        [
+            "interface Ethernet1/3",
+            "switchport mode access",
+            "switchport access vlan 20",
+            "switchport trunk native vlan 1",
+            "switchport trunk allowed vlan 1-4094",
+        ],
     ]
 
 

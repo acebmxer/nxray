@@ -10,23 +10,29 @@
   <p class="lead confirm-summary">The switch reloads: it stops, starts NX-OS again and comes back with its saved configuration.</p>
   <p class="warning">{{ warning }}</p>
   {% if unsaved is none %}
-  <p class="note">NXray cannot read the saved configuration to compare, so it cannot tell whether anything is unsaved.</p>
+  <p class="note">NXray cannot read the saved configuration to compare, so it cannot tell whether anything is unsaved. What is not saved is lost.</p>
   {% elif unsaved %}
-  <p class="warning">The running configuration differs from the saved one by {{ unsaved }} line{{ "" if unsaved == 1 else "s" }}: without Save first, the restart undoes them.</p>
+  <p class="warning">Do you want to save the changes first? The running configuration differs from the saved one by {{ unsaved }} line{{ "" if unsaved == 1 else "s" }}: without Save first, the restart undoes them.</p>
   {% else %}
-  <p>The running configuration is saved: the switch comes back as it is now.</p>
+  <p class="lead">Are you sure you want to restart the switch? Nothing is unsaved: it comes back as it is now.</p>
   {% endif %}
-  <p class="note">NXray's own account may not restart the switch, so this uses the switch's admin login, once, over SSH (the switch asks a question before it restarts, which NX-API cannot answer). The password is never stored. Save first uses NXray's own account, as Save config does.</p>
+  {% if needs_login %}
+  <p class="note">NXray's own account has no restart rule on this switch yet, so this uses the switch's admin login, once, over SSH. The password is never stored.{% if unsaved != 0 %} Save first uses NXray's own account, as Save config does.{% endif %} Once Update the port list has run on the Switch page, this login is no longer asked for.</p>
+  {% endif %}
   <form method="post" action="/config/reload" class="stack form-narrow" autocomplete="off">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="confirm" value="yes">
+    {% if unsaved != 0 %}
     <label class="check"><input type="checkbox" name="save" value="yes" {% if save %}checked{% endif %}> Save first (copy running-config startup-config)</label>
+    {% endif %}
+    {% if needs_login %}
     <label for="admin_user">Switch admin username</label>
     <input id="admin_user" name="admin_user" type="text" value="{{ admin_user }}" spellcheck="false" autocomplete="off">
     <label for="admin_password">Password</label>
     <input id="admin_password" name="admin_password" type="password" autocomplete="off">
     <label for="ssh_port">SSH port</label>
     <input id="ssh_port" name="ssh_port" type="text" inputmode="numeric" value="{{ ssh_port }}">
+    {% endif %}
     <div class="button-row">
       <button type="submit" class="btn btn-primary">Yes, restart the switch</button>
       <a class="btn btn-quiet" href="/config">Cancel</a>

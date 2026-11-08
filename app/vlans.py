@@ -31,6 +31,8 @@ VLAN_PAGE_COMMANDS = (*VLAN_COMMANDS, "show interface brief")
 
 # Every VLAN: what a trunk carries unless told otherwise.
 ALL_VLANS = frozenset(range(1, 4095))
+# A trunk's native VLAN unless told otherwise.
+DEFAULT_VLAN = 1
 
 
 @dataclass(frozen=True)
@@ -194,6 +196,10 @@ class PortVlanChange:
     allowed_vlans: list[int] | None = None
     # The native VLAN, when the form's VLANs carried left it out and NXray added it.
     native_added: int | None = None
+    # True when an access port's leftover trunk settings are set back to the
+    # defaults (native VLAN 1, every VLAN carried): native_vlan and
+    # allowed_vlans then hold those defaults.
+    trunk_reset: bool = False
 
     @property
     def empty(self) -> bool:
@@ -244,8 +250,10 @@ def plan_port_vlans(
 ) -> PortVlanChange:
     """Check the port's VLAN form against the switch and keep only what changes.
 
-    Only the settings of the chosen mode count: an access port's form leaves
-    the trunk settings alone and the other way round. Access and native
+    Only the settings of the chosen mode count: a trunk's form leaves the
+    access VLAN alone. An access port has no trunk settings, so any it still
+    carries from being a trunk are set back to the defaults (the switch's
+    default values leave the configuration as bare as removing them). Access and native
     VLANs must exist (the switch would accept a missing one and leave the
     port passing no traffic). A trunk's native VLAN is added to the VLANs it
     carries when the form leaves it out: NX-OS forwards untagged traffic only
@@ -269,9 +277,14 @@ def plan_port_vlans(
 
     if mode == "access":
         access = existing(access_vlan, "access VLAN")
+        reset_native = current.native_vlan != DEFAULT_VLAN
+        reset_allowed = current.allowed != ALL_VLANS
         return PortVlanChange(
             mode=new_mode,
             access_vlan=access if access != current.access_vlan or new_mode else None,
+            native_vlan=DEFAULT_VLAN if reset_native else None,
+            allowed_vlans=sorted(ALL_VLANS) if reset_allowed else None,
+            trunk_reset=reset_native or reset_allowed,
         )
     native = existing(native_vlan, "native VLAN")
     typed = frozenset(parse_vlan_list(allowed))
@@ -303,9 +316,15 @@ def describe_port_vlans(current: PortVlans, change: PortVlanChange) -> tuple[lis
                 f"{change.access_vlan} at once, and loses its connection to VLAN "
                 f"{current.access_vlan}."
             )
-    if change.native_vlan is not None:
+    if change.trunk_reset:
+        lines.append(
+            f"Trunk settings cleared: native VLAN {current.native_vlan} and VLANs carried "
+            f"{current.allowed_text} go back to the defaults ({DEFAULT_VLAN} and "
+            f"{format_vlan_list(ALL_VLANS)}), since an access port has none."
+        )
+    elif change.native_vlan is not None:
         lines.append(f"Native (untagged) VLAN: {current.native_vlan} → {change.native_vlan}.")
-    if change.allowed_vlans is not None:
+    if change.allowed_vlans is not None and not change.trunk_reset:
         new = frozenset(change.allowed_vlans)
         lines.append(
             f"VLANs carried: {current.allowed_text} → {format_vlan_list(change.allowed_vlans)}."

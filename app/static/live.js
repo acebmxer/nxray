@@ -54,9 +54,15 @@
     return false;
   }
 
-  // True while someone is typing or has changed a field: refreshing then
-  // would not touch the field, but leaves them reading figures that move.
+  // True while someone is typing, has changed a field or has text selected:
+  // refreshing then leaves them reading figures that move or drops the selection.
   function userBusy() {
+    // Text selected in the page (to copy it): swapping <main> would drop it.
+    var picked = window.getSelection && window.getSelection();
+    if (picked && !picked.isCollapsed && picked.toString() !== "") {
+      var main = document.querySelector("main");
+      if (main && (main.contains(picked.anchorNode) || main.contains(picked.focusNode))) return true;
+    }
     var active = document.activeElement;
     if (active && !form.contains(active) && /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName)) {
       return true;
