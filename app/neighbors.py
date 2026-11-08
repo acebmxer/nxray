@@ -61,9 +61,9 @@ _DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")
 
 
 def _advertised(value: Any) -> str:
-    """LLDP's "not advertised" means the neighbor did not say; shown as nothing."""
+    """A field the switch prints as "not advertised" or "null" was not sent; shown as nothing."""
     text = _text(value)
-    return "" if text.lower() == "not advertised" else text
+    return "" if text.lower() in ("not advertised", "null") else text
 
 
 def long_port_name(name: str) -> str:

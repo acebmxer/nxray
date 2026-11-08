@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Neighbors no longer shows the text "null" for LLDP fields a neighbor did not
+  send (#56).** A name, port, model, address or VLAN that the switch prints as
+  `null` is now treated like "not advertised": the cell is empty, or the
+  chassis ID or port ID is shown, as it already was for a missing name.
+
 - **The container health check reads `NXRAY_ENABLE_HTTPS` the way the app does
   (#54).** It had its own looser copy, so a value the app refuses to start with
   (such as `maybe`) was read as "HTTPS off". It now uses `env_bool` from
