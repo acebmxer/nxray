@@ -93,7 +93,7 @@ from app.nxapi import (
     validate_port_name,
 )
 from app.switch import rows, to_int
-from app.switch_connection import SWITCH_TIMEOUT
+from app.switch_connection import ROLE_BROAD, ROLE_LIMITED, ROLE_MODES, ROLE_STORED, SWITCH_TIMEOUT
 from app.switch_setup import SetupError, account_names, describe_error
 from app.switch_ssh import (
     ShellOpener,
@@ -549,11 +549,86 @@ RELOAD_RULES = (
     "rule 235 permit command reload",
 )
 
+# The broad role (issue #40): any configuration command, except what could hand
+# NXray's account more access or take the switch away, and any show command, plus
+# the few commands NXray types outside configuration mode. A rule with a higher
+# number wins over a lower one that also matches (checked on the switch: with the
+# permit as rule 1 and "rule 2 deny command conf t ; username *", "username ..."
+# was refused; with the numbers the other way round it was not), so the denies
+# sit right after rule 1 and every other permit after them. Numbers stay below
+# 256, the most a role takes. Only the "username" deny has been tried on a
+# switch; the others, and the "no" forms of all of them, follow it.
+_DENIED_CONFIG = ("username", "role", "aaa", "tacacs-server", "radius-server", "boot")
+BROAD_RULES = (
+    "rule 1 permit command conf t ; *",
+    *(
+        f"rule {number} deny command conf t ; {form}{word} *"
+        for number, (form, word) in enumerate(
+            ((form, word) for word in _DENIED_CONFIG for form in ("", "no ")), start=2
+        )
+    ),
+    "rule 14 permit command show *",
+    "rule 15 permit command copy running-config startup-config",
+    "rule 16 permit command clear mac address-table dynamic",
+    "rule 17 permit command clear mac address-table dynamic *",
+    "rule 18 permit command clock set *",
+    "rule 19 permit command checkpoint *",
+    "rule 20 permit command no checkpoint *",
+    "rule 21 permit command terminal dont-ask",
+    "rule 22 permit command reload",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
 ROLE_VERSION = 18
+
+LIMITED_RULES = (
+    *ROLE_RULES,
+    *VLAN_RULES,
+    *SETTINGS_RULES,
+    *FEATURE_RULES,
+    *NEIGHBOR_RULES,
+    *CHANNEL_RULES,
+    *LAYER3_RULES,
+    *VRF_RULES,
+    *ROUTE_RULES,
+    *PROTOCOL_RULES,
+    *STP_RULES,
+    *ADMIN_RULES,
+    *SECURITY_RULES,
+    *LAYER2_RULES,
+    *TRAFFIC_RULES,
+    *RESET_RULES,
+    *SFLOW_STATUS_RULES,
+    *RELOAD_RULES,
+)
+
+# What each role mode says in the page's words.
+ROLE_MODE_WORDS = {
+    ROLE_LIMITED: "Limited role",
+    ROLE_BROAD: "Broad role with a deny list",
+    ROLE_STORED: "Limited role with the admin login stored",
+}
+
+
+def check_role_mode(mode: str) -> str:
+    """``mode`` when it is one of the role modes; ValueError otherwise."""
+    if mode not in ROLE_MODES:
+        raise ValueError(f"unknown role mode {mode!r}")
+    return mode
+
+
+def rules_for_mode(mode: str) -> tuple[str, ...]:
+    """The role's command rules in ``mode``: the broad set, or the listed rules
+    (which the limited role and the stored-login role share)."""
+    return BROAD_RULES if check_role_mode(mode) == ROLE_BROAD else LIMITED_RULES
+
+
+def _rule_numbers(rules: tuple[str, ...]) -> list[int]:
+    return [int(rule.split()[1]) for rule in rules]
+
 
 # What each role version added, for the Switch page's button names.
 _ADDED_BY_VERSION = {
@@ -615,40 +690,44 @@ def front_ports(interface_brief_body: dict) -> list[str]:
     return names
 
 
-def role_lines(ports: list[str], account_name: str, vlan_interfaces: bool = True) -> list[str]:
+def role_lines(
+    ports: list[str],
+    account_name: str,
+    vlan_interfaces: bool = True,
+    mode: str = ROLE_LIMITED,
+    previous_mode: str | None = None,
+) -> list[str]:
     """The configuration lines that create the role and give it to the account.
 
     Typed after ``configure terminal``. Every value is checked first, so the
     lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
     to the port list; the switch refuses that line while interface-vlan is off.
+    ``previous_mode`` is the mode the role was in (None for a new role): when its
+    rules differ from ``mode``'s, they are all removed first, so the role keeps
+    none the new mode lacks (a ``no rule`` for a rule that is not there is
+    accepted by the switch).
     """
     validate_account_name(account_name)
     if not ports:
         raise ValueError("the switch reported no front-panel ports")
+    rules = rules_for_mode(mode)
+    if previous_mode is not None and rules_for_mode(previous_mode) != rules:
+        cleared = [f"no rule {n}" for n in _rule_numbers(rules_for_mode(previous_mode))]
+    else:
+        cleared = []
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
+    description = (
+        "NXray: any configuration except accounts, roles, AAA and boot, on the listed ports"
+        if mode == ROLE_BROAD
+        # Kept short: NX-OS takes up to 128 characters here.
+        else "NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
+        "admin, ACLs, port security, DHCP, ARP, checkpoints, reset"
+    )
     return [
         f"role name {ROLE_NAME}",
-        # Kept short: NX-OS takes up to 128 characters here.
-        "description NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
-        "admin, ACLs, port security, DHCP, ARP, checkpoints, reset",
-        *ROLE_RULES,
-        *VLAN_RULES,
-        *SETTINGS_RULES,
-        *FEATURE_RULES,
-        *NEIGHBOR_RULES,
-        *CHANNEL_RULES,
-        *LAYER3_RULES,
-        *VRF_RULES,
-        *ROUTE_RULES,
-        *PROTOCOL_RULES,
-        *STP_RULES,
-        *ADMIN_RULES,
-        *SECURITY_RULES,
-        *LAYER2_RULES,
-        *TRAFFIC_RULES,
-        *RESET_RULES,
-        *SFLOW_STATUS_RULES,
-        *RELOAD_RULES,
+        f"description {description}",
+        *cleared,
+        *rules,
         "interface policy deny",
         *permits,
         CHANNEL_PERMIT,
@@ -718,6 +797,8 @@ def enable_port_changes(
     account_name: str,
     role_version: int = 0,
     vlan_interfaces_listed: bool = False,
+    mode: str = ROLE_LIMITED,
+    previous_mode: str | None = None,
     transport: httpx.BaseTransport | None = None,
     ssh_opener: ShellOpener | None = None,
 ) -> EnableResult:
@@ -728,6 +809,8 @@ def enable_port_changes(
     and so does it when interface-vlan is on and ``vlan_interfaces_listed``
     (the port list names the VLAN interfaces already) is false; then the
     check and the save go over SSH, which does not depend on NX-API answering.
+    ``mode`` is the role mode to write and ``previous_mode`` the one the role
+    has now (None for no role yet); see ``role_lines``.
     Raises SetupError with a message for the page when it stops.
     """
     admin = SwitchTarget(
@@ -754,7 +837,9 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         vlans = feature_states(features).get("interface-vlan", False)
-        lines = role_lines(ports, account_name, vlan_interfaces=vlans)
+        lines = role_lines(
+            ports, account_name, vlan_interfaces=vlans, mode=mode, previous_mode=previous_mode
+        )
         over_ssh = role_version < LAST_PERMIT_VERSION or (vlans and not vlan_interfaces_listed)
         then = (f"show user-account {account_name}",) if over_ssh else ()
 

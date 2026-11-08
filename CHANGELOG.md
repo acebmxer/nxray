@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Choose how much access NXray's switch account gets, per switch (#40).**
+  Pick it in the setup form or later on the Switch page: the **limited role**
+  (default, as before), a **broad role with a deny list** (any configuration
+  and show command on the listed ports except accounts, roles, AAA, TACACS+,
+  RADIUS and the boot image, so new features need no role update), or the
+  limited role with the **switch admin login stored** (encrypted), so NXray
+  adds new rules itself when it starts. Changing the choice asks for the admin
+  login and removes the rules the new choice does not have; **Delete the
+  stored admin login** returns to the limited role. The broad role's denies for
+  `role`, `aaa`, `tacacs-server`, `radius-server` and `boot` are not yet tried
+  on a real switch.
+
 - **A "Restart" button in the top bar and at the foot of the menu** (admins
   only), so restarting the switch no longer needs a trip to the Config page.
   Both open the same confirm page (#38). That page now asks "Do you want to

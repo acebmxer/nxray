@@ -102,7 +102,9 @@ the switch, never `admin`: the Switch page signs in with the admin login
 once, creates that account with a long random password, gives it a role that
 allows only the changes NXray makes (untick **Also turn on changes** to keep
 it read-only), saves the switch configuration, and keeps only that account's
-login. The admin password is never stored. See [Switch setup](docs/switch-setup.md).
+login. The admin password is never stored, unless you choose the role mode that
+stores it (see [How much access NXray's account gets](docs/switch-setup.md#how-much-access-nxrays-account-gets)).
+See [Switch setup](docs/switch-setup.md).
 
 Once a switch is set up, NXray also reads it every minute (four read-only
 commands) to record history; see [Installation](docs/installation.md#history).

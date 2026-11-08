@@ -361,6 +361,17 @@ _MIGRATIONS: list[str] = [
     CREATE INDEX idx_sflow_traffic_minute ON sflow_traffic (minute);
     ALTER TABLE switch_connection ADD COLUMN sflow_agent TEXT NOT NULL DEFAULT '';
     """,
+    # 13 -> 14: how much access NXray's switch account gets (issue #40). role_mode is
+    # 'limited' (listed rules only), 'broad' (any configuration except accounts, roles,
+    # AAA and the boot image) or 'stored' (limited rules, and the switch admin login
+    # kept encrypted so NXray adds new rules itself). The admin login columns hold
+    # something only in 'stored' mode.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_mode TEXT NOT NULL DEFAULT 'limited';
+    ALTER TABLE switch_connection ADD COLUMN admin_user TEXT NOT NULL DEFAULT '';
+    ALTER TABLE switch_connection ADD COLUMN admin_password_encrypted TEXT NOT NULL DEFAULT '';
+    ALTER TABLE switch_connection ADD COLUMN admin_ssh_port INTEGER NOT NULL DEFAULT 22;
+    """,
 ]
 
 
