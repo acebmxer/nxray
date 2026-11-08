@@ -22,7 +22,8 @@ def _env_str(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
-def _env_bool(name: str, default: bool = False) -> bool:
+def env_bool(name: str, default: bool = False) -> bool:
+    """A true/false setting; ConfigError for any other word. Everything reads these through here."""
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return default
@@ -160,7 +161,7 @@ def load_settings() -> Settings:
     # Built-in HTTPS means the browser is always on HTTPS (NXray's own nginx
     # terminates it), so it implies the Secure cookie flag. NXRAY_HTTPS stays
     # for the other case: a reverse proxy of your own, which NXray can't see.
-    enable_https = _env_bool("NXRAY_ENABLE_HTTPS", False)
+    enable_https = env_bool("NXRAY_ENABLE_HTTPS", False)
 
     history_interval = _env_int("NXRAY_HISTORY_INTERVAL", 60, 0, 3600)
     if 0 < history_interval < 10:
@@ -178,15 +179,15 @@ def load_settings() -> Settings:
         admin_user=_env_str("NXRAY_ADMIN_USER", "admin") or "admin",
         admin_password_hash=password_hash,
         secret_key=_load_or_create_secret_key(data_dir),
-        https_only=_env_bool("NXRAY_HTTPS", enable_https),
+        https_only=env_bool("NXRAY_HTTPS", enable_https),
         session_hours=_env_int("NXRAY_SESSION_HOURS", 12, 1, 720),
         login_max_attempts=_env_int("NXRAY_LOGIN_MAX_ATTEMPTS", 5, 1, 100),
         login_lockout_minutes=_env_int("NXRAY_LOGIN_LOCKOUT_MINUTES", 15, 1, 1440),
         log_level=log_level,
         enable_https=enable_https,
         https_port=_env_int("NXRAY_HTTPS_PORT", 8443, 1, 65535),
-        enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
-        dev_build=_env_bool("NXRAY_DEV_BUILD", False),
+        enable_self_update=env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
+        dev_build=env_bool("NXRAY_DEV_BUILD", False),
         history_interval=history_interval,
         live_min_interval=live_min_interval,
         live_clients_min_interval=live_clients_min_interval,

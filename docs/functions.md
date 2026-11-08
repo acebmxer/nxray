@@ -83,6 +83,7 @@ prose columns; those are a reviewer's job.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `env_bool` | `(name: str, default: bool = False) -> bool` | A true/false environment setting (true/yes/on/1, false/no/off/0); raises `ConfigError` for any other word | `load_settings`, `healthcheck.https_enabled` | v0.1.0 |
 | `load_settings` | `() -> Settings` | Reads and validates the environment; raises `ConfigError` with the fix | `main.create_app` | v0.1.0 |
 
 `Settings` is a frozen dataclass; `ConfigError` means the app must not start.
@@ -725,7 +726,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `https_enabled` | `() -> bool` | `NXRAY_ENABLE_HTTPS` read as the app reads it | `healthcheck.main` | v0.1.0 |
+| `https_enabled` | `() -> bool` | `NXRAY_ENABLE_HTTPS` read by `config.env_bool`, so a value the app refuses is also refused here | `healthcheck.main` | v0.1.0 |
 | `main` | `() -> int` | 0 when `/healthz` answers, over HTTPS through nginx when that is on | Dockerfile `HEALTHCHECK` | v0.1.0 |
 
 ## `app/totp.py` — two-factor codes

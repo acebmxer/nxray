@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The container health check reads `NXRAY_ENABLE_HTTPS` the way the app does
+  (#54).** It had its own looser copy, so a value the app refuses to start with
+  (such as `maybe`) was read as "HTTPS off". It now uses `env_bool` from
+  `app/config.py` and reports unhealthy for such a value.
+
 - **A MAC address is read, and tested for being a group address, in one place
   (#53).** The static-entry check, the gateway-MAC check and the sFlow
   collector each had their own spelling rules and group-bit test. They all use
