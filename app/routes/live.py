@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
-from app.dependencies import current_role, live_login_required, stored_switch, templates
+from app.dependencies import live_login_required, may_change, stored_switch, templates
 from app.face import color_mode, draw_face, short_device_name, speed_class
 from app.live import (
     CLIENTS,
@@ -164,7 +164,6 @@ def live_ports(
         if ports and color != "vlan"
         else None
     )
-    role = current_role(request)
     return no_cache(
         templates.TemplateResponse(
             request,
@@ -181,7 +180,7 @@ def live_ports(
                 "show": show,
                 "selected": open_port.name if open_port else "",
                 "ticked": set(),
-                "bulk_on": role in ("admin", "operator") and connection.changes_enabled,
+                "bulk_on": may_change(request) and connection.changes_enabled,
                 "ports_link": ports_link,
                 "speed_class": speed_class,
                 "short_device_name": short_device_name,

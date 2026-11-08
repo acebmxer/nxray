@@ -211,6 +211,17 @@ def current_role(request: Request) -> str | None:
     return account.role if account is not None else None
 
 
+def may_change(request: Request) -> bool:
+    """True when the signed-in account may change the switch (operator or admin).
+
+    The one place pages ask this before showing change buttons; the roles
+    themselves are decided by ``User.can_change``. A page adds its own
+    ``*_changes_enabled`` flag on top.
+    """
+    account = current_account(request)
+    return account is not None and account.can_change
+
+
 templates.env.globals["current_role"] = current_role
 
 

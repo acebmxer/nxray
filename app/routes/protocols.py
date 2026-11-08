@@ -22,8 +22,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import (
-    current_role,
     login_required,
+    may_change,
     note_activity,
     operator_required,
     require_csrf,
@@ -63,11 +63,7 @@ async def form_fields(request: Request) -> dict[str, str]:
 
 
 def _can_change(request: Request, connection: SwitchConnection | None) -> bool:
-    return (
-        connection is not None
-        and connection.protocol_changes_enabled
-        and current_role(request) in ("admin", "operator")
-    )
+    return connection is not None and connection.protocol_changes_enabled and may_change(request)
 
 
 # ---- the overview -------------------------------------------------------------------
@@ -193,11 +189,7 @@ def render_site_page(
     status = page = None
     if target is not None:
         status, page = read_switch(target, site.load, transport=request.app.state.nxapi_transport)
-    can_change = (
-        connection is not None
-        and site.enabled(connection)
-        and current_role(request) in ("admin", "operator")
-    )
+    can_change = connection is not None and site.enabled(connection) and may_change(request)
     return templates.TemplateResponse(
         request,
         "protocol.html",

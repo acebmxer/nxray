@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Which roles may change the switch is now decided in one place (#52).**
+  Four pages each had their own copy of the operator/admin check, and three
+  more wrote the role list out again. They all ask `may_change`, which asks
+  `User.can_change`, so a new role only has to be added there.
+
 - **A duration on the OSPF and multicast pages is now read one way (#51).**
   The two pages each had their own formatter; the multicast one kept a zero
   part such as `0d` and left a fractional-seconds time unchanged. Both use
