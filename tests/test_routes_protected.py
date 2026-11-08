@@ -67,3 +67,12 @@ def test_anonymous_dashboard_redirect_preserves_destination(client: TestClient) 
     response = client.get("/")
     assert response.status_code == 303
     assert response.headers["location"] == "/login?next=/"
+
+
+def test_anonymous_redirect_keeps_the_query_string_encoded(client: TestClient) -> None:
+    response = client.get("/config?a=1&b=2")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?next=/config%3Fa%3D1%26b%3D2"
+    # The login form carries the decoded address back, and safe_next keeps it.
+    page = client.get(response.headers["location"])
+    assert 'value="/config?a=1&amp;b=2"' in page.text

@@ -102,6 +102,12 @@ async def share_switch_reads(
         shared_reads.reset(token)
 
 
+def request_target(request: Request) -> str:
+    """The path and query string of a request, to come back to after sign-in."""
+    query = request.url.query
+    return f"{request.url.path}?{query}" if query else request.url.path
+
+
 class RedirectToLogin(Exception):
     """Raised by login_required; turned into a 303 by the exception handler.
 
@@ -135,7 +141,7 @@ def login_required(request: Request) -> str:
     """Return the logged-in username, or send an anonymous caller to /login."""
     username = current_user(request)
     if username is None:
-        raise RedirectToLogin(request.url.path)
+        raise RedirectToLogin(request_target(request))
     return username
 
 
@@ -146,7 +152,7 @@ def live_login_required(request: Request) -> str:
     asking."""
     username = current_user(request, touch=False)
     if username is None:
-        raise RedirectToLogin(request.url.path)
+        raise RedirectToLogin(request_target(request))
     return username
 
 

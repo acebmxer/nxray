@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
@@ -151,7 +152,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RedirectToLogin)
     async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
-        return RedirectResponse(url=f"/login?next={exc.next_url}", status_code=303)
+        return RedirectResponse(url=f"/login?next={quote(exc.next_url, safe='/')}", status_code=303)
 
     @app.exception_handler(CsrfFailed)
     async def _csrf_failed(request: Request, exc: CsrfFailed) -> Response:

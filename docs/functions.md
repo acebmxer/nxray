@@ -141,6 +141,7 @@ really invalidates rather than merely asking the browser to forget.
 | `admin_required` | `(request) -> str` | FastAPI dependency for the Switch, Users, Config and Activity pages; raises `Forbidden` for other roles | `routes/switch_page`, `routes/users`, `routes/config_page`, `routes/activity` | v0.1.0 |
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
+| `request_target` | `(request) -> str` | The request's path plus query string, kept in `?next=` across sign-in | `dependencies.login_required`, `dependencies.live_login_required` | v0.2.1 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
 | `share_switch_reads` | `(request, call_next) -> Response` | HTTP middleware: a whole-page refresh (`X-Requested-With: nxray-live` on a page `refreshes_whole_page` names) reads the switch through the live cache, so many open pages cost one read per interval; any other request reads the switch itself | `main.create_app` | v0.2.0 |
 | `live_login_required` | `(request) -> str` | Like `login_required` for self-refreshing figures: does not slide the session | `routes/live` | v0.2.0 |

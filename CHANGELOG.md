@@ -11,6 +11,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Signing in now returns you to the page you asked for, query string
+  included (#48).** A signed-out request to `/config?a=1&b=2` used to come back
+  to `/config` only, and the address was put in `?next=` unencoded, so a `&` or
+  `#` in it would have cut it short. The whole path and query are now kept and
+  URL-encoded; only a local address is still accepted.
+
 - **HTTPS responses now carry `Strict-Transport-Security` (#47).** With
   `NXRAY_ENABLE_HTTPS` or `NXRAY_HTTPS` on, the browser is told to keep to
   https:// for a year after its first visit, so a later typed `http://` address
