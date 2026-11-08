@@ -23,8 +23,9 @@ Three kinds of page:
   Security, Features, Switch admin, Alerts, History, Activity, Config and
   Switch** read the page again and replace its content. Which sections are
   open and how far a wide table is scrolled stay as they are, but a choice you
-  have made and not yet sent (a changed field, a ticked box) stops the refresh
-  until you send it or reload.
+  have made and not yet sent (a changed field, a ticked box) or text you have
+  selected to copy stops the refresh until you send it, clear the selection or
+  reload.
 - **Settings, Users, Account and the other pages with nothing to refresh**
   show the control too, so the top bar is the same on every page; with a
   refresh chosen it says *Nothing on this page refreshes*.

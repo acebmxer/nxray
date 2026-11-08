@@ -9,6 +9,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Selected text on a self-refreshing page is kept (#41).** On the Config page
+  and the other pages that refresh whole, text selected with the mouse was
+  cleared within a second or two, so it could not be copied. A refresh now waits
+  while text in the page is selected.
+
 ### Added
 
 - **Choose how much access NXray's switch account gets, per switch (#40).**
