@@ -118,6 +118,19 @@ def test_page_reads_the_switch(logged_in: TestClient, switch: FakeSwitch) -> Non
     assert "/spanning-tree/change" not in page.text  # changes are off
 
 
+def test_long_tables_scroll_inside_their_card(logged_in: TestClient, switch: FakeSwitch) -> None:
+    page = logged_in.get("/spanning-tree").text
+    assert page.count('<div class="table-capped">') >= 2  # trees, ports in the trees, port settings
+
+
+def test_routing_protocol_tables_are_not_capped() -> None:
+    from app.routes.protocols import _routing_site
+    from app.routing_protocols import protocol
+
+    proto = protocol("ospf")
+    assert proto is not None and not _routing_site(proto).scroll_tables
+
+
 def test_changes_off_before_role_version_11(
     logged_in: TestClient, enabled: FakeSwitch, settings: Settings
 ) -> None:

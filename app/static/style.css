@@ -311,7 +311,7 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 @media (min-width: 1300px) {
   main.wrap:not(.wrap-alone) { column-count: 2; column-gap: 14px; }
   main.wrap:not(.wrap-alone) > * { column-span: all; }
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
@@ -319,16 +319,16 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 }
 /* A table in a column wraps its cells instead of running past the card. */
 @media (min-width: 1300px) and (max-width: 1699px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(5))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(5))) .table :is(th, td) { white-space: normal; }
 }
 @media (min-width: 1700px) and (max-width: 2349px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(7))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(7))) .table :is(th, td) { white-space: normal; }
 }
 @media (min-width: 2350px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(8))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(8))) .table :is(th, td) { white-space: normal; }
 }
 @media (min-width: 1700px) {
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
@@ -336,7 +336,7 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 }
 @media (min-width: 2350px) {
   main.wrap:not(.wrap-alone) { column-count: 3; }
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
@@ -534,6 +534,10 @@ a.btn { text-decoration: none; }
   color: var(--text-3);
   white-space: nowrap;
 }
+/* A long table on a page that asks for it: a fixed height, scrolling inside its
+   card with the column names kept in view, so the page does not grow with it. */
+.table-capped { max-height: 440px; overflow: auto; }
+.table-capped .table th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .table td { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
 .table tbody tr:hover td { background: var(--row-hover); }

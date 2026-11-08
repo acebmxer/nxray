@@ -11,6 +11,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Spanning tree page needs far less scrolling (#57).** Its tables (Trees,
+  Ports in the trees, Port settings) no longer stretch across the whole page.
+  They sit in the page's columns like the other cards, and a long table keeps
+  a fixed height and scrolls inside its card with the column names kept in
+  view. On a 1920px-wide screen the page is about 40% shorter.
+
 - **Neighbors no longer shows the text "null" for LLDP fields a neighbor did not
   send (#56).** A name, port, model, address or VLAN that the switch prints as
   `null` is now treated like "not advertised": the cell is empty, or the

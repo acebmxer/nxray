@@ -121,12 +121,14 @@
 <section class="card">
   <h2 class="card-title">{{ t.title }}</h2>
   {% if t.rows %}
+  <div{% if site.scroll_tables %} class="table-capped"{% endif %}>
   <table class="table table-devices">
     <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
       {% for r in t.rows %}<tr>{% for cell in r %}<td class="wrap">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="dim">{{ t.empty }}</p>
   {% endif %}

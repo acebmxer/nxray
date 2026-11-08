@@ -145,6 +145,8 @@ class ProtocolSite:
     after: Callable[[Request, ProtocolChange], None] | None = None
     links: tuple[tuple[str, str], ...] = ()  # (url, label) of related pages, under the title
     needs: Callable[[SwitchConnection, str, str], str] | None = None
+    # A long table keeps a fixed height and scrolls inside its card.
+    scroll_tables: bool = False
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:
