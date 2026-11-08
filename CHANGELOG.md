@@ -9,12 +9,9 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
-### Fixed
+## [0.2.1] - 2026-11-08
 
-- **Selected text on a self-refreshing page is kept (#41).** On the Config page
-  and the other pages that refresh whole, text selected with the mouse was
-  cleared within a second or two, so it could not be copied. A refresh now waits
-  while text in the page is selected.
+**A small release: choose how much access NXray's switch account gets, a Restart button that needs no admin login, and two fixes.** Run **Update the port list** on the Switch page once per switch to pick up the new role rules (role version 18). No `docker-compose.yml` change is needed.
 
 ### Added
 
@@ -50,6 +47,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   when the menu is narrowed (#37).
 
 ### Fixed
+
+- **Selected text on a self-refreshing page is kept (#41).** On the Config page
+  and the other pages that refresh whole, text selected with the mouse was
+  cleared within a second or two, so it could not be copied. A refresh now waits
+  while text in the page is selected.
 
 - **Switching a port from trunk to access now clears its trunk settings.** The
   port kept its trunk native VLAN and trunk allowed VLANs in the running
