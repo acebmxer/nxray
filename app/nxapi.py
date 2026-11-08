@@ -43,7 +43,7 @@ from typing import Any
 
 import httpx
 
-from app.oui import normalize_mac
+from app.oui import is_group_mac, normalize_mac
 
 # A hostname (RFC 1123 labels) or an IPv4/IPv6 literal. Anything else, such
 # as a value with a path, scheme or credentials in it, is refused so the
@@ -606,7 +606,7 @@ def validate_device_mac(text: str) -> str:
     digits = normalize_mac(text)
     if digits is None:
         raise ValueError(f"{text.strip()!r} is not a MAC address such as 00:11:22:33:44:55")
-    if int(digits[:2], 16) & 0x01:
+    if is_group_mac(digits):
         raise ValueError("that is a multicast address, not one device's address")
     if digits == "0" * 12:
         raise ValueError("00:00:00:00:00:00 is not a device's address")

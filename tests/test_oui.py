@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from app import oui
-from app.oui import format_mac, is_local_mac, mac_maker, normalize_mac
+from app.oui import format_mac, is_group_mac, is_local_mac, mac_maker, normalize_mac
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -144,3 +144,12 @@ def test_a_failed_download_keeps_the_old_file(
     assert script.main(["--out", str(out)]) == 1
     assert out.read_bytes() == b"old"
     assert [path.name for path in tmp_path.iterdir()] == ["oui.tsv.gz"]
+
+
+def test_group_mac_is_decided_by_the_first_bit_in_every_spelling():
+    for text in ("0100.5e00.0001", "01:00:5e:00:00:01", "FF-FF-FF-FF-FF-FF", "ffff.ffff.ffff"):
+        assert is_group_mac(text)
+    for text in ("0200.0000.0001", "00:11:22:33:44:55", "0cea1439bb3a"):
+        assert not is_group_mac(text)
+    assert not is_group_mac("")
+    assert not is_group_mac("not a mac")

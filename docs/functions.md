@@ -1359,6 +1359,7 @@ the switch delete its addresses, which the confirm page says.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `format_mac` | `(text: str) -> str` | `0cea.1439.bb3a` -> `0c:ea:14:39:bb:3a`; other text as is | `neighbors.parse_mac_table`, `parse_arp` | v0.1.0 |
+| `is_group_mac` | `(text: str) -> bool` | A group (multicast or broadcast) address, which no one device owns or receives | `validate_device_mac`, `protocols._mac`, `sflow` | v0.1.0 |
 | `is_local_mac` | `(text: str) -> bool` | A locally administered address (made up by a VM, a container or a phone), which has no maker | `mac_maker`, `neighbors.parse_mac_table` | v0.1.0 |
 | `mac_maker` | `(text: str) -> str` | The organisation the IEEE assigned the address block to (the smallest matching MA-S, MA-M or MA-L block), or "" | `neighbors.parse_mac_table` | v0.1.0 |
 | `normalize_mac` | `(text: str) -> str \| None` | The 12 hex digits of a MAC address written any common way, or None | everything here, `NeighborView.ips_of` | v0.1.0 |

@@ -45,6 +45,7 @@ from app.nxapi import (
     validate_vlan_id,
     validate_vrf_name,
 )
+from app.oui import is_group_mac, normalize_mac
 from app.switch import text
 from app.switch_setup import scrub_secrets
 
@@ -211,7 +212,6 @@ def _interface(value: str, label: str) -> str:
 
 
 _LOOPBACK = re.compile(r"(?i)^(?:lo|loopback)\s*([0-9]{1,4})$")
-_MAC_DIGITS = re.compile(r"[0-9a-f]{12}")
 # Characters a key or password may not start with: the switch reads them as
 # an output pipe, a redirect, an escape or the start of a quoted string.
 _SECRET_FIRST = "|>\\('\""
@@ -319,10 +319,10 @@ def _source(value: str, label: str) -> str:
 
 
 def _mac(value: str, label: str) -> str:
-    digits = re.sub(r"[.:-]", "", value.lower())
-    if not _MAC_DIGITS.fullmatch(digits):
+    digits = normalize_mac(value)
+    if digits is None:
         raise ValueError(f"{label} is written like 0200.0000.0001")
-    if int(digits[1], 16) & 1:
+    if is_group_mac(digits):
         raise ValueError(f"{label}: {value} is a multicast MAC address, not one a gateway can have")
     if digits == "0" * 12:
         raise ValueError(f"{label}: 0000.0000.0000 is not a MAC address a gateway can have")
@@ -402,8 +402,8 @@ def _object_group(value: str, word: str, label: str) -> str:
 
 def _any_mac(value: str, label: str) -> str:
     """Any MAC address, multicast and broadcast too, written 0200.0000.0001."""
-    digits = re.sub(r"[.:-]", "", value.lower())
-    if not _MAC_DIGITS.fullmatch(digits):
+    digits = normalize_mac(value)
+    if digits is None:
         raise ValueError(f"{label}: {value!r} is not a MAC address such as 0200.0000.0001")
     return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
 

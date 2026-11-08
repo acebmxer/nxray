@@ -44,6 +44,7 @@ from pathlib import Path
 from app.charts import SERIES_COLOURS, Line, area_chart
 from app.db import open_db
 from app.history import RANGES, ChartView, bucket_seconds, chart_view, rate_text
+from app.oui import is_group_mac
 
 log = logging.getLogger("nxray.sflow")
 
@@ -263,11 +264,6 @@ def decode_datagram(data: bytes) -> Datagram:
     return Datagram(agent, sequence, tuple(samples), counters)
 
 
-def _is_group_mac(mac: str) -> bool:
-    """Broadcast and multicast addresses: no one device receives them."""
-    return bool(mac) and int(mac[:2], 16) & 1 == 1
-
-
 # ---- adding up -------------------------------------------------------------------
 
 
@@ -400,9 +396,9 @@ class SflowCollector:
                 # A frame without a tag belongs to the VLAN of the port it came in on.
                 vlan = sample.vlan or port_vlans.get(sample.input_index, 0)
                 self._add(bucket, VLAN, str(vlan) if vlan else UNKNOWN_VLAN, size)
-                if sample.src_mac and not _is_group_mac(sample.src_mac):
+                if sample.src_mac and not is_group_mac(sample.src_mac):
                     self._add(bucket, MAC_SENDS, sample.src_mac, size)
-                if sample.dst_mac and not _is_group_mac(sample.dst_mac):
+                if sample.dst_mac and not is_group_mac(sample.dst_mac):
                     self._add(bucket, MAC_RECEIVES, sample.dst_mac, size)
             return len(datagram.samples)
 

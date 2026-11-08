@@ -11,6 +11,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **A MAC address is read, and tested for being a group address, in one place
+  (#53).** The static-entry check, the gateway-MAC check and the sFlow
+  collector each had their own spelling rules and group-bit test. They all use
+  `normalize_mac` and `is_group_mac` in `app/oui.py` now.
+
 - **Which roles may change the switch is now decided in one place (#52).**
   Four pages each had their own copy of the operator/admin check, and three
   more wrote the role list out again. They all ask `may_change`, which asks
