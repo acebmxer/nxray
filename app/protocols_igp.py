@@ -54,10 +54,10 @@ from app.protocols import (
     Table,
     interface_field,
     table_rows,
-    text,
     vrf_field,
 )
 from app.routing import long_name
+from app.switch import is_true, text
 
 # ---- fields shared by the three protocols ---------------------------------------
 
@@ -691,10 +691,6 @@ _EIGRP_PROCESS, _EIGRP_VRF, _EIGRP_AF = _router_scopes(
 )
 
 
-def _true(value: Any) -> bool:
-    return text(value).lower() == "true"
-
-
 def _vrf_ident(vrf: str) -> str:
     """The VRF as a scope's identity value: "" for the default VRF."""
     return "" if vrf in ("", "default") else vrf
@@ -781,7 +777,7 @@ def _eigrp_process(
         ("authentication_mode", "authen_md5"),
         ("nsf_await", "await_redist_proto_converge"),
     ):
-        if _true(row.get(field_name)):
+        if is_true(row.get(field_name)):
             values[key] = {}
     key_chain = text(row.get("authen_keychain"))
     if key_chain and key_chain != "none":
@@ -798,9 +794,9 @@ def _eigrp_process(
         ("Passive interfaces", text(row.get("num_pass_interfaces"))),
         ("Neighbors", text(row.get("num_peers"))),
         ("Redistributes", _redistribution_fact(redistribution)),
-        ("Graceful restart", _on(_true(row.get("graceful_restart")))),
-        ("Stub", "yes" if _true(row.get("stub_configured")) else "no"),
-        ("BFD", _on(_true(row.get("bfd_enabled")))),
+        ("Graceful restart", _on(is_true(row.get("graceful_restart")))),
+        ("Stub", "yes" if is_true(row.get("stub_configured")) else "no"),
+        ("BFD", _on(is_true(row.get("bfd_enabled")))),
         ("Authentication", f"key chain {key_chain}" if key_chain not in ("", "none") else "none"),
     )
     return facts, values
@@ -1093,9 +1089,9 @@ def _rip_af(row: dict[str, Any], family: str) -> tuple[tuple[tuple[str, str], ..
     ):
         if text(row.get(output)):
             values[key] = {field_name: text(row.get(output))}
-    if _true(row.get("def-rt-distrib")):
+    if is_true(row.get("def-rt-distrib")):
         values["default_information"] = {
-            "always": "always" if _true(row.get("def-distrib-always")) else "",
+            "always": "always" if is_true(row.get("def-distrib-always")) else "",
             "route_map": "",
         }
     redistribution: list[tuple[str, str]] = []
@@ -1121,13 +1117,13 @@ def _rip_af(row: dict[str, Any], family: str) -> tuple[tuple[tuple[str, str], ..
         ("Timers", timers),
         (
             "Default route",
-            ("sent always" if _true(row.get("def-distrib-always")) else "sent")
-            if _true(row.get("def-rt-distrib"))
+            ("sent always" if is_true(row.get("def-distrib-always")) else "sent")
+            if is_true(row.get("def-rt-distrib"))
             else "not sent",
         ),
         ("Redistributes", _redistribution_fact(redistribution)),
         ("Interfaces", ", ".join(interfaces) or "none"),
-        ("Shut down", "yes" if _true(row.get("rip-shut-globally-in-this-vrf")) else "no"),
+        ("Shut down", "yes" if is_true(row.get("rip-shut-globally-in-this-vrf")) else "no"),
     )
     return facts, values
 
@@ -1175,15 +1171,15 @@ def parse_rip(bodies: list[dict[str, Any]]) -> ProtocolView:
                         continue
                     facts, values = found.setdefault(name, ([], {}))
                     values["ip_router" + suffix] = {"tag": tag}
-                    if _true(row.get("if-passive")):
+                    if is_true(row.get("if-passive")):
                         values["passive" + suffix] = {}
                     if text(row.get("if-metric")):
                         values["metric_offset" + suffix] = {"offset": text(row.get("if-metric"))}
-                    if _true(row.get("poison-reverse")):
+                    if is_true(row.get("poison-reverse")):
                         values["poison_reverse" + suffix] = {}
                     auth = "none"
                     for auth_row in table_rows(row, "TABLE_auth", "ROW_auth"):
-                        if not _true(auth_row.get("auth-ena")):
+                        if not is_true(auth_row.get("auth-ena")):
                             continue
                         mode, chain = (
                             text(auth_row.get("auth-type")),
@@ -1202,9 +1198,9 @@ def parse_rip(bodies: list[dict[str, Any]]) -> ProtocolView:
                             vrf,
                             name,
                             text(row.get("if-status")),
-                            "yes" if _true(row.get("if-passive")) else "no",
+                            "yes" if is_true(row.get("if-passive")) else "no",
                             text(row.get("if-metric")),
-                            "yes" if _true(row.get("poison-reverse")) else "no",
+                            "yes" if is_true(row.get("poison-reverse")) else "no",
                             auth,
                         )
                     )
@@ -1772,9 +1768,9 @@ def _isis_interface(row: dict[str, Any]) -> tuple[dict[str, dict[str, str]], dic
     level = _is_type(text(row.get("intf-ckt-type-out")))
     if level:
         values["circuit_type"] = {"circuit_type": level}
-    if _true(row.get("intf-passive-mask-out")):
+    if is_true(row.get("intf-passive-mask-out")):
         values["passive"] = {"level": text(row.get("intf-passive-mask-lvl-out"))}
-    if _true(row.get("intf-p2p-type-out")):
+    if is_true(row.get("intf-p2p-type-out")):
         values["network_p2p"] = {}
     metrics: dict[str, str] = {}
     for p2p in table_rows(row, "TABLE_p2p", "ROW_p2p"):
@@ -1793,9 +1789,9 @@ def _isis_interface(row: dict[str, Any]) -> tuple[dict[str, dict[str, str]], dic
     if text(row.get("intf-retx-intv-out")):
         values["retransmit_interval"] = {"seconds": text(row.get("intf-retx-intv-out"))}
     for bfd in table_rows(row, "TABLE_bfd", "ROW_bfd"):
-        if _true(bfd.get("intf-bfd-ipv4-state-out")):
+        if is_true(bfd.get("intf-bfd-ipv4-state-out")):
             values["bfd"] = {}
-        if _true(bfd.get("intf-bfd-ipv6-state-out")):
+        if is_true(bfd.get("intf-bfd-ipv6-state-out")):
             values["bfd6"] = {}
     return values, metrics
 

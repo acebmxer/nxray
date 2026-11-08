@@ -57,9 +57,9 @@ from app.protocols import (
     Table,
     interface_field,
     table_rows,
-    text,
 )
 from app.routing import long_name
+from app.switch import text
 
 # ---- shared fields -------------------------------------------------------------
 

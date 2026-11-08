@@ -50,8 +50,8 @@ from app.protocols import (
     build_change,
     port_field,
     table_rows,
-    text,
 )
+from app.switch import text
 
 # ---- fields ---------------------------------------------------------------------
 

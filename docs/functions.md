@@ -288,6 +288,12 @@ self-signed certificate is accepted on purpose.
 | `parse_version` | `(body) -> SystemInfo` | Hostname, model, NX-OS version, uptime from `show version` | `switch.load_dashboard` | v0.1.0 |
 | `rows` | `(body, table: str, row: str) -> list[dict]` | An NX-OS table's rows as a list, one row or many | every parser | v0.1.0 |
 | `section` | `(body, key: str) -> dict` | A nested object of an NX-OS body, or `{}` | `switch.parse_environment` | v0.1.0 |
+| `text` | `(value) -> str` | A value from NX-OS JSON as stripped text; `""` for missing or null | every parser | v0.2.1 |
+| `int_or` | `(value, default=0) -> int` | A whole number from text such as `"10"`; `default` if it is not one (a sign is fine) | `vlans`, `ports` | v0.2.1 |
+| `digits_int` | `(value) -> int \| None` | A whole number from text made only of digits; None for anything else, a sign included | `routing` | v0.2.1 |
+| `is_true` | `(value) -> bool` | True only for the word `true`, in any case | `protocols_igp`, `protocols_ospf` | v0.2.1 |
+| `is_enabled` | `(value) -> bool` | True for `true`, `yes` or `enabled`, in any case | `protocols_bgp` | v0.2.1 |
+| `row_vrf` | `(row, *keys) -> str` | The VRF a row names, from the first of `keys` that holds text; `default` if none | `protocols_bgp`, `protocols_multicast` | v0.2.1 |
 | `to_int` | `(value) -> int \| None` | A number from NX-OS text such as `"650 W"` | every parser | v0.1.0 |
 
 NX-OS JSON holds a one-row table as an object and only a several-row table as
@@ -1104,7 +1110,6 @@ would take them out silently.
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
-| `text` | `(value: Any) -> str` | A value from switch output as stripped text | `protocols_*` parsers | v0.1.0 |
 | `route_age` | `(value: str) -> str` | An age as the switch writes it (`P1DT13H30M23S`) in short words (`1d 13h 30m`) | `routing_protocols.parse_routes`, `protocols_bgp` | v0.1.0 |
 | `table_rows` | `(body, table: str, row: str) -> list[dict]` | The rows of an NX-OS table, one row or many, also when the table is a list; deliberately not a change to `switch.rows` | `protocols_*` parsers, `routing_protocols.parse_routes` | v0.1.0 |
 | `vrf_field` | `(optional=True) -> Field` | The VRF identity field protocol scopes share | `protocols_*` | v0.1.0 |

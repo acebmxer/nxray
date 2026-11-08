@@ -44,6 +44,46 @@ def section(body: dict[str, Any], key: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def text(value: Any) -> str:
+    """A value from NX-OS JSON as stripped text; "" for missing or null."""
+    return "" if value is None else str(value).strip()
+
+
+def int_or(value: Any, default: int = 0) -> int:
+    """A whole number from text such as "10" or " 10 "; ``default`` if it is not one.
+
+    ``routing`` needs the stricter ``digits_int``, which refuses signs and returns None.
+    """
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def digits_int(value: Any) -> int | None:
+    """A whole number from text made only of digits; None for anything else, a sign included."""
+    found = text(value)
+    return int(found) if found.isdigit() else None
+
+
+def is_true(value: Any) -> bool:
+    """True only for the word "true", in any case. ``is_enabled`` also takes "yes" and "enabled"."""
+    return text(value).lower() == "true"
+
+
+def is_enabled(value: Any) -> bool:
+    """True for "true", "yes" or "enabled", in any case (BGP writes its flags all three ways)."""
+    return text(value).lower() in ("true", "yes", "enabled")
+
+
+def row_vrf(row: dict[str, Any], *keys: str) -> str:
+    """The VRF a row names, read from the first of ``keys`` that holds text; "default" if none."""
+    for key in keys:
+        if found := text(row.get(key)):
+            return found
+    return "default"
+
+
 def to_int(value: Any) -> int | None:
     """A number from NX-OS text such as "27" or "650 W"; None if there is none."""
     if value is None:

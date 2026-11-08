@@ -32,6 +32,7 @@ from app.nxapi import NxapiClient, NxapiCommandError
 from app.oui import format_mac, is_local_mac, mac_maker, normalize_mac
 from app.ports import port_sort_key
 from app.switch import rows
+from app.switch import text as _text
 
 NEIGHBOR_COMMANDS = (
     "show feature",
@@ -57,13 +58,6 @@ _LLDP_CAPABILITIES = {
 }
 
 _DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")
-
-
-def _text(value: Any) -> str:
-    """A value from NX-OS JSON as stripped text; "" for missing or null."""
-    if value is None:
-        return ""
-    return str(value).strip()
 
 
 def _advertised(value: Any) -> str:

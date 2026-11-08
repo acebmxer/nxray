@@ -44,9 +44,9 @@ from app.protocols import (
     Table,
     build_change,
     table_rows,
-    text,
 )
 from app.routing import parse_vrfs
+from app.switch import text
 
 # ---- fields ---------------------------------------------------------------------
 

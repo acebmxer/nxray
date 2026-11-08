@@ -50,9 +50,9 @@ from app.protocols import (
     Setting,
     Table,
     table_rows,
-    text,
 )
 from app.routing import long_name
+from app.switch import text
 
 POLICY_COMMANDS = (
     "show route-map",

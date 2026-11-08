@@ -66,10 +66,10 @@ from app.protocols import (
     route_age,
     source_field,
     table_rows,
-    text,
     vrf_field,
 )
 from app.routing import long_name
+from app.switch import is_enabled, row_vrf, text
 
 # ---- fields ----------------------------------------------------------------------
 
@@ -891,10 +891,6 @@ NEIGHBOR_AF = Scope(
 # ---- parsing ---------------------------------------------------------------------
 
 
-def _true(value: Any) -> bool:
-    return text(value).lower() in ("true", "yes", "enabled")
-
-
 def _af_name(value: Any) -> str:
     """'IPv4 Unicast' -> 'ipv4 unicast' (the words the address-family line takes)."""
     name = " ".join(text(value).lower().split())
@@ -912,8 +908,8 @@ def _set_id(value: Any) -> str:
     return "" if found in ("", "0", "0.0.0.0") else found
 
 
-def _vrf_name(row: dict[str, Any]) -> str:
-    return text(row.get("vrf-name-out")) or "default"
+# The key a BGP row names its VRF under.
+_VRF_KEYS = ("vrf-name-out",)
 
 
 def _redistribution(row: dict[str, Any]) -> tuple[str, dict[str, str]] | None:
@@ -944,7 +940,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
         return [], []
     instances: list[Instance] = []
     vrf_rows = table_rows(body, "TABLE_vrf", "ROW_vrf")
-    default = next((r for r in vrf_rows if _vrf_name(r) == "default"), {})
+    default = next((r for r in vrf_rows if row_vrf(r, *_VRF_KEYS) == "default"), {})
     values: dict[str, dict[str, str]] = {}
     if router_id := _set_id(default.get("vrf-cfgd-id")):
         values["router_id"] = {"router_id": router_id}
@@ -973,7 +969,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
     )
     vrfs = []
     for row in vrf_rows:
-        vrf = _vrf_name(row)
+        vrf = row_vrf(row, *_VRF_KEYS)
         vrfs.append(vrf)
         if vrf != "default":
             vrf_values = {}
@@ -1014,7 +1010,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
                 )
                 if found and found[0] not in af_values:
                     af_values[found[0]] = found[1]
-            if _true(af_row.get("default-information-enabled")):
+            if is_enabled(af_row.get("default-information-enabled")):
                 af_values["default_information"] = {}
             instances.append(
                 Instance(
@@ -1038,11 +1034,11 @@ def _summary_vrfs(summary: dict[str, Any], sessions: dict[str, Any]) -> dict[str
     """Every VRF BGP has, from the summary and sessions: router ID, local AS, neighbor counts."""
     found: dict[str, dict[str, str]] = {}
     for row in table_rows(summary, "TABLE_vrf", "ROW_vrf"):
-        found.setdefault(_vrf_name(row), {}).update(
+        found.setdefault(row_vrf(row, *_VRF_KEYS), {}).update(
             {"router_id": text(row.get("vrf-router-id")), "asn": text(row.get("vrf-local-as"))}
         )
     for row in table_rows(sessions, "TABLE_vrf", "ROW_vrf"):
-        entry = found.setdefault(_vrf_name(row), {})
+        entry = found.setdefault(row_vrf(row, *_VRF_KEYS), {})
         entry.setdefault("router_id", text(row.get("router-id")))
         entry.setdefault("asn", text(row.get("local-as")))
         entry["peers"] = text(row.get("vrfpeers")) or "0"
@@ -1062,7 +1058,7 @@ def _summary_afs(summary: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]
             for saf in table_rows(af_row, "TABLE_saf", "ROW_saf"):
                 af = _af_name(saf.get("af-name"))
                 if af:
-                    found.append((_vrf_name(row), af, saf))
+                    found.append((row_vrf(row, *_VRF_KEYS), af, saf))
     return found
 
 
@@ -1084,8 +1080,8 @@ def _policies(saf: dict[str, Any], way: str) -> dict[str, dict[str, str]]:
 
 def _neighbor_af_values(saf: dict[str, Any]) -> dict[str, dict[str, str]]:
     values = {**_policies(saf, "in"), **_policies(saf, "out")}
-    if _true(saf.get("insoftreconfigallowed")):
-        always = "always" if _true(saf.get("insoftreconfigallowedalways")) else ""
+    if is_enabled(saf.get("insoftreconfigallowed")):
+        always = "always" if is_enabled(saf.get("insoftreconfigallowedalways")) else ""
         values["soft_reconfiguration"] = {"always": always}
     for key, setting in (
         ("sendcommunity", "send_community"),
@@ -1094,9 +1090,9 @@ def _neighbor_af_values(saf: dict[str, Any]) -> dict[str, dict[str, str]]:
         ("peerascheckdisabled", "disable_peer_as_check"),
         ("rrconfigured", "route_reflector_client"),
     ):
-        if _true(saf.get(key)):
+        if is_enabled(saf.get(key)):
             values[setting] = {}
-    if _true(saf.get("defaultoriginate")):
+    if is_enabled(saf.get("defaultoriginate")):
         values["default_originate"] = {"route_map": text(saf.get("defaultoriginatermap"))}
     return values
 
@@ -1121,11 +1117,11 @@ def _neighbors(body: dict[str, Any], asn: str) -> list[Instance]:
             values["description"] = {"description": description}
         if source := text(row.get("sourceif")):
             values["update_source"] = {"source": long_name(source)}
-        if _true(row.get("bfd")):
+        if is_enabled(row.get("bfd")):
             values["bfd"] = {}
-        if _true(row.get("passiveonly")):
+        if is_enabled(row.get("passiveonly")):
             values["transport_passive"] = {}
-        if _true(row.get("remove-privateas")):
+        if is_enabled(row.get("remove-privateas")):
             values["remove_private_as"] = {"mode": ""}
         state = text(row.get("state"))
         since = route_age(text(row.get("elapsedtime")))
@@ -1202,7 +1198,7 @@ def _neighbor_table(summary: dict[str, Any]) -> Table:
 def _session_table(sessions: dict[str, Any]) -> Table:
     rows = []
     for vrf_row in table_rows(sessions, "TABLE_vrf", "ROW_vrf"):
-        vrf = _vrf_name(vrf_row)
+        vrf = row_vrf(vrf_row, *_VRF_KEYS)
         for row in table_rows(vrf_row, "TABLE_neighbor", "ROW_neighbor"):
             ports = [text(row.get("localport")), text(row.get("remoteport"))]
             rows.append(
@@ -1238,7 +1234,7 @@ def _session_table(sessions: dict[str, Any]) -> Table:
 def _ipv6_table(body: dict[str, Any]) -> Table:
     rows = []
     for vrf_row in table_rows(body, "TABLE_vrf", "ROW_vrf"):
-        vrf = _vrf_name(vrf_row)
+        vrf = row_vrf(vrf_row, *_VRF_KEYS)
         for afi in table_rows(vrf_row, "TABLE_afi", "ROW_afi"):
             for safi in table_rows(afi, "TABLE_safi", "ROW_safi"):
                 prefixes = table_rows(safi, "TABLE_prefix", "ROW_prefix")

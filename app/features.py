@@ -24,6 +24,7 @@ from typing import Any
 
 from app.nxapi import FEATURE_COMMANDS, NxapiClient
 from app.switch import rows
+from app.switch import text as _text
 
 # The page's groups, in the order they are shown.
 GROUPS = (
@@ -416,10 +417,6 @@ class FeatureView:
     @property
     def enabled(self) -> list[Feature]:
         return sorted((f for f in self.features if f.enabled), key=lambda f: f.label.lower())
-
-
-def _text(value: Any) -> str:
-    return "" if value is None else str(value).strip()
 
 
 def feature_states(body: dict[str, Any]) -> dict[str, bool]:

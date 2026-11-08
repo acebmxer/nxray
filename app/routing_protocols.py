@@ -31,7 +31,6 @@ from app.protocols import (
     build_change,
     route_age,
     table_rows,
-    text,
 )
 from app.protocols_bgp import PROTOCOLS as _BGP
 from app.protocols_fhrp import PROTOCOLS as _FHRP
@@ -40,6 +39,7 @@ from app.protocols_multicast import PROTOCOLS as _MULTICAST
 from app.protocols_ospf import PROTOCOLS as _OSPF
 from app.protocols_policy import PROTOCOLS as _POLICY
 from app.routing import parse_brief, parse_vrf_members, parse_vrfs
+from app.switch import text
 
 ALL_PROTOCOLS: tuple[Protocol, ...] = (*_OSPF, *_BGP, *_IGP, *_FHRP, *_MULTICAST, *_POLICY)
 

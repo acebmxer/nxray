@@ -67,7 +67,8 @@ from app.nxapi import (
     validate_vrf_name,
 )
 from app.ports import port_sort_key
-from app.switch import rows
+from app.switch import digits_int, rows
+from app.switch import text as _text
 from app.vlans import Vlan, parse_vlans
 
 ROUTING_COMMANDS = (
@@ -92,10 +93,6 @@ FEATURE_OFF = (
 )
 
 _VLAN_NAME = re.compile(r"^Vlan(\d+)$")
-
-
-def _text(value: Any) -> str:
-    return "" if value is None else str(value).strip()
 
 
 def long_name(name: str) -> str:
@@ -322,11 +319,6 @@ def parse_brief(brief_body: dict[str, Any]) -> tuple[list[str], list[dict[str, A
     return svis, routed
 
 
-def _int(value: Any) -> int | None:
-    text = _text(value)
-    return int(text) if text.isdigit() else None
-
-
 def parse_vlan_interface(
     name: str,
     svi_body: dict[str, Any],
@@ -353,7 +345,7 @@ def parse_vlan_interface(
         up=_text(row.get("svi_line_proto")).lower() == "up",
         reason="" if admin_up else _text(row.get("svi_rsn_desc")),
         description=_text(row.get("svi_desc")) or descriptions.get(name, ""),
-        mtu=_int(row.get("svi_mtu")),
+        mtu=digits_int(row.get("svi_mtu")),
         addresses=(*addresses4, *addresses6),
         link_local=link_local,
     )
@@ -376,7 +368,7 @@ def parse_routed_port(
         up=_text(row.get("state")).lower() == "up",
         reason=reason,
         description=descriptions.get(name, ""),
-        mtu=_int(ip_row.get("mtu")),
+        mtu=digits_int(ip_row.get("mtu")),
         addresses=(*addresses4, *addresses6),
         link_local=link_local,
     )

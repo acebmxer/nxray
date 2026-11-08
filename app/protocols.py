@@ -45,6 +45,7 @@ from app.nxapi import (
     validate_vlan_id,
     validate_vrf_name,
 )
+from app.switch import text
 from app.switch_setup import scrub_secrets
 
 # ---- fields --------------------------------------------------------------------
@@ -864,11 +865,6 @@ def build_change(
 
 
 # ---- helpers for the protocol modules ------------------------------------------
-
-
-def text(value: Any) -> str:
-    """A value from NX-OS output as stripped text ("" for None)."""
-    return "" if value is None else str(value).strip()
 
 
 _DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")

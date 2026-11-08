@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The small helpers that read a value from the switch's JSON now exist once
+  (#50).** `text`, whole-number, true/yes and VRF-name readers were copied
+  across a dozen modules and disagreed on what they accept. They now live in
+  `app/switch.py`, with the stricter variants named for what they do
+  (`digits_int`, `is_enabled`, `row_vrf`), so the same value reads the same way
+  on every page.
+
 - **Hiding a password or key in a message is now done one way (#49).** Seven
   places each had their own copy of the code; they all use `scrub_secrets`
   now, so an empty secret is handled the same everywhere.
