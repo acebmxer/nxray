@@ -94,7 +94,7 @@ from app.nxapi import (
 )
 from app.switch import rows, to_int
 from app.switch_connection import ROLE_BROAD, ROLE_LIMITED, ROLE_MODES, ROLE_STORED, SWITCH_TIMEOUT
-from app.switch_setup import SetupError, account_names, describe_error
+from app.switch_setup import SetupError, account_names, describe_error, scrub_secrets
 from app.switch_ssh import (
     ShellOpener,
     SshAuthError,
@@ -775,16 +775,12 @@ def _saved_over_ssh(
     try:
         (output,) = run_commands(lines=(SAVE_COMMAND,), **ssh)
     except SshError as exc:
-        output = _scrub(str(exc), admin_password)
+        output = scrub_secrets(str(exc), admin_password)
     if "Copy complete" not in output:
         log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
         return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans)
     log.info("saved the switch configuration over SSH")
     return EnableResult(wait, port_count, True, None, had_role, vlans)
-
-
-def _scrub(text: str, secret: str) -> str:
-    return text.replace(secret, "***") if secret else text
 
 
 def enable_port_changes(
@@ -827,7 +823,7 @@ def enable_port_changes(
             )
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, nxapi_port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, nxapi_port, "admin"), admin_password)
             ) from exc
         if account_name.lower() not in account_names(users):
             raise SetupError(
@@ -858,11 +854,13 @@ def enable_port_changes(
             raise SetupError("The switch refused the admin username or password over SSH.") from exc
         except SshCommandError as exc:
             raise SetupError(
-                _scrub(f"The switch refused a line while creating the role: {exc}", admin_password)
+                scrub_secrets(
+                    f"The switch refused a line while creating the role: {exc}", admin_password
+                )
             ) from exc
         except SshError as exc:
             raise SetupError(
-                _scrub(
+                scrub_secrets(
                     f"NXray could not reach the switch over SSH at {host}, port {ssh_port}. "
                     "Check that SSH is on and that this machine can reach it. "
                     f"Details: {exc}",
@@ -895,7 +893,7 @@ def enable_port_changes(
             (users,) = client.show("show user-account")
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, nxapi_port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, nxapi_port, "admin"), admin_password)
             ) from exc
         if ROLE_NAME not in account_roles(users, account_name):
             raise SetupError(
@@ -908,7 +906,7 @@ def enable_port_changes(
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
             return EnableResult(
-                wait, len(ports), False, _scrub(str(exc), admin_password), had_role, vlans
+                wait, len(ports), False, scrub_secrets(str(exc), admin_password), had_role, vlans
             )
 
     log.info("saved the switch configuration on %s", host)

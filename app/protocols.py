@@ -45,6 +45,7 @@ from app.nxapi import (
     validate_vlan_id,
     validate_vrf_name,
 )
+from app.switch_setup import scrub_secrets
 
 # ---- fields --------------------------------------------------------------------
 
@@ -769,13 +770,6 @@ def _checked(fields: Iterable[Field], raw: dict[str, str]) -> dict[str, str]:
     return {f.name: check_value(f, raw.get(f.name, "")) for f in fields}
 
 
-def _mask(line: str, values: dict[str, str], secrets: set[str]) -> str:
-    for name in secrets:
-        if values.get(name):
-            line = line.replace(values[name], "***")
-    return line
-
-
 def _where(scope: Scope, ident: dict[str, str]) -> str:
     parts = [f"{f.label} {ident[f.name]}" for f in scope.ident if ident.get(f.name)]
     return f"{scope.label} ({', '.join(parts)})" if parts else scope.label
@@ -847,7 +841,7 @@ def build_change(
             if setting.no_line
             else "no " + render(setting.line, {**borrowed, **checked})
         )
-    label = _mask(line, checked, setting.secret_fields)
+    label = scrub_secrets(line, *(checked.get(name, "") for name in setting.secret_fields))
     shown = [
         "***" if f.kind == "secret" else checked[f.name]
         for f in setting.fields

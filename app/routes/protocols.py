@@ -44,7 +44,7 @@ from app.routing_protocols import (
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SwitchConnection, set_unsaved_changes
-from app.switch_setup import read_switch
+from app.switch_setup import read_switch, scrub_secrets
 
 router = APIRouter()
 log = logging.getLogger("nxray.protocols")
@@ -363,8 +363,7 @@ def site_change(
             site.send(client, change, ident, values)
     except NxapiError as exc:
         refused = change_refused(exc, target)
-        for secret in _secrets(proto, change.scope, change.setting, values):
-            refused = refused.replace(secret, "***")
+        refused = scrub_secrets(refused, *_secrets(proto, change.scope, change.setting, values))
         log.warning("%s change refused: %s", proto.name, refused)
         return refuse(refused)
     if change.config:

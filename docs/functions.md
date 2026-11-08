@@ -382,7 +382,7 @@ the switch takes only while interface-vlan is on.
 | `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
-| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin` | v0.2.0 |
+| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin`, `switch_repair`, `port_changes`, `protocols`, `routes/protocols`, `routes/config_page` | v0.2.0 |
 | `verify_account` | `(host, port, name, password, transport) -> None` | Signs in with a login NXray just set, retrying briefly; raises the `NxapiError` if it never works | `run_setup`, `switch_repair.run_repair` | v0.1.0 |
 
 `SetupError` carries the message the page shows. The admin login lives only

@@ -50,7 +50,7 @@ from app.port_changes import SSH_TIMEOUT
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
 from app.switch_connection import SWITCH_TIMEOUT, SwitchConnection, set_unsaved_changes
-from app.switch_setup import connection_error, read_switch
+from app.switch_setup import connection_error, read_switch, scrub_secrets
 from app.switch_ssh import SshAuthError, SshCommandError, SshError, reload_switch
 
 router = APIRouter()
@@ -439,7 +439,7 @@ def config_rollback(
         with NxapiClient(admin, transport=transport) as client:
             client.rollback_to_checkpoint(backup.checkpoint)
     except NxapiError as exc:
-        refused = connection_error(exc, admin).replace(admin_password, "***")
+        refused = scrub_secrets(connection_error(exc, admin), admin_password)
         log.warning("rollback to %s refused: %s", backup.checkpoint, refused)
         return render_config_page(
             request,
@@ -579,11 +579,11 @@ def config_reload(
         except SshAuthError:
             return again("Not restarted: the switch refused that admin username or password.")
         except SshCommandError as exc:
-            message = str(exc).replace(admin_password, "***")
+            message = scrub_secrets(str(exc), admin_password)
             log.warning("reload refused: %s", message)
             return again(f"Not restarted: the switch refused it: {message}")
         except SshError as exc:
-            message = str(exc).replace(admin_password, "***")
+            message = scrub_secrets(str(exc), admin_password)
             return again(f"Not restarted: {message}")
     log.info("restarted %s by %s", connection.host, username)
     note_activity(

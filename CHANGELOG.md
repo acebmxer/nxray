@@ -11,6 +11,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Hiding a password or key in a message is now done one way (#49).** Seven
+  places each had their own copy of the code; they all use `scrub_secrets`
+  now, so an empty secret is handled the same everywhere.
+
 - **Signing in now returns you to the page you asked for, query string
   included (#48).** A signed-out request to `/config?a=1&b=2` used to come back
   to `/config` only, and the address was put in `?next=` unencoded, so a `&` or
