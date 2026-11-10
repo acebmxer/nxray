@@ -24,18 +24,21 @@ A VXLAN switch needs, in this order:
 
 Read from the switch: ``show feature``, ``show vlan brief`` and ``show vrf`` in one
 request; then, while the features are on, ``show nve interface``, ``show nve peers`` and
-``show nve vni``. The settings that are configured come from ``show running-config
-vxlan``, which NX-API gives only as text (``NxapiClient.show_text``) and only once
-NXray's role allows it (role version 20); without it the page still shows everything the
-``show nve`` commands report.
+``show nve vni``. The settings that are configured come from ``show running-config``,
+which NX-API gives only as text (``NxapiClient.show_text``) and only once NXray's role
+allows it (it has since role version 12); without it the page still shows everything the
+``show nve`` commands report. The whole configuration is read because NX-OS 9.3 splits
+the VXLAN lines over filters (``show running-config nv overlay`` has the NVE interface,
+``vlan`` the ``vn-segment`` lines, ``vrf`` the ``vni`` lines, only ``bgp`` or a pipe the
+``evpn`` block, and ``nv overlay evpn`` is in none of them), and there is no
+``show running-config vxlan``.
 
-Not tried on a switch: the nve feature is off on cisco-25gb, which is in production, so
-this page was written from Cisco's NX-OS 9.3 VXLAN Configuration Guide and the field
-names its ``show nve`` outputs use (``TABLE_nve_peers``, ``TABLE_nve_vni``,
-``peer-ip``, ``vni``). Every field is read tolerantly: one the switch words differently
-shows empty rather than breaking the page. Whether ``show running-config vxlan`` holds
-the ``evpn`` block and the VRF lines is not confirmed either; if it does not, those
-parts show no current values.
+Tried on cisco-25gb (NX-OS 9.3(16), 2026-11-10) with throwaway objects, all removed
+afterwards: every line the page sends, its ``no`` form, and the JSON of ``show nve
+interface`` and ``show nve vni``. Not tried: ``show nve peers`` (no peer exists), the
+role rules (the fake switch stands in), ``suppress-arp`` data-plane use (it needs a TCAM
+carve and a reload), and EVPN with a real BGP neighbor. The ``evpn`` block and the VRF
+route-targets need ``feature bgp`` first; the switch refuses them without it.
 """
 
 from __future__ import annotations
@@ -65,7 +68,7 @@ from app.switch import text
 VNI_MAX = 16777215  # a VNI is 24 bits
 NVE_MAX = 1  # NX-OS 9.3 has one NVE interface, nve1
 COMMANDS = ("show nve interface", "show nve peers", "show nve vni")
-CONFIG_COMMAND = "show running-config vxlan"
+CONFIG_COMMAND = "show running-config"
 PAGE_COMMANDS = ("show feature", "show vlan brief", "show vrf")
 ADDRESS_FAMILIES = ("ipv4", "ipv6")
 
@@ -254,7 +257,7 @@ _NVE = Scope(
             key="global_mcast",
             label="Multicast group for every VNI",
             line="global mcast-group {group} {layer}",
-            no_line="no global mcast-group {group} {layer}",
+            no_line="no global mcast-group {layer}",
             group="For every VNI",
             fields=(
                 Field("group", "Multicast group", "maddr4", placeholder="239.1.1.1"),
@@ -316,7 +319,8 @@ _L3VNI = Scope(
     delete_warning="Routing between the VLANs of this VRF across the fabric stops.",
     help=(
         "A VNI that routes between the VLANs of one VRF. Name it in the VRF below and add it "
-        "here with the same number."
+        "here with the same number. The switch needs host reachability through BGP on the "
+        "NVE interface first."
     ),
 )
 
@@ -331,7 +335,8 @@ _EVPN = Scope(
     delete_warning="BGP stops advertising this VNI's hosts.",
     help=(
         "How EVPN names the VNI's routes. Use auto for both and the switches work the "
-        "route distinguisher and route-targets out from the BGP AS number and the VNI."
+        "route distinguisher and route-targets out from the BGP AS number and the VNI. "
+        "The switch takes these only while the bgp feature is on and EVPN is turned on above."
     ),
     settings=(
         Setting(
@@ -396,7 +401,10 @@ _VRF_AF = Scope(
         Field("af", "Address family", "choice", choices=ADDRESS_FAMILIES),
     ),
     enter=("vrf context {vrf}", "address-family {af} unicast"),
-    help="Which routes of the VRF go into EVPN and which come out of it.",
+    help=(
+        "Which routes of the VRF go into EVPN and which come out of it. The switch takes "
+        "these only while the bgp feature is on and EVPN is turned on above."
+    ),
     settings=(
         Setting(
             key="rt_both_auto",
@@ -594,7 +602,8 @@ def parse_vxlan(bodies: list[dict[str, Any]], config: VxlanConfig | None = None)
 
     # VLANs with a VNI, from the configuration.
     if config is not None:
-        for line in configured.children():
+        # The full configuration lists a VLAN once in the VLAN list and once with its lines.
+        for line in dict.fromkeys(configured.children()):
             vlan = re.fullmatch(r"vlan ([0-9]+)", line)
             if not vlan:
                 continue

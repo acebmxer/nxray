@@ -442,8 +442,6 @@ NXray then:
          rule 252 permit command conf t ; vrf context * ; no vni *
          rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *
          rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *
-         rule 255 permit command show running-config vxlan
-         rule 256 permit command show running-config vxlan *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -1013,7 +1011,8 @@ from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
 **VXLAN.** The **VXLAN** page (role version 20, from Update the port list) needs the
 `nve` and `vnseg_vlan` features (Features page). It reads `show nve interface`,
-`show nve peers`, `show nve vni` and, as text, `show running-config vxlan`, and types
+`show nve peers`, `show nve vni` and, as text, `show running-config` (there is no
+`show running-config vxlan`), and types
 the NVE interface (`interface nve1`, `source-interface`, `host-reachability protocol
 bgp`, `member vni`), a VLAN's `vn-segment`, the `evpn` block of a VNI, a VRF's `vni`
 and EVPN route-targets, and the switch-wide `nv overlay evpn` and anycast gateway MAC,
@@ -1021,8 +1020,11 @@ each with its `no` form. Entering `interface nve1` also needs the role's port li
 name it (`permit interface nve1`), which NXray writes only while the nve feature is on
 (the switch is expected to refuse it otherwise, as with the VLAN interfaces): turn the
 feature on first, then press Update the port list. The same VNIs are set on every
-switch of the fabric, from each one's NXray. Written from Cisco's NX-OS 9.3 guides;
-not yet tried on a switch.
+switch of the fabric, from each one's NXray. The EVPN block and a VRF's EVPN
+route-targets need `feature bgp` and `nv overlay evpn` first; the switch refuses them
+otherwise, and `member vni ... associate-vrf` needs `host-reachability protocol bgp`.
+The lines were tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects; the role
+rules and EVPN with a real BGP neighbor were not.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows

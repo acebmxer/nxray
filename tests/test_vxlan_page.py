@@ -188,7 +188,7 @@ def test_enabled_page_offers_the_settings(logged_in: TestClient, enabled: FakeSw
     assert "does not let it read" not in _text(page.text)
     for setting in ("evpn", "vni", "source_interface", "suppress_arp", "rd", "rt_both_auto"):
         assert f'name="setting" value="{setting}"' in page.text
-    assert enabled.requests[2] == ["show running-config vxlan"]
+    assert enabled.requests[2] == ["show running-config"]
     assert '<option value="management"' in page.text
 
 

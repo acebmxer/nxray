@@ -77,6 +77,11 @@ def test_parse_vxlan_config_as_a_tree() -> None:
     ]
     assert config.children("evpn", "vni 10010 l2")[0] == "rd auto"
     assert not config.has("interface nve2")
+    # The full configuration lists a VLAN in the list and again with its lines.
+    view = parse_vxlan(
+        _bodies(), parse_vxlan_config("vlan 1-2,10\nvlan 10\n  vn-segment 10010\nvlan 10\n")
+    )
+    assert [i.ident["vlan"] for i in view.of("vlan")] == ["10"]
 
 
 def test_parse_vxlan_from_the_switch_and_the_configuration() -> None:
@@ -280,6 +285,10 @@ def test_removing_a_setting_sends_its_no_form() -> None:
         "interface nve1",
         "no source-interface loopback1",
     )
+    assert _lines("nve", "global_mcast", "remove", {"nve": "1"}, {"layer": "L2"}) == (
+        "interface nve1",
+        "no global mcast-group L2",
+    )
     assert _lines("evpn", "rd", "remove", {"vni": "10"}, {"target": "auto"}) == (
         "evpn",
         "vni 10 l2",
@@ -353,13 +362,13 @@ def test_every_setting_has_a_role_rule() -> None:
     assert all(rule in LIMITED_RULES for rule in VXLAN_RULES)
     assert all(rule in role_lines(["Ethernet1/1"], "nxray") for rule in VXLAN_RULES)
     rules = " ".join(VXLAN_RULES)
+    assert "show running-config vxlan" not in rules  # no such command; rule 170 reads it all
     for part in (
         "conf t ; interface nve*",
         "conf t ; evpn*",
         "conf t ; vlan * ; vn-segment *",
         "conf t ; vrf context * ; vni *",
         "conf t ; nv overlay evpn",
-        "show running-config vxlan",
     ):
         assert part in rules
 

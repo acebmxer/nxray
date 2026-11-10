@@ -23,8 +23,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   on. Each change shows its lines and asks first. It needs the nve and
   vnseg_vlan features (Features page) and NXray's role at version 20: admins
   turn the features on, then press **Update the port list** on the Switch page,
-  which now also names the NVE interface in the role's port list. Written from
-  Cisco's NX-OS 9.3 guides and not yet tried on a switch.
+  which now also names the NVE interface in the role's port list. The lines
+  it sends were tried on a switch with throwaway objects; the role rules and EVPN with
+  a real BGP neighbor were not. The EVPN settings need the bgp feature and EVPN turned
+  on first.
 - **Set up and monitor vPC from the web interface (#59).** The new **vPC** page
   (under Configure) shows the vPC domain (peer status, peer keepalive, which
   switch is primary, whether the two agree), the peer-link and every vPC with

@@ -598,9 +598,9 @@ VPC_RULES = (
 # VXLAN and EVPN rules, added in ROLE_VERSION 20: the NVE interface and every line
 # inside it (member VNIs too), the ``evpn`` block, a VLAN's ``vn-segment``, a VRF's
 # ``vni`` and route-targets, the switch-wide ``nv overlay evpn`` and ``fabric
-# forwarding`` lines, their "no" forms, and reading the VXLAN lines of the running
-# configuration as text. Written after Cisco's NX-OS 9.3 VXLAN Configuration Guide;
-# not yet tried on a switch (the nve feature is off on the switch in production).
+# forwarding`` lines and their "no" forms. Reading the lines needs no rule of its own: it is
+# ``show running-config`` (rule 170). The lines themselves were tried on cisco-25gb
+# (2026-11-10) as admin; the rules were not (the fake switch stands in).
 # Entering ``interface nve1`` also needs NVE_PERMIT in the port list, which the
 # switch is expected to take only while the nve feature is on, as with the VLAN
 # interfaces.
@@ -618,8 +618,6 @@ VXLAN_RULES = (
     "rule 252 permit command conf t ; vrf context * ; no vni *",
     "rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *",
     "rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *",
-    "rule 255 permit command show running-config vxlan",
-    "rule 256 permit command show running-config vxlan *",
 )
 # The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
 NVE_PERMIT = "permit interface nve1"

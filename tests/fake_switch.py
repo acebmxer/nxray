@@ -782,7 +782,6 @@ class FakeSwitch:
         known = (
             "show running-config spanning-tree",
             "show running-config vpc",
-            "show running-config vxlan",
             "show running-config",
             "show startup-config",
             "show checkpoint summary",
@@ -799,7 +798,6 @@ class FakeSwitch:
             text = {
                 "show running-config spanning-tree": self.stp_config,
                 "show running-config vpc": self.vpc_config,
-                "show running-config vxlan": self.vxlan_config,
             }.get(cmd, self.running_config)()
         return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
 
@@ -825,7 +823,7 @@ class FakeSwitch:
                 lines.append(line)
         for place, lines in places.items():
             out += [place, *(f"  {line}" for line in lines)]
-        return "\n".join(out) + "\n"
+        return "\n".join(out) + "\n" + self.vxlan_config()
 
     def __post_init__(self) -> None:
         self._start_config = self.running_config()
