@@ -374,6 +374,13 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN admin_password_encrypted TEXT NOT NULL DEFAULT '';
     ALTER TABLE switch_connection ADD COLUMN admin_ssh_port INTEGER NOT NULL DEFAULT 22;
     """,
+    # 14 -> 15: whether the nxray-ports role's port list names the NVE interface
+    # (VXLAN). Like the VLAN interfaces, the switch is expected to take that line only
+    # while its feature (nve) is on, so a role made with it off lacks it until
+    # Update the port list.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_nve INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

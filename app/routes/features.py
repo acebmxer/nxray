@@ -168,4 +168,9 @@ def feature_set(
             " To make VLAN interfaces on the Routing page, press Update the port list on the "
             "Switch page: NXray's role names them only once interface-vlan is on."
         )
+    if feature.name == "nve" and turn_on and not connection.role_nve:
+        notice += (
+            " To change VXLAN on the VXLAN page, press Update the port list on the Switch "
+            "page: NXray's role names the NVE interface only once the nve feature is on."
+        )
     return _render(request, username, notice=notice)

@@ -64,7 +64,7 @@ rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static ro
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
 15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart
-rules, 19 the vPC rules.
+rules, 19 the vPC rules, 20 the VXLAN rules and the NVE interface in the port list.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -595,11 +595,40 @@ VPC_RULES = (
     "rule 241 permit command show running-config vpc *",
 )
 
+# VXLAN and EVPN rules, added in ROLE_VERSION 20: the NVE interface and every line
+# inside it (member VNIs too), the ``evpn`` block, a VLAN's ``vn-segment``, a VRF's
+# ``vni`` and route-targets, the switch-wide ``nv overlay evpn`` and ``fabric
+# forwarding`` lines, their "no" forms, and reading the VXLAN lines of the running
+# configuration as text. Written after Cisco's NX-OS 9.3 VXLAN Configuration Guide;
+# not yet tried on a switch (the nve feature is off on the switch in production).
+# Entering ``interface nve1`` also needs NVE_PERMIT in the port list, which the
+# switch is expected to take only while the nve feature is on, as with the VLAN
+# interfaces.
+VXLAN_RULES = (
+    "rule 242 permit command conf t ; nv overlay evpn",
+    "rule 243 permit command conf t ; no nv overlay evpn",
+    "rule 244 permit command conf t ; fabric forwarding *",
+    "rule 245 permit command conf t ; no fabric forwarding *",
+    "rule 246 permit command conf t ; vlan * ; vn-segment *",
+    "rule 247 permit command conf t ; vlan * ; no vn-segment *",
+    "rule 248 permit command conf t ; interface nve*",
+    "rule 249 permit command conf t ; no interface nve*",
+    "rule 250 permit command conf t ; evpn*",
+    "rule 251 permit command conf t ; vrf context * ; vni *",
+    "rule 252 permit command conf t ; vrf context * ; no vni *",
+    "rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *",
+    "rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *",
+    "rule 255 permit command show running-config vxlan",
+    "rule 256 permit command show running-config vxlan *",
+)
+# The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
+NVE_PERMIT = "permit interface nve1"
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 19
+ROLE_VERSION = 20
 
 LIMITED_RULES = (
     *ROLE_RULES,
@@ -621,6 +650,7 @@ LIMITED_RULES = (
     *SFLOW_STATUS_RULES,
     *RELOAD_RULES,
     *VPC_RULES,
+    *VXLAN_RULES,
 )
 
 # What each role mode says in the page's words.
@@ -668,6 +698,7 @@ _ADDED_BY_VERSION = {
     17: "sFlow status",
     18: "switch restart",
     19: "vPC",
+    20: "VXLAN",
 }
 
 
@@ -695,6 +726,8 @@ class EnableResult:
     had_role: bool = False
     # True when the role's port list names the VLAN interfaces (interface-vlan on).
     vlan_interfaces: bool = False
+    # True when the role's port list names the NVE interface (the nve feature on).
+    nve: bool = False
 
 
 def front_ports(interface_brief_body: dict) -> list[str]:
@@ -715,12 +748,14 @@ def role_lines(
     vlan_interfaces: bool = True,
     mode: str = ROLE_LIMITED,
     previous_mode: str | None = None,
+    nve: bool = False,
 ) -> list[str]:
     """The configuration lines that create the role and give it to the account.
 
     Typed after ``configure terminal``. Every value is checked first, so the
     lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
     to the port list; the switch refuses that line while interface-vlan is off.
+    ``nve`` adds the NVE interface the same way, for the nve feature.
     ``previous_mode`` is the mode the role was in (None for a new role): when its
     rules differ from ``mode``'s, they are all removed first, so the role keeps
     none the new mode lacks (a ``no rule`` for a rule that is not there is
@@ -751,6 +786,7 @@ def role_lines(
         *permits,
         CHANNEL_PERMIT,
         *([VLAN_INTERFACE_PERMIT] if vlan_interfaces else []),
+        *([NVE_PERMIT] if nve else []),
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -788,7 +824,13 @@ def _check_role_output(roles_output: str, account_name: str) -> None:
 
 
 def _saved_over_ssh(
-    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int, vlans: bool
+    ssh: dict,
+    admin_password: str,
+    port_count: int,
+    had_role: bool,
+    wait: int,
+    vlans: bool,
+    nve: bool = False,
 ) -> EnableResult:
     """Save the configuration over SSH, and the result."""
     try:
@@ -797,9 +839,9 @@ def _saved_over_ssh(
         output = scrub_secrets(str(exc), admin_password)
     if "Copy complete" not in output:
         log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
-        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans)
+        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans, nve)
     log.info("saved the switch configuration over SSH")
-    return EnableResult(wait, port_count, True, None, had_role, vlans)
+    return EnableResult(wait, port_count, True, None, had_role, vlans, nve)
 
 
 def enable_port_changes(
@@ -812,6 +854,7 @@ def enable_port_changes(
     account_name: str,
     role_version: int = 0,
     vlan_interfaces_listed: bool = False,
+    nve_listed: bool = False,
     mode: str = ROLE_LIMITED,
     previous_mode: str | None = None,
     transport: httpx.BaseTransport | None = None,
@@ -822,7 +865,8 @@ def enable_port_changes(
     ``role_version`` is the version NXray gave its account before (0 for
     none). Below ``LAST_PERMIT_VERSION`` the role's port list gains a line,
     and so does it when interface-vlan is on and ``vlan_interfaces_listed``
-    (the port list names the VLAN interfaces already) is false; then the
+    (the port list names the VLAN interfaces already) is false, or the nve feature is
+    on and ``nve_listed`` (the port list names the NVE interface already) is false; then the
     check and the save go over SSH, which does not depend on NX-API answering.
     ``mode`` is the role mode to write and ``previous_mode`` the one the role
     has now (None for no role yet); see ``role_lines``.
@@ -852,10 +896,20 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         vlans = feature_states(features).get("interface-vlan", False)
+        nve = feature_states(features).get("nve", False)
         lines = role_lines(
-            ports, account_name, vlan_interfaces=vlans, mode=mode, previous_mode=previous_mode
+            ports,
+            account_name,
+            vlan_interfaces=vlans,
+            mode=mode,
+            previous_mode=previous_mode,
+            nve=nve,
         )
-        over_ssh = role_version < LAST_PERMIT_VERSION or (vlans and not vlan_interfaces_listed)
+        over_ssh = (
+            role_version < LAST_PERMIT_VERSION
+            or (vlans and not vlan_interfaces_listed)
+            or (nve and not nve_listed)
+        )
         then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:
@@ -906,7 +960,7 @@ def enable_port_changes(
                 "timeout": SSH_TIMEOUT,
                 "opener": ssh_opener,
             }
-            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans)
+            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans, nve)
 
         try:
             (users,) = client.show("show user-account")
@@ -925,8 +979,14 @@ def enable_port_changes(
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
             return EnableResult(
-                wait, len(ports), False, scrub_secrets(str(exc), admin_password), had_role, vlans
+                wait,
+                len(ports),
+                False,
+                scrub_secrets(str(exc), admin_password),
+                had_role,
+                vlans,
+                nve,
             )
 
     log.info("saved the switch configuration on %s", host)
-    return EnableResult(wait, len(ports), True, None, had_role, vlans)
+    return EnableResult(wait, len(ports), True, None, had_role, vlans, nve)

@@ -130,7 +130,7 @@ def test_changes_off_before_role_version_19(
     assert refused.status_code == 400
     assert "vPC changes are off" in _text(refused.text)
     assert _config_requests(enabled) == []
-    assert "Turn on vPC changes" in _text(logged_in.get("/switch").text)
+    assert "Turn on vPC and VXLAN changes" in _text(logged_in.get("/switch").text)
 
 
 def test_enabled_page_offers_the_settings(logged_in: TestClient, enabled: FakeSwitch) -> None:

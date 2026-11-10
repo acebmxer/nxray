@@ -1,0 +1,24 @@
+{
+  "TABLE_nve_vni": {
+    "ROW_nve_vni": [
+      {
+        "if-name": "nve1",
+        "vni": "10010",
+        "mcast": "UnicastBGP",
+        "vni-state": "Up",
+        "mode": "CP",
+        "type": "L2 [10]",
+        "flags": ""
+      },
+      {
+        "if-name": "nve1",
+        "vni": "50000",
+        "mcast": "n/a",
+        "vni-state": "Up",
+        "mode": "CP",
+        "type": "L3 [tenant]",
+        "flags": ""
+      }
+    ]
+  }
+}

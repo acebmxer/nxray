@@ -1535,6 +1535,27 @@ class NxapiClient:
         change = build_vpc_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_vxlan(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VXLAN page: the NVE interface and its member VNIs, a VLAN's
+        VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets, or the
+        switch-wide EVPN lines.
+
+        The lines are built from the page's description and the checked values
+        (``vxlan.build_vxlan_change``), as for vPC.
+        """
+        # Imported here: the VXLAN description uses this module's checks.
+        from app.vxlan import build_vxlan_change
+
+        change = build_vxlan_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

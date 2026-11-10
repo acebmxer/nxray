@@ -429,6 +429,21 @@ NXray then:
          rule 239 permit command conf t ; interface * ; no vpc *
          rule 240 permit command show running-config vpc
          rule 241 permit command show running-config vpc *
+         rule 242 permit command conf t ; nv overlay evpn
+         rule 243 permit command conf t ; no nv overlay evpn
+         rule 244 permit command conf t ; fabric forwarding *
+         rule 245 permit command conf t ; no fabric forwarding *
+         rule 246 permit command conf t ; vlan * ; vn-segment *
+         rule 247 permit command conf t ; vlan * ; no vn-segment *
+         rule 248 permit command conf t ; interface nve*
+         rule 249 permit command conf t ; no interface nve*
+         rule 250 permit command conf t ; evpn*
+         rule 251 permit command conf t ; vrf context * ; vni *
+         rule 252 permit command conf t ; vrf context * ; no vni *
+         rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *
+         rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *
+         rule 255 permit command show running-config vxlan
+         rule 256 permit command show running-config vxlan *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -995,6 +1010,19 @@ port-channel `vpc peer-link` or `vpc <number>`, each with its `no` form. The
 port-channel must exist first (Port-channels page); the same domain and vPC
 numbers are set on the other switch of the pair, from its own NXray. Written
 from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
+
+**VXLAN.** The **VXLAN** page (role version 20, from Update the port list) needs the
+`nve` and `vnseg_vlan` features (Features page). It reads `show nve interface`,
+`show nve peers`, `show nve vni` and, as text, `show running-config vxlan`, and types
+the NVE interface (`interface nve1`, `source-interface`, `host-reachability protocol
+bgp`, `member vni`), a VLAN's `vn-segment`, the `evpn` block of a VNI, a VRF's `vni`
+and EVPN route-targets, and the switch-wide `nv overlay evpn` and anycast gateway MAC,
+each with its `no` form. Entering `interface nve1` also needs the role's port list to
+name it (`permit interface nve1`), which NXray writes only while the nve feature is on
+(the switch is expected to refuse it otherwise, as with the VLAN interfaces): turn the
+feature on first, then press Update the port list. The same VNIs are set on every
+switch of the fabric, from each one's NXray. Written from Cisco's NX-OS 9.3 guides;
+not yet tried on a switch.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows

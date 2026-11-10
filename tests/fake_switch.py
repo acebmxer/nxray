@@ -396,6 +396,10 @@ class FakeSwitch:
     # vPC lines as entered, the same way ("vpc domain 10 ; peer-switch",
     # "interface port-channel43 ; vpc 43"); ``show running-config vpc`` prints them.
     vpc_lines: list[str] = field(default_factory=list)
+    # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
+    # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
+    # ``show running-config vxlan`` prints them.
+    vxlan_lines: list[str] = field(default_factory=list)
     # Switch admin (see the module notes).
     hostname: str = "nexus-lab"
     admin_lines: list[str] = field(default_factory=list)
@@ -569,6 +573,153 @@ class FakeSwitch:
             return _ok(ident, None), ("vpc-domain", cmd)
         return _ok(ident, None), context
 
+    def _inside_rule(self, user: str, path: str, interface: str | None) -> bool:
+        """Whether a rule of the account's roles names a command inside ``path`` (a mode
+        a line can be typed in): the switch lets the account enter a mode then, as it does
+        for a VLAN or VRF."""
+        depth = len(path.split(" ; "))
+        for name in self.roles_of(user):
+            role = self.roles.get(name)
+            if role is None:
+                continue
+            if interface is not None and role.interface_policy_deny and not role.names(interface):
+                continue
+            for entity in role.entities:
+                parts = entity.split(" ; ")
+                if len(parts) > depth:
+                    pattern = re.escape(" ; ".join(parts[:depth])).replace(r"\*", ".*")
+                    if re.fullmatch(pattern, path):
+                        return True
+        return False
+
+    def _vxlan(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A VXLAN or EVPN line, or None when ``cmd`` is not one. Needs ``feature nve``
+        (and ``feature fabric forwarding`` for the anycast gateway MAC), as on the
+        switch. The role's "conf t ; interface nve*" rule covers every line inside the
+        NVE interface, "conf t ; evpn*" the evpn block."""
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        kind = context[0] if context else None
+        parent = context[1] if context and kind == "vxlan" else None
+        denied = _error(ident, "% Permission denied for the role\n")
+        invalid = _error(ident, "% Invalid command at '^' marker.\n")
+
+        def allowed(path: str, interface: str | None = None, entering: bool = False) -> bool:
+            full = f"conf t ; {path}"
+            return (
+                is_admin
+                or self._role_matches(user, full, interface)
+                or (entering and self._inside_rule(user, full, interface))
+            )
+
+        # Top-level lines.
+        if re.fullmatch(r"nv overlay evpn", bare):
+            if not self._feature_on("nve"):
+                return invalid, context
+            if not allowed(cmd):
+                return denied, context
+            self._record(cmd, self.vxlan_lines)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"fabric forwarding anycast-gateway-mac \S+", bare):
+            if not self._feature_on("hmm"):
+                return invalid, context
+            if not allowed(cmd):
+                return denied, context
+            self._record(cmd, self.vxlan_lines)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"interface (nve\d+)", bare):
+            name = match.group(1)
+            if not self._feature_on("nve"):
+                return invalid, context
+            if not is_admin and not any(
+                (r := self.roles.get(n)) and r.names(name) for n in self.roles_of(user)
+            ):
+                return _error(ident, "% Interface permission denied\n"), None
+            if not allowed(cmd, name, entering=True):
+                return denied, None
+            self._record(cmd, self.vxlan_lines)
+            if undo:
+                return _ok(ident, None), None
+            if f"interface {name}" not in self.vxlan_lines:
+                self.vxlan_lines.append(f"interface {name}")
+            return _ok(ident, None), ("vxlan", f"interface {name}")
+        if cmd == "evpn":
+            if not self._feature_on("nve"):
+                return invalid, context
+            if not allowed("evpn", entering=True):
+                return denied, None
+            return _ok(ident, None), ("vxlan", "evpn")
+
+        # A VLAN's or VRF's VNI lines (the VLAN and VRF come from the generic handlers).
+        if kind == "vlan" and context and re.fullmatch(r"vn-segment( \d+)?", bare):
+            if not self._feature_on("vnseg_vlan"):
+                return invalid, context
+            path = f"vlan {context[1]} ; {cmd}"
+            if not allowed(path):
+                return denied, context
+            self._record(path, self.vxlan_lines)
+            return _ok(ident, None), context
+        if (
+            kind == "vrf"
+            and context
+            and (
+                re.fullmatch(r"vni \d+", bare)
+                or re.fullmatch(r"address-family ipv[46] unicast", cmd)
+            )
+        ):
+            path = f"vrf context {context[1]} ; {cmd}"
+            if not allowed(path, entering=True):
+                return denied, context
+            if cmd.startswith("address-family"):
+                self.vxlan_lines.append(path) if path not in self.vxlan_lines else None
+                return _ok(ident, None), ("vxlan", path)
+            self._record(path, self.vxlan_lines)
+            return _ok(ident, None), context
+
+        # Lines inside a mode this handler entered.
+        if parent is None:
+            return None
+        path = f"{parent} ; {cmd}"
+        nested = re.fullmatch(r"member vni \d+(?: associate-vrf)?|vni \d+ l2", cmd)
+        if cmd in ("shutdown", "no shutdown") and parent.startswith("interface nve"):
+            if not allowed(path, parent.split()[1]):
+                return denied, context
+            self.vxlan_lines[:] = [
+                line
+                for line in self.vxlan_lines
+                if line not in (f"{parent} ; shutdown", f"{parent} ; no shutdown")
+            ]
+            self.vxlan_lines.append(path)
+            return _ok(ident, None), context
+        interface = parent.split()[1] if parent.startswith("interface nve") else None
+        if not allowed(path, interface, entering=bool(nested)):
+            return denied, context
+        self._record(path, self.vxlan_lines)
+        if nested:
+            if path not in self.vxlan_lines:
+                self.vxlan_lines.append(path)
+            return _ok(ident, None), ("vxlan", path)
+        return _ok(ident, None), context
+
+    def vxlan_config(self) -> str:
+        """``show running-config vxlan`` from the lines entered, nested by their paths."""
+        out = (
+            ["feature nv overlay", "feature vn-segment-vlan-based", ""]
+            if self._feature_on("nve")
+            else []
+        )
+        shown: list[str] = []
+        for path in self.vxlan_lines:
+            parts = path.split(" ; ")
+            for depth in range(len(parts)):
+                key = " ; ".join(parts[: depth + 1])
+                if key not in shown:
+                    shown.append(key)
+                    out.append("  " * depth + parts[depth])
+        return "\n".join(out) + ("\n" if out else "")
+
     def vpc_config(self) -> str:
         """``show running-config vpc`` from the lines entered."""
         out = ["feature vpc", ""] if self._feature_on("vpc") else []
@@ -631,6 +782,7 @@ class FakeSwitch:
         known = (
             "show running-config spanning-tree",
             "show running-config vpc",
+            "show running-config vxlan",
             "show running-config",
             "show startup-config",
             "show checkpoint summary",
@@ -647,6 +799,7 @@ class FakeSwitch:
             text = {
                 "show running-config spanning-tree": self.stp_config,
                 "show running-config vpc": self.vpc_config,
+                "show running-config vxlan": self.vxlan_config,
             }.get(cmd, self.running_config)()
         return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
 
@@ -1015,6 +1168,8 @@ class FakeSwitch:
             return stp_reply
         if vpc_reply := self._vpc(user, is_admin, cmd, ident, context):
             return vpc_reply
+        if vxlan_reply := self._vxlan(user, is_admin, cmd, ident, context):
+            return vxlan_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):
@@ -2259,6 +2414,9 @@ class FakeShell:
                     "interface-vlan", False
                 ):
                     # As on cisco-25gb: the Vlan type exists only while the feature is on.
+                    return "% Invalid interface format at '^' marker."
+                if name.startswith("nve") and not self.switch.feature_state.get("nve", False):
+                    # Expected the same for the NVE interface (not tried on a switch).
                     return "% Invalid interface format at '^' marker."
                 if (
                     self.switch.freeze_on_channel_permit

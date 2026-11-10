@@ -124,7 +124,7 @@ def test_changes_off_before_role_version_14(
     switch_page = _text(logged_in.get("/switch").text)
     assert (
         "Turn on layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
-        "restart and vPC changes" in switch_page
+        "restart, vPC and VXLAN changes" in switch_page
     )
     refused = _change(logged_in, DHCP, scope="switch", setting="snooping", action="set")
     assert refused.status_code == 400
@@ -145,8 +145,8 @@ def test_role_version_13_turns_on_layer2_without_a_wait(
     enabled.ssh_lines.clear()
     text = _enable(logged_in)
     assert (
-        "Layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart and "
-        "vPC "
+        "Layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, "
+        "vPC and VXLAN "
         "changes are "
         "on: nxray may "
         "now also set DHCP "

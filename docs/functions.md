@@ -58,6 +58,7 @@ prose columns; those are a reviewer's job.
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
+| Read VXLAN and EVPN (NVE interface, peers, VNIs) or change it: the NVE interface and its member VNIs, a VLAN's VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets | `app/vxlan.py` (`load_vxlan_page`, `build_vxlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vxlan` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
 | Read, make, change or apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, or size the TCAM regions | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
@@ -342,7 +343,7 @@ none reads or changes "the" switch by default.
 | `set_address` | `(conn, switch_id, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
 | `set_switch_identity` | `(conn, connection, system: SystemInfo) -> None` | Stores the model and NX-OS version the switch just reported (for the strip at the top of every page); writes only when they changed | `routes/dashboard`, `routes/switch_page` (test, address) | v0.1.0 |
 | `set_switch_hostname` | `(conn, switch_id, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
-| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None, role_mode=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and the role mode (None keeps it; a broad role is stored with `BROAD_ROLE_VERSION`), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
+| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None, role_mode=None, nve=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces and the NVE interface (None keeps each), and the role mode (None keeps it; a broad role is stored with `BROAD_ROLE_VERSION`), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_admin_login` | `(conn, switch_id, *, admin_user, admin_password, ssh_port, secret_key) -> None` | Keeps the switch admin login, encrypted, for the stored-login role mode | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `delete_admin_login` | `(conn, switch_id) -> None` | Forgets the stored admin login; a switch in the stored-login mode goes back to the limited mode | `routes/switch_page.switch_forget_admin_login`, `switch_enable_changes` | v0.1.0 |
@@ -359,7 +360,9 @@ changes are on and how long NXray still waits before calling the switch;
 `channel_changes_enabled`, `layer3_changes_enabled`, `vrf_changes_enabled` and
 `route_changes_enabled` the later rule sets (3, 4, 5, 6, 7, 8 and 9). `vlan_interface_changes_enabled` also needs
 `role_vlan_interfaces`: the role's port list names the VLAN interfaces, which
-the switch takes only while interface-vlan is on.
+the switch takes only while interface-vlan is on. `vxlan_changes_enabled` needs role
+version 20 and `role_nve`: the port list names the NVE interface, which the switch is
+expected to take only while the nve feature is on.
 
 ## `app/switch_choice.py` — which switch a browser is looking at
 
@@ -430,11 +433,11 @@ NX-API certificate is. Tests pass a pretend opener through
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, mode="limited", previous_mode=None, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH in the role `mode` (limited, broad or stored; `previous_mode` is the one it has now), gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, nve_listed=False, mode="limited", previous_mode=None, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH in the role `mode` (limited, broad or stored; `previous_mode` is the one it has now), gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on and the NVE interface only while nve is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces or the NVE interface for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
-| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off) | `enable_port_changes` | v0.1.0 |
+| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None, nve=False) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off), the NVE interface's only with `nve` | `enable_port_changes` | v0.1.0 |
 | `rules_for_mode` | `(mode) -> tuple[str, ...]` | The role's command rules in a mode: the broad set, or the listed rules (shared by the limited and stored-login modes); `ValueError` for an unknown mode | `role_lines` | v0.1.0 |
 | `check_role_mode` | `(mode) -> str` | `mode` when it is a role mode, else `ValueError` | `rules_for_mode` | v0.1.0 |
 
@@ -619,6 +622,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_vpc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the vPC page, with a message | `vpc_page`, `switch_save` | v0.2.1 |
 | `vpc_page` | `(request, username) -> Response` | `GET /vpc`: the domain, peer-link and vPCs, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `vpc_change` | `(request, username, form) -> Response` | `POST /vpc/change`: one change, after a confirm page | router | v0.2.1 |
+| `check_vxlan_place` | `(page, ident) -> None` | Refuses a VLAN or VRF the switch lacks (naming it would make one) | the VXLAN `ProtocolSite` | v0.2.1 |
+| `render_vxlan_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN page, with a message | `vxlan_page`, `switch_save` | v0.2.1 |
+| `vxlan_page` | `(request, username) -> Response` | `GET /vxlan`: the NVE interface, peers and VNIs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `vxlan_change` | `(request, username, form) -> Response` | `POST /vxlan/change`: one change, after a confirm page; needs role version 20 and the NVE interface in the role's port list | router | v0.2.1 |
 | `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
 | `render_switch_admin_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Switch admin page with a message | `switch_admin_page`, `switch_save` | v0.1.0 |
@@ -1205,6 +1212,15 @@ would take them out silently.
 | `parse_vpc` | `(bodies, config=None) -> ProtocolView` | The page from `show vpc` and the configuration (None when the role may not read it): the domain with its facts, the peer-link and the vPCs, as tables and port-channel places | `VPC.parse`, `load_vpc_page` | v0.2.1 |
 | `load_vpc_page` | `(client) -> VpcPage` | One request for the features, port-channels and VRFs, then `show vpc` and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vpc` | v0.2.1 |
 | `build_vpc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the vPC page | `NxapiClient.configure_vpc`, `routes/vpc` | v0.2.1 |
+
+## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page` | v0.2.1 |
+| `parse_vxlan` | `(bodies, config=None) -> ProtocolView` | The page from `show nve interface`, `show nve peers`, `show nve vni` and the configuration (None when the role may not read it): the NVE interface, VLAN to VNI lines, member VNIs, EVPN blocks and VRF lines as places, the peers and VNIs as tables | `VXLAN.parse`, `load_vxlan_page` | v0.2.1 |
+| `load_vxlan_page` | `(client) -> VxlanPage` | One request for the features, VLANs and VRFs, then the `show nve` commands and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vxlan` | v0.2.1 |
+| `build_vxlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VXLAN page | `NxapiClient.configure_vxlan`, `routes/vxlan` | v0.2.1 |
 
 ## `app/switch_admin.py` — Switch admin: name, clock and NTP, DNS, logging, SNMP, banner, and the log
 

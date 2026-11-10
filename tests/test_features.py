@@ -139,7 +139,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 19
+    assert ROLE_VERSION == 20
 
 
 @pytest.mark.parametrize(
@@ -150,87 +150,89 @@ def test_role_has_the_feature_rules() -> None:
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart and vPC changes",
+            "status, switch restart, vPC and VXLAN changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
             "route, routing protocol, spanning tree, switch admin, security and config, "
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart and vPC changes",
+            " restart, vPC and VXLAN changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
             "protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            " and vPC changes",
+            ", vPC and VXLAN changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol,"
             " spanning tree, switch admin, security and config, layer 2 security, traffic"
-            " measuring, reset to defaults, sFlow status, switch restart and vPC changes",
+            " measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
             "tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart and vPC changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
             "admin, security and config, layer 2 security, traffic measuring, reset to "
-            "defaults, sFlow status, switch restart and vPC changes",
+            "defaults, sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security "
             "and config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart and vPC changes",
+            "status, switch restart, vPC and VXLAN changes",
         ),
         (
             8,
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart and vPC changes",
+            "status, switch restart, vPC and VXLAN changes",
         ),
         (
             9,
             "routing protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            " and vPC changes",
+            ", vPC and VXLAN changes",
         ),
         (
             10,
             "spanning tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart and vPC changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             11,
             "switch admin, security and config, layer 2 security, traffic measuring, "
-            "reset to defaults, sFlow status, switch restart and vPC changes",
+            "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             12,
             "security and config, layer 2 security, traffic measuring, reset to defaults,"
-            " sFlow status, switch restart and vPC changes",
+            " sFlow status, switch restart, vPC and VXLAN changes",
         ),
         (
             13,
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart and vPC changes",
+            " restart, vPC and VXLAN changes",
         ),
         (
             14,
-            "traffic measuring, reset to defaults, sFlow status, switch restart and vPC changes",
+            "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN "
+            "changes",
         ),
-        (15, "reset to defaults, sFlow status, switch restart and vPC changes"),
-        (16, "sFlow status, switch restart and vPC changes"),
-        (17, "switch restart and vPC changes"),
-        (18, "vPC changes"),
-        (19, ""),
+        (15, "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"),
+        (16, "sFlow status, switch restart, vPC and VXLAN changes"),
+        (17, "switch restart, vPC and VXLAN changes"),
+        (18, "vPC and VXLAN changes"),
+        (19, "VXLAN changes"),
+        (20, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

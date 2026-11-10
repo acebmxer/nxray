@@ -47,6 +47,7 @@ from app.routes.switch_admin import render_switch_admin_page
 from app.routes.traffic import render_traffic_page
 from app.routes.vlans import render_vlans_page
 from app.routes.vpc import render_vpc_page
+from app.routes.vxlan import render_vxlan_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
 from app.switch_choice import choose_switch, remember_switch, resolve_switch_id, selected_switch_id
@@ -336,6 +337,7 @@ def switch_setup(
                 pause_seconds=role.pause_seconds,
                 role_version=ROLE_VERSION,
                 vlan_interfaces=role.vlan_interfaces,
+                nve=role.nve,
                 role_mode=role_mode,
             )
             if role_mode == ROLE_STORED:
@@ -696,6 +698,7 @@ def switch_enable_changes(
             account_name=connection.username,
             role_version=connection.role_version,
             vlan_interfaces_listed=connection.role_vlan_interfaces,
+            nve_listed=connection.role_nve,
             mode=new_mode,
             previous_mode=mode_before,
             transport=request.app.state.nxapi_transport,
@@ -725,6 +728,7 @@ def switch_enable_changes(
             pause_seconds=result.pause_seconds,
             role_version=ROLE_VERSION,
             vlan_interfaces=result.vlan_interfaces,
+            nve=result.nve,
             role_mode=new_mode,
         )
     note_activity(
@@ -792,6 +796,10 @@ def switch_enable_changes(
         "make the vPC domain, set the peer keepalive, and mark the peer-link and the vPCs of "
         "port-channels on the vPC page"
     )
+    vxlan_words = (
+        "set up the NVE interface, map VLANs to VNIs and make the EVPN settings of the VNIs "
+        "on the VXLAN page"
+    )
     if mode_before != new_mode and (new_mode == ROLE_BROAD or mode_before is not None):
         wait = (
             " The switch applies a new role once it has not heard from NXray for a while, so "
@@ -810,23 +818,27 @@ def switch_enable_changes(
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
-            "restart and vPC changes are on: "
+            "restart, vPC and VXLAN changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
             f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, "
-            f"{reset_words}, and {vpc_words}. "
+            f"{reset_words}, {vpc_words}, and {vxlan_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
     elif connection.role_version >= ROLE_VERSION:
-        vlans = (
-            " and the VLAN interfaces"
-            if result.vlan_interfaces and not connection.role_vlan_interfaces
-            else ""
-        )
+        named = [
+            name
+            for name, now, before in (
+                ("the VLAN interfaces", result.vlan_interfaces, connection.role_vlan_interfaces),
+                ("the NVE interface", result.nve, connection.role_nve),
+            )
+            if now and not before
+        ]
+        vlans = f" and {' and '.join(named)}" if named else ""
         done = (
             f"The port list is updated: NXray's role now names the {count} front ports the "
             f"switch has now{vlans}. The switch applies this at once, so there is no wait."
@@ -863,6 +875,7 @@ def switch_enable_changes(
             parts.append(traffic_words)
         parts.append(reset_words)
         parts.append(vpc_words)
+        parts.append(vxlan_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -938,8 +951,8 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``vpc``, ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
-    shown there. From the Ports page, ``show``, ``color`` and ``port`` keep its
+    ``vpc``, ``vxlan``, ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``);
+    the answer is shown there. From the Ports page, ``show``, ``color`` and ``port`` keep its
     filter, colour mode and open side panel.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
@@ -981,6 +994,8 @@ def switch_save(
             return render_spanning_tree_page(request, username, error=error, notice=notice)
         if back == "vpc":
             return render_vpc_page(request, username, error=error, notice=notice)
+        if back == "vxlan":
+            return render_vxlan_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

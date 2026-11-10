@@ -11,6 +11,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up and monitor VXLAN and EVPN from the web interface (#60).** The new
+  **VXLAN** page (under Configure) shows the NVE interface (state, source
+  address, host reachability), its peers, and every VNI with its type, mode and
+  state. It makes the NVE interface and sets its source interface, host
+  reachability through BGP, on/off state and the flooding of every VNI; ties a
+  VLAN to a VNI; adds layer 2 and layer 3 VNIs to the NVE interface with
+  suppress-ARP, multicast group and ingress replication; sets a VNI's EVPN route
+  distinguisher and route-targets; gives a VRF its layer 3 VNI and EVPN
+  route-targets; and turns the EVPN control plane and the anycast gateway MAC
+  on. Each change shows its lines and asks first. It needs the nve and
+  vnseg_vlan features (Features page) and NXray's role at version 20: admins
+  turn the features on, then press **Update the port list** on the Switch page,
+  which now also names the NVE interface in the role's port list. Written from
+  Cisco's NX-OS 9.3 guides and not yet tried on a switch.
 - **Set up and monitor vPC from the web interface (#59).** The new **vPC** page
   (under Configure) shows the vPC domain (peer status, peer keepalive, which
   switch is primary, whether the two agree), the peer-link and every vPC with

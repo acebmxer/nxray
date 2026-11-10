@@ -107,6 +107,7 @@ def _upgrade_one(
             account_name=connection.username,
             role_version=connection.role_version,
             vlan_interfaces_listed=connection.role_vlan_interfaces,
+            nve_listed=connection.role_nve,
             mode=ROLE_STORED,
             previous_mode=ROLE_STORED,
             transport=transport,
@@ -126,6 +127,7 @@ def _upgrade_one(
             pause_seconds=result.pause_seconds,
             role_version=ROLE_VERSION,
             vlan_interfaces=result.vlan_interfaces,
+            nve=result.nve,
             role_mode=ROLE_STORED,
         )
         record_activity(conn, ACTOR, "Switch", what, connection.host)

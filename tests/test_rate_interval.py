@@ -173,7 +173,7 @@ def test_role_has_the_traffic_rules() -> None:
     for rule in TRAFFIC_RULES:
         assert rule in lines
     assert missing_changes(14) == (
-        "traffic measuring, reset to defaults, sFlow status, switch restart and vPC changes"
+        "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
 
 
@@ -183,7 +183,8 @@ def test_role_version_14_turns_on_traffic_measuring_without_a_wait(
     _db(settings, "UPDATE switch_connection SET role_version = 14")
     page = _text(logged_in.get("/switch").text)
     assert (
-        "Turn on traffic measuring, reset to defaults, sFlow status, switch restart and vPC changes"
+        "Turn on traffic measuring, reset to defaults, sFlow status, switch restart, vPC and "
+        "VXLAN changes"
     ) in page
     enabled.ssh_lines.clear()
     response = logged_in.post(
@@ -198,7 +199,8 @@ def test_role_version_14_turns_on_traffic_measuring_without_a_wait(
     )
     text = _text(response.text)
     assert (
-        "Traffic measuring, reset to defaults, sFlow status, switch restart and vPC changes are "
+        "Traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN "
+        "changes are "
         "on: "
         "nxray may now "
         "also set how long" in text

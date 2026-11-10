@@ -286,7 +286,7 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     assert (
         "Turn on VLAN interface, VRF, static route, routing protocol, spanning tree, "
         "switch admin, security and config, layer 2 security, traffic measuring, "
-        "reset to defaults, sFlow status, switch restart and vPC changes"
+        "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     ) in switch_page
     enabled.ssh_lines.clear()
     response = _enable_changes(logged_in)
@@ -294,7 +294,7 @@ def test_an_older_role_offers_vlan_interface_changes_without_a_wait(
     assert (
         "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
         "admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status, switch restart and vPC changes are on: nxray may now also"
+        "defaults, sFlow status, switch restart, vPC and VXLAN changes are on: nxray may now also"
         " make, change and delete VLAN" in text
     )
     assert "there is no wait" in text
@@ -423,7 +423,7 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     assert (
         "Turn on VRF, static route, routing protocol, spanning tree, switch admin, security "
         "and config, layer 2 security, traffic measuring, reset to defaults, sFlow status, "
-        "switch restart and vPC "
+        "switch restart, vPC and VXLAN "
         "changes" in switch_page
     )
     assert "this version of NXray can also make and delete VRFs and move" in switch_page
@@ -432,7 +432,7 @@ def test_role_version_7_offers_vrf_changes_without_a_wait(
     assert (
         "VRF, static route, routing protocol, spanning tree, switch admin, security and "
         "config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
-        "restart and vPC "
+        "restart, vPC and VXLAN "
         "changes are on: "
         "nxray may now also make "
         "and delete VRFs" in text
@@ -507,12 +507,13 @@ def test_role_version_8_offers_static_route_changes(
     assert (
         "Turn on static route, routing protocol, spanning tree, switch admin, security and "
         "config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
-        "restart and vPC changes" in _text(logged_in.get("/switch").text)
+        "restart, vPC and VXLAN changes" in _text(logged_in.get("/switch").text)
     )
     text = _text(_enable_changes(logged_in).text)
     assert (
         "Static route, routing protocol, spanning tree, switch admin, security and config, layer "
-        "2 security, traffic measuring, reset to defaults, sFlow status, switch restart and vPC "
+        "2 security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and "
+        "VXLAN "
         "changes are on: "
         "nxray may now also "
         "add and remove "

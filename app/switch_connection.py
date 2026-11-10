@@ -52,6 +52,8 @@ class SwitchConnection:
     role_version: int = 0
     # The role's port list names the VLAN interfaces (needs interface-vlan on).
     role_vlan_interfaces: bool = False
+    # The role's port list names the NVE interface (needs the nve feature on).
+    role_nve: bool = False
     # As last read from the switch (dashboard, connection test); empty until then.
     switch_model: str = ""
     nxos_version: str = ""
@@ -111,6 +113,13 @@ class SwitchConnection:
         """True once the role also names the VLAN interfaces in its port list, which
         the switch takes only while interface-vlan is on."""
         return self.layer3_changes_enabled and self.role_vlan_interfaces
+
+    @property
+    def vxlan_changes_enabled(self) -> bool:
+        """True once that role includes the VXLAN rules and names the NVE interface in
+        its port list (role version 20 or later, with the nve feature on when it was
+        written)."""
+        return self.changes_enabled and self.role_version >= 20 and self.role_nve
 
     @property
     def vrf_changes_enabled(self) -> bool:
@@ -241,6 +250,7 @@ def _connection(row: sqlite3.Row) -> SwitchConnection:
         unsaved_changes=bool(row["unsaved_changes"]),
         role_version=row["role_version"],
         role_vlan_interfaces=bool(row["role_vlan_interfaces"]),
+        role_nve=bool(row["role_nve"]),
         switch_model=row["switch_model"],
         nxos_version=row["nxos_version"],
         sflow_agent=row["sflow_agent"],
@@ -282,9 +292,11 @@ def set_changes_enabled(
     role_version: int,
     vlan_interfaces: bool | None = None,
     role_mode: str | None = None,
+    nve: bool | None = None,
 ) -> None:
     """Record that port changes are on with the given role version, and whether
-    its port list names the VLAN interfaces (None keeps what is stored).
+    its port list names the VLAN interfaces and the NVE interface (None keeps what
+    is stored).
     ``role_mode`` (None keeps it) is stored with ``BROAD_ROLE_VERSION`` as the
     version for a broad role; the admin login is kept by ``set_admin_login``.
 
@@ -300,6 +312,7 @@ def set_changes_enabled(
                paused_until = MAX(COALESCE(paused_until, 0), ?),
                role_version = ?,
                role_vlan_interfaces = COALESCE(?, role_vlan_interfaces),
+               role_nve = COALESCE(?, role_nve),
                role_mode = COALESCE(?, role_mode)
          WHERE id = ?
         """,
@@ -308,6 +321,7 @@ def set_changes_enabled(
             until,
             BROAD_ROLE_VERSION if role_mode == ROLE_BROAD else role_version,
             None if vlan_interfaces is None else int(vlan_interfaces),
+            None if nve is None else int(nve),
             role_mode,
             switch_id,
         ),
@@ -319,7 +333,7 @@ def set_changes_off(conn: sqlite3.Connection, switch_id: int) -> None:
     """Record that port changes are off (the role is gone from the switch)."""
     conn.execute(
         "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0, "
-        "role_vlan_interfaces = 0, role_mode = 'limited', admin_user = '', "
+        "role_vlan_interfaces = 0, role_nve = 0, role_mode = 'limited', admin_user = '', "
         "admin_password_encrypted = '', admin_ssh_port = 22 WHERE id = ?",
         (switch_id,),
     )
