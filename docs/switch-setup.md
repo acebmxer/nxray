@@ -421,6 +421,8 @@ NXray then:
          rule 231 permit command conf t ; no sflow *
          rule 232 permit command conf t ; default interface *
          rule 233 permit command show sflow
+         rule 234 permit command terminal dont-ask
+         rule 235 permit command reload
          rule 236 permit command conf t ; vpc domain *
          rule 237 permit command conf t ; no vpc domain *
          rule 238 permit command conf t ; interface * ; vpc *
