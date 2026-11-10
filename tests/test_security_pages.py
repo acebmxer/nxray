@@ -118,7 +118,8 @@ def test_changes_off_before_role_version_13(
     assert "Security and config changes are off" in _text(logged_in.get("/security/acls").text)
     assert (
         "Turn on security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status and switch restart changes" in _text(logged_in.get("/switch").text)
+        "defaults, sFlow status, switch restart and vPC changes"
+        in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, ACL, scope="ipv4_acl", action="create", id_name="web")
     assert refused.status_code == 400
@@ -143,7 +144,7 @@ def test_role_version_12_turns_on_security_without_a_wait(
     text = _text(response.text)
     assert (
         "Security and config, layer 2 security, traffic measuring, reset to defaults,"
-        " sFlow status and switch restart changes are on: nxray may now also make and"
+        " sFlow status, switch restart and vPC changes are on: nxray may now also make and"
         " delete" in text
     )
     assert "there is no wait" in text

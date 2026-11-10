@@ -31,7 +31,7 @@ and IPv6 addresses, make VRFs and move interfaces between them, add static route
 OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
-guard), set the switch's hostname, banner, clock and NTP, DNS, logging and
+guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels), set the switch's hostname, banner, clock and NTP, DNS, logging and
 SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
 the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
@@ -160,7 +160,8 @@ default: *(built)*.
 15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
     routed ports: *(built)*. VRFs: *(built)*. Static routes: *(built)*. Routing
     protocols: *(built)*
-16. **Spanning tree.** *(built)*
+16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
+    vPC port-channels, with the pair's health. *(built)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,

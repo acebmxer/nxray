@@ -124,7 +124,7 @@ def test_changes_off_before_role_version_12(
     assert "Switch admin changes are off" in _text(page)
     assert (
         "Turn on switch admin, security and config, layer 2 security, traffic measuring, reset "
-        "to defaults, sFlow status and switch restart "
+        "to defaults, sFlow status, switch restart and vPC "
         "changes" in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, scope="system", setting="hostname", action="set",
@@ -151,7 +151,7 @@ def test_role_version_11_turns_on_switch_admin_without_a_wait(
     text = _text(response.text)
     assert (
         "Switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status and switch restart changes are "
+        "defaults, sFlow status, switch restart and vPC changes are "
         "on: nxray may now also "
         "change the "
         "switch's hostname" in text

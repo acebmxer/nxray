@@ -249,6 +249,6 @@ def test_role_has_the_reset_rule() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in RESET_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 18
+    assert ROLE_VERSION == 19
     description = next(line for line in lines if line.startswith("description "))
     assert len(description.removeprefix("description ")) <= 128

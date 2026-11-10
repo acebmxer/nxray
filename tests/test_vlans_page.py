@@ -337,7 +337,7 @@ def test_old_role_offers_turning_on_vlan_changes(
     assert (
         "Turn on VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
         "static route, routing protocol, spanning tree, switch admin, security and config, layer "
-        "2 security, traffic measuring, reset to defaults, sFlow status and switch restart "
+        "2 security, traffic measuring, reset to defaults, sFlow status, switch restart and vPC "
         "changes" in text
     )
     assert "There is no wait this time" in text
@@ -354,7 +354,8 @@ def test_turning_on_vlan_changes_needs_no_wait(
     assert (
         "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
         "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-        "security, traffic measuring, reset to defaults, sFlow status and switch restart changes "
+        "security, traffic measuring, reset to defaults, sFlow status, switch restart and vPC "
+        "changes "
         "are on: nxray may now also create, rename and delete VLANs" in text
     )
     assert "no wait" in text and "leaving the switch alone" not in text

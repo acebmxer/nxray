@@ -57,6 +57,7 @@ prose columns; those are a reviewer's job.
 | Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
+| Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
 | Read, make, change or apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, or size the TCAM regions | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
@@ -614,6 +615,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
 | `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
+| `check_vpc_place` | `(page, ident) -> None` | Refuses a port-channel the switch lacks (naming it would make one) and a second vPC domain | the vPC `ProtocolSite` | v0.2.1 |
+| `render_vpc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the vPC page, with a message | `vpc_page`, `switch_save` | v0.2.1 |
+| `vpc_page` | `(request, username) -> Response` | `GET /vpc`: the domain, peer-link and vPCs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `vpc_change` | `(request, username, form) -> Response` | `POST /vpc/change`: one change, after a confirm page | router | v0.2.1 |
 | `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
 | `render_switch_admin_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Switch admin page with a message | `switch_admin_page`, `switch_save` | v0.1.0 |
@@ -1117,6 +1122,7 @@ would take them out silently.
 | `table_rows` | `(body, table: str, row: str) -> list[dict]` | The rows of an NX-OS table, one row or many, also when the table is a list; deliberately not a change to `switch.rows` | `protocols_*` parsers, `routing_protocols.parse_routes` | v0.1.0 |
 | `vrf_field` | `(optional=True) -> Field` | The VRF identity field protocol scopes share | `protocols_*` | v0.1.0 |
 | `interface_field` | `() -> Field` | The interface identity field of interface scopes | `protocols_*` | v0.1.0 |
+| `channel_field` | `() -> Field` | The port-channel identity field of the vPC page's port-channel scope (field kind `channel`: a port-channel number, written `port-channel20` or `po20`) | `vpc` | v0.2.1 |
 | `port_field` | `() -> Field` | The port identity field of spanning-tree port scopes: a switched front port or port-channel (field kind `port`) | `spanning_tree` | v0.1.0 |
 | `source_field` | `(name="source", label="Source interface") -> Field` | A field for an interface whose address a protocol uses, loopbacks included (BGP update source, PIM register source, MSDP connect source) | `protocols_bgp`, `protocols_multicast` | v0.1.0 |
 
@@ -1188,6 +1194,17 @@ would take them out silently.
 | `stp_vlan_numbers` | `(vlan_brief) -> list[int]` | The VLAN numbers in `show vlan brief` up to 3967, lowest first | `parse_spanning_tree`, `load_spanning_tree_page`, `port_security.load_port_security_page` | v0.1.0 |
 | `load_spanning_tree_page` | `(client) -> SpanningTreePage` | One request for the reads, then the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/spanning_tree` | v0.1.0 |
 | `build_stp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Spanning tree page | `NxapiClient.configure_spanning_tree`, `routes/spanning_tree` | v0.1.0 |
+
+## `app/vpc.py` — vPC: the domain, the peer-link, the vPCs, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vpc_config` | `(config: str) -> VpcConfig` | `show running-config vpc` text sorted by where each line applies: the domain number, the lines inside `vpc domain`, and each port-channel's `vpc` lines | `load_vpc_page` | v0.2.1 |
+| `domain_values` | `(lines) -> dict[str, dict[str, str]]` | The vPC domain's settings the configured lines show, by setting key, as field values (peer keepalive, priorities, delay restore, auto-recovery) | `VpcConfig.values`, `parse_vpc` | v0.2.1 |
+| `channel_name` | `(value: str) -> str` | `Po43` (how `show vpc` writes a port-channel) as `port-channel43`; other names unchanged | `parse_vpc` | v0.2.1 |
+| `parse_vpc` | `(bodies, config=None) -> ProtocolView` | The page from `show vpc` and the configuration (None when the role may not read it): the domain with its facts, the peer-link and the vPCs, as tables and port-channel places | `VPC.parse`, `load_vpc_page` | v0.2.1 |
+| `load_vpc_page` | `(client) -> VpcPage` | One request for the features, port-channels and VRFs, then `show vpc` and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vpc` | v0.2.1 |
+| `build_vpc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the vPC page | `NxapiClient.configure_vpc`, `routes/vpc` | v0.2.1 |
 
 ## `app/switch_admin.py` — Switch admin: name, clock and NTP, DNS, logging, SNMP, banner, and the log
 

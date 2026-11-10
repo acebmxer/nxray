@@ -393,6 +393,9 @@ class FakeSwitch:
     # Spanning tree lines as entered, the same way ("interface Ethernet1/54 ;
     # spanning-tree cost 100"); ``show running-config spanning-tree`` prints them.
     stp_lines: list[str] = field(default_factory=list)
+    # vPC lines as entered, the same way ("vpc domain 10 ; peer-switch",
+    # "interface port-channel43 ; vpc 43"); ``show running-config vpc`` prints them.
+    vpc_lines: list[str] = field(default_factory=list)
     # Switch admin (see the module notes).
     hostname: str = "nexus-lab"
     admin_lines: list[str] = field(default_factory=list)
@@ -540,6 +543,48 @@ class FakeSwitch:
             return _ok(ident, None), ("stp-mst", cmd)
         return _ok(ident, None), context
 
+    def _vpc(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A vPC line, or None when ``cmd`` is not one. The role's "conf t ; vpc
+        domain *" rule covers every line inside the domain, "conf t ; interface * ;
+        vpc *" the port-channel lines. Needs ``feature vpc``, as on the switch."""
+        kind = context[0] if context else None
+        interface = context[1] if context and kind == "interface" else None
+        bare = cmd.removeprefix("no ")
+        if kind == "vpc-domain" and context:
+            path = f"{context[1]} ; {cmd}"
+        elif interface is not None and re.fullmatch(r"vpc( .+)?", bare):
+            path = f"interface {interface} ; {cmd}"
+        elif kind is None and re.fullmatch(r"vpc domain \d+", bare):
+            path = cmd
+        else:
+            return None
+        if not self._feature_on("vpc"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        self._record(path, self.vpc_lines)
+        if kind is None and not cmd.startswith("no "):
+            return _ok(ident, None), ("vpc-domain", cmd)
+        return _ok(ident, None), context
+
+    def vpc_config(self) -> str:
+        """``show running-config vpc`` from the lines entered."""
+        out = ["feature vpc", ""] if self._feature_on("vpc") else []
+        domain = [p for p in self.vpc_lines if p.startswith("vpc domain ")]
+        for place in dict.fromkeys(p.split(" ; ")[0] for p in domain):
+            out.append(place)
+            out += [f"  {p.split(' ; ', 1)[1]}" for p in domain if p.startswith(place + " ; ")]
+        ports: dict[str, list[str]] = {}
+        for p in self.vpc_lines:
+            if p.startswith("interface "):
+                place, line = p.split(" ; ", 1)
+                ports.setdefault(place, []).append(line)
+        for place, lines in ports.items():
+            out += [place, *(f"  {line}" for line in lines)]
+        return "\n".join(out) + ("\n" if out else "")
+
     def stp_config(self) -> str:
         """``show running-config spanning-tree`` from the lines entered: the top-level
         ones, then the MST region's, then each port's."""
@@ -585,6 +630,7 @@ class FakeSwitch:
             return {"jsonrpc": "2.0", "result": {"msg": "".join(lines)}, "id": ident}
         known = (
             "show running-config spanning-tree",
+            "show running-config vpc",
             "show running-config",
             "show startup-config",
             "show checkpoint summary",
@@ -598,7 +644,10 @@ class FakeSwitch:
         elif cmd == "show checkpoint summary":
             text = self.checkpoint_summary()
         else:
-            text = self.stp_config() if cmd.endswith("spanning-tree") else self.running_config()
+            text = {
+                "show running-config spanning-tree": self.stp_config,
+                "show running-config vpc": self.vpc_config,
+            }.get(cmd, self.running_config)()
         return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
 
     def running_config(self) -> str:
@@ -964,6 +1013,8 @@ class FakeSwitch:
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
             return stp_reply
+        if vpc_reply := self._vpc(user, is_admin, cmd, ident, context):
+            return vpc_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):

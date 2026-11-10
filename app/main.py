@@ -52,6 +52,7 @@ from app.routes import (
     traffic,
     users,
     vlans,
+    vpc,
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
 from app.sflow import SflowCollector, start_collector
@@ -189,6 +190,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routing.router)
     app.include_router(protocols.router)
     app.include_router(spanning_tree.router)
+    app.include_router(vpc.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)
     app.include_router(config_page.router)

@@ -63,7 +63,8 @@ rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
-15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart rules.
+15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart
+rules, 19 the vPC rules.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -578,11 +579,27 @@ BROAD_RULES = (
     "rule 22 permit command reload",
 )
 
+# vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it
+# ("conf t ; vpc domain *" covers the submode, as the routing protocol rules do),
+# ``vpc peer-link`` and ``vpc <number>`` on a port-channel, their "no" forms, and
+# reading the vPC lines of the running configuration as text. Written after
+# Cisco's NX-OS 9.3 Interfaces Configuration Guide; not yet tried on a switch (vPC
+# is off on the switch in production). The port list stays as it was, so this needs
+# no SSH save and no wait.
+VPC_RULES = (
+    "rule 236 permit command conf t ; vpc domain *",
+    "rule 237 permit command conf t ; no vpc domain *",
+    "rule 238 permit command conf t ; interface * ; vpc *",
+    "rule 239 permit command conf t ; interface * ; no vpc *",
+    "rule 240 permit command show running-config vpc",
+    "rule 241 permit command show running-config vpc *",
+)
+
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 18
+ROLE_VERSION = 19
 
 LIMITED_RULES = (
     *ROLE_RULES,
@@ -603,6 +620,7 @@ LIMITED_RULES = (
     *RESET_RULES,
     *SFLOW_STATUS_RULES,
     *RELOAD_RULES,
+    *VPC_RULES,
 )
 
 # What each role mode says in the page's words.
@@ -649,6 +667,7 @@ _ADDED_BY_VERSION = {
     16: "reset to defaults",
     17: "sFlow status",
     18: "switch restart",
+    19: "vPC",
 }
 
 

@@ -21,6 +21,10 @@
   {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
   {% for i in page.ports %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
 </select>
+{% elif f.kind == "channel" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% for i in page.channels %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
+</select>
 {% elif f.kind == "vlan" %}
 <select id="{{ uid }}" name="{{ name }}">
   {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}

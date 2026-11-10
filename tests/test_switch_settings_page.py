@@ -319,8 +319,8 @@ def test_role_removed_from_the_switch_turns_port_changes_off(
     assert (
         "Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, "
         "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
-        "restart changes" in logged_in.get("/switch").text
+        "config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
+        "restart and vPC changes" in logged_in.get("/switch").text
     )
 
 

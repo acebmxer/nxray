@@ -46,6 +46,7 @@ from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.traffic import render_traffic_page
 from app.routes.vlans import render_vlans_page
+from app.routes.vpc import render_vpc_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
 from app.switch_choice import choose_switch, remember_switch, resolve_switch_id, selected_switch_id
@@ -787,6 +788,10 @@ def switch_enable_changes(
         "put a port or a port-channel back to how it came out of the box, on its own page or "
         "the Port-channels page"
     )
+    vpc_words = (
+        "make the vPC domain, set the peer keepalive, and mark the peer-link and the vPCs of "
+        "port-channels on the vPC page"
+    )
     if mode_before != new_mode and (new_mode == ROLE_BROAD or mode_before is not None):
         wait = (
             " The switch applies a new role once it has not heard from NXray for a while, so "
@@ -804,15 +809,15 @@ def switch_enable_changes(
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
-            "restart changes are on: "
+            "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
+            "restart and vPC changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, and "
-            f"{reset_words}. "
+            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, "
+            f"{reset_words}, and {vpc_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
@@ -857,6 +862,7 @@ def switch_enable_changes(
         if connection.role_version < 15:
             parts.append(traffic_words)
         parts.append(reset_words)
+        parts.append(vpc_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -932,7 +938,7 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
+    ``vpc``, ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page, ``show``, ``color`` and ``port`` keep its
     filter, colour mode and open side panel.
     Anything else means the
@@ -973,6 +979,8 @@ def switch_save(
             return render_protocol_page(request, username, protocol, error=error, notice=notice)
         if back == "spanning-tree":
             return render_spanning_tree_page(request, username, error=error, notice=notice)
+        if back == "vpc":
+            return render_vpc_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

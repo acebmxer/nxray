@@ -1515,6 +1515,26 @@ class NxapiClient:
         change = build_stp_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_vpc(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the vPC page: the vPC domain and its settings, or the peer-link
+        and vPC number of a port-channel.
+
+        The lines are built from the page's description and the checked values
+        (``vpc.build_vpc_change``), as for spanning tree.
+        """
+        # Imported here: the vPC description uses this module's checks.
+        from app.vpc import build_vpc_change
+
+        change = build_vpc_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

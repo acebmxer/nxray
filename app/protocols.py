@@ -87,6 +87,7 @@ KINDS = (
     "mac",  # a unicast MAC address, written 0200.0000.0001
     "maddr4",  # one IPv4 multicast group address: 239.1.1.1
     "port",  # a front port or port-channel, switched (layer 2): spanning tree
+    "channel",  # a port-channel that exists on the switch: port-channel20 (or po20)
     "vlan",  # one VLAN number, 1 to 3967 (the switch keeps 3968-4094 for itself)
     "vlans",  # VLAN numbers and ranges, 1 to 3967: 10 or 10,20-30
     "host",  # a server: an IP address or a DNS name such as ntp.example.net
@@ -282,6 +283,16 @@ def _switch_port(value: str, label: str) -> str:
         return validate_port_name(f"Ethernet{match.group(1)}" if match else value)
     except ValueError as exc:
         raise ValueError(f"{label}: a front port such as Ethernet1/3 or a port-channel") from exc
+
+
+def _channel_name(value: str, label: str) -> str:
+    match = _CHANNEL.fullmatch(value)
+    if not match:
+        raise ValueError(f"{label} is a port-channel such as port-channel20")
+    try:
+        return f"port-channel{validate_channel_number(match.group(1))}"
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from exc
 
 
 def _vlan(value: str, label: str) -> str:
@@ -504,6 +515,8 @@ def check_value(spec: Field, raw: str) -> str:
         return _multicast_address(value, spec.label)
     if kind == "port":
         return _switch_port(value, spec.label)
+    if kind == "channel":
+        return _channel_name(value, spec.label)
     if kind == "vlan":
         return _vlan(value, spec.label)
     if kind == "vlans":
@@ -947,6 +960,17 @@ def port_field() -> Field:
     )
 
 
+def channel_field() -> Field:
+    """The port-channel identity field of the vPC page's port-channel scope."""
+    return Field(
+        "channel",
+        "Port-channel",
+        "channel",
+        hint="A port-channel made on the Port-channels page",
+        placeholder="port-channel20",
+    )
+
+
 def interface_field() -> Field:
     """The interface identity field of interface scopes."""
     return Field(
@@ -971,6 +995,7 @@ __all__ = [
     "Table",
     "blanks",
     "build_change",
+    "channel_field",
     "check_value",
     "interface_field",
     "port_field",

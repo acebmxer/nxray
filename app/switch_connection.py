@@ -167,6 +167,11 @@ class SwitchConnection:
         return self.changes_enabled and self.role_version >= 16
 
     @property
+    def vpc_changes_enabled(self) -> bool:
+        """True once that role includes the vPC rules (role version 19 or later)."""
+        return self.changes_enabled and self.role_version >= 19
+
+    @property
     def can_restart(self) -> bool:
         """True once that role includes the restart rules (role version 18 or
         later): NXray restarts the switch itself, with no admin login typed."""

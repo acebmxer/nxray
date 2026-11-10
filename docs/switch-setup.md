@@ -421,6 +421,12 @@ NXray then:
          rule 231 permit command conf t ; no sflow *
          rule 232 permit command conf t ; default interface *
          rule 233 permit command show sflow
+         rule 236 permit command conf t ; vpc domain *
+         rule 237 permit command conf t ; no vpc domain *
+         rule 238 permit command conf t ; interface * ; vpc *
+         rule 239 permit command conf t ; interface * ; no vpc *
+         rule 240 permit command show running-config vpc
+         rule 241 permit command show running-config vpc *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -978,6 +984,15 @@ No admin login is asked. Before that update, the page asks for the switch admin
 login and SSH port and types the same two lines over SSH, once; the password
 is never stored. The switch dropping the connection is how NXray knows it went
 down; it answers again after several minutes.
+
+**vPC.** The **vPC** page (role version 19, from Update the port list) needs the
+`vpc` and `lacp` features (Features page). It reads `show vpc` and, as text,
+`show running-config vpc`, and types the vPC domain with its settings
+(`vpc domain 10`, `peer-keepalive destination ...`, `peer-switch`, ...) and on a
+port-channel `vpc peer-link` or `vpc <number>`, each with its `no` form. The
+port-channel must exist first (Port-channels page); the same domain and vPC
+numbers are set on the other switch of the pair, from its own NXray. Written
+from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows

@@ -98,7 +98,8 @@ def test_turning_on_types_the_settings_rules(
     assert (
         "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
         "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-        "security, traffic measuring, reset to defaults, sFlow status and switch restart changes "
+        "security, traffic measuring, reset to defaults, sFlow status, switch restart and vPC "
+        "changes "
         "are on" in text
     )
     assert "split or join the 100G ports" in text
@@ -117,7 +118,8 @@ def test_old_role_offers_port_settings_without_a_wait(
     assert (
         "Turn on port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
         "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-        "security, traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "security, traffic measuring, reset to defaults, sFlow status, switch restart and vPC "
+        "changes"
         in page
         and "There is no wait this time" in page
     )
@@ -128,7 +130,8 @@ def test_old_role_offers_port_settings_without_a_wait(
     assert (
         "Port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, "
         "routing protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring, reset to defaults, sFlow status and switch restart changes are on: "
+        "traffic measuring, reset to defaults, sFlow status, switch restart and vPC changes are "
+        "on: "
         "nxray may now also set the speed, MTU" in text
     )
     assert "there is no wait" in text

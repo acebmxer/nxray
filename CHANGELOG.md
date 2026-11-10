@@ -9,6 +9,20 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Added
+
+- **Set up and monitor vPC from the web interface (#59).** The new **vPC** page
+  (under Configure) shows the vPC domain (peer status, peer keepalive, which
+  switch is primary, whether the two agree), the peer-link and every vPC with
+  its state and consistency. It makes the vPC domain and sets its peer
+  keepalive, role and system priority, peer switch, peer gateway, layer 3 peer
+  router, ARP and IPv6 neighbor synchronization, auto-recovery and delay
+  restore; marks a port-channel as the peer-link; and gives a port-channel a
+  vPC number. Each change shows its lines and asks first. It needs the vpc and
+  lacp features (Features page) and NXray's role at version 19: admins press
+  **Update the port list** on the Switch page. Written from Cisco's NX-OS 9.3
+  guides and not yet tried on a switch.
+
 ### Changed
 
 - **The Ports page switch picture shows each port's speed in its normal view
