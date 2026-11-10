@@ -9,6 +9,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Ports page switch picture shows each port's speed in its normal view
+  (#58).** A port that is up is now coloured by the speed it runs at (1G, 10G,
+  25G, 40G, 100G), the same colours as the Speed view (40G is now pink, no longer
+  orange, so it cannot be mistaken for amber), and the small light in
+  its top right corner shows that it is up. Amber (down with something plugged
+  in), grey (turned off) and empty ports are unchanged. The
+  legends of the State, Speed, Traffic and Errors views always list every
+  colour, with a count of 0 when no port has it. VLAN and Port-channel keep
+  listing only the colours in use.
+
 ### Fixed
 
 - **The Spanning tree page needs far less scrolling (#57).** Its tables (Trees,

@@ -155,9 +155,9 @@ def test_ports_page_draws_the_front_panel(logged_in: TestClient, switch: FakeSwi
     html = logged_in.get("/ports").text
     assert '<svg class="face"' in html
     assert html.count('<a class="face-port"') == 54
-    assert 'class="face-cell f-up"' in html
+    assert 'class="face-cell f-25g"' in html
     # The legend counts the ports in each colour.
-    assert 'Up <span class="legend-values">1</span>' in html
+    assert 'Up, 25G <span class="legend-values">1</span>' in html
     assert 'Empty: nothing plugged in <span class="legend-values">53</span>' in html
 
 

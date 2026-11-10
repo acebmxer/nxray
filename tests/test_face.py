@@ -86,7 +86,10 @@ def test_a_broken_out_port_is_one_cage_cut_in_four() -> None:
 def test_state_colours() -> None:
     port = _port(_ports(), "Ethernet1/1")
     assert port_colour(port, "state", {})[0] == "f-empty"
-    assert port_colour(replace(port, up=True), "state", {})[0] == "f-up"
+    up = replace(port, up=True, bandwidth_bits=25_000_000_000)
+    assert port_colour(up, "state", {}) == ("f-25g", "Up, 25G")
+    assert port_colour(replace(up, bandwidth_bits=10_000_000_000), "state", {})[0] == "f-10g"
+    assert port_colour(replace(up, bandwidth_bits=7_000_000_000), "state", {})[0] == "f-other"
     assert port_colour(replace(port, admin_up=False), "state", {})[0] == "f-off"
     plugged = replace(port, transceiver=Transceiver(present=True, type="SFP-H10GB-CU3M"))
     assert port_colour(plugged, "state", {}) == (
@@ -179,11 +182,35 @@ def test_every_port_is_a_link_with_a_tooltip_and_text_is_escaped() -> None:
 
 def test_the_legend_counts_ports_per_colour() -> None:
     ports = _ports()
-    ports[0] = replace(ports[0], up=True)
+    ports[0] = replace(ports[0], up=True, bandwidth_bits=25_000_000_000)
     legend = {entry.css: entry.count for entry in draw_face(ports, "state").legend}
-    assert legend == {"f-up": 1, "f-empty": 53}
+    # Every colour of the State view is listed, with 0 when no port has it.
+    assert legend == {
+        "f-1g": 0,
+        "f-10g": 0,
+        "f-25g": 1,
+        "f-40g": 0,
+        "f-100g": 0,
+        "f-down": 0,
+        "f-empty": 53,
+        "f-off": 0,
+    }
     labels = [entry.label for entry in draw_face(ports, "state").legend]
-    assert labels[0] == "Up"
+    assert labels[:5] == ["Up, 1G", "Up, 10G", "Up, 25G", "Up, 40G", "Up, 100G"]
+
+
+def test_fixed_colour_views_list_every_colour() -> None:
+    """Speed, Traffic and Errors show all their colours, with 0 for the unused."""
+    ports = _ports()
+    expected = {
+        "speed": ["f-1g", "f-10g", "f-25g", "f-40g", "f-100g", "f-none"],
+        "traffic": ["f-t0", "f-t1", "f-t2", "f-t3", "f-none"],
+        "errors": ["f-err", "f-clean", "f-none"],
+    }
+    for mode, classes in expected.items():
+        legend = draw_face(ports, mode).legend
+        assert sorted(entry.css for entry in legend) == sorted(classes)
+        assert all(entry.count == 0 for entry in legend if entry.css != "f-none")
 
 
 def test_no_inline_style_or_script_reaches_the_svg() -> None:
