@@ -61,6 +61,9 @@ prose columns; those are a reviewer's job.
 | Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
 | Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
 | Read private VLANs (primary, isolated and community VLANs, the ports and VLAN interfaces in them) or change them: a VLAN's type and secondary VLANs, a port's private VLAN mode, host association, mapping and trunk lines, a VLAN interface's mapping | `app/private_vlans.py` (`load_private_vlan_page`, `build_private_vlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_private_vlans` |
+| Read UDLD (the switch-wide mode and message interval, each port's state and neighbours) or change it: a port's UDLD state and aggressive mode, the switch-wide message interval and aggressive mode | `app/udld.py` (`load_udld_page`, `build_udld_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_udld` |
+| Read VTP (the status, the ports taking part, the message counters) or change it: the VTP mode, domain, version and password, VTP on a port | `app/vtp.py` (`load_vtp_page`, `build_vtp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vtp` |
+| Read 802.1X (the switch-wide state, the ports set up for it, the devices signed in) or change it: the RADIUS server groups and switch-wide lines, a port's port control, host mode, MAC authentication bypass, timers and retries | `app/dot1x.py` (`load_dot1x_page`, `build_dot1x_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_dot1x` |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
@@ -643,6 +646,18 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_private_vlans_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Private VLANs page, with a message | `private_vlans_page`, `switch_save` | v0.2.1 |
 | `private_vlans_page` | `(request, username) -> Response` | `GET /private-vlans`: the private VLANs, ports and VLAN interface mappings, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `private_vlans_change` | `(request, username, form) -> Response` | `POST /private-vlans/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_udld_place` | `(page, ident) -> None` | Refuses a port that is not a front port of the switch (UDLD is not set on a port-channel) | the UDLD `ProtocolSite` | v0.2.1 |
+| `render_udld_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the UDLD page, with a message | `udld_page`, `switch_save` | v0.2.1 |
+| `udld_page` | `(request, username) -> Response` | `GET /udld`: each port's UDLD state and neighbours, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `udld_change` | `(request, username, form) -> Response` | `POST /udld/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_vtp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel of the switch | the VTP `ProtocolSite` | v0.2.1 |
+| `render_vtp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VTP page, with a message | `vtp_page`, `switch_save` | v0.2.1 |
+| `vtp_page` | `(request, username) -> Response` | `GET /vtp`: the VTP status, ports and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `vtp_change` | `(request, username, form) -> Response` | `POST /vtp/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_dot1x_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port (802.1X is not for port-channels or routed ports) | the 802.1X `ProtocolSite` | v0.2.1 |
+| `render_dot1x_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the 802.1X page, with a message | `dot1x_page`, `switch_save` | v0.2.1 |
+| `dot1x_page` | `(request, username) -> Response` | `GET /dot1x`: the ports set up for 802.1X and the devices signed in, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `dot1x_change` | `(request, username, form) -> Response` | `POST /dot1x/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1294,6 +1309,36 @@ would take them out silently.
 | `parse_private_vlans` | `(bodies, mapping=None) -> ProtocolView` | The page from `show vlan private-vlan type`, `show vlan private-vlan`, `show interface switchport` and `show interface private-vlan mapping`: a place per private VLAN, port and mapped VLAN interface, and the tables of the pairs with their ports and of the ports in private VLAN modes | `PRIVATE_VLANS.parse`, `load_private_vlan_page` | v0.2.1 |
 | `load_private_vlan_page` | `(client) -> PrivateVlanPage` | One request for the features, VLANs and ports; while private-vlan is on, one for the private VLANs and ports' settings and one for the VLAN interface mappings | `routes/private_vlans` | v0.2.1 |
 | `build_private_vlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Private VLANs page | `NxapiClient.configure_private_vlans`, `routes/private_vlans` | v0.2.1 |
+
+## `app/udld.py` — UDLD: the switch-wide mode and message interval, each port's state and neighbours
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_udld_global` | `(text_out) -> dict[str, str]` | `show udld global` as `{"mode": ..., "interval": ...}`; a line worded differently is left out | `parse_udld` | v0.2.1 |
+| `parse_udld_ports` | `(text_out) -> list[UdldPort]` | The ports in `show udld`: one block per port with its `label: value` lines and one `Entry` per neighbour | `parse_udld` | v0.2.1 |
+| `parse_udld` | `(global_text, ports_text) -> ProtocolView` | The page: the switch-wide place, the tables of ports and neighbours, and a place per port not on its default | `load_udld_page` | v0.2.1 |
+| `load_udld_page` | `(client) -> UdldPage` | One request for the feature and the ports; while udld is on, one for the switch-wide state and one for every port's (text) | `routes/udld` | v0.2.1 |
+| `build_udld_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the UDLD page | `NxapiClient.configure_udld`, `routes/udld` | v0.2.1 |
+
+## `app/vtp.py` — VTP: the mode, domain, version and password, the ports taking part
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pairs` | `(text_out) -> list[tuple[str, str]]` | Every `label : value` line of a show command's text, in order; headings and a time of day's colons are not taken for one | `parse_vtp` | v0.2.1 |
+| `parse_vtp_ports` | `(text_out) -> list[tuple[str, str]]` | The ports in `show vtp interface` with Enabled or Disabled, short names (`Eth1/7`, `Po3`) written out | `parse_vtp` | v0.2.1 |
+| `parse_vtp` | `(status_text, interface_text="", counters_text="") -> ProtocolView` | The page: the switch's VTP place (mode, domain, version), the status lines as printed, the ports and the counters | `load_vtp_page` | v0.2.1 |
+| `load_vtp_page` | `(client) -> VtpPage` | One request for the feature and the ports; while vtp is on, one each for the status, the ports and the counters (text); never reads the password | `routes/vtp` | v0.2.1 |
+| `build_vtp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VTP page | `NxapiClient.configure_vtp`, `routes/vtp` | v0.2.1 |
+
+## `app/dot1x.py` — 802.1X: the switch-wide state, the ports set up for it, the devices signed in
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_dot1x_global` | `(*texts) -> dict[str, str]` | The switch-wide lines of `show dot1x` (and the top of `show dot1x all`): system auth control, protocol version, MAC move | `parse_dot1x` | v0.2.1 |
+| `parse_dot1x_ports` | `(text_out) -> list[Dot1xPort]` | The ports in `show dot1x all details` with their `Label = Value` settings and the devices in the authenticator client list; a port's supplicant block is left out | `parse_dot1x` | v0.2.1 |
+| `parse_dot1x` | `(global_text, details_text) -> ProtocolView` | The page: the switch-wide place, a place and row per port with 802.1X, and the table of signed-in devices | `load_dot1x_page` | v0.2.1 |
+| `load_dot1x_page` | `(client) -> Dot1xPage` | One request for the feature and the ports; while dot1x is on, one for the switch-wide state and one for the ports and devices (text) | `routes/dot1x` | v0.2.1 |
+| `build_dot1x_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the 802.1X page | `NxapiClient.configure_dot1x`, `routes/dot1x` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

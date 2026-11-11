@@ -1,0 +1,40 @@
+
+Interface Ethernet1/1
+--------------------------------
+Port enable administrative configuration setting: device-default
+Port enable operational state: enabled-aggressive
+Current bidirectional state: bidirectional
+Current operational state:  advertisement - Single neighbor detected
+Message interval: 15
+Timeout interval: 5
+
+        Entry 1
+        ----------------
+        Expiration time: 39
+        Cache Device index: 1
+        Current neighbor state: bidirectional
+        Device ID: FDO00000001
+        Port ID: Ethernet1/49
+        Neighbor echo 1 devices: FDO00000002
+        Neighbor echo 1 port: Ethernet1/1
+        Message interval: 15
+        Timeout interval: 5
+        CDP Device name: core-1
+
+Interface Ethernet1/2
+--------------------------------
+Port enable administrative configuration setting: disabled
+Port enable operational state: disabled
+Current bidirectional state: unknown
+Current operational state:  link up
+Message interval: 15
+Timeout interval: 5
+
+Interface Ethernet1/3
+--------------------------------
+Port enable administrative configuration setting: enabled-aggressive
+Port enable operational state: enabled-aggressive
+Current bidirectional state: unknown
+Current operational state:  advertisement
+Message interval: 15
+Timeout interval: 5

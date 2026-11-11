@@ -410,6 +410,15 @@ class FakeSwitch:
     # Ethernet1/5 ; switchport mode private-vlan host", "interface Vlan250 ; private-vlan
     # mapping 251"). Needs ``feature private-vlan``, as on cisco-25gb.
     pvlan_lines: list[str] = field(default_factory=list)
+    # UDLD, VTP and 802.1X lines as entered ("udld aggressive", "interface Ethernet1/5 ;
+    # udld enable", "vtp domain campus", "interface Ethernet1/5 ; dot1x port-control
+    # auto"). Each needs its feature (udld, vtp, dot1x); so do their show commands, which
+    # print ``texts`` (the command -> its text). Shapes from Cisco's guides, never
+    # recorded on cisco-25gb.
+    udld_lines: list[str] = field(default_factory=list)
+    vtp_lines: list[str] = field(default_factory=list)
+    dot1x_lines: list[str] = field(default_factory=list)
+    texts: dict[str, str] = field(default_factory=dict)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -641,6 +650,48 @@ class FakeSwitch:
             return _error(ident, "% Permission denied for the role\n"), context
         self._record(path, self.pfc_lines)
         return _ok(ident, None), context
+
+    _UDLD_TOP = re.compile(r"udld message-time \d+|(?:no )?udld aggressive")
+    _UDLD_PORT = re.compile(r"(?:no )?udld (?:enable|disable|aggressive)")
+    _VTP_TOP = re.compile(
+        r"vtp mode (?:transparent|off)|vtp domain \S+|vtp version [12]|vtp password \S+"
+        r"|no vtp password"
+    )
+    _VTP_PORT = re.compile(r"(?:no )?vtp")
+    _DOT1X_TOP = re.compile(
+        r"(?:no )?aaa (?:authentication|accounting) dot1x default group \S+"
+        r"|(?:no )?dot1x (?:system-auth-control|radius-accounting)|dot1x mac-move (?:permit|deny)"
+    )
+    _DOT1X_PORT = re.compile(
+        r"dot1x port-control (?:auto|force-authorized|force-unauthorized)"
+        r"|dot1x host-mode (?:single-host|multi-host|multi-auth)"
+        r"|no dot1x (?:port-control|host-mode|mac-auth-bypass|max-req|max-reauth-req)"
+        r"|(?:no )?dot1x (?:pae authenticator|re-authentication)"
+        r"|dot1x mac-auth-bypass(?: eap)?"
+        r"|dot1x timeout [a-z-]+ \d+|no dot1x timeout [a-z-]+"
+        r"|dot1x max-(?:reauth-)?req \d+"
+    )
+
+    def _edge(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A UDLD, VTP or 802.1X line, at the top or inside an interface, or None."""
+        interface = context[1] if context and context[0] == "interface" else None
+        for feature, top, port, kept in (
+            ("udld", self._UDLD_TOP, self._UDLD_PORT, self.udld_lines),
+            ("vtp", self._VTP_TOP, self._VTP_PORT, self.vtp_lines),
+            ("dot1x", self._DOT1X_TOP, self._DOT1X_PORT, self.dot1x_lines),
+        ):
+            if not (port if interface else top).fullmatch(cmd):
+                continue
+            path = f"interface {interface} ; {cmd}" if interface else cmd
+            if not self._feature_on(feature):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+                return _error(ident, "% Permission denied for the role\n"), context
+            self._record(path, kept)
+            return _ok(ident, None), context
+        return None
 
     _PVLAN_VLAN = re.compile(
         r"(?:no )?private-vlan (?:primary|isolated|community)"
@@ -916,6 +967,11 @@ class FakeSwitch:
             if not self._feature_on("sflow"):
                 return _error(ident, "% Invalid command at '^' marker.\n")
             return {"jsonrpc": "2.0", "result": {"msg": self.sflow_text()}, "id": ident}
+        for feature in ("udld", "vtp", "dot1x"):
+            if cmd.startswith(f"show {feature}"):
+                if not self._feature_on(feature):
+                    return _error(ident, "% Invalid command at '^' marker.\n")
+                return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
         if cmd == "show hardware access-list tcam region":
             return {"jsonrpc": "2.0", "result": {"msg": self.tcam_regions()}, "id": ident}
         if cmd == "show ip dhcp snooping binding":
@@ -1325,6 +1381,8 @@ class FakeSwitch:
             return pfc_reply
         if pvlan_reply := self._pvlan(user, is_admin, cmd, ident, context):
             return pvlan_reply
+        if edge_reply := self._edge(user, is_admin, cmd, ident, context):
+            return edge_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):

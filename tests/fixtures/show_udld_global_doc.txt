@@ -1,0 +1,3 @@
+
+UDLD global configuration mode: enabled-aggressive
+UDLD global message interval: 15

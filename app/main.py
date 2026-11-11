@@ -35,6 +35,7 @@ from app.routes import (
     config_page,
     copp,
     dashboard,
+    dot1x,
     features,
     health,
     history,
@@ -56,9 +57,11 @@ from app.routes import (
     switch_admin,
     switch_page,
     traffic,
+    udld,
     users,
     vlans,
     vpc,
+    vtp,
     vxlan,
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
@@ -214,6 +217,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(qos.router)
     app.include_router(pfc.router)
     app.include_router(private_vlans.router)
+    app.include_router(udld.router)
+    app.include_router(vtp.router)
+    app.include_router(dot1x.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

@@ -1041,6 +1041,38 @@ on a VLAN interface; each with its `no` form. The association and mapping lines 
 is there rather than replace it. Tried on cisco-25gb (NX-OS 9.3(16)) on a spare port and
 throwaway VLANs.
 
+**UDLD.** The **UDLD** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role (it has no rule numbers left).
+It needs `feature udld` (Features page), which starts UDLD on every fibre port at once. It
+reads `show feature`, `show interface brief`, `show udld global` and `show udld` (the last
+two as text), and types `udld message-time <7-90>` and `udld aggressive` at the top, and
+`udld enable`, `udld disable` and `udld aggressive` on a front port, with their `no` forms
+(the message interval has none: set 15). Written from Cisco's NX-OS 9.3 guide and not tried
+on a switch.
+
+**VTP.** The **VTP** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role. It needs `feature vtp`
+(Features page). A Nexus 9000 runs VTP in transparent mode only: it never takes its VLAN
+list from another switch. The page reads `show feature`, `show interface brief`, `show vtp
+status`, `show vtp interface` and `show vtp counters` (the last three as text; never `show
+vtp password`), and types `vtp mode transparent|off`, `vtp domain <name>`, `vtp version
+1|2`, `vtp password <password>` (and `no vtp password`) at the top, and `vtp` or `no vtp`
+on a port. Written from Cisco's NX-OS 9.3 guide and not tried on a switch; the guide names
+the modes and the per-port setting without printing those two commands.
+
+**802.1X.** The **802.1X** page needs no rule of its own, so it works with the broad role
+and with a stored admin login, and is off with the limited role. It needs `feature dot1x`
+(Features page) and RADIUS servers already set up on the switch. It reads `show feature`,
+`show interface brief`, `show dot1x` and `show dot1x all details` (the last two as text),
+and types `aaa authentication dot1x default group <group>`, `aaa accounting dot1x default
+group <group>`, `dot1x system-auth-control`, `dot1x radius-accounting` and `dot1x mac-move
+permit|deny` at the top, and `dot1x port-control auto|force-authorized|force-unauthorized`,
+`dot1x host-mode single-host|multi-host|multi-auth`, `dot1x mac-auth-bypass [eap]`, `dot1x
+pae authenticator`, `dot1x re-authentication`, `dot1x timeout <timer> <1-65535>`, `dot1x
+max-req <1-10>` and `dot1x max-reauth-req <1-10>` on a switched front port, with their `no`
+forms. NX-OS has no guest VLAN and no auth-fail VLAN, so the page has neither. Written from
+Cisco's NX-OS 9.3 guide and not tried on a switch.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type

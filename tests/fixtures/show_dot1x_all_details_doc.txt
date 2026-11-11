@@ -1,0 +1,73 @@
+           Sysauthcontrol Enabled
+   Dot1x Protocol Version 2
+                 Mac-Move Deny
+
+Dot1x Info for Ethernet1/1
+-----------------------------------
+                     PAE = AUTHENTICATOR
+             PortControl = AUTO
+                HostMode = MULTI AUTH
+        ReAuthentication = Disabled
+             QuietPeriod = 60
+           ServerTimeout = 30
+             SuppTimeout = 30
+            ReAuthPeriod = 3600 (Locally configured)
+               ReAuthMax = 2
+                  MaxReq = 1
+                TxPeriod = 1
+         RateLimitPeriod = 0
+        InactivityPeriod = 0
+         Mac-Auth-Bypass = Enabled
+
+Dot1x Authenticator Client List
+-------------------------------
+              Supplicant = 00:00:5E:00:53:01
+                  Domain = DATA
+           Auth SM State = AUTHENTICATED
+      Auth BEND SM State = IDLE
+             Port Status = AUTHORIZED
+   Authentication Method = EAP
+        Authenticated By = Remote Server
+               Auth-Vlan = 110
+            DACL-Applied = False
+
+-------------------------------
+              Supplicant = 00:00:5E:00:53:02
+                  Domain = DATA
+           Auth SM State = AUTHENTICATED
+             Port Status = AUTHORIZED
+   Authentication Method = MAB
+        Authenticated By = Remote Server
+               Auth-Vlan = 0
+
+Dot1x Info for Ethernet1/2
+-----------------------------------
+                     PAE = AUTHENTICATOR
+             PortControl = FORCE_AUTH
+                HostMode = SINGLE HOST
+        ReAuthentication = Enabled
+             QuietPeriod = 60
+           ServerTimeout = 30
+             SuppTimeout = 30
+            ReAuthPeriod = 3600 (Locally configured)
+               ReAuthMax = 2
+                  MaxReq = 2
+                TxPeriod = 30
+         RateLimitPeriod = 0
+        InactivityPeriod = 0
+         Mac-Auth-Bypass = Disabled
+
+Dot1x Info for Ethernet1/2
+-----------------------------------
+                     PAE = SUPPLICANT
+             StartPeriod = 30
+              AuthPeriod = 30
+              HeldPeriod = 60
+                MaxStart = 3
+
+Dot1x Supplicant Client List
+
+-------------------------------
+           Authenticator = 00:00:5E:00:53:09
+           Supp SM State = AUTHENTICATED
+             Port Status = AUTHORIZED

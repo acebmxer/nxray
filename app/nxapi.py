@@ -1638,6 +1638,66 @@ class NxapiClient:
         change = build_private_vlan_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_udld(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the UDLD page: a port's UDLD state or aggressive mode, or the
+        switch-wide message interval or aggressive mode.
+
+        The lines are built from the page's description and the checked values
+        (``udld.build_udld_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the UDLD description uses this module's checks.
+        from app.udld import build_udld_change
+
+        change = build_udld_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vtp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VTP page: the switch's VTP mode, domain, version or password,
+        or VTP on a port.
+
+        The lines are built from the page's description and the checked values
+        (``vtp.build_vtp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the VTP description uses this module's checks.
+        from app.vtp import build_vtp_change
+
+        change = build_vtp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_dot1x(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the 802.1X page: the switch-wide 802.1X lines, or a port's
+        port control, host mode, timers or MAC authentication bypass.
+
+        The lines are built from the page's description and the checked values
+        (``dot1x.build_dot1x_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the 802.1X description uses this module's checks.
+        from app.dot1x import build_dot1x_change
+
+        change = build_dot1x_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

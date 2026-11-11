@@ -11,6 +11,31 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage 802.1X port authentication from the web interface (#68).** The new **802.1X**
+  page (under Configure) sets the RADIUS server groups that check sign-ins and get
+  accounting, turns 802.1X on or off for the switch, and per port sets port control (auto,
+  force-authorized, force-unauthorized), the host mode (single-host, multi-host,
+  multi-auth), MAC authentication bypass, regular sign-in, the timers and the retries. It
+  lists the ports set up for 802.1X and every device signed in, with its port, MAC address,
+  method, who checked it and the VLAN it was given. NX-OS has no guest VLAN and no
+  auth-fail VLAN, so the page has neither; the RADIUS servers themselves are still made on
+  the switch. It needs the dot1x feature (Features page). Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login. Written from Cisco's
+  guide; not tried on a switch.
+- **Manage VTP from the web interface (#67).** The new **VTP** page (under Configure) shows
+  the switch's VTP status, the ports taking part and the message counters, and sets the VTP
+  mode (transparent or off), domain, version (1 or 2) and password, and VTP on or off per
+  port. A Nexus 9000 runs VTP in transparent mode only, so it never takes its VLAN list
+  from another switch; the password that is set is never shown. It needs the vtp feature
+  (Features page). Each change shows its lines and asks first. It works with the broad role
+  or a stored admin login. Written from Cisco's guide; not tried on a switch.
+- **Manage UDLD from the web interface (#66).** The new **UDLD** page (under Configure)
+  turns UDLD on or off per port, sets aggressive mode per port or for every fibre port, and
+  sets the message interval. It lists each port's setting, state and whether its link
+  passes traffic both ways, and the neighbour each port hears. It needs the udld feature
+  (Features page), which starts UDLD on every fibre port at once. Each change shows its
+  lines and asks first. It works with the broad role or a stored admin login. Written from
+  Cisco's guide; not tried on a switch.
 - **Set up private VLANs from the web interface (#65).** The new **Private VLANs** page
   (under Configure) makes a VLAN a primary, isolated or community VLAN, gives a primary
   VLAN its secondary VLANs, sets a port's private VLAN mode (host, promiscuous, trunk

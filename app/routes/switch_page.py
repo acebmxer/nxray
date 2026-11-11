@@ -36,6 +36,7 @@ from app.port_changes import (
 from app.role_upgrade import SETUP_LOCK
 from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
+from app.routes.dot1x import render_dot1x_page
 from app.routes.features import render_features_page
 from app.routes.monitor import render_monitor_page
 from app.routes.neighbors import render_neighbors_page
@@ -50,8 +51,10 @@ from app.routes.security import render_acls_page, render_dhcp_page, render_port_
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.traffic import render_traffic_page
+from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
 from app.routes.vpc import render_vpc_page
+from app.routes.vtp import render_vtp_page
 from app.routes.vxlan import render_vxlan_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
@@ -956,7 +959,8 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``,
+    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
+    ``vtp``, ``dot1x``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1012,6 +1016,12 @@ def switch_save(
             return render_copp_page(request, username, error=error, notice=notice)
         if back == "private-vlans":
             return render_private_vlans_page(request, username, error=error, notice=notice)
+        if back == "udld":
+            return render_udld_page(request, username, error=error, notice=notice)
+        if back == "vtp":
+            return render_vtp_page(request, username, error=error, notice=notice)
+        if back == "dot1x":
+            return render_dot1x_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":
