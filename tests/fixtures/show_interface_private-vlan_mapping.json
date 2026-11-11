@@ -1,0 +1,8 @@
+{
+  "TABLE_interf_mapp": {
+    "ROW_interf_mapp": [
+      {"interface-id": "Vlan250", "secondary-vlan": 251, "pvlan-type": "isolated"},
+      {"interface-id": "Vlan250", "secondary-vlan": 252, "pvlan-type": "community"}
+    ]
+  }
+}

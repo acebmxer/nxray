@@ -45,6 +45,7 @@ from app.routes import (
     port_channels,
     ports,
     preferences,
+    private_vlans,
     protocols,
     qos,
     routing,
@@ -212,6 +213,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(monitor.router)
     app.include_router(qos.router)
     app.include_router(pfc.router)
+    app.include_router(private_vlans.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

@@ -1,0 +1,10 @@
+{
+  "TABLE_pvlantype": {
+    "ROW_pvlantype": [
+      {"vlan-num": 250, "pvlan-type": "primary"},
+      {"vlan-num": 251, "pvlan-type": "isolated"},
+      {"vlan-num": 252, "pvlan-type": "community"},
+      {"vlan-num": 260, "pvlan-type": "primary"}
+    ]
+  }
+}

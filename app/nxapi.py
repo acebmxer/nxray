@@ -1617,6 +1617,27 @@ class NxapiClient:
         change = build_pfc_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_private_vlans(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Private VLANs page: a VLAN's type or secondary VLANs, a
+        port's mode, host association, mapping or trunk lines, or a VLAN interface's
+        mapping.
+
+        The lines are built from the page's description and the checked values
+        (``private_vlans.build_private_vlan_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Private VLANs description uses this module's checks.
+        from app.private_vlans import build_private_vlan_change
+
+        change = build_private_vlan_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

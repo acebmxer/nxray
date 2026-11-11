@@ -11,6 +11,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up private VLANs from the web interface (#65).** The new **Private VLANs** page
+  (under Configure) makes a VLAN a primary, isolated or community VLAN, gives a primary
+  VLAN its secondary VLANs, sets a port's private VLAN mode (host, promiscuous, trunk
+  promiscuous or trunk secondary) with its host association, mapping or trunk lines, and
+  maps secondary VLANs to the primary VLAN's VLAN interface. It lists each primary and
+  secondary VLAN with its host and promiscuous ports, and every port in a private VLAN
+  mode. It needs the private-vlan feature (Features page). Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login; the limited role has
+  no room left for it. The lines and show output were tried on a switch.
 - **See control-plane policing (CoPP) from the web interface (#64).** The new
   **Control-plane policing** page (under Configure) names the CoPP policy applied to the
   control plane and lists its classes, with what each matches, its CoS, rate limit and

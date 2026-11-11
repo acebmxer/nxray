@@ -24,7 +24,8 @@ plugged into each port (CDP and LLDP neighbors, the MAC address table with
 each device's maker, ARP), turn CDP and LLDP on or off per port, set the MAC
 address aging time, add static MAC addresses, clear learned ones, label ports, turn
 ports on or off and edit their descriptions (one at a time or several at once), create, rename and delete VLANs, set the
-VLANs on ports, set a port's speed, MTU, FEC, flow control, storm control and
+VLANs on ports, set up private VLANs (primary, isolated and community, with host and
+promiscuous ports), set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
 and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
@@ -180,6 +181,9 @@ default: *(built)*.
     **Control-plane policing**: the CoPP policy on the control plane, its
     classes and rate limits, with what each class passed and dropped. *(built;
     look only)*
+    **Private VLANs**: primary, isolated and community VLANs, host and
+    promiscuous ports, private VLAN trunks and the VLAN interface mapping.
+    *(built; needs the broad role or a stored admin login)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,

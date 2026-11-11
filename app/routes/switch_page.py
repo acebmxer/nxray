@@ -42,6 +42,7 @@ from app.routes.neighbors import render_neighbors_page
 from app.routes.pfc import render_pfc_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
+from app.routes.private_vlans import render_private_vlans_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.qos import render_qos_page
 from app.routes.routing import render_routing_page
@@ -955,8 +956,9 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``switch-admin``, ``acls``,
-    ``port-security``, ``dhcp`` or ``config``); the answer is shown there. From the Ports page,
+    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``,
+    ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
+    shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
@@ -1008,6 +1010,8 @@ def switch_save(
             return render_pfc_page(request, username, error=error, notice=notice)
         if back == "copp":
             return render_copp_page(request, username, error=error, notice=notice)
+        if back == "private-vlans":
+            return render_private_vlans_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

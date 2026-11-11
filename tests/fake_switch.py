@@ -406,6 +406,10 @@ class FakeSwitch:
     qos_lines: list[str] = field(default_factory=list)
     # PFC lines as entered ("interface Ethernet1/5 ; priority-flow-control mode on").
     pfc_lines: list[str] = field(default_factory=list)
+    # Private VLAN lines as entered ("vlan 250 ; private-vlan primary", "interface
+    # Ethernet1/5 ; switchport mode private-vlan host", "interface Vlan250 ; private-vlan
+    # mapping 251"). Needs ``feature private-vlan``, as on cisco-25gb.
+    pvlan_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -636,6 +640,42 @@ class FakeSwitch:
         if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
             return _error(ident, "% Permission denied for the role\n"), context
         self._record(path, self.pfc_lines)
+        return _ok(ident, None), context
+
+    _PVLAN_VLAN = re.compile(
+        r"(?:no )?private-vlan (?:primary|isolated|community)"
+        r"|private-vlan association(?: remove)? [0-9,-]+|no private-vlan association"
+    )
+    _PVLAN_PORT = re.compile(
+        r"(?:no )?switchport mode private-vlan (?:host|promiscuous|trunk promiscuous"
+        r"|trunk secondary)"
+        r"|switchport private-vlan host-association \d+ \d+"
+        r"|no switchport private-vlan (?:host-association|mapping|mapping trunk"
+        r"|trunk native vlan|association trunk \d+|trunk allowed vlan [0-9,-]+)"
+        r"|switchport private-vlan mapping (?:trunk )?\d+ (?:remove )?[0-9,-]+"
+        r"|switchport private-vlan association trunk \d+ \d+"
+        r"|switchport private-vlan trunk (?:allowed vlan [0-9,-]+|native vlan \d+)"
+    )
+    _PVLAN_SVI = re.compile(r"private-vlan mapping(?: remove)? [0-9,-]+|no private-vlan mapping")
+
+    def _pvlan(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A private VLAN line inside a VLAN, a port or a VLAN interface, or None."""
+        kind, name = context if context else ("", "")
+        if kind == "vlan" and self._PVLAN_VLAN.fullmatch(cmd):
+            path, interface = f"vlan {name} ; {cmd}", None
+        elif kind == "interface" and name.startswith("Vlan") and self._PVLAN_SVI.fullmatch(cmd):
+            path, interface = f"interface {name} ; {cmd}", name
+        elif kind == "interface" and self._PVLAN_PORT.fullmatch(cmd):
+            path, interface = f"interface {name} ; {cmd}", name
+        else:
+            return None
+        if not self._feature_on("private-vlan"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        self._record(path, self.pvlan_lines)
         return _ok(ident, None), context
 
     def _qos(
@@ -1283,6 +1323,8 @@ class FakeSwitch:
             return qos_reply
         if pfc_reply := self._pfc(user, is_admin, cmd, ident, context):
             return pfc_reply
+        if pvlan_reply := self._pvlan(user, is_admin, cmd, ident, context):
+            return pvlan_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):
@@ -2266,6 +2308,10 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith(("show vlan private-vlan", "show interface private-vlan")):
+            # As on cisco-25gb: these exist only while private-vlan is on.
+            if not self._feature_on("private-vlan"):
+                return _error(ident, "% Invalid command\n")
         if cmd == "show feature":
             return _ok(ident, self.features())
         if cmd == "show port-channel summary":

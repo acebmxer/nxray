@@ -60,6 +60,7 @@ prose columns; those are a reviewer's job.
 | Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
 | Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
 | Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
+| Read private VLANs (primary, isolated and community VLANs, the ports and VLAN interfaces in them) or change them: a VLAN's type and secondary VLANs, a port's private VLAN mode, host association, mapping and trunk lines, a VLAN interface's mapping | `app/private_vlans.py` (`load_private_vlan_page`, `build_private_vlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_private_vlans` |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
@@ -638,6 +639,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_pfc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Priority flow control page, with a message | `pfc_page`, `switch_save` | v0.2.1 |
 | `pfc_page` | `(request, username) -> Response` | `GET /pfc`: each port's PFC mode and pause counters, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `pfc_change` | `(request, username, form) -> Response` | `POST /pfc/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_private_vlan_place` | `(page, ident) -> None` | Refuses a VLAN or VLAN interface the switch lacks (naming it would make one) and a port it lacks | the Private VLANs `ProtocolSite` | v0.2.1 |
+| `render_private_vlans_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Private VLANs page, with a message | `private_vlans_page`, `switch_save` | v0.2.1 |
+| `private_vlans_page` | `(request, username) -> Response` | `GET /private-vlans`: the private VLANs, ports and VLAN interface mappings, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `private_vlans_change` | `(request, username, form) -> Response` | `POST /private-vlans/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1280,6 +1285,15 @@ would take them out silently.
 | `parse_pfc` | `(bodies) -> ProtocolView` | The page from `show interface priority-flow-control detail`: a table of every port's mode, state and pause counts, a table of pause counts per priority, and a place for each port not on auto | `PFC.parse`, `load_pfc_page` | v0.2.1 |
 | `load_pfc_page` | `(client) -> PfcPage` | One request for the ports and one for the PFC state and counters | `routes/pfc` | v0.2.1 |
 | `build_pfc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Priority flow control page | `NxapiClient.configure_pfc`, `routes/pfc` | v0.2.1 |
+
+## `app/private_vlans.py` — Private VLANs: primary, isolated and community VLANs, their ports and VLAN interfaces
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pvlan_ports` | `(body) -> list[PvlanPort]` | The ports with any private VLAN setting in `show interface switchport`: mode, host association, mapping, trunk pairs, plain and native VLANs on a private VLAN trunk | `parse_private_vlans` | v0.2.1 |
+| `parse_private_vlans` | `(bodies, mapping=None) -> ProtocolView` | The page from `show vlan private-vlan type`, `show vlan private-vlan`, `show interface switchport` and `show interface private-vlan mapping`: a place per private VLAN, port and mapped VLAN interface, and the tables of the pairs with their ports and of the ports in private VLAN modes | `PRIVATE_VLANS.parse`, `load_private_vlan_page` | v0.2.1 |
+| `load_private_vlan_page` | `(client) -> PrivateVlanPage` | One request for the features, VLANs and ports; while private-vlan is on, one for the private VLANs and ports' settings and one for the VLAN interface mappings | `routes/private_vlans` | v0.2.1 |
+| `build_private_vlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Private VLANs page | `NxapiClient.configure_private_vlans`, `routes/private_vlans` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

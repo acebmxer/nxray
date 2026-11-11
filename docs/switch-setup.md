@@ -1025,6 +1025,22 @@ QoS page (`pause pfc-cos` in a network-qos policy). The show output was read on 
 (NX-OS 9.3(16)); the configuration lines are written from Cisco's NX-OS 9.3 guide and were
 not tried on a switch.
 
+**Private VLANs.** The **Private VLANs** page needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role (it has no rule
+numbers left). It needs `feature private-vlan` (Features page): the private VLAN show
+commands do not exist before. It reads `show feature`, `show vlan brief`, `show interface
+brief`, `show vlan private-vlan type`, `show vlan private-vlan`, `show interface switchport`
+and `show interface private-vlan mapping`, and types `private-vlan primary|isolated|community`
+and `private-vlan association <list>` (and `association remove <list>`) in a VLAN;
+`switchport mode private-vlan host|promiscuous|trunk promiscuous|trunk secondary`,
+`switchport private-vlan host-association`, `switchport private-vlan mapping` (and `mapping
+<primary> remove <list>`), `switchport private-vlan mapping trunk`, `switchport private-vlan
+association trunk`, `switchport private-vlan trunk allowed vlan` and `switchport private-vlan
+trunk native vlan` on a port; and `private-vlan mapping <list>` (and `mapping remove <list>`)
+on a VLAN interface; each with its `no` form. The association and mapping lines add to what
+is there rather than replace it. Tried on cisco-25gb (NX-OS 9.3(16)) on a spare port and
+throwaway VLANs.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type
