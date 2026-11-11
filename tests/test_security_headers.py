@@ -56,3 +56,11 @@ def test_hsts_is_sent_on_every_kind_of_response_when_https_is_on(
         header = client.get(path).headers.get("strict-transport-security")
         assert header == HSTS_VALUE, path
     assert "includesubdomains" not in HSTS_VALUE.lower()
+
+
+def test_static_files_are_checked_again_on_every_load(client: TestClient) -> None:
+    # Without this a browser keeps an old stylesheet after an update (#90).
+    response = client.get("/static/style.css")
+    assert response.headers["cache-control"] == "no-cache"
+    again = client.get("/static/style.css", headers={"if-none-match": response.headers["etag"]})
+    assert again.status_code == 304

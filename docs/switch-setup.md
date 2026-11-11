@@ -1009,6 +1009,11 @@ port-channel must exist first (Port-channels page); the same domain and vPC
 numbers are set on the other switch of the pair, from its own NXray. Written
 from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
+**Control-plane policing.** The **Control-plane policing** page only reads, so it needs no
+rule of its own and works with every role mode. It reads `show policy-map interface
+control-plane` (the policy, its classes, rate limits and counters). Read on cisco-25gb
+(NX-OS 9.3(16)).
+
 **Priority flow control.** The **Priority flow control** page needs no rule of its own, so
 it works with the broad role and with a stored admin login, and is off with the limited
 role (it has no rule numbers left). It reads `show interface priority-flow-control detail`

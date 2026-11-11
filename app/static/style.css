@@ -287,7 +287,7 @@ code {
 
 /* ---- page layout ---- */
 
-.wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }
+main.wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }
 .wrap-alone { display: flex; flex-direction: column; justify-content: center; }
 .wrap-centred { max-width: 400px; margin: 0 auto; align-items: stretch; }
 
@@ -302,8 +302,8 @@ code {
    tall one, and stack on a narrow one. Anything that is not a plain card
    (title, messages, notes, rows of cards) and every card that needs the width
    (the front panel, a list of ports or VLANs, a table of over 20 rows, a code block, a table with too
-   many columns for the column, a long run of places, an empty-state message)
-   takes the whole row. The columns are about 500px wide from 1300px, 700px from
+   many columns for the column, a long run of places, an empty-state message,
+   a page's only card when it holds a table) takes the whole row. The columns are about 500px wide from 1300px, 700px from
    1700px and 700px as three from 2350px, so the table limit is 5, 7 and 8
    columns. */
 main.wrap:not(.wrap-alone) > * { margin-top: 0; margin-bottom: 14px; }
@@ -319,13 +319,13 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 }
 /* A table in a column wraps its cells instead of running past the card. */
 @media (min-width: 1300px) and (max-width: 1699px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(5))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(5))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 1700px) and (max-width: 2349px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(7))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(7))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 2350px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(8))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(8))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 1700px) {
   main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
@@ -340,6 +340,13 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
+  }
+}
+/* A page whose only card is a table (Control-plane policing) gives it the whole
+   width instead of one column beside an empty one. */
+@media (min-width: 1300px) {
+  main.wrap:not(.wrap-alone) > .card.card:has(.table):not(.card ~ .card):not(:has(~ .card)) {
+    column-span: all;
   }
 }
 
@@ -558,6 +565,7 @@ a.btn { text-decoration: none; }
 .table-users .badge + .inline { margin-left: 6px; }
 .table-devices td { vertical-align: top; white-space: nowrap; }
 .table-devices td.wrap { white-space: normal; }
+.table td.one-line { white-space: nowrap; }
 .devices-part + .devices-part { margin-top: 16px; }
 .devices-part h3 { font-size: 12px; margin: 0 0 6px; }
 .reason { color: var(--text-3); font-size: 12px; margin-left: 6px; }

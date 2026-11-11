@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from contextlib import asynccontextmanager
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -32,6 +33,7 @@ from app.routes import (
     alerts,
     auth,
     config_page,
+    copp,
     dashboard,
     features,
     health,
@@ -62,6 +64,17 @@ from app.security import current_user, purge_expired_sessions, purge_old_login_a
 from app.sflow import SflowCollector, start_collector
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """The static files, sent with ``Cache-Control: no-cache``: the browser asks again on
+    every load (an unchanged file is a short 304 answer), so a new stylesheet or script
+    shows at once after an update instead of the old copy it kept."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
 
 
 @asynccontextmanager
@@ -179,7 +192,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.middleware("http")(share_switch_reads)
     app.middleware("http")(add_security_headers)
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(dashboard.router)
@@ -199,6 +212,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(monitor.router)
     app.include_router(qos.router)
     app.include_router(pfc.router)
+    app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)
     app.include_router(config_page.router)

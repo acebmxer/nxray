@@ -724,6 +724,9 @@ class Table:
     rows: tuple[tuple[str, ...], ...] = ()
     empty: str = "None."
     note: str = ""
+    # When set, only this column (counted from 0) wraps its text and takes the spare
+    # width; the other columns stay on one line. None: every column wraps.
+    wrap_column: int | None = None
 
 
 @dataclass(frozen=True)

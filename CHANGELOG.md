@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **See control-plane policing (CoPP) from the web interface (#64).** The new
+  **Control-plane policing** page (under Configure) names the CoPP policy applied to the
+  control plane and lists its classes, with what each matches, its CoS, rate limit and
+  burst, the traffic it passed and dropped, and its 5-minute offered and drop rates. The
+  page only shows; every role can look. Read from a switch. Its table uses the whole
+  width of the page, as does any page whose only card is a table, and only the matches
+  wrap onto more lines.
 - **See and set priority flow control (PFC) from the web interface (#63).** The new
   **Priority flow control** page (under Configure) lists every port's PFC mode and
   whether it is working, with the pause frames received and sent, and the pause counts
@@ -84,6 +91,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **A page shows an update's new look without a forced reload (#90).** Browsers kept
+  the old stylesheet and scripts for a while after NXray was updated, so a changed
+  layout showed only after Ctrl+Shift+R. NXray now tells the browser to check them on
+  every load; an unchanged file costs a short answer.
+- **Table columns are no longer squeezed (#89).** In tables whose text wraps (the
+  protocol, QoS, PFC, Monitor sessions, Activity, Alerts, Routing, Neighbors and
+  Port-channels pages, among others) the first column took almost the whole width and
+  every cell had extra space above and below. Columns now size to their content, so long
+  text such as matches, messages and addresses gets the room.
 - **The Spanning tree page needs far less scrolling (#57).** Its tables (Trees,
   Ports in the trees, Port settings) no longer stretch across the whole page.
   They sit in the page's columns like the other cards, and a long table keeps

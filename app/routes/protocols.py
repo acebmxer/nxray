@@ -147,6 +147,9 @@ class ProtocolSite:
     needs: Callable[[SwitchConnection, str, str], str] | None = None
     # A long table keeps a fixed height and scrolls inside its card.
     scroll_tables: bool = False
+    # A page that only shows (Control-plane policing): no line about changes at the
+    # bottom, and its route has no change form to post to.
+    read_only: bool = False
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:

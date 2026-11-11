@@ -129,7 +129,7 @@
   <table class="table table-devices">
     <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
-      {% for r in t.rows %}<tr>{% for cell in r %}<td class="wrap">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      {% for r in t.rows %}<tr>{% for cell in r %}<td class="{{ 'wrap' if t.wrap_column is none or loop.index0 == t.wrap_column else 'one-line' }}">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
     </tbody>
   </table>
   </div>
@@ -193,7 +193,8 @@
 {% endfor %}
 {% endif %}
 
-{% if role in ("admin", "operator") and not can_change %}
+{% if site.read_only %}
+{% elif role in ("admin", "operator") and not can_change %}
 <p class="note">{{ site.changes_name }} changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %}.</p>
 {% elif role not in ("admin", "operator") %}
 <p class="note">Your role ({{ role }}) can look at {{ site.subject }} but not change {{ "them" if site.subject.endswith("s") else "it" }}.</p>
