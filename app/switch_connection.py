@@ -122,6 +122,13 @@ class SwitchConnection:
         return self.changes_enabled and self.role_version >= 20 and self.role_nve
 
     @property
+    def monitor_changes_enabled(self) -> bool:
+        """True when NXray may make monitor sessions: with the broad role, or the stored
+        admin login, which both allow every configuration command. The limited role has
+        a rule for each command and no rule numbers left for these (a role holds 256)."""
+        return self.changes_enabled and self.role_mode in (ROLE_BROAD, ROLE_STORED)
+
+    @property
     def vrf_changes_enabled(self) -> bool:
         """True once that role includes the VRF rules (role version 8 or later)."""
         return self.changes_enabled and self.role_version >= 8

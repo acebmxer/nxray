@@ -32,7 +32,8 @@ OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
-with EVPN (NVE interface, VNIs, route-targets), set the switch's hostname, banner,
+with EVPN (NVE interface, VNIs, route-targets), copy ports' or VLANs' traffic to a
+port or an analyzer (SPAN and ERSPAN), set the switch's hostname, banner,
 clock and NTP, DNS, logging and
 SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
@@ -166,6 +167,8 @@ default: *(built)*.
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the
     tunnels' health. *(built)*
+    **Monitor sessions**: SPAN and ERSPAN source sessions. *(built; needs the
+    broad role or a stored admin login)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,

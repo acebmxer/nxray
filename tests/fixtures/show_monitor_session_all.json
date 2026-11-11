@@ -1,0 +1,34 @@
+{
+  "TABLE_session": {
+    "ROW_session": [
+      {
+        "session_number": "30",
+        "description": "uplink to analyzer",
+        "type": "local",
+        "state": "down",
+        "state_reason": "Session admin shut",
+        "TABLE_sources_rx": {"ROW_sources_rx": {"sources_rx": "Ethernet1/54"}},
+        "source_vlans_rx": "250",
+        "filter_vlans": "1-10",
+        "destinations": "Ethernet1/53"
+      },
+      {
+        "session_number": "31",
+        "description": "nxprobe-erspan",
+        "type": "erspan-source",
+        "state": "down",
+        "state_reason": "Session admin shut",
+        "flow_id": "7",
+        "vrf_name": "default",
+        "erspan_ttl": "32",
+        "erspan_dscp": "10",
+        "span_mtu": "1400",
+        "dst_ip": "10.250.250.1",
+        "origin_ip": "10.250.250.9",
+        "TABLE_sources_rx": {"ROW_sources_rx": {"sources_rx": "Ethernet1/54"}},
+        "marker_time_intv": "100",
+        "erspan_egress_if": null
+      }
+    ]
+  }
+}

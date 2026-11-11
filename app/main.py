@@ -37,6 +37,7 @@ from app.routes import (
     health,
     history,
     live,
+    monitor,
     neighbors,
     port_channels,
     ports,
@@ -193,6 +194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(spanning_tree.router)
     app.include_router(vpc.router)
     app.include_router(vxlan.router)
+    app.include_router(monitor.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)
     app.include_router(config_page.router)

@@ -396,6 +396,10 @@ class FakeSwitch:
     # vPC lines as entered, the same way ("vpc domain 10 ; peer-switch",
     # "interface port-channel43 ; vpc 43"); ``show running-config vpc`` prints them.
     vpc_lines: list[str] = field(default_factory=list)
+    # Monitor session lines as entered ("monitor session 5 ; source interface Ethernet1/3 rx",
+    # "monitor erspan origin ip-address 192.0.2.1 global", "interface Ethernet1/5 ;
+    # switchport monitor"); ``show running-config monitor`` prints them.
+    monitor_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -481,7 +485,10 @@ class FakeSwitch:
                 if not role.names(interface):
                     continue
             if entity in ("interface", "vlan", "vrf context"):
-                if any(e.startswith(f"conf t ; {entity} * ; ") for e in role.entities):
+                # The broad role's one permit ("conf t ; *") covers entering any of them.
+                if "conf t ; *" in role.entities or any(
+                    e.startswith(f"conf t ; {entity} * ; ") for e in role.entities
+                ):
                     return True
             elif entity in role.entities:
                 return True
@@ -572,6 +579,43 @@ class FakeSwitch:
         if kind is None and not cmd.startswith("no "):
             return _ok(ident, None), ("vpc-domain", cmd)
         return _ok(ident, None), context
+
+    def _monitor(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A monitor session line, or None when ``cmd`` is not one. A session is entered
+        with its type (``type erspan-source`` for ERSPAN), as on cisco-25gb, where a plain
+        ``monitor session N`` is a local session and ERSPAN lines are refused in it."""
+        kind = context[0] if context else None
+        interface = context[1] if context and kind == "interface" else None
+        bare = cmd.removeprefix("no ")
+        if kind == "monitor-session" and context:
+            if re.fullmatch(r"(?:no )?(?:erspan-id|destination ip|vrf|ip ttl|ip dscp).*", cmd):
+                if "erspan" not in context[1]:
+                    return _error(ident, "ERROR: ssn type incorrect\n"), context
+            path = f"{context[1]} ; {cmd}"
+        elif interface is not None and bare == "switchport monitor":
+            path = f"interface {interface} ; {cmd}"
+        elif kind is None and re.fullmatch(r"monitor session \d+( type erspan-source)?", bare):
+            path = cmd
+        elif kind is None and bare.startswith("monitor erspan origin "):
+            path = cmd
+        else:
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        self._record(path, self.monitor_lines)
+        if kind is None and cmd.startswith("monitor session "):
+            return _ok(ident, None), ("monitor-session", cmd)
+        return _ok(ident, None), context
+
+    def monitor_config(self) -> str:
+        """``show running-config monitor`` from the lines entered."""
+        out: list[str] = []
+        for line in self.monitor_lines:
+            if line.startswith("monitor erspan"):
+                out.append(line)
+        return "\n".join(out) + ("\n" if out else "")
 
     def _inside_rule(self, user: str, path: str, interface: str | None) -> bool:
         """Whether a rule of the account's roles names a command inside ``path`` (a mode
@@ -782,6 +826,7 @@ class FakeSwitch:
         known = (
             "show running-config spanning-tree",
             "show running-config vpc",
+            "show running-config monitor",
             "show running-config",
             "show startup-config",
             "show checkpoint summary",
@@ -798,6 +843,7 @@ class FakeSwitch:
             text = {
                 "show running-config spanning-tree": self.stp_config,
                 "show running-config vpc": self.vpc_config,
+                "show running-config monitor": self.monitor_config,
             }.get(cmd, self.running_config)()
         return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
 
@@ -1168,6 +1214,8 @@ class FakeSwitch:
             return vpc_reply
         if vxlan_reply := self._vxlan(user, is_admin, cmd, ident, context):
             return vxlan_reply
+        if monitor_reply := self._monitor(user, is_admin, cmd, ident, context):
+            return monitor_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):

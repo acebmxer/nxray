@@ -1009,6 +1009,23 @@ port-channel must exist first (Port-channels page); the same domain and vPC
 numbers are set on the other switch of the pair, from its own NXray. Written
 from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
+**Monitor sessions.** The **Monitor sessions** page needs no rule of its own, so it works
+with the broad role and with a stored admin login, and is off with the limited role (a
+role holds 256 rules and the limited one has 254 in use). It reads `show monitor session
+all` and, as text, `show running-config monitor` (for the ERSPAN source address), and
+types `monitor session <n>` (`monitor session <n> type erspan-source` for ERSPAN, which
+the switch needs every time) with its `source interface`, `source vlan`, `filter vlan`,
+`destination interface` or `destination ip`, `erspan-id`, `vrf`, `ip ttl`, `ip dscp`,
+`mtu` and `shut` / `no shut`, `switchport monitor` on a destination port, and `monitor
+erspan origin ip-address <address> global`, each with its `no` form. Tried on
+cisco-25gb (NX-OS 9.3(16)) with throwaway sessions: sessions are numbered 1 to 32, the
+switch refuses `tx` and `both` on a port source while sFlow is on, a description is at
+most 32 characters, and `header-type` was refused. A session did not leave "Session
+admin shut" on the test ports (no transceiver on the destination), so a session coming up
+was not seen. ERSPAN destination sessions (`monitor session <n> type erspan-destination`,
+`source ip`, `erspan-id`, `vrf`, `destination interface`) are written from Cisco's guide:
+the switch refuses them while the nve feature is on, and it was on, so they were not tried.
+
 **VXLAN.** The **VXLAN** page (role version 20, from Update the port list) needs the
 `nve` and `vnseg_vlan` features (Features page). It reads `show nve interface`,
 `show nve peers`, `show nve vni` and, as text, `show running-config` (there is no

@@ -1556,6 +1556,26 @@ class NxapiClient:
         change = build_vxlan_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_monitor(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Monitor sessions page: a local or ERSPAN source session and
+        its settings, a destination port, or the ERSPAN source address.
+
+        The lines are built from the page's description and the checked values
+        (``monitor.build_monitor_change``), as for vPC.
+        """
+        # Imported here: the monitor description uses this module's checks.
+        from app.monitor import build_monitor_change
+
+        change = build_monitor_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

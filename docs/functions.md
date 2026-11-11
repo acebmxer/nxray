@@ -58,6 +58,7 @@ prose columns; those are a reviewer's job.
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
+| Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read VXLAN and EVPN (NVE interface, peers, VNIs) or change it: the NVE interface and its member VNIs, a VLAN's VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets | `app/vxlan.py` (`load_vxlan_page`, `build_vxlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vxlan` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
@@ -625,6 +626,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `check_vxlan_place` | `(page, ident) -> None` | Refuses a VLAN or VRF the switch lacks (naming it would make one) | the VXLAN `ProtocolSite` | v0.2.1 |
 | `render_vxlan_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN page, with a message | `vxlan_page`, `switch_save` | v0.2.1 |
 | `vxlan_page` | `(request, username) -> Response` | `GET /vxlan`: the NVE interface, peers and VNIs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
+| `render_monitor_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Monitor sessions page, with a message | `monitor_page`, `switch_save` | v0.2.1 |
+| `monitor_page` | `(request, username) -> Response` | `GET /monitor`: the SPAN and ERSPAN sessions, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `monitor_change` | `(request, username, form) -> Response` | `POST /monitor/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
 | `vxlan_change` | `(request, username, form) -> Response` | `POST /vxlan/change`: one change, after a confirm page; needs role version 20 and the NVE interface in the role's port list | router | v0.2.1 |
 | `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
@@ -1212,6 +1217,15 @@ would take them out silently.
 | `parse_vpc` | `(bodies, config=None) -> ProtocolView` | The page from `show vpc` and the configuration (None when the role may not read it): the domain with its facts, the peer-link and the vPCs, as tables and port-channel places | `VPC.parse`, `load_vpc_page` | v0.2.1 |
 | `load_vpc_page` | `(client) -> VpcPage` | One request for the features, port-channels and VRFs, then `show vpc` and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vpc` | v0.2.1 |
 | `build_vpc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the vPC page | `NxapiClient.configure_vpc`, `routes/vpc` | v0.2.1 |
+
+## `app/monitor.py` — Monitor sessions: SPAN and ERSPAN source sessions, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_origin` | `(config: str) -> str` | The ERSPAN source address in `show running-config monitor` text ('' for none) | `load_monitor_page` | v0.2.1 |
+| `parse_monitor` | `(bodies, origin="") -> ProtocolView` | The page from `show monitor session all` and the ERSPAN source address: a place per local or ERSPAN source session, the address, and a table of every session | `MONITOR.parse`, `load_monitor_page` | v0.2.1 |
+| `load_monitor_page` | `(client) -> MonitorPage` | One request for the ports and features, one for the sessions (no session is a note, not a table), one for the configuration text | `routes/monitor` | v0.2.1 |
+| `build_monitor_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Monitor sessions page | `NxapiClient.configure_monitor`, `routes/monitor` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

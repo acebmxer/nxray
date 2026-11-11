@@ -11,6 +11,17 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up and monitor port mirroring (SPAN and ERSPAN) from the web interface (#61).**
+  The new **Monitor sessions** page (under Configure) lists every monitor session with
+  its state, sources and destination. It makes local (SPAN) and ERSPAN source sessions
+  and ERSPAN destination sessions and sets their source ports and VLANs with a direction,
+  the VLAN filter, the destination port or address, ERSPAN ID, VRF, time to live, DSCP,
+  the largest packet copied, a description and on/off; marks a port as a monitor destination; and sets the
+  ERSPAN source address. Each change shows its lines and asks first. It works with the
+  broad role or a stored admin login; the limited role has no room left for it. The
+  lines were tried on a switch with throwaway sessions, except ERSPAN destination
+  sessions, which the switch refuses while the nve (VXLAN) feature is on; a session
+  coming up was not seen, because the test ports were down.
 - **Set up and monitor VXLAN and EVPN from the web interface (#60).** The new
   **VXLAN** page (under Configure) shows the NVE interface (state, source
   address, host reachability), its peers, and every VNI with its type, mode and
