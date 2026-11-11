@@ -105,6 +105,10 @@ KINDS = (
     "ethertype",  # an EtherType written 0x0800, 0x0600 to 0xffff
     "arpip",  # an ARP ACL's IPv4 match: any, or one address (as host <address>)
     "arpmac",  # an ARP ACL's MAC match: any, or one address (as host <address>)
+    "url",  # a web address: http://<host>[:<port>][/<path>], no "?" (NX-API refuses it)
+    "slalife",  # how long an IP SLA entry runs: forever, or 1 to 2147483647 seconds
+    "slastart",  # when an IP SLA entry starts: now, pending, after 00:10:00, 14:30 or
+    # 14:30:00, with a date after it if wanted (14:30:00 Nov 12)
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -469,6 +473,58 @@ def _arp_match(value: str, kind: str, label: str) -> str:
     return f"host {_address(value, 4, label)}"
 
 
+_URL = re.compile(r"^http://([^/:\s]+)(?::([0-9]{1,5}))?(/[A-Za-z0-9._~%!$&'()*+,=:@/-]*)?$")
+
+
+def _url(value: str, label: str) -> str:
+    """'http://192.0.2.1/', 'http://www.example.net:8080/status': an address the switch
+    fetches. Only http: the switch's IP SLA ``http get`` takes no other scheme."""
+    match = _URL.fullmatch(value)
+    if not match:
+        raise ValueError(f"{label} is a web address such as http://192.0.2.1/index.html")
+    host = _host(match.group(1), label)
+    port = match.group(2)
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise ValueError(f"{label}: the port is 1 to 65535")
+    return f"http://{host}{':' + port if port else ''}{match.group(3) or '/'}"
+
+
+# The longest life and the largest number of seconds an IP SLA line takes.
+SLA_SECONDS_MAX = 2147483647
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_SLA_AT = re.compile(r"^([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)(?:\s+([A-Za-z]{3})\s+([0-9]{1,2}))?$")
+
+
+def _sla_life(value: str, label: str) -> str:
+    if value.lower() == "forever":
+        return "forever"
+    return _int(value, 1, SLA_SECONDS_MAX, label + " (seconds, or forever)")
+
+
+def _sla_start(value: str, label: str) -> str:
+    """now, pending, 'after 00:10:00' (a wait), or a time of day with an optional date:
+    '14:30', '14:30:00', '14:30:00 Nov 12'."""
+    words = " ".join(value.split())
+    if words.lower() in ("now", "pending"):
+        return words.lower()
+    if words.lower().startswith("after "):
+        return "after " + _time_of_day(words[6:], label + " (after)", True)
+    match = _SLA_AT.fullmatch(words)
+    if not match:
+        raise ValueError(
+            f"{label} is now, pending, after 00:10:00, or a time such as 14:30 or 14:30:00 Nov 12"
+        )
+    clock = match.group(1)
+    when = _time_of_day(clock, label, clock.count(":") == 2)
+    if match.group(2) is None:
+        return when
+    month = match.group(2).capitalize()
+    day = int(match.group(3))
+    if month not in _MONTHS or not 1 <= day <= 31:
+        raise ValueError(f"{label}: the date is a month and a day, such as Nov 12")
+    return f"{when} {month} {day}"
+
+
 def check_value(spec: Field, raw: str) -> str:
     """``raw`` as the switch should get it, or "" for an empty optional field.
 
@@ -559,6 +615,12 @@ def check_value(spec: Field, raw: str) -> str:
         return _ethertype(value, spec.label)
     if kind in ("arpip", "arpmac"):
         return _arp_match(value, kind, spec.label)
+    if kind == "url":
+        return _url(value, spec.label)
+    if kind == "slalife":
+        return _sla_life(value, spec.label)
+    if kind == "slastart":
+        return _sla_start(value, spec.label)
     if kind in ("hhmm", "hhmmss"):
         return _time_of_day(value, spec.label, kind == "hhmmss")
     if kind == "vrf":

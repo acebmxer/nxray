@@ -39,6 +39,7 @@ from app.routes import (
     features,
     health,
     history,
+    ip_sla,
     live,
     monitor,
     neighbors,
@@ -220,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(udld.router)
     app.include_router(vtp.router)
     app.include_router(dot1x.router)
+    app.include_router(ip_sla.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

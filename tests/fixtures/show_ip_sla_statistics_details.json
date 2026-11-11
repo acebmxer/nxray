@@ -1,0 +1,258 @@
+{
+  "print_type": 22,
+  "TABLE_stats": {
+    "ROW_stats": [
+      {
+        "index": 9001,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "update-count": 0,
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9002,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9003,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9004,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "update-count": 0,
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9005,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9006,
+        "life-left": 0,
+        "oper-state": "Inactive",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "outstring1": "Number of successes: Unknown\n",
+            "outstring2": "Number of failures: Unknown\n"
+          }
+        }
+      },
+      {
+        "index": 9007,
+        "life-left": 3600000,
+        "oper-state": "Pending",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "update-count": 0,
+            "outstring1": "Number of successes: 0\n",
+            "outstring2": "Number of failures: 0\n"
+          }
+        }
+      },
+      {
+        "index": 9008,
+        "life-left": 2147483647,
+        "oper-state": "Pending",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "operation-type": "udp-jitter",
+            "update-count": 0,
+            "rtt-count": 0,
+            "rtt-min": 0,
+            "rtt-avg": 0,
+            "rtt-max": 0,
+            "lat-ow-samples": 0,
+            "sd-lat-ow-min": 0,
+            "sd-lat-ow-avg": 0,
+            "sd-lat-ow-max": 0,
+            "ds-lat-ow-min": 0,
+            "ds-lat-ow-avg": 0,
+            "ds-lat-ow-max": 0,
+            "sd-lat-sum": 0,
+            "sd-lat-sum2": 0,
+            "ds-lat-sum": 0,
+            "ds-lat-sum2": 0,
+            "sd-jitter-count": 0,
+            "ds-jitter-count": 0,
+            "sd-jitter-min": 0,
+            "sd-jitter-avg": 0,
+            "sd-jitter-max": 0,
+            "ds-jitter-min": 0,
+            "ds-jitter-avg": 0,
+            "ds-jitter-max": 0,
+            "sd-pos-jitter-min": 0,
+            "sd-pos-jitter-avg": 0,
+            "sd-pos-jitter-max": 0,
+            "sd-pos-jitter-num": 0,
+            "sd-pos-jitter-sum": 0,
+            "sd-pos-jitter-sum2": 0,
+            "sd-neg-jitter-min": 0,
+            "sd-neg-jitter-avg": 0,
+            "sd-neg-jitter-max": 0,
+            "sd-neg-jitter-num": 0,
+            "sd-neg-jitter-sum": 0,
+            "sd-neg-jitter-sum2": 0,
+            "ds-pos-jitter-min": 0,
+            "ds-pos-jitter-avg": 0,
+            "ds-pos-jitter-max": 0,
+            "ds-pos-jitter-num": 0,
+            "ds-pos-jitter-sum": 0,
+            "ds-pos-jitter-sum2": 0,
+            "ds-neg-jitter-min": 0,
+            "ds-neg-jitter-avg": 0,
+            "ds-neg-jitter-max": 0,
+            "ds-neg-jitter-num": 0,
+            "ds-neg-jitter-sum": 0,
+            "ds-neg-jitter-sum2": 0,
+            "inter-jitter-out": 0,
+            "inter-jitter-in": 0,
+            "jitter-avg": 0,
+            "pkt-loss-sd": 0,
+            "pkt-loss-sd-per": 0,
+            "pkt-loss-sd-min": 0,
+            "pkt-loss-sd-max": 0,
+            "pkt-loss-sd-inter-min": 0,
+            "pkt-loss-sd-inter-max": 0,
+            "pkt-loss-ds": 0,
+            "pkt-loss-ds-per": 0,
+            "pkt-loss-ds-min": 0,
+            "pkt-loss-ds-max": 0,
+            "pkt-loss-ds-inter-min": 0,
+            "pkt-loss-ds-inter-max": 0,
+            "pkt-oos": 0,
+            "pkt-mia": 0,
+            "pkt-late": 0,
+            "pkt-skipped": 0,
+            "voice-icpif": 0,
+            "voice-mos": 0,
+            "outstring1": "Number of successes: 0\n",
+            "outstring2": "Number of failures: 0\n"
+          }
+        }
+      },
+      {
+        "index": 9009,
+        "life-left": 60000,
+        "oper-state": "Pending",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "operation-type": "udp-jitter",
+            "update-count": 0,
+            "rtt-count": 0,
+            "rtt-min": 0,
+            "rtt-avg": 0,
+            "rtt-max": 0,
+            "lat-ow-samples": 0,
+            "sd-lat-ow-min": 0,
+            "sd-lat-ow-avg": 0,
+            "sd-lat-ow-max": 0,
+            "ds-lat-ow-min": 0,
+            "ds-lat-ow-avg": 0,
+            "ds-lat-ow-max": 0,
+            "sd-lat-sum": 0,
+            "sd-lat-sum2": 0,
+            "ds-lat-sum": 0,
+            "ds-lat-sum2": 0,
+            "sd-jitter-count": 0,
+            "ds-jitter-count": 0,
+            "sd-jitter-min": 0,
+            "sd-jitter-avg": 0,
+            "sd-jitter-max": 0,
+            "ds-jitter-min": 0,
+            "ds-jitter-avg": 0,
+            "ds-jitter-max": 0,
+            "sd-pos-jitter-min": 0,
+            "sd-pos-jitter-avg": 0,
+            "sd-pos-jitter-max": 0,
+            "sd-pos-jitter-num": 0,
+            "sd-pos-jitter-sum": 0,
+            "sd-pos-jitter-sum2": 0,
+            "sd-neg-jitter-min": 0,
+            "sd-neg-jitter-avg": 0,
+            "sd-neg-jitter-max": 0,
+            "sd-neg-jitter-num": 0,
+            "sd-neg-jitter-sum": 0,
+            "sd-neg-jitter-sum2": 0,
+            "ds-pos-jitter-min": 0,
+            "ds-pos-jitter-avg": 0,
+            "ds-pos-jitter-max": 0,
+            "ds-pos-jitter-num": 0,
+            "ds-pos-jitter-sum": 0,
+            "ds-pos-jitter-sum2": 0,
+            "ds-neg-jitter-min": 0,
+            "ds-neg-jitter-avg": 0,
+            "ds-neg-jitter-max": 0,
+            "ds-neg-jitter-num": 0,
+            "ds-neg-jitter-sum": 0,
+            "ds-neg-jitter-sum2": 0,
+            "inter-jitter-out": 0,
+            "inter-jitter-in": 0,
+            "jitter-avg": 0,
+            "pkt-loss-sd": 0,
+            "pkt-loss-sd-per": 0,
+            "pkt-loss-sd-min": 0,
+            "pkt-loss-sd-max": 0,
+            "pkt-loss-sd-inter-min": 0,
+            "pkt-loss-sd-inter-max": 0,
+            "pkt-loss-ds": 0,
+            "pkt-loss-ds-per": 0,
+            "pkt-loss-ds-min": 0,
+            "pkt-loss-ds-max": 0,
+            "pkt-loss-ds-inter-min": 0,
+            "pkt-loss-ds-inter-max": 0,
+            "pkt-oos": 0,
+            "pkt-mia": 0,
+            "pkt-late": 0,
+            "pkt-skipped": 0,
+            "voice-icpif": 0,
+            "voice-mos": 0,
+            "outstring1": "Number of successes: 0\n",
+            "outstring2": "Number of failures: 0\n"
+          }
+        }
+      }
+    ]
+  }
+}

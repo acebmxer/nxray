@@ -1698,6 +1698,26 @@ class NxapiClient:
         change = build_dot1x_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_ip_sla(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the IP SLA page: what an entry measures and its settings, an
+        entry's schedule, or its reactions and reaction trigger.
+
+        The lines are built from the page's description and the checked values
+        (``ip_sla.build_ip_sla_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the IP SLA description uses this module's checks.
+        from app.ip_sla import build_ip_sla_change
+
+        change = build_ip_sla_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

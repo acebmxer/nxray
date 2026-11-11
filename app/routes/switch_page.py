@@ -38,6 +38,7 @@ from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
 from app.routes.dot1x import render_dot1x_page
 from app.routes.features import render_features_page
+from app.routes.ip_sla import render_ip_sla_page
 from app.routes.monitor import render_monitor_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.pfc import render_pfc_page
@@ -960,7 +961,7 @@ def switch_save(
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
-    ``vtp``, ``dot1x``,
+    ``vtp``, ``dot1x``, ``ip-sla``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1022,6 +1023,8 @@ def switch_save(
             return render_vtp_page(request, username, error=error, notice=notice)
         if back == "dot1x":
             return render_dot1x_page(request, username, error=error, notice=notice)
+        if back == "ip-sla":
+            return render_ip_sla_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

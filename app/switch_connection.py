@@ -167,6 +167,12 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def ip_sla_changes_enabled(self) -> bool:
+        """True when NXray may change IP SLA: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
     def vrf_changes_enabled(self) -> bool:
         """True once that role includes the VRF rules (role version 8 or later)."""
         return self.changes_enabled and self.role_version >= 8

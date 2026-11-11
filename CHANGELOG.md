@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage IP SLA from the web interface (#71).** The new **IP SLA** page (under Configure)
+  makes IP SLA entries that measure from the switch: ping, UDP echo, UDP jitter (with an
+  optional voice codec), TCP connect, DNS lookup and HTTP get, each with its frequency,
+  threshold, timeout, VRF, type of service, packet size, tag, owner and history settings. It
+  schedules an entry (start now, at a time, after a wait or when triggered; for a time or
+  forever; every day if wanted), adds reactions to its results (round-trip time, timeout,
+  jitter, packet loss and more, with thresholds and an SNMP trap or a trigger) and lets one
+  entry start another. It lists every entry with what it measures, its state, its latest
+  result, how many runs passed and failed, and its schedule and reactions. A scheduled entry
+  cannot be changed: the page says to remove its schedule first. It needs the sla sender
+  feature (Features page). Each change shows its lines and asks first. It works with the
+  broad role or a stored admin login. The lines and show output were tried on a switch.
 - **Manage 802.1X port authentication from the web interface (#68).** The new **802.1X**
   page (under Configure) sets the RADIUS server groups that check sign-ins and get
   accounting, turns 802.1X on or off for the switch, and per port sets port control (auto,

@@ -419,6 +419,11 @@ class FakeSwitch:
     vtp_lines: list[str] = field(default_factory=list)
     dot1x_lines: list[str] = field(default_factory=list)
     texts: dict[str, str] = field(default_factory=dict)
+    # IP SLA lines as entered ("ip sla 10 ; icmp-echo 192.0.2.1", "ip sla 10 ; frequency
+    # 30", "ip sla schedule 10 life forever start-time now", "ip sla reaction-trigger 10
+    # 11"). Needs ``feature sla sender``, as on cisco-25gb, which also showed: an entry's
+    # measuring line is taken once, and a scheduled entry refuses every change.
+    sla_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -692,6 +697,68 @@ class FakeSwitch:
             self._record(path, kept)
             return _ok(ident, None), context
         return None
+
+    _SLA_MEASURE = re.compile(r"(?:icmp-echo|udp-echo|udp-jitter|tcp-connect|dns|http get) .+")
+    _SLA_TOP = re.compile(
+        r"(?:no )?ip sla schedule (\d+).*|(?:no )?ip sla reaction-configuration (\d+) react .+"
+        r"|(?:no )?ip sla reaction-trigger (\d+) \d+"
+    )
+
+    def _sla_running(self, entry: str) -> bool:
+        return any(line.startswith(f"ip sla schedule {entry} ") for line in self.sla_lines)
+
+    def _ip_sla(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """An IP SLA line: an entry (``ip sla N``) and the lines inside it, a schedule, a
+        reaction or a reaction trigger; None when ``cmd`` is not one."""
+        kind = context[0] if context else None
+        entry = context[1] if context and kind == "ip-sla" else ""
+        top = re.fullmatch(r"(no )?ip sla (\d+)", cmd)
+        if not (top or entry or self._SLA_TOP.fullmatch(cmd)):
+            return None
+        if not self._feature_on("sla_sender"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        path = f"ip sla {entry} ; {cmd}" if entry else cmd
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if top and top.group(1):
+            number = top.group(2)
+            self.sla_lines[:] = [
+                line
+                for line in self.sla_lines
+                if not re.match(
+                    rf"ip sla (?:schedule |reaction-configuration |reaction-trigger )?{number}\b",
+                    line,
+                )
+            ]
+            return _ok(ident, None), None
+        if top:
+            if self._sla_running(top.group(2)):
+                return (
+                    _error(ident, "Entry already running and cannot be modified\n"),
+                    context,
+                )
+            return _ok(ident, None), ("ip-sla", top.group(2))
+        if entry:
+            measured = any(line.startswith(f"ip sla {entry} ; ") for line in self.sla_lines)
+            if bool(self._SLA_MEASURE.fullmatch(cmd)) == measured:
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+        self._record(path, self.sla_lines)
+        return _ok(ident, None), context
+
+    def sla_config_text(self) -> str:
+        """``show running-config sla sender``: the entries, then the other lines."""
+        out = ["feature sla sender", ""]
+        entries: dict[str, list[str]] = {}
+        for line in self.sla_lines:
+            if " ; " in line:
+                place, inner = line.split(" ; ", 1)
+                entries.setdefault(place, []).append(inner)
+        for place, inner in entries.items():
+            out += [place, f"  {inner[0]}", *(f"    {line}" for line in inner[1:])]
+        out += [line for line in self.sla_lines if " ; " not in line]
+        return "\n".join(out) + "\n"
 
     _PVLAN_VLAN = re.compile(
         r"(?:no )?private-vlan (?:primary|isolated|community)"
@@ -972,6 +1039,10 @@ class FakeSwitch:
                 if not self._feature_on(feature):
                     return _error(ident, "% Invalid command at '^' marker.\n")
                 return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if cmd == "show running-config sla sender":
+            if not self._feature_on("sla_sender"):
+                return _error(ident, "% Invalid command at '^' marker.\n")
+            return {"jsonrpc": "2.0", "result": {"msg": self.sla_config_text()}, "id": ident}
         if cmd == "show hardware access-list tcam region":
             return {"jsonrpc": "2.0", "result": {"msg": self.tcam_regions()}, "id": ident}
         if cmd == "show ip dhcp snooping binding":
@@ -1383,6 +1454,8 @@ class FakeSwitch:
             return pvlan_reply
         if edge_reply := self._edge(user, is_admin, cmd, ident, context):
             return edge_reply
+        if sla_reply := self._ip_sla(user, is_admin, cmd, ident, context):
+            return sla_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):
@@ -2366,6 +2439,9 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith("show ip sla") and not self._feature_on("sla_sender"):
+            # As on cisco-25gb: the IP SLA show commands exist only while sla sender is on.
+            return _error(ident, "% Invalid command\n")
         if cmd.startswith(("show vlan private-vlan", "show interface private-vlan")):
             # As on cisco-25gb: these exist only while private-vlan is on.
             if not self._feature_on("private-vlan"):

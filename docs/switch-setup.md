@@ -1073,6 +1073,19 @@ max-req <1-10>` and `dot1x max-reauth-req <1-10>` on a switched front port, with
 forms. NX-OS has no guest VLAN and no auth-fail VLAN, so the page has neither. Written from
 Cisco's NX-OS 9.3 guide and not tried on a switch.
 
+**IP SLA.** The **IP SLA** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role. It needs `feature sla sender`
+(Features page): the IP SLA show commands do not exist before. It reads `show feature`,
+`show vrf`, `show ip sla configuration`, `show ip sla statistics details` and `show
+running-config sla sender` (as text), and types `ip sla <n>` followed by one of `icmp-echo`,
+`udp-echo`, `udp-jitter`, `tcp-connect`, `dns ... name-server` or `http get`, then
+`frequency`, `threshold`, `timeout`, `vrf`, `tos`, `request-data-size`, `verify-data`,
+`tag`, `owner` and the `history` lines inside the entry; `no ip sla <n>`; `ip sla schedule
+<n> [life] [start-time] [ageout] [recurring]`; `ip sla reaction-configuration <n> react
+<event> ...`; and `ip sla reaction-trigger <n> <n>`; each with its `no` form. The switch
+refuses every change to an entry while it is scheduled. Tried on cisco-25gb (NX-OS 9.3(16))
+with throwaway entries.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type

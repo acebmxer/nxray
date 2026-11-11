@@ -64,6 +64,7 @@ prose columns; those are a reviewer's job.
 | Read UDLD (the switch-wide mode and message interval, each port's state and neighbours) or change it: a port's UDLD state and aggressive mode, the switch-wide message interval and aggressive mode | `app/udld.py` (`load_udld_page`, `build_udld_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_udld` |
 | Read VTP (the status, the ports taking part, the message counters) or change it: the VTP mode, domain, version and password, VTP on a port | `app/vtp.py` (`load_vtp_page`, `build_vtp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vtp` |
 | Read 802.1X (the switch-wide state, the ports set up for it, the devices signed in) or change it: the RADIUS server groups and switch-wide lines, a port's port control, host mode, MAC authentication bypass, timers and retries | `app/dot1x.py` (`load_dot1x_page`, `build_dot1x_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_dot1x` |
+| Read IP SLA (the entries, their latest results, schedules and reactions) or change it: what an entry measures and its timing, packet, label and history settings, its schedule, its reactions and reaction trigger | `app/ip_sla.py` (`load_ip_sla_page`, `build_ip_sla_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ip_sla` |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
@@ -658,6 +659,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_dot1x_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the 802.1X page, with a message | `dot1x_page`, `switch_save` | v0.2.1 |
 | `dot1x_page` | `(request, username) -> Response` | `GET /dot1x`: the ports set up for 802.1X and the devices signed in, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `dot1x_change` | `(request, username, form) -> Response` | `POST /dot1x/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_ip_sla_place` | `(page, ident) -> None` | Refuses a schedule or reaction for an entry the switch does not have | the IP SLA `ProtocolSite` | v0.2.1 |
+| `render_ip_sla_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the IP SLA page, with a message | `ip_sla_page`, `switch_save` | v0.2.1 |
+| `ip_sla_page` | `(request, username) -> Response` | `GET /ip-sla`: the IP SLA entries with their results, schedules and reactions, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `ip_sla_change` | `(request, username, form) -> Response` | `POST /ip-sla/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1164,7 +1169,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1340,6 +1345,17 @@ would take them out silently.
 | `load_dot1x_page` | `(client) -> Dot1xPage` | One request for the feature and the ports; while dot1x is on, one for the switch-wide state and one for the ports and devices (text) | `routes/dot1x` | v0.2.1 |
 | `build_dot1x_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the 802.1X page | `NxapiClient.configure_dot1x`, `routes/dot1x` | v0.2.1 |
 
+## `app/ip_sla.py` — IP SLA: the entries that measure from the switch, their results, schedules and reactions
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_sla_config` | `(config) -> dict[int, SlaConfig]` | The entries in `show running-config sla sender` text, by number: the measuring line, the other lines, the schedule, the reactions and triggers | `parse_ip_sla` | v0.2.1 |
+| `entry_values` | `(config) -> dict[str, dict[str, str]]` | An entry's settings as field values (what it measures, timing, packets, labels, history), for the "set" marks | `parse_ip_sla` | v0.2.1 |
+| `schedule_values` | `(schedule) -> dict[str, str]` | What follows `ip sla schedule <n>` as field values: life, start, ageout, recurring | `parse_ip_sla` | v0.2.1 |
+| `parse_ip_sla` | `(bodies, config=None) -> ProtocolView` | The page from `show ip sla configuration`, `show ip sla statistics details` and the configuration text: a place per entry, schedule and set of reactions, and the table of entries with their latest results | `IP_SLA.parse`, `load_ip_sla_page` | v0.2.1 |
+| `load_ip_sla_page` | `(client) -> IpSlaPage` | One request for the features and VRFs; while sla sender is on, one for the entries and results and the configuration text | `routes/ip_sla` | v0.2.1 |
+| `build_ip_sla_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the IP SLA page | `NxapiClient.configure_ip_sla`, `routes/ip_sla` | v0.2.1 |
+
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 
 | Function | Signature | Does | Used by | Since |
@@ -1359,7 +1375,7 @@ would take them out silently.
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
-| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page` | v0.1.0 |
+| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page` | v0.1.0 |
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |

@@ -1,0 +1,55 @@
+
+!Command: show running-config sla sender
+!Running configuration last done at: Wed Nov 11 11:00:20 2026
+!Time: Wed Nov 11 11:00:33 2026
+
+version 9.3(16) Bios:version 07.71 
+feature sla sender
+
+ip sla 9001
+  icmp-echo 192.0.2.1
+    frequency 30
+ip sla 9002
+  udp-jitter 192.0.2.1 5000 num-packets 5
+    tos 46
+    frequency 30
+ip sla 9003
+  udp-echo 192.0.2.1 5001
+    vrf management
+ip sla 9004
+  tcp-connect 192.0.2.1 80
+ip sla 9005
+  dns www.example.com name-server 192.0.2.1
+ip sla 9006
+  http get http://192.0.2.1/
+ip sla 9007
+  icmp-echo 192.0.2.1 source-ip 198.51.100.2
+ip sla schedule 9007 start-time 01:00:00 ageout 86400 recurring
+ip sla 9008
+  udp-jitter 192.0.2.1 5002 codec g711alaw
+ip sla schedule 9008 life forever start-time after 00:30:00 ageout 7200
+ip sla 9009
+  udp-jitter 192.0.2.1 5003 source-ip 198.51.100.2 source-port 6000 interval 30
+ip sla schedule 9009 life 60 start-time 01:00:00 Nov 12
+ip sla reaction-configuration 9001 react rtt threshold-type immediate
+ip sla reaction-configuration 9001 react timeout
+ip sla reaction-configuration 9001 react verifyError threshold-type immediate
+ip sla reaction-configuration 9002 react jitterSDAvg threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react jitterDSAvg threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react packetLossSD threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react packetLossDS threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react mos threshold-value 400 300 threshold-type immediate
+ip sla reaction-configuration 9002 react jitterAvg threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react icpif threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react packetLateArrival threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react packetOutOfSequence threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react maxOfPositiveSD threshold-value 10 5 threshold-type xOfy 3 5 action-type triggerOnly
+ip sla reaction-configuration 9002 react maxOfNegativeSD threshold-value 10 5 threshold-type immediate
+ip sla reaction-configuration 9002 react maxOfPositiveDS threshold-value 10 5 threshold-type immediate
+ip sla reaction-configuration 9002 react maxOfNegativeDS threshold-value 10 5 threshold-type immediate
+ip sla reaction-configuration 9005 react rtt threshold-value 400 200 threshold-type consecutive 3 action-type trapOnly
+ip sla reaction-configuration 9005 react timeout threshold-type immediate
+ip sla reaction-configuration 9006 react connectionLoss
+ip sla reaction-trigger 9005 9006
+
+

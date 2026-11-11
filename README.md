@@ -26,7 +26,8 @@ address aging time, add static MAC addresses, clear learned ones, label ports, t
 ports on or off and edit their descriptions (one at a time or several at once), create, rename and delete VLANs, set the
 VLANs on ports, set up private VLANs (primary, isolated and community, with host and
 promiscuous ports), turn UDLD on per port and see its neighbors, set the VTP mode, domain
-and version, set up 802.1X sign-in on ports and see the devices signed in, set a port's speed, MTU, FEC, flow control, storm control and
+and version, set up 802.1X sign-in on ports and see the devices signed in, measure delay,
+jitter and loss from the switch with IP SLA entries and see their results, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
 and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
@@ -191,6 +192,9 @@ default: *(built)*.
     *(built; needs the broad role or a stored admin login)*
     **802.1X**: RADIUS server groups, port control, host mode, MAC
     authentication bypass and timers per port, with the devices signed in.
+    *(built; needs the broad role or a stored admin login)*
+    **IP SLA**: entries that measure from the switch (ping, UDP echo and
+    jitter, TCP connect, DNS, HTTP), their schedules, reactions and results.
     *(built; needs the broad role or a stored admin login)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
