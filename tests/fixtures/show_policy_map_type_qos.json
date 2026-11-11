@@ -1,0 +1,73 @@
+{
+  "TABLE_pmap": {
+    "ROW_pmap": {
+      "pmap-key": "nxprobe-pm",
+      "type-spec": "0",
+      "yqos-or-q": "qos",
+      "options": "0",
+      "pmap-name-out": "nxprobe-pm",
+      "TABLE_cmap": {
+        "ROW_cmap": [
+          {
+            "cmap-key": "nxprobe-voice",
+            "xqos-or-q": "qos",
+            "cmap-name": "nxprobe-voice",
+            "TABLE_action": {
+              "ROW_action": [
+                {
+                  "action-key": "1",
+                  "qos-group": "7"
+                },
+                {
+                  "action-key": "2",
+                  "dscp": "46"
+                },
+                {
+                  "action-key": "3",
+                  "cos": "5"
+                },
+                {
+                  "action-key": "4",
+                  "prec": "3"
+                },
+                {
+                  "action-key": "5",
+                  "cir-spec": "0",
+                  "bc-spec": "0",
+                  "be-spec": "0",
+                  "cir-rate-units": "gbps",
+                  "cir": "2",
+                  "bc-size-units": "ms",
+                  "bc": "200",
+                  "TABLE_police": {
+                    "ROW_police": [
+                      {
+                        "police-key": "1",
+                        "cnf-act": "1"
+                      },
+                      {
+                        "police-key": "2",
+                        "vio-act": "2"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "cmap-key": "class-default",
+            "xqos-or-q": "qos",
+            "cmap-name": "class-default",
+            "TABLE_action": {
+              "ROW_action": {
+                "action-key": "1",
+                "qos-group": "0"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

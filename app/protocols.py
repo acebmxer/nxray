@@ -88,6 +88,7 @@ KINDS = (
     "maddr4",  # one IPv4 multicast group address: 239.1.1.1
     "port",  # a front port or port-channel, switched (layer 2): spanning tree
     "channel",  # a port-channel that exists on the switch: port-channel20 (or po20)
+    "numlist",  # whole numbers and ranges from minimum to maximum: 46 or 8,10-12
     "vlan",  # one VLAN number, 1 to 3967 (the switch keeps 3968-4094 for itself)
     "vlans",  # VLAN numbers and ranges, 1 to 3967: 10 or 10,20-30
     "host",  # a server: an IP address or a DNS name such as ntp.example.net
@@ -320,6 +321,25 @@ def _vlans(value: str, label: str) -> str:
     return compact
 
 
+_NUMBER_LIST = re.compile(r"^[0-9]{1,5}(?:-[0-9]{1,5})?(?:,[0-9]{1,5}(?:-[0-9]{1,5})?)*$")
+
+
+def _numlist(value: str, low: int | None, high: int | None, label: str) -> str:
+    """'8, 10-12' -> '8,10-12': every number from ``low`` to ``high``, every range
+    lower-higher."""
+    compact = re.sub(r"\s*([,-])\s*", r"\1", value)
+    if not _NUMBER_LIST.fullmatch(compact):
+        raise ValueError(f"{label} is numbers and ranges such as 8,10-12")
+    for part in compact.split(","):
+        first, _, last = part.partition("-")
+        _int(first, low, high, label)
+        if last:
+            _int(last, low, high, label)
+            if int(last) <= int(first):
+                raise ValueError(f"{label}: in {part} the second number must be the higher one")
+    return compact
+
+
 def _source(value: str, label: str) -> str:
     if match := _LOOPBACK.fullmatch(value):
         number = int(match.group(1))
@@ -521,6 +541,8 @@ def check_value(spec: Field, raw: str) -> str:
         return _vlan(value, spec.label)
     if kind == "vlans":
         return _vlans(value, spec.label)
+    if kind == "numlist":
+        return _numlist(value, spec.minimum, spec.maximum, spec.label)
     if kind == "host":
         return _host(value, spec.label)
     if kind == "domain":

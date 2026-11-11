@@ -1,0 +1,57 @@
+{
+  "TABLE_xpmap": {
+    "ROW_xpmap": [
+      {
+        "xpmap-name": "default-8q-nq-policy",
+        "TABLE_xcmap": {
+          "ROW_xcmap": {
+            "xcmap-name": "c-8q-nq-default",
+            "TABLE_xmatch": {
+              "ROW_xmatch": {
+                "xmatch-key": "1",
+                "xqos-group-list": "0"
+              }
+            },
+            "TABLE_xaction": {
+              "ROW_xaction": {
+                "xaction-key": "1",
+                "mtu": "1500"
+              }
+            }
+          }
+        }
+      },
+      {
+        "xpmap-name": "nxprobe-npm",
+        "TABLE_xcmap": {
+          "ROW_xcmap": {
+            "xcmap-name": "nxprobe-nq",
+            "TABLE_xmatch": {
+              "ROW_xmatch": {
+                "xmatch-key": "1",
+                "xqos-group-list": "3"
+              }
+            },
+            "TABLE_xaction": {
+              "ROW_xaction": [
+                {
+                  "action-key": "1",
+                  "mtu": "9216"
+                },
+                {
+                  "action-key": "2",
+                  "pause": "2",
+                  "timeout": "0",
+                  "size-in-bytes": "0",
+                  "xoff-bytes": "0",
+                  "xon-bytes": "0",
+                  "pfc-cos-list": "3"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

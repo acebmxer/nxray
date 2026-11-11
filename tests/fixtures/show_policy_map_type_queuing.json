@@ -1,0 +1,88 @@
+{
+  "TABLE_pmap": {
+    "ROW_pmap": [
+      {
+        "pmap-key": "default-8q-out-policy",
+        "type-spec": "0",
+        "yqos-or-q": "queuing",
+        "options": "0",
+        "pmap-name-out": "default-8q-out-policy",
+        "TABLE_cmap": {
+          "ROW_cmap": [
+            {
+              "cmap-key": "c-out-8q-q7",
+              "type-cmap-spec": "1",
+              "xqos-or-q": "queuing",
+              "cmap-name": "c-out-8q-q7",
+              "TABLE_action": {
+                "ROW_action": {
+                  "action-key": "1",
+                  "prio-level": "1"
+                }
+              }
+            },
+            {
+              "cmap-key": "c-out-8q-q-default",
+              "type-cmap-spec": "1",
+              "xqos-or-q": "queuing",
+              "cmap-name": "c-out-8q-q-default",
+              "TABLE_action": {
+                "ROW_action": {
+                  "action-key": "1",
+                  "rem-bw-units": "7",
+                  "rem-bw-rate": "100"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "pmap-key": "nxprobe-qpm",
+        "type-spec": "0",
+        "yqos-or-q": "queuing",
+        "options": "0",
+        "pmap-name-out": "nxprobe-qpm",
+        "TABLE_cmap": {
+          "ROW_cmap": [
+            {
+              "cmap-key": "c-out-8q-q2",
+              "type-cmap-spec": "1",
+              "xqos-or-q": "queuing",
+              "cmap-name": "c-out-8q-q2",
+              "TABLE_action": {
+                "ROW_action": [
+                  {
+                    "action-key": "1",
+                    "size-units": "bytes",
+                    "qlim-size": "50000"
+                  },
+                  {
+                    "action-key": "2",
+                    "min-rate-units": "mbps",
+                    "shape-min-rate": "100",
+                    "max-rate-units": "mbps",
+                    "shape-max-rate": "500"
+                  }
+                ]
+              }
+            },
+            {
+              "cmap-key": "c-out-8q-q3",
+              "type-cmap-spec": "1",
+              "xqos-or-q": "queuing",
+              "cmap-name": "c-out-8q-q3",
+              "TABLE_action": {
+                "ROW_action": {
+                  "action-key": "1",
+                  "rem-bw-units": "7",
+                  "rem-bw-rate": "20"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

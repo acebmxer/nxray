@@ -1009,6 +1009,27 @@ port-channel must exist first (Port-channels page); the same domain and vPC
 numbers are set on the other switch of the pair, from its own NXray. Written
 from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
+**QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role (it has no rule numbers left).
+It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type
+network-qos`, `show policy-map type network-qos`, `show policy-map type queuing`, `show
+policy-map interface brief`, `show policy-map system` and `show queuing interface`, and
+types `class-map type qos match-any|match-all <name>` with `match dscp`, `cos`,
+`precedence`, `access-group name` and `ip rtp`; `policy-map type qos <name>` with
+`class <class-map>`, `set qos-group`, `set dscp`, `set cos`, `set precedence` and `police
+cir ... conform transmit violate drop`; `service-policy type qos input <policy>` on a port;
+`class-map` and `policy-map type network-qos` with `mtu` and `pause pfc-cos`;
+`policy-map type queuing` with `class type queuing c-out-8q-q3` and `bandwidth remaining
+percent`, `priority level`, `shape min ... max ...` and `queue-limit ... bytes`; and, under
+`system qos`, `service-policy type network-qos|queuing output|qos input <policy>`, each
+with its `no` form. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects on
+Ethernet1/54: the switch refuses `match ip dscp`, `match vlan` and DSCP names such as
+`af11`; `no set cos` and `no police` alone (the whole line is needed); a classification
+policy as `output`; a queuing policy on a port; and `priority level` together with
+`bandwidth` in one queue. Applying a policy under `system qos` changes the whole switch
+and was not tried, so those lines are written from Cisco's guide. While no class-map or
+policy-map was made, the switch prints nothing for the first two commands.
+
 **Monitor sessions.** The **Monitor sessions** page needs no rule of its own, so it works
 with the broad role and with a stored admin login, and is off with the limited role (a
 role holds 256 rules and the limited one has 254 in use). It reads `show monitor session

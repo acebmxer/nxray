@@ -1,0 +1,58 @@
+{
+  "TABLE_cmap": {
+    "ROW_cmap": [
+      {
+        "cmap-key": "nxprobe-voice",
+        "id": "0",
+        "xqos-or-q": "qos",
+        "any_or_all": "match-any",
+        "cmap-name-out": "nxprobe-voice",
+        "desc": "voice traffic",
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": "1",
+              "dscp-list": "46"
+            },
+            {
+              "match-key": "2",
+              "match-acl-name": "nxprobe-acl"
+            },
+            {
+              "match-key": "3",
+              "precedence-list": "5"
+            },
+            {
+              "match-key": "4",
+              "cos-list": "0-3"
+            },
+            {
+              "match-key": "5",
+              "rtp-port-list": "2000-3000"
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "nxprobe-data",
+        "id": "0",
+        "xqos-or-q": "qos",
+        "any_or_all": "match-all",
+        "cmap-name-out": "nxprobe-data",
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": "1",
+            "dscp-list": "10,12"
+          }
+        }
+      },
+      {
+        "cmap-key": "nxprobe-empty",
+        "id": "0",
+        "xqos-or-q": "qos",
+        "any_or_all": "match-all",
+        "cmap-name-out": "nxprobe-empty"
+      }
+    ]
+  }
+}

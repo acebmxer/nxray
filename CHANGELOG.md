@@ -11,6 +11,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage QoS from the web interface (#62).** The new **QoS** page (under Configure)
+  shows the class-maps and policy-maps that were made, what is applied to each port and
+  to the whole switch, the switch's own default policies and the output queue counters
+  (packets sent and dropped per port and QoS group). It makes class-maps that match
+  DSCP, CoS, IP precedence, an ACL or RTP ports; makes policy-maps and adds classes that
+  set a QoS group, DSCP, CoS or precedence or limit the rate; applies a policy to a
+  port's incoming traffic; and makes network-qos policies (MTU, pause) and queuing
+  policies (bandwidth, priority, shaping, queue limit) and applies them to the system.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; the limited role has no room left for it. The class-map, policy-map and
+  port lines were tried on a switch with throwaway objects; applying a network-qos or
+  queuing policy to the system changes the whole switch and was not tried.
 - **Set up and monitor port mirroring (SPAN and ERSPAN) from the web interface (#61).**
   The new **Monitor sessions** page (under Configure) lists every monitor session with
   its state, sources and destination. It makes local (SPAN) and ERSPAN source sessions

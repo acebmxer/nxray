@@ -400,6 +400,10 @@ class FakeSwitch:
     # "monitor erspan origin ip-address 192.0.2.1 global", "interface Ethernet1/5 ;
     # switchport monitor"); ``show running-config monitor`` prints them.
     monitor_lines: list[str] = field(default_factory=list)
+    # QoS lines as entered ("class-map type qos match-any web ; match dscp 46", "policy-map
+    # type qos p ; class web ; set qos-group 3", "interface Ethernet1/5 ; service-policy type
+    # qos input p", "system qos ; service-policy type network-qos nq").
+    qos_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -607,6 +611,45 @@ class FakeSwitch:
         self._record(path, self.monitor_lines)
         if kind is None and cmd.startswith("monitor session "):
             return _ok(ident, None), ("monitor-session", cmd)
+        return _ok(ident, None), context
+
+    _QOS_TOP = re.compile(
+        r"(?:no )?(?:class-map type (?:qos|network-qos)(?: match-(?:any|all))? \S+"
+        r"|policy-map type (?:qos|queuing|network-qos) \S+)"
+    )
+
+    def _qos(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A QoS line, or None when ``cmd`` is not one. A class-map or policy-map is entered
+        by its full line ("policy-map type qos p"), a class inside a policy-map by ``class``
+        (``class type queuing c-out-8q-q3`` for queuing); the lines are kept under the path
+        they were typed at, as on the switch."""
+        kind = context[0] if context else None
+        interface = context[1] if context and kind == "interface" else None
+        bare = cmd.removeprefix("no ")
+        if self._QOS_TOP.fullmatch(cmd) or (kind is None and bare == "system qos"):
+            path, enters = cmd, not cmd.startswith("no ")
+        elif kind == "qos" and context:
+            top = context[1].split(" ; ")[0]
+            if not top.startswith("policy-map") and bare.startswith("class "):
+                return _error(ident, "% Invalid command\n"), context
+            if re.fullmatch(r"(?:no )?class (?:type (?:network-qos|queuing) )?\S+", cmd):
+                path, enters = f"{top} ; {cmd}", not cmd.startswith("no ")
+            else:
+                path, enters = f"{context[1]} ; {cmd}", False
+        elif interface is not None and re.fullmatch(
+            r"(?:no )?service-policy type qos input \S+", cmd
+        ):
+            path, enters = f"interface {interface} ; {cmd}", False
+        else:
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        # The mode is part of making a class-map only: "no class-map type qos x" removes it.
+        self._record(re.sub(r" match-(?:any|all)", "", path), self.qos_lines)
+        if enters:
+            return _ok(ident, None), ("qos", path)
         return _ok(ident, None), context
 
     def monitor_config(self) -> str:
@@ -1216,6 +1259,8 @@ class FakeSwitch:
             return vxlan_reply
         if monitor_reply := self._monitor(user, is_admin, cmd, ident, context):
             return monitor_reply
+        if qos_reply := self._qos(user, is_admin, cmd, ident, context):
+            return qos_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):

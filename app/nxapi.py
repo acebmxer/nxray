@@ -1576,6 +1576,27 @@ class NxapiClient:
         change = build_monitor_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_qos(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the QoS page: a class-map or policy-map (classification,
+        network-qos or queuing) and its classes, a port's incoming policy, or a policy
+        applied to the system.
+
+        The lines are built from the page's description and the checked values
+        (``qos.build_qos_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the QoS description uses this module's checks.
+        from app.qos import build_qos_change
+
+        change = build_qos_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

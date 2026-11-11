@@ -1,0 +1,30 @@
+{
+  "TABLE_ifvlanstr": {
+    "ROW_ifvlanstr": [
+      {
+        "if-vlan-str": "port-channel41",
+        "if-status": "1",
+        "in-pmap-qos": null,
+        "out-pmap-qos": null,
+        "in-pmap-que": null,
+        "out-pmap-que": "default-8q-out-policy"
+      },
+      {
+        "if-vlan-str": "Ethernet1/53",
+        "if-status": "1",
+        "in-pmap-qos": "nxprobe-pm",
+        "out-pmap-qos": null,
+        "in-pmap-que": null,
+        "out-pmap-que": "default-8q-out-policy"
+      },
+      {
+        "if-vlan-str": "Ethernet1/54",
+        "if-status": "1",
+        "in-pmap-qos": null,
+        "out-pmap-qos": null,
+        "in-pmap-que": null,
+        "out-pmap-que": "default-8q-out-policy"
+      }
+    ]
+  }
+}

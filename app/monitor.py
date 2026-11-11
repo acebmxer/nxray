@@ -560,7 +560,7 @@ class MonitorPage:
     missing: tuple[str, ...] = ()  # monitor sessions need no feature; kept for the template
 
 
-def _all_port_names(brief: dict[str, Any]) -> tuple[str, ...]:
+def all_port_names(brief: dict[str, Any]) -> tuple[str, ...]:
     """Every front port and port-channel in ``show interface brief``: a routed port can be
     a source too, so the spanning tree page's switched-only list is not used as it is."""
     switched = switch_port_names(brief)
@@ -602,7 +602,7 @@ def load_monitor_page(client: NxapiClient) -> MonitorPage:
                 *view.notes,
             ),
         )
-    return MonitorPage(MONITOR, view, _all_port_names(brief), problem=problem)
+    return MonitorPage(MONITOR, view, all_port_names(brief), problem=problem)
 
 
 def build_monitor_change(
