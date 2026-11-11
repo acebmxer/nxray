@@ -179,6 +179,15 @@
         and press the Turn on button to update it.
       </p>
       {% endfor %}
+      {% for behind in broad_behind(request) %}
+      <p class="alert alert-warn" role="status">
+        NXray's account on {{ behind.switch_hostname or behind.host }} has a broad role
+        written by an older NXray, which does not yet deny EEM applets.
+        <a href="/switch">Open the Switch page</a>{% if picker_switches|length > 1 %}
+        (with that switch chosen in the top bar){% endif %}
+        and press Update the port list to add the deny.
+      </p>
+      {% endfor %}
       {% block content %}{% endblock %}
     </main>
   </div>

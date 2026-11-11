@@ -1244,14 +1244,25 @@ names) is the same in every mode, so the account stays limited to those ports.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server` and `boot` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
 denies are numbered right after the permit for `conf t ; *`, and the other
 permits after them. Checked on a switch (NX-OS 9.3(16)): the `username` deny,
 and that the port list still limits the account. Not yet tried: the denies for
-`role`, `aaa`, `tacacs-server`, `radius-server` and `boot`, and the `no` forms.
+`role`, `aaa`, `tacacs-server`, `radius-server` and `boot`, and their `no` forms.
+
+The `event manager` denies (rules 23 and 24) came later. An EEM applet's `action
+cli` lines run as the switch's admin, not as the account that made the applet, so
+without them the account could make an applet that runs what the other denies
+refuse. Checked on a switch (NX-OS 9.3(16)): both denies refuse `event manager
+applet` and `event manager environment`, and other configuration still goes
+through. A scheduler job runs as the account that made it, so the denies hold
+inside a job and the scheduler needs no deny. A broad role written by an older
+NXray lacks the EEM denies: the Switch page and a banner say so, and **Update the
+port list** writes the role again with them. EEM changes then need the stored
+admin login.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

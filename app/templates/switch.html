@@ -31,7 +31,7 @@
     </label>
     <p class="hint">
       Any configuration command and any show command, except configuration of
-      accounts, roles, AAA, TACACS+, RADIUS and the boot image. New features need
+      accounts, roles, AAA, TACACS+, RADIUS, the boot image and EEM applets. New features need
       no role update, and the account is still limited to the ports the role
       names. Tradeoff: the account can change any other setting on the switch.
     </p>
@@ -307,9 +307,9 @@
     Now: <strong>{{ role_mode_words[connection.role_mode] }}</strong>.
     {% if connection.role_mode == "broad" %}
     The role permits any configuration command and any show command on the ports
-    it names, except configuration of accounts, roles, AAA, TACACS+, RADIUS and
-    the boot image. New features need no role update, but the account can
-    change any other setting on the switch.
+    it names, except configuration of accounts, roles, AAA, TACACS+, RADIUS, the
+    boot image and EEM applets. New features need no role update, but the account
+    can change any other setting on the switch.
     {% elif connection.role_mode == "stored" %}
     The role has the listed rules only, and the switch admin login
     ({{ connection.admin_user }}) is stored, encrypted. NXray adds new rules
@@ -414,6 +414,15 @@
 {% endif %}
 <section class="card">
   <h2 class="card-title">Update the port list</h2>
+  {% if connection.broad_role_behind %}
+  <p class="warning">
+    NXray's broad role on the switch was written by an older NXray and does not
+    deny EEM applets yet. An applet's commands run as the switch's admin, so
+    with it the account could get past the other denies. Press Update the port
+    list to write the role again with the deny; EEM changes then need the stored
+    admin login.
+  </p>
+  {% endif %}
   {% if not connection.role_vlan_interfaces %}
   <p class="warning">
     NXray's role does not name the VLAN interfaces yet: interface-vlan was off

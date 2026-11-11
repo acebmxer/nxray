@@ -285,6 +285,10 @@ def test_the_ports_page_keeps_room_for_the_panel_open_or_not(
     assert '<main class="wrap wrap-ports"' in opened
     css = logged_in.get("/static/style.css").text
     assert ".wrap-ports { padding-right: 476px; }" in css
+    # The room must beat the page rule's own padding: as specific (#91).
+    assert "main.wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }" in css
+    assert "main.wrap-ports { padding-right: 476px; }" in css
+    assert css.index("main.wrap {") < css.index("main.wrap-ports {")
     assert ".wrap:has(" not in css
     assert "top: var(--strip-h);" in css[css.index(".drawer {") :][:200]
 

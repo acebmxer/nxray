@@ -295,8 +295,21 @@ def role_behind(request: Request) -> list[tuple[SwitchConnection, str]]:
     ]
 
 
+def broad_behind(request: Request) -> list[SwitchConnection]:
+    """Switches whose broad role was written before its latest denies
+    (``SwitchConnection.broad_role_behind``), for a warning on every page. Like
+    ``role_behind``: for an admin only, and not on the Switch page, which has its own
+    card for it."""
+    account = current_account(request)
+    if account is None or not account.is_admin or request.url.path.startswith("/switch"):
+        return []
+    switches, _ = switch_picker(request)
+    return [switch for switch in switches if switch.broad_role_behind]
+
+
 templates.env.globals["switch_picker"] = switch_picker
 templates.env.globals["role_behind"] = role_behind
+templates.env.globals["broad_behind"] = broad_behind
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
 templates.env.globals["live_choices"] = LIVE_CHOICES

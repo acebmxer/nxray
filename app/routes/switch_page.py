@@ -195,8 +195,8 @@ def _mode_words(mode: str) -> str:
     if mode == ROLE_BROAD:
         return (
             "The role permits any configuration change on the listed ports except accounts, "
-            "roles, AAA and the boot image, so new features need no role update. The account "
-            "can change any other setting on the switch."
+            "roles, AAA, the boot image and EEM applets, so new features need no role update. "
+            "The account can change any other setting on the switch."
         )
     if mode == ROLE_STORED:
         return (
@@ -852,6 +852,8 @@ def switch_enable_changes(
             f"The port list is updated: NXray's role now names the {count} front ports the "
             f"switch has now{vlans}. The switch applies this at once, so there is no wait."
         )
+        if connection.broad_role_behind and new_mode == ROLE_BROAD:
+            done += " The role now also denies EEM applets."
     else:
         parts = []
         if connection.role_version < 2:

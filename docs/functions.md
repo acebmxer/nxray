@@ -167,6 +167,7 @@ really invalidates rather than merely asking the browser to forget.
 | `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The switch this request is for (`switch_choice.selected_switch_id`), its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
 | `switch_picker` | `(request) -> tuple[list[SwitchConnection], int \| None]` | Every switch and the one this page is for; a template global for the top bar's picker | `base.html` | v0.1.0 |
 | `role_behind` | `(request) -> list[tuple[SwitchConnection, str]]` | Switches whose NXray role lacks rules this version can use, with the missing kinds of change in words; admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.0 |
+| `broad_behind` | `(request) -> list[SwitchConnection]` | Switches whose broad role was written before its latest denies (`SwitchConnection.broad_role_behind`, the EEM denies); admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.1 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 

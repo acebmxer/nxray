@@ -559,7 +559,19 @@ RELOAD_RULES = (
 # sit right after rule 1 and every other permit after them. Numbers stay below
 # 256, the most a role takes. Only the "username" deny has been tried on a
 # switch; the others, and the "no" forms of all of them, follow it.
+#
+# EEM applets are denied too (rules 23 and 24, added later, so numbered after
+# the rest). An applet's "action cli" lines run as the switch's admin, not as the
+# account that made the applet: checked on a switch (NX-OS 9.3(16)), an applet
+# made by an account with this role ran "username ..." and made an account. Both
+# denies, and that "event manager environment" is refused with them, were checked
+# there too. Scheduler jobs need no deny: a job runs as the account that made it,
+# so the denies above still hold inside it (checked the same way).
 _DENIED_CONFIG = ("username", "role", "aaa", "tacacs-server", "radius-server", "boot")
+EEM_DENY_RULES = (
+    "rule 23 deny command conf t ; event manager *",
+    "rule 24 deny command conf t ; no event manager *",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -577,6 +589,7 @@ BROAD_RULES = (
     "rule 20 permit command no checkpoint *",
     "rule 21 permit command terminal dont-ask",
     "rule 22 permit command reload",
+    *EEM_DENY_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it
@@ -769,7 +782,7 @@ def role_lines(
         cleared = []
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     description = (
-        "NXray: any configuration except accounts, roles, AAA and boot, on the listed ports"
+        "NXray: any configuration except accounts, roles, AAA, boot and EEM, on the listed ports"
         if mode == ROLE_BROAD
         # Kept short: NX-OS takes up to 128 characters here.
         else "NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "

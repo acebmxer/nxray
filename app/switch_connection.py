@@ -28,8 +28,11 @@ ROLE_STORED = "stored"
 ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 
 # The role version kept for a broad role: it permits every configuration command,
-# so no later NXray version can add a rule it lacks. Above any real ROLE_VERSION.
-BROAD_ROLE_VERSION = 1000
+# so no later NXray version can add a permit it lacks. Above any real ROLE_VERSION.
+# It counts the broad role's own deny lists instead: 1000 had the account, role, AAA
+# and boot denies; 1001 added the EEM denies (app/port_changes.py EEM_DENY_RULES). A
+# broad role below it is written again by Update the port list on the Switch page.
+BROAD_ROLE_VERSION = 1001
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,16 @@ class SwitchConnection:
     def changes_enabled(self) -> bool:
         """True once NXray's account has been given the port-changes role."""
         return self.changes_enabled_at is not None
+
+    @property
+    def broad_role_behind(self) -> bool:
+        """True when the account has a broad role written before its latest denies
+        (``BROAD_ROLE_VERSION``): Update the port list on the Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_ROLE_VERSION
+        )
 
     @property
     def vlan_changes_enabled(self) -> bool:

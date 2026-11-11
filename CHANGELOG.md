@@ -137,6 +137,16 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Ports page keeps its room for the side panel again (#91).** On a screen 1700px
+  or wider, the front panel picture and the port table stretched to the right edge, so
+  a port's side panel covered their right end. They again stop short of the panel's
+  place, open or shut.
+- **The broad role now also denies EEM applets.** An EEM applet's commands run as the
+  switch's admin, not as the account that made it, so NXray's account with the broad
+  role could get past its own deny list (accounts, roles, AAA, boot) through an applet.
+  The role now denies `event manager` configuration too. A broad role written by an
+  older NXray is flagged on the Switch page and in a banner for admins: press **Update
+  the port list** there to add the deny.
 - **A page shows an update's new look without a forced reload (#90).** Browsers kept
   the old stylesheet and scripts for a while after NXray was updated, so a changed
   layout showed only after Ctrl+Shift+R. NXray now tells the browser to check them on
