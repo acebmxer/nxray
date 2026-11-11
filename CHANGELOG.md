@@ -11,6 +11,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **See and set priority flow control (PFC) from the web interface (#63).** The new
+  **Priority flow control** page (under Configure) lists every port's PFC mode and
+  whether it is working, with the pause frames received and sent, and the pause counts
+  per priority (CoS) for ports that have any. It sets a port's mode (on, off or auto) and
+  watchdog, and the switch-wide watchdog and "force PFC off" setting. Each change shows
+  its lines and asks first. It works with the broad role or a stored admin login; the
+  limited role has no room left for it. The pause counters were read from a switch; the
+  configuration lines are written from Cisco's NX-OS 9.3 guide and were not tried on one.
 - **Manage QoS from the web interface (#62).** The new **QoS** page (under Configure)
   shows the class-maps and policy-maps that were made, what is applied to each port and
   to the whole switch, the switch's own default policies and the output queue counters

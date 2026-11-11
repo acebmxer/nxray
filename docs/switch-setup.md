@@ -1009,6 +1009,17 @@ port-channel must exist first (Port-channels page); the same domain and vPC
 numbers are set on the other switch of the pair, from its own NXray. Written
 from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
 
+**Priority flow control.** The **Priority flow control** page needs no rule of its own, so
+it works with the broad role and with a stored admin login, and is off with the limited
+role (it has no rule numbers left). It reads `show interface priority-flow-control detail`
+and `show interface brief`, and types `priority-flow-control mode on|off|auto` and
+`priority-flow-control watch-dog-interval on|off` on a port, and, for the whole switch,
+`priority-flow-control watch-dog-interval on|off` and `priority-flow-control
+override-interface mode off`, each with its `no` form. Which classes are paused is set on the
+QoS page (`pause pfc-cos` in a network-qos policy). The show output was read on cisco-25gb
+(NX-OS 9.3(16)); the configuration lines are written from Cisco's NX-OS 9.3 guide and were
+not tried on a switch.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type

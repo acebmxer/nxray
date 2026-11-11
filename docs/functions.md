@@ -58,6 +58,8 @@ prose columns; those are a reviewer's job.
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
 | Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
+| Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
+| Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
 | Read VXLAN and EVPN (NVE interface, peers, VNIs) or change it: the NVE interface and its member VNIs, a VLAN's VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets | `app/vxlan.py` (`load_vxlan_page`, `build_vxlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vxlan` |
@@ -627,6 +629,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `check_vxlan_place` | `(page, ident) -> None` | Refuses a VLAN or VRF the switch lacks (naming it would make one) | the VXLAN `ProtocolSite` | v0.2.1 |
 | `render_vxlan_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN page, with a message | `vxlan_page`, `switch_save` | v0.2.1 |
 | `vxlan_page` | `(request, username) -> Response` | `GET /vxlan`: the NVE interface, peers and VNIs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `check_pfc_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Priority flow control `ProtocolSite` | v0.2.1 |
+| `render_pfc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Priority flow control page, with a message | `pfc_page`, `switch_save` | v0.2.1 |
+| `pfc_page` | `(request, username) -> Response` | `GET /pfc`: each port's PFC mode and pause counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pfc_change` | `(request, username, form) -> Response` | `POST /pfc/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_pfc_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Priority flow control `ProtocolSite` | v0.2.1 |
+| `render_pfc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Priority flow control page, with a message | `pfc_page`, `switch_save` | v0.2.1 |
+| `pfc_page` | `(request, username) -> Response` | `GET /pfc`: each port's PFC mode and pause counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pfc_change` | `(request, username, form) -> Response` | `POST /pfc/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
 | `render_monitor_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Monitor sessions page, with a message | `monitor_page`, `switch_save` | v0.2.1 |
 | `monitor_page` | `(request, username) -> Response` | `GET /monitor`: the SPAN and ERSPAN sessions, read live; every role looks, operators and admins change | router | v0.2.1 |
@@ -1244,6 +1254,22 @@ would take them out silently.
 | `parse_qos` | `(bodies, counters=None) -> ProtocolView` | The page from the answers: a place per class-map, policy-map, class, port with a policy and the system, and the tables of what is applied, the switch's own policies and the counters | `QOS.parse`, `load_qos_page` | v0.2.1 |
 | `load_qos_page` | `(client) -> QosPage` | One request for the ports and the network-qos, queuing and applied policies, then one each for the qos class-maps, qos policy-maps and counters (nothing made is an empty answer, not a warning) | `routes/qos` | v0.2.1 |
 | `build_qos_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the QoS page | `NxapiClient.configure_qos`, `routes/qos` | v0.2.1 |
+
+## `app/pfc.py` — Priority flow control: a port's PFC mode and watchdog, the pause counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pfc` | `(bodies) -> ProtocolView` | The page from `show interface priority-flow-control detail`: a table of every port's mode, state and pause counts, a table of pause counts per priority, and a place for each port not on auto | `PFC.parse`, `load_pfc_page` | v0.2.1 |
+| `load_pfc_page` | `(client) -> PfcPage` | One request for the ports and one for the PFC state and counters | `routes/pfc` | v0.2.1 |
+| `build_pfc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Priority flow control page | `NxapiClient.configure_pfc`, `routes/pfc` | v0.2.1 |
+
+## `app/pfc.py` — Priority flow control: a port's PFC mode and watchdog, the pause counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pfc` | `(bodies) -> ProtocolView` | The page from `show interface priority-flow-control detail`: a table of every port's mode, state and pause counts, a table of pause counts per priority, and a place for each port not on auto | `PFC.parse`, `load_pfc_page` | v0.2.1 |
+| `load_pfc_page` | `(client) -> PfcPage` | One request for the ports and one for the PFC state and counters | `routes/pfc` | v0.2.1 |
+| `build_pfc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Priority flow control page | `NxapiClient.configure_pfc`, `routes/pfc` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

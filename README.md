@@ -34,7 +34,8 @@ priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
 with EVPN (NVE interface, VNIs, route-targets), copy ports' or VLANs' traffic to a
 port or an analyzer (SPAN and ERSPAN), mark, limit and queue traffic with QoS
-class-maps and policy-maps, set the switch's hostname, banner,
+class-maps and policy-maps, set each port's priority flow control and read its pause
+counters, set the switch's hostname, banner,
 clock and NTP, DNS, logging and
 SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
@@ -173,6 +174,8 @@ default: *(built)*.
     **QoS**: class-maps, policy-maps (classification, network-qos, queuing),
     where they are applied and the queue counters. *(built; needs the broad
     role or a stored admin login)*
+    **Priority flow control**: each port's PFC mode and watchdog, with the pause
+    counters. *(built; needs the broad role or a stored admin login)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
     the switch's own log, SNMP, banner. *(built)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,

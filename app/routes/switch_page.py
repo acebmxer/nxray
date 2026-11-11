@@ -38,6 +38,7 @@ from app.routes.config_page import render_config_page
 from app.routes.features import render_features_page
 from app.routes.monitor import render_monitor_page
 from app.routes.neighbors import render_neighbors_page
+from app.routes.pfc import render_pfc_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
@@ -953,9 +954,9 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
-    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``switch-admin``, ``acls``, ``port-security``,
-    ``dhcp`` or ``config``); the answer is shown there. From the Ports page, ``show``, ``color``
-    and ``port`` keep its filter, colour mode and open side panel.
+    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``switch-admin``, ``acls``,
+    ``port-security``, ``dhcp`` or ``config``); the answer is shown there. From the Ports page,
+    ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -1002,6 +1003,8 @@ def switch_save(
             return render_monitor_page(request, username, error=error, notice=notice)
         if back == "qos":
             return render_qos_page(request, username, error=error, notice=notice)
+        if back == "pfc":
+            return render_pfc_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

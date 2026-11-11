@@ -1597,6 +1597,26 @@ class NxapiClient:
         change = build_qos_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_pfc(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Priority flow control page: a port's PFC mode or watchdog, or
+        the switch-wide watchdog or override.
+
+        The lines are built from the page's description and the checked values
+        (``pfc.build_pfc_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PFC description uses this module's checks.
+        from app.pfc import build_pfc_change
+
+        change = build_pfc_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

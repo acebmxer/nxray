@@ -404,6 +404,8 @@ class FakeSwitch:
     # type qos p ; class web ; set qos-group 3", "interface Ethernet1/5 ; service-policy type
     # qos input p", "system qos ; service-policy type network-qos nq").
     qos_lines: list[str] = field(default_factory=list)
+    # PFC lines as entered ("interface Ethernet1/5 ; priority-flow-control mode on").
+    pfc_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -617,6 +619,24 @@ class FakeSwitch:
         r"(?:no )?(?:class-map type (?:qos|network-qos)(?: match-(?:any|all))? \S+"
         r"|policy-map type (?:qos|queuing|network-qos) \S+)"
     )
+
+    _PFC = re.compile(
+        r"(?:no )?priority-flow-control (?:mode (?:on|off|auto)|watch-dog-interval(?: on| off)?"
+        r"|override-interface mode off)"
+    )
+
+    def _pfc(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A priority-flow-control line, at the top or inside an interface, or None."""
+        if not self._PFC.fullmatch(cmd):
+            return None
+        interface = context[1] if context and context[0] == "interface" else None
+        path = f"interface {interface} ; {cmd}" if interface else cmd
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        self._record(path, self.pfc_lines)
+        return _ok(ident, None), context
 
     def _qos(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -1261,6 +1281,8 @@ class FakeSwitch:
             return monitor_reply
         if qos_reply := self._qos(user, is_admin, cmd, ident, context):
             return qos_reply
+        if pfc_reply := self._pfc(user, is_admin, cmd, ident, context):
+            return pfc_reply
         if admin_reply := self._admin(user, is_admin, cmd, ident, context):
             return admin_reply
         if security_reply := self._security(user, is_admin, cmd, ident, context):
