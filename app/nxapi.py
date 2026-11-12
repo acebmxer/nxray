@@ -1818,6 +1818,27 @@ class NxapiClient:
         change = build_loopback_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_tunnels(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Tunnels page: make or delete a tunnel, or set its mode,
+        source, destination, transport VRF, TTL, address, description, MTU, VRF, path MTU
+        discovery or state.
+
+        The lines are built from the page's description and the checked values
+        (``tunnels.build_tunnel_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Tunnels description uses this module's checks.
+        from app.tunnels import build_tunnel_change
+
+        change = build_tunnel_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

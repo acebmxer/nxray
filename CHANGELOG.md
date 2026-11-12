@@ -11,6 +11,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage tunnel interfaces from the web interface (#79).** The new **Tunnels** page
+  (under Configure) lists every GRE and IP-in-IP tunnel with whether it is up, its mode,
+  source, destination, VRFs, address and MTU. It makes and deletes tunnels and sets a
+  tunnel's mode, source (an address or an interface), destination, transport VRF, TTL,
+  IPv4 address, description, MTU, VRF and path MTU discovery, and turns it off or on.
+  Each change shows its lines and asks first. Changes need the stored admin login, and
+  the switch's tunnel feature, which it refuses while VXLAN is on; the page says so.
+  Built from Cisco's guide and not yet tried on a switch.
 - **Manage loopback interfaces from the web interface (#82).** The new **Loopbacks** page
   (under Configure) lists every loopback with whether it is on, its description, VRF and
   IPv4 and IPv6 addresses. It makes and deletes loopbacks (0 to 1023) and sets a

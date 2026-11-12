@@ -57,6 +57,7 @@ from app.routes.security import render_acls_page, render_dhcp_page, render_port_
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.traffic import render_traffic_page
+from app.routes.tunnels import render_tunnels_page
 from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
 from app.routes.vpc import render_vpc_page
@@ -972,7 +973,7 @@ def switch_save(
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
-    ``loopbacks``,
+    ``loopbacks``, ``tunnels``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1046,6 +1047,8 @@ def switch_save(
             return render_ip_sla_page(request, username, error=error, notice=notice)
         if back == "loopbacks":
             return render_loopbacks_page(request, username, error=error, notice=notice)
+        if back == "tunnels":
+            return render_tunnels_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

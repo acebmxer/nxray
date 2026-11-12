@@ -63,6 +63,7 @@ from app.routes import (
     switch_admin,
     switch_page,
     traffic,
+    tunnels,
     udld,
     users,
     vlans,
@@ -232,6 +233,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(eem.router)
     app.include_router(ip_sla.router)
     app.include_router(loopbacks.router)
+    app.include_router(tunnels.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

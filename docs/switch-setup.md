@@ -1088,7 +1088,7 @@ with throwaway entries.
 
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
-SLA, Errdisable, Scheduler, Call Home, EEM and Loopbacks) send their changes with the stored admin
+SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks and Tunnels) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1102,6 +1102,21 @@ one `description`, `ip address <address/length>`, `ip address <address/length> s
 `ipv6 address <address/length>`, `vrf member <vrf>`, `shutdown` and `no shutdown`, with the
 `no` forms. Moving a loopback into or out of a VRF deletes its addresses, as on a VLAN
 interface. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway loopbacks and a throwaway VRF.
+
+**Tunnels.** The **Tunnels** page (under Configure, next to Loopbacks) changes tunnel
+interfaces only with a stored admin login: NXray's roles name the interfaces they may
+change, and the switch refuses to name a tunnel in a role while tunnel is off, so neither
+the limited nor the broad role can cover them. It needs `feature tunnel` (Features page),
+which the switch refuses while VXLAN (`feature nv overlay`) is on: the two cannot be on
+together. It reads `show feature`, `show vrf`, `show interface brief` and `show
+running-config` (as text, with the role's `show running-config` rule), and types
+`interface tunnel <0-65535>` (which makes one) and `no interface tunnel <n>`, and inside
+one `tunnel mode gre ip|ipip ip|ipip decapsulate-any`, `tunnel source <address|interface>`,
+`tunnel destination <address>`, `tunnel use-vrf <vrf>`, `tunnel ttl <1-255>`, `ip address
+<address/length>`, `description`, `mtu <64-9192>`, `vrf member <vrf>`, `tunnel
+path-mtu-discovery age-timer <10-30>`, `tunnel path-mtu-discovery min-mtu <64-9192>`,
+`shutdown` and `no shutdown`, with the `no` forms. Built from Cisco's NX-OS 9.3
+Interfaces Configuration Guide and not yet tried on a switch: cisco-25gb has VXLAN on.
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show

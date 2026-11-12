@@ -48,6 +48,15 @@ loopback (``permit interface loopback0-1023``) or the switch answers "Interface
 permission denied", and ``show interface brief`` lists each loopback with its state and
 description.
 
+Tunnels live in ``tunnels`` (number -> the lines inside it), made by ``interface tunnel N``
+and deleted by its ``no`` form, only while ``feature tunnel`` is on (which, as on
+cisco-25gb, the switch refuses while VXLAN's ``nve`` feature is on). A line replaces the
+one it would set again (a second ``tunnel source``), its ``no`` form removes it, and ``vrf
+member`` drops the address. A role with an interface policy cannot name tunnels, so only
+the admin login changes them. ``show running-config`` prints each as ``interface TunnelN``
+with its lines, and ``show interface brief`` lists it as ``Tunnel1`` with a state: Cisco's
+guide prints no output for it, so that row's shape is a guess.
+
 VRFs made on the switch live in ``vrfs`` (default and management are always
 there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
 entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
@@ -447,6 +456,8 @@ class FakeSwitch:
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
     vxlan_lines: list[str] = field(default_factory=list)
+    # Tunnel interfaces (see the module notes): number -> the lines inside it.
+    tunnels: dict[int, list[str]] = field(default_factory=dict)
     # Switch admin (see the module notes).
     hostname: str = "nexus-lab"
     admin_lines: list[str] = field(default_factory=list)
@@ -1206,6 +1217,7 @@ class FakeSwitch:
                 lines.append(line)
         for place, lines in places.items():
             out += [place, *(f"  {line}" for line in lines)]
+        out += self.tunnel_config()
         return "\n".join(out) + "\n" + self.vxlan_config()
 
     def __post_init__(self) -> None:
@@ -1312,6 +1324,68 @@ class FakeSwitch:
                 context
             )
         return _ok(ident, None), context
+
+    # The tunnel lines, each with the part that names what it sets: setting one again
+    # replaces the line with the same part.
+    _TUNNEL_LINES = re.compile(
+        r"(?P<key>description|tunnel mode|tunnel source|tunnel destination|tunnel use-vrf"
+        r"|tunnel ttl|tunnel path-mtu-discovery age-timer|tunnel path-mtu-discovery min-mtu"
+        r"|ip address|mtu|vrf member)(?: (?P<value>.+))?|(?P<state>(?:no )?shutdown)"
+    )
+
+    def _tunnel(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """``interface tunnel N``, its ``no`` form and the lines inside one, or None."""
+        if match := re.fullmatch(r"(no )?interface tunnel ?(\d+)", cmd):
+            if not self._feature_on("tunnel"):
+                return _error(ident, "Invalid interface format\n"), None
+            if not is_admin:
+                return _error(ident, "% Interface permission denied\n"), None
+            number = int(match.group(2))
+            if match.group(1):
+                self.tunnels.pop(number, None)
+                return _ok(ident, None), None
+            self.tunnels.setdefault(number, [])
+            return _ok(ident, None), ("tunnel", str(number))
+        if not context or context[0] != "tunnel":
+            return None
+        lines = self.tunnels[int(context[1])]
+        undo = cmd.startswith("no ") and cmd != "no shutdown"
+        line = self._TUNNEL_LINES.fullmatch(cmd.removeprefix("no ") if undo else cmd)
+        if line is None:
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if line.group("state"):
+            lines[:] = [kept for kept in lines if kept != "shutdown"]
+            if cmd == "shutdown":
+                lines.append("shutdown")
+            return _ok(ident, None), context
+        key = line.group("key")
+        same = [kept for kept in lines if kept == key or kept.startswith(key + " ")]
+        if undo:
+            if not same:
+                return _error(ident, "% Not configured\n"), context
+            lines.remove(same[0])
+            if key == "vrf member":
+                lines[:] = [kept for kept in lines if not kept.startswith("ip address ")]
+            return _ok(ident, None), context
+        if line.group("value") is None:
+            return _error(ident, "% Incomplete command\n"), context
+        for kept in same:
+            lines.remove(kept)
+        if key == "vrf member":
+            if line.group("value") not in self.vrfs:
+                return _error(ident, f"% VRF {line.group('value')} does not exist\n"), context
+            lines[:] = [kept for kept in lines if not kept.startswith("ip address ")]
+        lines.append(cmd)
+        return _ok(ident, None), context
+
+    def tunnel_config(self) -> list[str]:
+        """The ``interface TunnelN`` blocks of ``show running-config``."""
+        out = []
+        for number, lines in sorted(self.tunnels.items()):
+            out += [f"interface Tunnel{number}", *(f"  {line}" for line in lines)]
+        return out
 
     def _security(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -1661,6 +1735,8 @@ class FakeSwitch:
             return layer2_reply
         if loopback_reply := self._loopback(user, is_admin, cmd, ident, context):
             return loopback_reply
+        if tunnel_reply := self._tunnel(user, is_admin, cmd, ident, context):
+            return tunnel_reply
         if interface is None and (match := re.fullmatch(r"(no )?sflow (.+)", cmd)):
             rule = "conf t ; no sflow *" if match.group(1) else "conf t ; sflow *"
             if not (is_admin or self._role_allows(user, rule, None)):
@@ -1902,6 +1978,11 @@ class FakeSwitch:
             name = _FEATURE_NAMES.get(match.group(2))
             if name is None:
                 return _error(ident, f"% Invalid command at '^' marker: {cmd}\n"), context
+            if name == "tunnel" and not match.group(1) and self._feature_on("nve"):
+                # As on cisco-25gb.
+                return _error(
+                    ident, "feature nv overlay already enabled. Please disable that\n"
+                ), context
             if name == "lldp":
                 self.lldp = not match.group(1)
             else:
@@ -2745,6 +2826,12 @@ class FakeSwitch:
                     if state.get("desc"):
                         row["desc"] = state["desc"]
                     body["TABLE_interface"]["ROW_interface"].append(row)
+            for number, lines in sorted(self.tunnels.items()):
+                # Not recorded (see the module notes).
+                state = "down" if "shutdown" in lines else "up"
+                body["TABLE_interface"]["ROW_interface"].append(
+                    {"interface": f"Tunnel{number}", "state": state}
+                )
             return _ok(ident, body)
         if cmd == "show interface status":
             body = load_fixture("show_interface_status")

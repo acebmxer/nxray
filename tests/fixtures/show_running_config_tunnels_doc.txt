@@ -1,0 +1,31 @@
+
+!Command: show running-config
+!Running configuration last done at: Thu Nov 12 10:00:00 2026
+!Time: Thu Nov 12 10:00:05 2026
+
+version 9.3(16) Bios:version 05.47
+hostname switch1
+feature tunnel
+
+interface Tunnel0
+  ip address 209.165.20.2/8
+  tunnel source ethernet 1/2
+  tunnel destination 192.0.2.2
+  tunnel mode gre ip
+  tunnel path-mtu-discovery 25 1500
+
+interface Tunnel1
+  description to branch
+  shutdown
+  vrf member RemoteOfficeVRF
+  ip address 203.0.113.1/30
+  mtu 1400
+  tunnel mode ipip ip
+  tunnel source 198.51.100.10
+  tunnel destination 198.51.100.20
+  tunnel use-vrf blue
+  tunnel ttl 100
+
+interface Ethernet1/2
+  no switchport
+  ip address 192.0.2.55/8

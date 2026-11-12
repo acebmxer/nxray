@@ -235,6 +235,13 @@ class SwitchConnection:
         return self.changes_enabled and self.role_mode == ROLE_STORED
 
     @property
+    def tunnel_changes_enabled(self) -> bool:
+        """True when NXray may change tunnel interfaces: with the stored admin login only.
+        The broad role lists the interfaces it may change, and the switch refuses to list
+        tunnels while tunnel is off, so the role cannot name them."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
     def vrf_changes_enabled(self) -> bool:
         """True once that role includes the VRF rules (role version 8 or later)."""
         return self.changes_enabled and self.role_version >= 8

@@ -70,6 +70,7 @@ prose columns; those are a reviewer's job.
 | Read the scheduler (jobs, schedules, the log) or change it: make a job from the command menu, a schedule's jobs and time, the log size | `app/scheduler.py` (`load_scheduler_page`, `build_scheduler_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_scheduler` |
 | Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
 | Read the loopbacks (state, description, VRF, addresses) or change them: make or delete one, its description, main and extra IPv4 addresses, IPv6 addresses, VRF, on or off | `app/loopbacks.py` (`load_loopback_page`, `build_loopback_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_loopbacks` |
+| Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -691,6 +692,10 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_loopbacks_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Loopbacks page, with a message | `loopbacks_page`, `switch_save` | v0.2.1 |
 | `loopbacks_page` | `(request, username) -> Response` | `GET /loopbacks`: every loopback with its state, VRF and addresses, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `loopbacks_change` | `(request, username, form) -> Response` | `POST /loopbacks/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_tunnel_place` | `(page, ident) -> None` | Nothing: naming a tunnel the switch lacks makes it, as the switch does | the Tunnels `ProtocolSite` | v0.2.1 |
+| `render_tunnels_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tunnels page, with a message | `tunnels_page`, `switch_save` | v0.2.1 |
+| `tunnels_page` | `(request, username) -> Response` | `GET /tunnels`: every tunnel with its state, mode, ends and address, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `tunnels_change` | `(request, username, form) -> Response` | `POST /tunnels/change`: one change, after a confirm page; needs the stored admin login (sent with that login) | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1439,6 +1444,16 @@ would take them out silently.
 | `parse_loopback_view` | `(bodies) -> ProtocolView` | The page: one place per loopback with its facts and current values | `LOOPBACKS.parse`, `load_loopback_page` | v0.2.1 |
 | `load_loopback_page` | `(client) -> LoopbackPage` | One request for every read; the VRFs a loopback can move into (never default or management) | `routes/loopbacks` | v0.2.1 |
 | `build_loopback_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Loopbacks page | `NxapiClient.configure_loopbacks`, `routes/loopbacks` | v0.2.1 |
+
+## `app/tunnels.py` — tunnel interfaces: GRE and IP-in-IP, their ends, mode and address
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_tunnel_config` | `(config) -> dict[int, list[str]]` | Each `interface TunnelN` block of `show running-config` with its lines | `parse_tunnels` | v0.2.1 |
+| `parse_tunnels` | `(brief, config) -> list[Tunnel]` | Every tunnel in number order from the configuration text and `show interface brief`: state, mode, source, destination, transport VRF, VRF, address, MTU, TTL, path MTU discovery | `parse_tunnel_view` | v0.2.1 |
+| `parse_tunnel_view` | `(brief, config) -> ProtocolView` | The page: one place per tunnel with its facts and current values (a source address or a source interface), and a note at the switch's 16 tunnels | `load_tunnel_page` | v0.2.1 |
+| `load_tunnel_page` | `(client) -> TunnelPage` | One request for the features and VRFs; while tunnel is on, the brief and the configuration text (a role that may not read the text gives the tunnels without their settings); says VXLAN must go first when it is on | `routes/tunnels` | v0.2.1 |
+| `build_tunnel_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Tunnels page | `NxapiClient.configure_tunnels`, `routes/tunnels` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 
