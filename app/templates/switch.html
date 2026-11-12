@@ -427,6 +427,13 @@
     admin login.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_loopbacks %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it named the loopbacks,
+    so the switch refuses NXray's changes on the Loopbacks page. Press Update
+    the port list to write the role again with them.
+  </p>
+  {% endif %}
   {% if not connection.role_vlan_interfaces %}
   <p class="warning">
     NXray's role does not name the VLAN interfaces yet: interface-vlan was off
@@ -437,7 +444,7 @@
   {% endif %}
   <p class="lead">
     NXray's role names every front port it may change one by one, and the
-    VLAN interfaces. After a 100G
+    VLAN interfaces{% if connection.role_mode == "broad" %} and the loopbacks{% endif %}. After a 100G
     port is split into four, or four split ports are joined again, the role
     does not name the new ports yet, and the switch refuses NXray's changes to
     them. {% if connection.role_mode == "stored" %}NXray signs in to the switch

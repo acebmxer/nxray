@@ -1798,6 +1798,26 @@ class NxapiClient:
         change = build_eem_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_loopbacks(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Loopbacks page: make or delete a loopback, or set its
+        description, addresses, VRF or state.
+
+        The lines are built from the page's description and the checked values
+        (``loopbacks.build_loopback_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Loopbacks description uses this module's checks.
+        from app.loopbacks import build_loopback_change
+
+        change = build_loopback_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

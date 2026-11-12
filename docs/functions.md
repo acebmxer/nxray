@@ -69,6 +69,7 @@ prose columns; those are a reviewer's job.
 | Read Call Home (on or off, the contact details, the transport, the destination profiles) or change it: the contact lines, the mail server, proxy and VRF, a profile's format, addresses, level and alert groups, Call Home on or off, a test message | `app/callhome.py` (`load_callhome_page`, `build_callhome_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_callhome` |
 | Read the scheduler (jobs, schedules, the log) or change it: make a job from the command menu, a schedule's jobs and time, the log size | `app/scheduler.py` (`load_scheduler_page`, `build_scheduler_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_scheduler` |
 | Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
+| Read the loopbacks (state, description, VRF, addresses) or change them: make or delete one, its description, main and extra IPv4 addresses, IPv6 addresses, VRF, on or off | `app/loopbacks.py` (`load_loopback_page`, `build_loopback_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_loopbacks` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -172,7 +173,7 @@ really invalidates rather than merely asking the browser to forget.
 | `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The switch this request is for (`switch_choice.selected_switch_id`), its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
 | `switch_picker` | `(request) -> tuple[list[SwitchConnection], int \| None]` | Every switch and the one this page is for; a template global for the top bar's picker | `base.html` | v0.1.0 |
 | `role_behind` | `(request) -> list[tuple[SwitchConnection, str]]` | Switches whose NXray role lacks rules this version can use, with the missing kinds of change in words; admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.0 |
-| `broad_behind` | `(request) -> list[SwitchConnection]` | Switches whose broad role was written before its latest denies (`SwitchConnection.broad_role_behind`, the EEM denies); admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.1 |
+| `broad_behind` | `(request) -> list[SwitchConnection]` | Switches whose broad role was written before its EEM denies (`SwitchConnection.broad_role_behind`); admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.1 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
@@ -453,7 +454,7 @@ NX-API certificate is. Tests pass a pretend opener through
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
-| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None, nve=False) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off), the NVE interface's only with `nve` | `enable_port_changes` | v0.1.0 |
+| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None, nve=False) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off), the NVE interface's only with `nve`; the broad role's port list also names every loopback (`LOOPBACK_PERMIT`), and a role leaving the broad mode has that line taken out | `enable_port_changes` | v0.1.0 |
 | `rules_for_mode` | `(mode) -> tuple[str, ...]` | The role's command rules in a mode: the broad set, or the listed rules (shared by the limited and stored-login modes); `ValueError` for an unknown mode | `role_lines` | v0.1.0 |
 | `check_role_mode` | `(mode) -> str` | `mode` when it is a role mode, else `ValueError` | `rules_for_mode` | v0.1.0 |
 
@@ -685,6 +686,11 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_eem_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the EEM page, with a message | `eem_page`, `switch_save` | v0.2.1 |
 | `eem_page` | `(request, username) -> Response` | `GET /eem`: the applets, variables, system policies and recent events, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `eem_change` | `(request, username, form) -> Response` | `POST /eem/change`: one change, after a confirm page; needs the stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_loopback_place` | `(page, ident) -> None` | Nothing: naming a loopback the switch lacks makes it, as the switch does | the Loopbacks `ProtocolSite` | v0.2.1 |
+| `loopback_needs` | `(connection, scope, setting) -> str` | Refuses changes while the broad role was written before its port list named the loopbacks (`SwitchConnection.broad_role_without_loopbacks`) | the Loopbacks `ProtocolSite` | v0.2.1 |
+| `render_loopbacks_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Loopbacks page, with a message | `loopbacks_page`, `switch_save` | v0.2.1 |
+| `loopbacks_page` | `(request, username) -> Response` | `GET /loopbacks`: every loopback with its state, VRF and addresses, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `loopbacks_change` | `(request, username, form) -> Response` | `POST /loopbacks/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1191,7 +1197,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1424,6 +1430,15 @@ would take them out silently.
 | `parse_eem` | `(bodies, config) -> ProtocolView` | The page: a place per applet and variable, the recent events and the system policies | `load_eem_page` | v0.2.1 |
 | `load_eem_page` | `(client) -> EemPage` | One request for the ports, system policies and event history; the configuration as text | `routes/eem` | v0.2.1 |
 | `build_eem_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the EEM page; a picked command becomes its `action ... cli` lines (labels n.1, n.2... for one of several lines) | `NxapiClient.configure_eem`, `routes/eem` | v0.2.1 |
+
+## `app/loopbacks.py` — loopback interfaces: state, description, VRF and addresses
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_loopbacks` | `(bodies) -> list[Loopback]` | Every loopback in number order from `show interface brief`, `show ip interface vrf all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`: on or off, description, VRF, IPv4 (main first) and IPv6 addresses | `parse_loopback_view` | v0.2.1 |
+| `parse_loopback_view` | `(bodies) -> ProtocolView` | The page: one place per loopback with its facts and current values | `LOOPBACKS.parse`, `load_loopback_page` | v0.2.1 |
+| `load_loopback_page` | `(client) -> LoopbackPage` | One request for every read; the VRFs a loopback can move into (never default or management) | `routes/loopbacks` | v0.2.1 |
+| `build_loopback_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Loopbacks page | `NxapiClient.configure_loopbacks`, `routes/loopbacks` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

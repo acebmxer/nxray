@@ -634,6 +634,13 @@ VXLAN_RULES = (
 )
 # The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
 NVE_PERMIT = "permit interface nve1"
+# Every loopback, in the broad role's port list only (BROAD_LOOPBACK_VERSION). Checked on
+# cisco-25gb (NX-OS 9.3(16)) with a throwaway role and account: the switch stores this
+# range as one line (unlike the VLAN interfaces, which it writes one per line), takes it
+# with no feature on, and with it lets the account make, change and delete the loopbacks
+# it covers, refusing others ("% Interface permission denied"). The limited role has no
+# rules for loopbacks, so its port list does not name them.
+LOOPBACK_PERMIT = "permit interface loopback0-1023"
 
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
@@ -766,7 +773,10 @@ def role_lines(
     Typed after ``configure terminal``. Every value is checked first, so the
     lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
     to the port list; the switch refuses that line while interface-vlan is off.
-    ``nve`` adds the NVE interface the same way, for the nve feature.
+    ``nve`` adds the NVE interface the same way, for the nve feature. The broad role's
+    port list also names every loopback (``LOOPBACK_PERMIT``); a role leaving the broad
+    mode has that line taken out again (checked on a switch: ``no permit interface
+    loopback0-1023`` is taken).
     ``previous_mode`` is the mode the role was in (None for a new role): when its
     rules differ from ``mode``'s, they are all removed first, so the role keeps
     none the new mode lacks (a ``no rule`` for a rule that is not there is
@@ -798,6 +808,9 @@ def role_lines(
         CHANNEL_PERMIT,
         *([VLAN_INTERFACE_PERMIT] if vlan_interfaces else []),
         *([NVE_PERMIT] if nve else []),
+        *([LOOPBACK_PERMIT] if mode == ROLE_BROAD else []),
+        # Leaving the broad role: the limited rules would act on the loopbacks too.
+        *(["no " + LOOPBACK_PERMIT] if previous_mode == ROLE_BROAD and mode != ROLE_BROAD else []),
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",

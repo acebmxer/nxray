@@ -1088,9 +1088,20 @@ with throwaway entries.
 
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
-SLA, Errdisable, Scheduler, Call Home and EEM) send their changes with the stored admin
+SLA, Errdisable, Scheduler, Call Home, EEM and Loopbacks) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
+
+**Loopbacks.** The **Loopbacks** page (under Configure, next to Routing) needs no rule of
+its own, but the role's port list must name the loopbacks: the broad role's does, the
+limited role's does not, so it works with the broad role and with a stored admin login,
+and is off with the limited role. It reads `show interface brief`, `show ip interface vrf
+all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`, and types
+`interface loopback<0-1023>` (which makes one) and `no interface loopback<n>`, and inside
+one `description`, `ip address <address/length>`, `ip address <address/length> secondary`,
+`ipv6 address <address/length>`, `vrf member <vrf>`, `shutdown` and `no shutdown`, with the
+`no` forms. Moving a loopback into or out of a VRF deletes its addresses, as on a VLAN
+interface. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway loopbacks and a throwaway VRF.
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
@@ -1303,7 +1314,9 @@ changes**) and changeable later on the Switch page under **How much access
 NXray's account gets**. Changing it asks for the switch admin login, writes the
 `nxray-ports` role again, removes the rules the new mode does not have, and
 saves the configuration. The port list (`interface policy deny` and the ports it
-names) is the same in every mode, so the account stays limited to those ports.
+names) is the same in every mode, so the account stays limited to those ports; the broad
+role's also names every loopback (`permit interface loopback0-1023`), which the Loopbacks
+page needs, and a role leaving the broad mode has that line taken out again.
 
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
@@ -1327,6 +1340,15 @@ inside a job and the scheduler needs no deny. A broad role written by an older
 NXray lacks the EEM denies: the Switch page and a banner say so, and **Update the
 port list** writes the role again with them. EEM changes then need the stored
 admin login.
+
+The loopbacks came into the broad role's port list after that. A broad role written
+before lacks them, and the switch answers the Loopbacks page's changes with "Interface
+permission denied": the Switch page says so on the **Update the port list** card, and
+pressing it writes the role again with them. Checked on a switch (NX-OS 9.3(16)) with a
+throwaway role and account: the switch keeps `permit interface loopback0-1023` as that one
+line (unlike the VLAN interfaces, which it writes out one per line), takes it with no
+feature on, lets the account make, change and delete the loopbacks it names and refuses
+the others, and `no permit interface loopback0-1023` takes it out again.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

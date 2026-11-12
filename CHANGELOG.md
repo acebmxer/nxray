@@ -11,6 +11,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage loopback interfaces from the web interface (#82).** The new **Loopbacks** page
+  (under Configure) lists every loopback with whether it is on, its description, VRF and
+  IPv4 and IPv6 addresses. It makes and deletes loopbacks (0 to 1023) and sets a
+  loopback's description, main and extra IPv4 addresses, IPv6 addresses and VRF, and turns
+  it off or on. Each change shows its lines and asks first. It works with the broad role or
+  a stored admin login; the broad role now names the loopbacks in its port list, so a
+  broad role written by an older NXray needs **Update the port list** on the Switch page
+  first. The lines and show output were tried on a switch.
 - **Manage EEM applets from the web interface (#72).** The new **EEM** page (under Switch)
   lists the applets with their event and actions, the environment variables, the
   switch's own system policies and the recent EEM events. It makes and deletes applets

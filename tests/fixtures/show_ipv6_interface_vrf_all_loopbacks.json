@@ -1,0 +1,19 @@
+{
+  "TABLE_intf": {
+    "ROW_intf": {
+      "vrf-name-out": "default",
+      "intf-name": "loopback250",
+      "proto-state": "up",
+      "link-state": "up",
+      "admin-state": "up",
+      "prefix": "2001:db8:250::1/128",
+      "linklocal-addr": "fe80::200:ff:fe00:1",
+      "mtu": 1500,
+      "TABLE_addr": {
+        "ROW_addr": {
+          "addr": "2001:db8:250::1/128"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "TABLE_if": {
+    "ROW_if": [
+      {
+        "if_name": "loopback250",
+        "vrf_name": "default",
+        "vrf_id": 1,
+        "soo": "--"
+      },
+      {
+        "if_name": "mgmt0",
+        "vrf_name": "management",
+        "vrf_id": 2,
+        "soo": "--"
+      },
+      {
+        "if_name": "loopback251",
+        "vrf_name": "lab",
+        "vrf_id": 3,
+        "soo": "--"
+      }
+    ]
+  }
+}

@@ -28,11 +28,17 @@ ROLE_STORED = "stored"
 ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 
 # The role version kept for a broad role: it permits every configuration command,
-# so no later NXray version can add a permit it lacks. Above any real ROLE_VERSION.
-# It counts the broad role's own deny lists instead: 1000 had the account, role, AAA
-# and boot denies; 1001 added the EEM denies (app/port_changes.py EEM_DENY_RULES). A
-# broad role below it is written again by Update the port list on the Switch page.
-BROAD_ROLE_VERSION = 1001
+# so no later NXray version can add a command permit it lacks. Above any real
+# ROLE_VERSION. It counts the broad role's own changes instead: 1000 had the account,
+# role, AAA and boot denies; 1001 added the EEM denies (app/port_changes.py
+# EEM_DENY_RULES); 1002 named the loopbacks in its port list (LOOPBACK_PERMIT). A broad
+# role below it is written again by Update the port list on the Switch page.
+BROAD_ROLE_VERSION = 1002
+# The broad role version that first denied EEM applets: one below it lets the account get
+# past the other denies, which every page warns about.
+BROAD_EEM_DENY_VERSION = 1001
+# The broad role version that first named the loopbacks in its port list.
+BROAD_LOOPBACK_VERSION = 1002
 
 
 @dataclass(frozen=True)
@@ -80,12 +86,23 @@ class SwitchConnection:
 
     @property
     def broad_role_behind(self) -> bool:
-        """True when the account has a broad role written before its latest denies
-        (``BROAD_ROLE_VERSION``): Update the port list on the Switch page adds them."""
+        """True when the account has a broad role written before its EEM denies
+        (``BROAD_EEM_DENY_VERSION``): Update the port list on the Switch page adds them."""
         return (
             self.changes_enabled
             and self.role_mode == ROLE_BROAD
-            and self.role_version < BROAD_ROLE_VERSION
+            and self.role_version < BROAD_EEM_DENY_VERSION
+        )
+
+    @property
+    def broad_role_without_loopbacks(self) -> bool:
+        """True when the account has a broad role written before its port list named the
+        loopbacks (``BROAD_LOOPBACK_VERSION``): Update the port list on the Switch page
+        adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_LOOPBACK_VERSION
         )
 
     @property
@@ -202,6 +219,13 @@ class SwitchConnection:
         """True when NXray may make scheduler jobs and schedules: the same as for monitor
         sessions (the broad role or the stored admin login). A job runs as the account
         that made it, so with the broad role its commands keep that role's limits."""
+        return self.monitor_changes_enabled
+
+    @property
+    def loopback_changes_enabled(self) -> bool:
+        """True when NXray may change loopbacks: the same as for monitor sessions (the broad
+        role, whose port list names them, or the stored admin login; the limited role's
+        port list does not name them)."""
         return self.monitor_changes_enabled
 
     @property
@@ -617,6 +641,8 @@ def load_target(conn: sqlite3.Connection, switch_id: int | None, secret_key: str
 
 
 __all__ = [
+    "BROAD_EEM_DENY_VERSION",
+    "BROAD_LOOPBACK_VERSION",
     "BROAD_ROLE_VERSION",
     "ROLE_BROAD",
     "ROLE_LIMITED",

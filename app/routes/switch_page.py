@@ -42,6 +42,7 @@ from app.routes.eem import render_eem_page
 from app.routes.errdisable import render_errdisable_page
 from app.routes.features import render_features_page
 from app.routes.ip_sla import render_ip_sla_page
+from app.routes.loopbacks import render_loopbacks_page
 from app.routes.monitor import render_monitor_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.pfc import render_pfc_page
@@ -859,6 +860,8 @@ def switch_enable_changes(
         )
         if connection.broad_role_behind and new_mode == ROLE_BROAD:
             done += " The role now also denies EEM applets."
+        if connection.broad_role_without_loopbacks and new_mode == ROLE_BROAD:
+            done += " The role now also names the loopbacks."
     else:
         parts = []
         if connection.role_version < 2:
@@ -969,6 +972,7 @@ def switch_save(
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
+    ``loopbacks``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1040,6 +1044,8 @@ def switch_save(
             return render_eem_page(request, username, error=error, notice=notice)
         if back == "ip-sla":
             return render_ip_sla_page(request, username, error=error, notice=notice)
+        if back == "loopbacks":
+            return render_loopbacks_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-2956%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3540%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -31,7 +31,7 @@ jitter and loss from the switch with IP SLA entries and see their results, choos
 problems shut a port down (errdisable) and which let it come back by itself, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
-and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
+and IPv6 addresses, make loopbacks with their addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
 OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
@@ -170,7 +170,8 @@ default: *(built)*.
 14. **Link aggregation**: port-channels and LACP. *(built)*
 15. **Layer 3**: VLAN interfaces and IPv4 and IPv6 addresses on them and on
     routed ports: *(built)*. VRFs: *(built)*. Static routes: *(built)*. Routing
-    protocols: *(built)*
+    protocols: *(built)* **Loopbacks**: made, described, addressed, moved into a
+    VRF, on or off. *(built; needs the broad role or a stored admin login)*
 16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the

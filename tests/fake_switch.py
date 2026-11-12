@@ -40,6 +40,14 @@ interfaces, and deleting one needs the rule "conf t ; no interface Vlan *".
 Extra IPv4 and IPv6 addresses of a routed port or VLAN interface are in its
 ``port_state`` (``secondaries``, ``ipv6``).
 
+Loopbacks live in ``port_state`` too (``loopback250``, with ``loopback`` set), made by
+``interface loopbackN`` (0-1023) and deleted by its ``no`` form; inside one, the
+description, on/off, IPv4 (main and secondary) and IPv6 addresses and ``vrf member``
+lines are kept there. As on cisco-25gb, a role with an interface policy must name the
+loopback (``permit interface loopback0-1023``) or the switch answers "Interface
+permission denied", and ``show interface brief`` lists each loopback with its state and
+description.
+
 VRFs made on the switch live in ``vrfs`` (default and management are always
 there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
 entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
@@ -310,11 +318,12 @@ class Role:
     interfaces: set[str] = field(default_factory=set)  # lower-cased port names
 
     def names(self, interface: str) -> bool:
-        """Whether the port list covers ``interface`` (a range for port-channels)."""
+        """Whether the port list covers ``interface`` (a range for port-channels, VLAN
+        interfaces and loopbacks)."""
         lowered = interface.lower()
         if lowered in self.interfaces:
             return True
-        kind = "vlan" if lowered.startswith("vlan") else "port-channel"
+        kind = next((k for k in ("vlan", "loopback") if lowered.startswith(k)), "port-channel")
         number = lowered.removeprefix(kind)
         if number == lowered or not number.isdigit():
             return False
@@ -1216,6 +1225,94 @@ class FakeSwitch:
             ]
         return "\n".join(out) + "\n"
 
+    _LOOPBACK_LINES = re.compile(
+        r"description .+|no description|shutdown|no shutdown"
+        r"|(?:no )?ip address \S+(?: secondary)?|(?:no )?ipv6 address \S+"
+        r"|(?:no )?vrf member \S+"
+    )
+
+    def _loopback(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """``interface loopbackN``, its ``no`` form and the lines inside one, or None."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        if match := re.fullmatch(r"(no )?interface loopback(\d+)", cmd):
+            undo, number = match.group(1), int(match.group(2))
+            if number > 1023:
+                return _error(ident, "Invalid interface format\n"), None
+            name = f"loopback{number}"
+            if not is_admin and not any(
+                (r := self.roles.get(n)) and (not r.interface_policy_deny or r.names(name))
+                for n in self.roles_of(user)
+                if n in self.roles
+            ):
+                return _error(ident, "% Interface permission denied\n"), None
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", name)):
+                return denied, None
+            if undo:
+                self.port_state.pop(name, None)
+                return _ok(ident, None), None
+            self.port_state.setdefault(name, {"routed": True, "admin_up": True, "loopback": True})
+            return _ok(ident, None), ("loopback", name)
+        if not context or context[0] != "loopback":
+            return None
+        name = context[1]
+        if not self._LOOPBACK_LINES.fullmatch(cmd):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if not (is_admin or self._role_matches(user, f"conf t ; interface {name} ; {cmd}", name)):
+            return denied, context
+        state = self.port_state[name]
+        undo = cmd.startswith("no ")
+        bare = cmd.removeprefix("no ")
+        if bare.startswith("description"):
+            state["desc"] = "" if undo else bare.split(" ", 1)[1]
+        elif bare == "shutdown":
+            state["admin_up"] = undo
+        elif match := re.fullmatch(r"ip address (\S+) secondary", bare):
+            found = state.setdefault("secondaries", [])
+            if undo:
+                if match.group(1) not in found:
+                    return _error(ident, "% Address not found\n"), context
+                found.remove(match.group(1))
+            elif not state.get("ip"):
+                return _error(ident, "% Configure the primary address first\n"), context
+            elif match.group(1) not in found:
+                found.append(match.group(1))
+        elif match := re.fullmatch(r"ip address (\S+)", bare):
+            address = ipaddress.IPv4Interface(match.group(1))
+            if undo:
+                if state.get("ip") != match.group(1):
+                    return _error(ident, "% Address not found\n"), context
+                state.pop("ip")
+            elif address.ip == address.network.network_address and address.network.prefixlen < 31:
+                # As on cisco-25gb.
+                return _error(ident, f"All 0s host part is invalid: {match.group(1)}\n"), context
+            else:
+                state["ip"] = match.group(1)
+        elif match := re.fullmatch(r"ipv6 address (\S+)", bare):
+            found = state.setdefault("ipv6", [])
+            if undo:
+                if match.group(1) not in found:
+                    return _error(ident, "% Address not found\n"), context
+                found.remove(match.group(1))
+            elif match.group(1) not in found:
+                found.append(match.group(1))
+        else:
+            vrf = bare.split()[-1]
+            if undo:
+                if state.get("vrf", "default") != vrf:
+                    return _error(ident, f"% {name} is not a member of VRF {vrf}\n"), context
+                state.pop("vrf", None)
+            elif vrf not in self.vrfs:
+                return _error(ident, f"% VRF {vrf} does not exist\n"), context
+            else:
+                state["vrf"] = vrf
+            _drop_l3(state)
+            return _ok(ident, {"msg": f"Warning: Deleted all L3 config on interface {name}\n"}), (
+                context
+            )
+        return _ok(ident, None), context
+
     def _security(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
     ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
@@ -1562,6 +1659,8 @@ class FakeSwitch:
             return security_reply
         if layer2_reply := self._layer2(user, is_admin, cmd, ident, context):
             return layer2_reply
+        if loopback_reply := self._loopback(user, is_admin, cmd, ident, context):
+            return loopback_reply
         if interface is None and (match := re.fullmatch(r"(no )?sflow (.+)", cmd)):
             rule = "conf t ; no sflow *" if match.group(1) else "conf t ; sflow *"
             if not (is_admin or self._role_allows(user, rule, None)):
@@ -2047,13 +2146,14 @@ class FakeSwitch:
         return {"TABLE_vrf": {"ROW_vrf": found}}
 
     def vrf_interfaces(self) -> dict[str, Any]:
-        """``show vrf interface``: the VLAN interfaces, mgmt0 and the routed ports."""
+        """``show vrf interface``: the VLAN interfaces, mgmt0, the routed ports and the
+        loopbacks."""
         ids = {n: i for i, n in enumerate(["default", "management", *self.vrfs], 1)}
         names = [f"Vlan{n}" for n in sorted(self.svis)]
         found: list[dict[str, Any]] = [{"if_name": n, "vrf_name": self.vrf_of(n)} for n in names]
         found.append({"if_name": "mgmt0", "vrf_name": "management"})
         for name, state in sorted(self.port_state.items(), key=lambda item: _port_key(item[0])):
-            if state.get("routed") and name.startswith("Ethernet"):
+            if state.get("routed") and name.startswith(("Ethernet", "loopback")):
                 found.append({"if_name": name, "vrf_name": self.vrf_of(name)})
         for row in found:
             row.update(vrf_id=ids[row["vrf_name"]], soo="--")
@@ -2638,6 +2738,13 @@ class FakeSwitch:
                 if "svi_rsn_desc" in svi:
                     row["svi_rsn_desc"] = svi["svi_rsn_desc"]
                 body["TABLE_interface"]["ROW_interface"].append(row)
+            for name, state in sorted(self.port_state.items(), key=lambda i: _port_key(i[0])):
+                if state.get("loopback"):
+                    # As recorded on cisco-25gb: a turned-off loopback is "down".
+                    row = {"interface": name, "state": "up" if state["admin_up"] else "down"}
+                    if state.get("desc"):
+                        row["desc"] = state["desc"]
+                    body["TABLE_interface"]["ROW_interface"].append(row)
             return _ok(ident, body)
         if cmd == "show interface status":
             body = load_fixture("show_interface_status")
@@ -2813,6 +2920,21 @@ class FakeShell:
                 self.mode.append("role-interface")
                 return ""
         if current == "role-interface" and self.role is not None:
+            if match := re.fullmatch(r"no permit interface (\S+)", line):
+                # As on cisco-25gb: the loopbacks a range names go with it, narrower
+                # loopback lines it covers too.
+                gone = match.group(1).lower()
+                covered = re.fullmatch(r"loopback(\d+)-(\d+)", gone)
+                for entry in list(self.role.interfaces):
+                    inside = re.fullmatch(r"loopback(\d+)(?:-(\d+))?", entry)
+                    if entry == gone or (
+                        covered
+                        and inside
+                        and int(covered.group(1)) <= int(inside.group(1))
+                        and int(inside.group(2) or inside.group(1)) <= int(covered.group(2))
+                    ):
+                        self.role.interfaces.discard(entry)
+                return ""
             if match := re.fullmatch(r"permit interface (\S+)", line):
                 name = match.group(1).lower()
                 if name.startswith("vlan") and not self.switch.feature_state.get(
