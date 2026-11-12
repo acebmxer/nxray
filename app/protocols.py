@@ -109,6 +109,17 @@ KINDS = (
     "slalife",  # how long an IP SLA entry runs: forever, or 1 to 2147483647 seconds
     "slastart",  # when an IP SLA entry starts: now, pending, after 00:10:00, 14:30 or
     # 14:30:00, with a date after it if wanted (14:30:00 Nov 12)
+    "email",  # an email address: noc@example.net
+    "phone",  # an international phone number: + and up to 16 digits, +15550100
+    "weburl",  # a web address starting http:// or https://, no "?" (NX-API refuses it)
+    "flashfile",  # a file name on bootflash: letters, digits, ".", "_" and "-": backup.cfg
+    "eemlabel",  # an EEM action's label: a number, or a number and one digit (1, 1.0, 20.5)
+    "quoted",  # text the switch takes inside double quotes: as "text", without '"'
+    "schedstart",  # when a scheduler schedule starts: now, +02:00 (in 2 hours), 23:30
+    # (today) or 2026-12-01 03:00
+    "schedrepeat",  # how often a scheduler schedule repeats: 02:00 (hours:minutes) or
+    # 1:00:00 (days:hours:minutes)
+    "syspolicy",  # an EEM system policy's name: two underscores first, __ethpm_link_flap
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -525,6 +536,77 @@ def _sla_start(value: str, label: str) -> str:
     return f"{when} {month} {day}"
 
 
+_EMAIL = re.compile(
+    r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$"
+)
+_PHONE = re.compile(r"^\+[0-9]{1,16}$")
+_WEB_URL = re.compile(
+    r"^(https?)://([^/:\s]+)(?::([0-9]{1,5}))?(/[A-Za-z0-9._~%!$&'()*+,=:@/-]*)?$"
+)
+_FLASH_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
+_EEM_LABEL = re.compile(r"^[0-9]{1,16}(?:\.[0-9])?$")
+_SCHED_DATE = re.compile(r"^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})\s+([0-9]{1,2}:[0-9]{2})$")
+_SCHED_REPEAT = re.compile(r"^(?:([0-9]{1,3}):)?([0-9]{1,2}):([0-9]{2})$")
+
+
+def _email(value: str, label: str, longest: int) -> str:
+    if not _EMAIL.fullmatch(value) or len(value) > longest:
+        raise ValueError(f"{label} is an email address such as noc@example.net")
+    return value
+
+
+def _web_url(value: str, label: str) -> str:
+    """'https://tools.example.net/its/service/oddce/services/DDCEService': an address
+    the switch sends to, http or https."""
+    match = _WEB_URL.fullmatch(value)
+    if not match or len(value) > 255:
+        raise ValueError(f"{label} is a web address such as https://example.net/callhome")
+    host = _host(match.group(2), label)
+    port = match.group(3)
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise ValueError(f"{label}: the port is 1 to 65535")
+    return f"{match.group(1)}://{host}{':' + port if port else ''}{match.group(4) or '/'}"
+
+
+def _flash_file(value: str, label: str) -> str:
+    if not _FLASH_FILE.fullmatch(value) or ".." in value:
+        raise ValueError(
+            f"{label} is a file name of letters, digits, '.', '_' or '-', such as backup.cfg"
+        )
+    return value
+
+
+def _sched_start(value: str, label: str) -> str:
+    """now; +02:00 (that long from now); 23:30 (today); 2026-12-01 03:00. Sent the way the
+    switch writes them: now, +02:00, 23:30, 2026:12:01:03:00."""
+    words = " ".join(value.split())
+    if words.lower() == "now":
+        return "now"
+    if words.startswith("+"):
+        return "+" + _time_of_day(words[1:], label + " (a wait)", False)
+    if match := _SCHED_DATE.fullmatch(words):
+        year, month, day = (int(g) for g in match.groups()[:3])
+        if not (2000 <= year <= 2099 and 1 <= month <= 12 and 1 <= day <= 31):
+            raise ValueError(f"{label}: the date is written like 2026-12-01")
+        at = _time_of_day(match.group(4), label, False)
+        return f"{year}:{month:02d}:{day:02d}:{at}"
+    if _HHMM.fullmatch(words):
+        return _time_of_day(words, label, False)
+    raise ValueError(f"{label} is now, +02:00 (a wait), 23:30 (today) or 2026-12-01 03:00")
+
+
+def _sched_repeat(value: str, label: str) -> str:
+    match = _SCHED_REPEAT.fullmatch(value.strip())
+    if not match:
+        raise ValueError(f"{label} is hours:minutes (02:00) or days:hours:minutes (1:00:00)")
+    days = int(match.group(1) or 0)
+    hours, minutes = int(match.group(2)), int(match.group(3))
+    if hours > 23 or minutes > 59 or not (days or hours or minutes):
+        raise ValueError(f"{label}: hours go to 23, minutes to 59, and it cannot be 0")
+    return f"{days}:{hours:02d}:{minutes:02d}" if days else f"{hours:02d}:{minutes:02d}"
+
+
 def check_value(spec: Field, raw: str) -> str:
     """``raw`` as the switch should get it, or "" for an empty optional field.
 
@@ -623,6 +705,38 @@ def check_value(spec: Field, raw: str) -> str:
         return _sla_start(value, spec.label)
     if kind in ("hhmm", "hhmmss"):
         return _time_of_day(value, spec.label, kind == "hhmmss")
+    if kind == "email":
+        return _email(value, spec.label, spec.maximum or 255)
+    if kind == "phone":
+        if not _PHONE.fullmatch(value):
+            raise ValueError(f"{spec.label} is + and the number's digits, such as +15550100")
+        return value
+    if kind == "weburl":
+        return _web_url(value, spec.label)
+    if kind == "flashfile":
+        return _flash_file(value, spec.label)
+    if kind == "eemlabel":
+        if not _EEM_LABEL.fullmatch(value):
+            raise ValueError(f"{spec.label} is a number such as 1, or 1.0 to 1.9")
+        return value
+    if kind == "quoted":
+        try:
+            text = validate_description(value)
+        except ValueError as exc:
+            raise ValueError(f"{spec.label}: {exc}") from exc
+        if '"' in text:
+            raise ValueError(f'{spec.label} cannot contain a double quote (")')
+        if spec.maximum is not None and len(text) > spec.maximum:
+            raise ValueError(f"{spec.label} is at most {spec.maximum} characters")
+        return text
+    if kind == "schedstart":
+        return _sched_start(value, spec.label)
+    if kind == "schedrepeat":
+        return _sched_repeat(value, spec.label)
+    if kind == "syspolicy":
+        if not re.fullmatch(r"__[A-Za-z0-9_]{1,60}", value):
+            raise ValueError(f"{spec.label} is a system policy's name, such as __ethpm_link_flap")
+        return value
     if kind == "vrf":
         if value == DEFAULT_VRF:
             if not spec.optional:

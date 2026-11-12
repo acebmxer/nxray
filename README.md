@@ -27,7 +27,8 @@ ports on or off and edit their descriptions (one at a time or several at once), 
 VLANs on ports, set up private VLANs (primary, isolated and community, with host and
 promiscuous ports), turn UDLD on per port and see its neighbors, set the VTP mode, domain
 and version, set up 802.1X sign-in on ports and see the devices signed in, measure delay,
-jitter and loss from the switch with IP SLA entries and see their results, set a port's speed, MTU, FEC, flow control, storm control and
+jitter and loss from the switch with IP SLA entries and see their results, choose which
+problems shut a port down (errdisable) and which let it come back by itself, set a port's speed, MTU, FEC, flow control, storm control and
 layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
 and IPv6 addresses, make VRFs and move interfaces between them, add static routes, run OSPF,
@@ -41,7 +42,8 @@ class-maps and policy-maps, set each port's priority flow control and read its p
 counters, see the control-plane policing (CoPP) policy with what each class passed and
 dropped, set the switch's hostname, banner,
 clock and NTP, DNS, logging and
-SNMP and read its log, make and apply IPv4, IPv6 and MAC ACLs, object groups
+SNMP and read its log, have the switch run jobs on a schedule (such as a nightly copy of its
+configuration) and act on events with EEM applets, send its messages with Smart Call Home, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
 the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
 switch's configuration, compare them and roll back to one, restart the switch,
@@ -196,8 +198,17 @@ default: *(built)*.
     **IP SLA**: entries that measure from the switch (ping, UDP echo and
     jitter, TCP connect, DNS, HTTP), their schedules, reactions and results.
     *(built; needs the broad role or a stored admin login)*
+    **Errdisable**: which causes shut a port down and which recover by themselves, the
+    recovery interval, the ports err-disabled now. *(built; needs the broad role or a
+    stored admin login)*
 17. **Switch admin**: hostname, clock and NTP, DNS, logging and a viewer for
-    the switch's own log, SNMP, banner. *(built)*
+    the switch's own log, SNMP, banner. *(built)* **Scheduler**: jobs from a
+    menu of commands, their schedules and log. *(built; needs the broad role or
+    a stored admin login)* **EEM**: applets with their events and actions,
+    environment variables, the system policies. *(built; needs the stored admin
+    login)* **Smart Call Home**: contact details, destination profiles, the
+    transport, a test message. *(built; needs the broad role or a stored admin
+    login)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,
     VLAN access maps, TCAM regions), port security, DHCP snooping and relay,
     dynamic ARP inspection, IP Source Guard, an activity log of who changed

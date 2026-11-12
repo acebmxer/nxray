@@ -55,6 +55,7 @@ SITE = ProtocolSite(
     check_place=check_monitor_place,
     build=build_monitor_change,
     send=_send,
+    stored_login=True,
 )
 
 

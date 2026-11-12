@@ -57,6 +57,7 @@ SITE = ProtocolSite(
     build=build_dot1x_change,
     send=_send,
     scroll_tables=True,
+    stored_login=True,
 )
 
 

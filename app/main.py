@@ -32,10 +32,13 @@ from app.routes import (
     activity,
     alerts,
     auth,
+    callhome,
     config_page,
     copp,
     dashboard,
     dot1x,
+    eem,
+    errdisable,
     features,
     health,
     history,
@@ -51,6 +54,7 @@ from app.routes import (
     protocols,
     qos,
     routing,
+    scheduler,
     security,
     settings_page,
     spanning_tree,
@@ -221,6 +225,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(udld.router)
     app.include_router(vtp.router)
     app.include_router(dot1x.router)
+    app.include_router(errdisable.router)
+    app.include_router(callhome.router)
+    app.include_router(scheduler.router)
+    app.include_router(eem.router)
     app.include_router(ip_sla.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)

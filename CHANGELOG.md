@@ -11,6 +11,44 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage EEM applets from the web interface (#72).** The new **EEM** page (under Switch)
+  lists the applets with their event and actions, the environment variables, the
+  switch's own system policies and the recent EEM events. It makes and deletes applets
+  (an applet may override a system policy), and sets an applet's description, its event
+  (a command typed, a log message, a timer, a part put in or taken out, a temperature,
+  fan or memory alarm, a module, a tracked object, a counter, storm control, or none) and
+  its actions (log a message, send an SNMP trap, run the command typed, do what the
+  system policy does, change a counter, restart the switch, or run a command). The
+  commands an applet runs come from a fixed list: save the configuration, copy it to a
+  bootflash file, turn a port off or on, clear a port's counters, or run a show command
+  from a list; nothing is typed. An applet's commands run as the switch's admin, so EEM
+  changes need the stored admin login. Each change shows its lines and asks first. Some
+  lines were tried on a switch; the rest are from Cisco's guide.
+- **Manage the scheduler from the web interface (#73).** The new **Scheduler** page (under
+  Switch) makes jobs from the same fixed list of commands (for example a nightly copy of
+  the configuration to bootflash) and schedules that run them every day, week or month,
+  once, or again and again; it lists each job's commands, each schedule's time, last run
+  and results, and the log of what the jobs printed. A job is made once with all its
+  commands, as the switch takes them only then. It needs the scheduler feature (Features
+  page). Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login; with the broad role the switch refuses the copy to bootflash and
+  clearing counters. The lines and show output were tried on a switch.
+- **Manage Smart Call Home from the web interface (#77).** The new **Call Home** page
+  (under Switch) shows whether Call Home is on, the contact details, how messages are sent
+  and every destination profile. It sets the contact email, phone, street address and
+  contract, customer and site IDs, the switch priority, holding back repeated messages
+  and the regular inventory, turns Call Home on or off and sends a test message; it sets
+  the mail servers, the from and reply-to addresses, the web VRF and proxy; and it makes,
+  changes and deletes destination profiles (format, email and web addresses, lowest
+  level, largest message, alert groups). Each change shows its lines and asks first. It
+  works with the broad role or a stored admin login. The contact, profile and transport
+  lines were tried on a switch; turning it on and the test message were not.
+- **Manage errdisable detection and recovery from the web interface (#87).** The new
+  **Errdisable** page (under Configure) lists every cause with whether the switch detects
+  it and recovers from it by itself, the recovery interval, and the ports err-disabled now
+  with the reason. It turns recovery on or off per cause, sets the interval and turns
+  detection on or off per cause. Each change shows its lines and asks first. It works with
+  the broad role or a stored admin login. The recovery lines were tried on a switch.
 - **Manage IP SLA from the web interface (#71).** The new **IP SLA** page (under Configure)
   makes IP SLA entries that measure from the switch: ping, UDP echo, UDP jitter (with an
   optional voice codec), TCP connect, DNS lookup and HTTP get, each with its frequency,
@@ -137,6 +175,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Pages that need every configuration command work with the admin login stored
+  (#92).** With **Limited role, and store the switch admin login**, the Monitor sessions,
+  QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X and IP SLA pages offered
+  their changes but sent them with NXray's own account, whose limited rules have none for
+  them, so the switch refused them. They now send their changes with the stored admin
+  login in that mode; they still read the switch with NXray's account.
 - **The Ports page keeps its room for the side panel again (#91).** On a screen 1700px
   or wider, the front panel picture and the port table stretched to the right edge, so
   a port's side panel covered their right end. They again stop short of the panel's

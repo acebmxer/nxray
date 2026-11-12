@@ -1,0 +1,216 @@
+{
+ "TABLE_eem": {
+  "ROW_eem": [
+   {
+    "event_name": "__BootupPortLoopback",
+    "event_description": "Do CallHome, log error, disable ports on failure. Port disable cmd:diagnostic internal action port-error-disable module <module> port <port>",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__L2ACLRedirect",
+    "event_description": "Do CallHome, log error and disable further HM testing on affected ports after 10 consecutive failures of GOLD \"L2ACLRedirect\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__PortLoopback",
+    "event_description": "Do CallHome, log error and disable further HM testing on affected ports after 10 consecutive failures of GOLD \"PortLoopback\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__act2",
+    "event_description": "Do CallHome, log error and disable further HM testing after 1 failure of  GOLD \"ACT2\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__asic_register_check",
+    "event_description": "Do CallHome, log error and disable further HM testing for that ASIC device/instance after 20 consecutive failures of GOLD  \"ASICRegisterCheck\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__asicmem",
+    "event_description": "Do CallHome and log error when GOLD \"AsicMemory\" test fails",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__bootflash",
+    "event_description": "Do CallHome and log error after 5 consecutive failures of GOLD \"BootFlash\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__console",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of  GOLD \"Console\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__ethpm_debug_1",
+    "event_description": "Action: none",
+    "event_overridable": "Yes",
+    "event_type": "0x1320c"
+   },
+   {
+    "event_name": "__ethpm_debug_2",
+    "event_description": "Action: none",
+    "event_overridable": "Yes",
+    "event_type": "0x1320d"
+   },
+   {
+    "event_name": "__ethpm_debug_3",
+    "event_description": "Action: none",
+    "event_overridable": "Yes",
+    "event_type": "0x1320e"
+   },
+   {
+    "event_name": "__ethpm_debug_4",
+    "event_description": "Action: none",
+    "event_overridable": "Yes",
+    "event_type": "0x1320f"
+   },
+   {
+    "event_name": "__ethpm_link_flap",
+    "event_description": "More than 30 link flaps in 420 seconds interval. Action: Error Disable the port",
+    "event_overridable": "Yes",
+    "event_type": "0x13201"
+   },
+   {
+    "event_name": "__ethpm_reinit_no_flap",
+    "event_description": "More than 30 reinits in 420 seconds interval. Action: Error Disable the port",
+    "event_overridable": "Yes",
+    "event_type": "0x13219"
+   },
+   {
+    "event_name": "__fpgareg",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of  GOLD \"FpgaRegTest\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__gold_obfl",
+    "event_description": "Do CallHome log error, and disable further HMtesting when GOLD \"OBFL\" test fails",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__lcm_module_failure",
+    "event_description": "Power-cycle 2 times then power-down",
+    "event_overridable": "Yes",
+    "event_type": "0x1901"
+   },
+   {
+    "event_name": "__mce",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of  GOLD \"Mce\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__nvram",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of  GOLD \"NVRAM\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__pcie",
+    "event_description": "Do CallHome and log error when GOLD \"Pcie\" test fails",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__pfm_fanabsent_any_singlefan",
+    "event_description": "syslog if any fanabsent for 180 minute(s)",
+    "event_overridable": "Yes",
+    "event_type": "0x1802"
+   },
+   {
+    "event_name": "__pfm_fanabsent_multi_fan",
+    "event_description": "Shutdown if multiple fans are together absent for 2 minute(s)",
+    "event_overridable": "Yes",
+    "event_type": "0x1802"
+   },
+   {
+    "event_name": "__pfm_fanbad_any_singlefan",
+    "event_description": "Syslog when fan goes bad ",
+    "event_overridable": "Yes",
+    "event_type": "0x1803"
+   },
+   {
+    "event_name": "__pfm_fanbad_multi_fan",
+    "event_description": "Shutdown if multiple fan goes bad ",
+    "event_overridable": "Yes",
+    "event_type": "0x1803"
+   },
+   {
+    "event_name": "__pfm_oppositefandir",
+    "event_description": "Generate a syslog",
+    "event_overridable": "Yes",
+    "event_type": "0x1807"
+   },
+   {
+    "event_name": "__pfm_power_over_budget",
+    "event_description": "Syslog warning for insufficient power overbudget",
+    "event_overridable": "Yes",
+    "event_type": "0x1806"
+   },
+   {
+    "event_name": "__pfm_tempev_major",
+    "event_description": "TempSensor Major Threshold.  Action: Shutdown",
+    "event_overridable": "Yes",
+    "event_type": "0x1805"
+   },
+   {
+    "event_name": "__pfm_tempev_minor",
+    "event_description": "TempSensor Minor Threshold.  Action: Syslog.",
+    "event_overridable": "Yes",
+    "event_type": "0x1805"
+   },
+   {
+    "event_name": "__primary_bootrom",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of GOLD \"PrimaryBootROM\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__real_time_clock",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of GOLD \"RealTimeClock\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__secondary_bootrom",
+    "event_description": "Do CallHome, log error and disable further HM testing after 20 consecutive failures of GOLD \"SecondaryBootROM\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__syslog_trigger_default",
+    "event_description": "Default policy for trigger based logging",
+    "event_overridable": "Yes",
+    "event_type": "0x2101"
+   },
+   {
+    "event_name": "__system_mgmt_bus",
+    "event_description": "Do CallHome, log error and disable further HM testing for that FAN or PowerSupply after 20 consecutive failures of GOLD \"SystemMgmtBus\" test",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__usb",
+    "event_description": "Do CallHome and log error when GOLD \"USB\" test fails",
+    "event_overridable": "Yes",
+    "event_type": "0x1c301"
+   },
+   {
+    "event_name": "__xbm_linkflap_policy",
+    "event_description": "More than 30 link flaps in 420 seconds interval. Action: Bring down FM, if more than one FM present else bring down LC",
+    "event_overridable": "Yes",
+    "event_type": "0x1701"
+   }
+  ]
+ }
+}

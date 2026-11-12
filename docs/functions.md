@@ -65,6 +65,11 @@ prose columns; those are a reviewer's job.
 | Read VTP (the status, the ports taking part, the message counters) or change it: the VTP mode, domain, version and password, VTP on a port | `app/vtp.py` (`load_vtp_page`, `build_vtp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vtp` |
 | Read 802.1X (the switch-wide state, the ports set up for it, the devices signed in) or change it: the RADIUS server groups and switch-wide lines, a port's port control, host mode, MAC authentication bypass, timers and retries | `app/dot1x.py` (`load_dot1x_page`, `build_dot1x_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_dot1x` |
 | Read IP SLA (the entries, their latest results, schedules and reactions) or change it: what an entry measures and its timing, packet, label and history settings, its schedule, its reactions and reaction trigger | `app/ip_sla.py` (`load_ip_sla_page`, `build_ip_sla_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ip_sla` |
+| Read errdisable (the causes the switch detects and recovers from, the recovery interval, the ports err-disabled now) or change it: recovery for a cause, the interval, detection for a cause | `app/errdisable.py` (`load_errdisable_page`, `build_errdisable_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_errdisable` |
+| Read Call Home (on or off, the contact details, the transport, the destination profiles) or change it: the contact lines, the mail server, proxy and VRF, a profile's format, addresses, level and alert groups, Call Home on or off, a test message | `app/callhome.py` (`load_callhome_page`, `build_callhome_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_callhome` |
+| Read the scheduler (jobs, schedules, the log) or change it: make a job from the command menu, a schedule's jobs and time, the log size | `app/scheduler.py` (`load_scheduler_page`, `build_scheduler_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_scheduler` |
+| Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
+| Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
 | Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
@@ -627,7 +632,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
 | `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
 | `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
-| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
+| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends (with the stored admin login, for a site marked `stored_login` on a switch in the stored mode) and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
 | `check_vpc_place` | `(page, ident) -> None` | Refuses a port-channel the switch lacks (naming it would make one) and a second vPC domain | the vPC `ProtocolSite` | v0.2.1 |
 | `render_vpc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the vPC page, with a message | `vpc_page`, `switch_save` | v0.2.1 |
@@ -664,6 +669,22 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_ip_sla_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the IP SLA page, with a message | `ip_sla_page`, `switch_save` | v0.2.1 |
 | `ip_sla_page` | `(request, username) -> Response` | `GET /ip-sla`: the IP SLA entries with their results, schedules and reactions, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `ip_sla_change` | `(request, username, form) -> Response` | `POST /ip-sla/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_errdisable_place` | `(page, ident) -> None` | Nothing: the page's only place is the switch | the Errdisable `ProtocolSite` | v0.2.1 |
+| `render_errdisable_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Errdisable page, with a message | `errdisable_page`, `switch_save` | v0.2.1 |
+| `errdisable_page` | `(request, username) -> Response` | `GET /errdisable`: the detection and recovery tables and the err-disabled ports, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `errdisable_change` | `(request, username, form) -> Response` | `POST /errdisable/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_callhome_place` | `(page, ident) -> None` | Nothing: a new profile name makes a new profile | the Call Home `ProtocolSite` | v0.2.1 |
+| `render_callhome_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Call Home page, with a message | `callhome_page`, `switch_save` | v0.2.1 |
+| `callhome_page` | `(request, username) -> Response` | `GET /callhome`: Call Home's state, contact details, transport and destination profiles, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `callhome_change` | `(request, username, form) -> Response` | `POST /callhome/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_scheduler_place` | `(page, ident) -> None` | Nothing: a new job or schedule name makes a new one | the Scheduler `ProtocolSite` | v0.2.1 |
+| `render_scheduler_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Scheduler page, with a message | `scheduler_page`, `switch_save` | v0.2.1 |
+| `scheduler_page` | `(request, username) -> Response` | `GET /scheduler`: the jobs, schedules and log, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `scheduler_change` | `(request, username, form) -> Response` | `POST /scheduler/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_eem_place` | `(page, ident) -> None` | Refuses a system policy the switch does not have | the EEM `ProtocolSite` | v0.2.1 |
+| `render_eem_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the EEM page, with a message | `eem_page`, `switch_save` | v0.2.1 |
+| `eem_page` | `(request, username) -> Response` | `GET /eem`: the applets, variables, system policies and recent events, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `eem_change` | `(request, username, form) -> Response` | `POST /eem/change`: one change, after a confirm page; needs the stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1356,6 +1377,53 @@ would take them out silently.
 | `parse_ip_sla` | `(bodies, config=None) -> ProtocolView` | The page from `show ip sla configuration`, `show ip sla statistics details` and the configuration text: a place per entry, schedule and set of reactions, and the table of entries with their latest results | `IP_SLA.parse`, `load_ip_sla_page` | v0.2.1 |
 | `load_ip_sla_page` | `(client) -> IpSlaPage` | One request for the features and VRFs; while sla sender is on, one for the entries and results and the configuration text | `routes/ip_sla` | v0.2.1 |
 | `build_ip_sla_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the IP SLA page | `NxapiClient.configure_ip_sla`, `routes/ip_sla` | v0.2.1 |
+
+## `app/errdisable.py` — errdisable: detection, recovery and the err-disabled ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `recovery_interval` | `(body) -> str` | The recovery interval in seconds from `show errdisable recovery` (the row that carries `time_interval`); "" when none does | `parse_errdisable` | v0.2.1 |
+| `parse_err_disabled` | `(text_out) -> list[tuple[str, str, str]]` | The ports in `show interface status err-disabled`: port, description and reason, split at the status word | `parse_errdisable` | v0.2.1 |
+| `parse_errdisable` | `(bodies, ports_text="") -> ProtocolView` | The page: the switch's place (interval, causes it recovers from), the err-disabled ports, and every cause with detection and recovery on or off | `load_errdisable_page` | v0.2.1 |
+| `load_errdisable_page` | `(client) -> ErrdisablePage` | One request for the detection and recovery tables; one for the err-disabled ports' text | `routes/errdisable` | v0.2.1 |
+| `build_errdisable_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Errdisable page | `NxapiClient.configure_errdisable`, `routes/errdisable` | v0.2.1 |
+
+## `app/callhome.py` — Smart Call Home: contact details, transport, destination profiles
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_label_lines` | `(text_out) -> list[tuple[str, str]]` | Every `label:value` line of a Call Home show command, in order | `parse_callhome` | v0.2.1 |
+| `parse_profiles` | `(text_out) -> list[Profile]` | Every profile in `show callhome destination-profile` with its values and its email, web and alert-group lists | `parse_callhome` | v0.2.1 |
+| `config_lines` | `(config) -> list[str]` | The lines inside `callhome` in `show running-config callhome`, stripped | `parse_callhome` | v0.2.1 |
+| `parse_callhome` | `(status, profiles_text, transport, config="") -> ProtocolView` | The page: Call Home's place (on or off, contact details), the transport, a place per destination profile, the mail servers | `load_callhome_page` | v0.2.1 |
+| `load_callhome_page` | `(client) -> CallhomePage` | One request for the VRFs; then the four Call Home texts | `routes/callhome` | v0.2.1 |
+| `build_callhome_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Call Home page | `NxapiClient.configure_callhome`, `routes/callhome` | v0.2.1 |
+
+## `app/command_menu.py` — the commands a scheduler job or an EEM applet may run
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `menu_lines` | `(entry, port="", file="", show="") -> list[str]` | The command lines of one menu entry, from checked values; ValueError for a value it lacks or an entry not on the menu | `build_scheduler_change`, `build_eem_change` | v0.2.1 |
+| `port_and_channel_names` | `(brief) -> list[str]` | Every front port and port-channel in `show interface brief`, switched or routed | `load_scheduler_page`, `load_eem_page` | v0.2.1 |
+
+## `app/scheduler.py` — the scheduler: jobs, schedules and their log
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_jobs` | `(config) -> dict[str, list[str]]` | Each job's lines in `show scheduler config` | `parse_scheduler` | v0.2.1 |
+| `parse_scheduler` | `(bodies) -> ProtocolView` | The page from `show scheduler config`, `schedule` and `logfile`: the log size, a place per job and schedule (time, last run, each job's result), the log table | `SCHEDULER.parse`, `load_scheduler_page` | v0.2.1 |
+| `load_scheduler_page` | `(client) -> SchedulerPage` | One request for the feature and the ports; while scheduler is on, one for the configuration, schedules and log | `routes/scheduler` | v0.2.1 |
+| `build_scheduler_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Scheduler page; making a job turns the picked menu entries into its lines, all in one request | `NxapiClient.configure_scheduler`, `routes/scheduler` | v0.2.1 |
+
+## `app/eem.py` — EEM: applets, environment variables, system policies, recent events
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_eem_config` | `(config) -> tuple[list[Applet], list[tuple[str, str]]]` | The applets (with their lines) and environment variables in `show running-config eem` | `parse_eem` | v0.2.1 |
+| `parse_history` | `(history) -> list[tuple[str, ...]]` | The rows of `show event manager history events`, newest first, the last 10 | `parse_eem` | v0.2.1 |
+| `parse_eem` | `(bodies, config) -> ProtocolView` | The page: a place per applet and variable, the recent events and the system policies | `load_eem_page` | v0.2.1 |
+| `load_eem_page` | `(client) -> EemPage` | One request for the ports, system policies and event history; the configuration as text | `routes/eem` | v0.2.1 |
+| `build_eem_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the EEM page; a picked command becomes its `action ... cli` lines (labels n.1, n.2... for one of several lines) | `NxapiClient.configure_eem`, `routes/eem` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

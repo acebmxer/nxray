@@ -55,6 +55,7 @@ SITE = ProtocolSite(
     build=build_pfc_change,
     send=_send,
     scroll_tables=True,
+    stored_login=True,
 )
 
 

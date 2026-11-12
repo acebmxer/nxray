@@ -69,6 +69,7 @@ SITE = ProtocolSite(
     check_place=check_private_vlan_place,
     build=build_private_vlan_change,
     send=_send,
+    stored_login=True,
 )
 
 

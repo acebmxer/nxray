@@ -41,8 +41,10 @@
     </label>
     <p class="hint">
       The same rules as the limited role. NXray keeps the switch admin login
-      typed below, encrypted like its own account's password, and adds new rules
-      itself after an update. Tradeoff: a stolen NXray database then exposes the
+      typed below, encrypted like its own account's password, adds new rules
+      itself after an update, and sends with it the changes of the pages that need
+      every configuration command (EEM, Scheduler, QoS and the like). Tradeoff: a
+      stolen NXray database then exposes the
       switch's real admin login, not only the low-privilege account.
     </p>
   </fieldset>
@@ -313,7 +315,9 @@
     {% elif connection.role_mode == "stored" %}
     The role has the listed rules only, and the switch admin login
     ({{ connection.admin_user }}) is stored, encrypted. NXray adds new rules
-    itself after an update; a stolen NXray database would expose that login.
+    itself after an update, and sends with it the changes of the pages that need
+    every configuration command (EEM, Scheduler, QoS and the like); a stolen NXray
+    database would expose that login.
     {% else %}
     The role has the listed rules only. After an update that adds rules, an
     admin presses Update the port list; the banner says when.

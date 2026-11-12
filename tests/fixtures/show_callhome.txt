@@ -1,0 +1,15 @@
+callhome disabled
+Callhome Information:
+contact person name(sysContact):
+contact person's email:noc@example.net
+contact person's phone number:+15550100
+street addr:1 Example Street
+site id:rack-4
+customer id:C-1001
+contract id:K-2002
+switch priority:7
+duplicate message throttling : enabled
+periodic inventory : enabled
+periodic inventory time-period : 7 days
+periodic inventory timeofday : 08:00 (HH:MM)
+Distribution : Disabled

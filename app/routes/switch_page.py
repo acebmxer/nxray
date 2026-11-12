@@ -34,9 +34,12 @@ from app.port_changes import (
     missing_changes,
 )
 from app.role_upgrade import SETUP_LOCK
+from app.routes.callhome import render_callhome_page
 from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
 from app.routes.dot1x import render_dot1x_page
+from app.routes.eem import render_eem_page
+from app.routes.errdisable import render_errdisable_page
 from app.routes.features import render_features_page
 from app.routes.ip_sla import render_ip_sla_page
 from app.routes.monitor import render_monitor_page
@@ -48,6 +51,7 @@ from app.routes.private_vlans import render_private_vlans_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.qos import render_qos_page
 from app.routes.routing import render_routing_page
+from app.routes.scheduler import render_scheduler_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
@@ -200,9 +204,10 @@ def _mode_words(mode: str) -> str:
         )
     if mode == ROLE_STORED:
         return (
-            "The role has the listed rules only. The switch admin login is stored, encrypted, "
-            "and NXray adds new rules itself after an update. A copy of NXray's database "
-            "exposes that login, not only the low-privilege account."
+            "The role has the listed rules only. The switch admin login is stored, encrypted; "
+            "NXray adds new rules itself after an update and sends with it the changes of the "
+            "pages that need every configuration command (EEM, Scheduler, QoS and the like). A "
+            "copy of NXray's database exposes that login, not only the low-privilege account."
         )
     return (
         "The role has the listed rules only. After an update that adds rules, an admin "
@@ -963,7 +968,7 @@ def switch_save(
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
-    ``vtp``, ``dot1x``, ``ip-sla``,
+    ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1025,6 +1030,14 @@ def switch_save(
             return render_vtp_page(request, username, error=error, notice=notice)
         if back == "dot1x":
             return render_dot1x_page(request, username, error=error, notice=notice)
+        if back == "errdisable":
+            return render_errdisable_page(request, username, error=error, notice=notice)
+        if back == "callhome":
+            return render_callhome_page(request, username, error=error, notice=notice)
+        if back == "scheduler":
+            return render_scheduler_page(request, username, error=error, notice=notice)
+        if back == "eem":
+            return render_eem_page(request, username, error=error, notice=notice)
         if back == "ip-sla":
             return render_ip_sla_page(request, username, error=error, notice=notice)
         if back == "switch-admin":

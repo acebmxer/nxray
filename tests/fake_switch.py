@@ -424,6 +424,16 @@ class FakeSwitch:
     # 11"). Needs ``feature sla sender``, as on cisco-25gb, which also showed: an entry's
     # measuring line is taken once, and a scheduled entry refuses every change.
     sla_lines: list[str] = field(default_factory=list)
+    # Errdisable, Call Home, scheduler and EEM lines as entered ("errdisable recovery cause
+    # udld", "callhome ; email-contact noc@example.net", "scheduler job name nightly ;
+    # copy running-config startup-config", "event manager applet hello ; action 1 syslog
+    # msg hi"). The scheduler lines need ``feature scheduler``, and a job's name typed
+    # again is refused, as on cisco-25gb. ``show running-config callhome`` and ``show
+    # running-config eem`` print them; the other show commands answer from fixtures.
+    errdisable_lines: list[str] = field(default_factory=list)
+    callhome_lines: list[str] = field(default_factory=list)
+    scheduler_lines: list[str] = field(default_factory=list)
+    eem_lines: list[str] = field(default_factory=list)
     # VXLAN lines as entered, the same way ("interface nve1 ; source-interface loopback0",
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
@@ -760,6 +770,88 @@ class FakeSwitch:
         out += [line for line in self.sla_lines if " ; " not in line]
         return "\n".join(out) + "\n"
 
+    _ERRDISABLE = re.compile(
+        r"(?:no )?errdisable (?:recovery cause \S+|detect cause \S+)"
+        r"|errdisable recovery interval \d+"
+    )
+
+    def _automation(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """An errdisable, Call Home, scheduler or EEM line, or None when ``cmd`` is not one."""
+        kind = context[0] if context else None
+        place = context[1] if context else ""
+        if kind in ("callhome", "sched-job", "sched-schedule", "eem-applet"):
+            if cmd == "exit":
+                return _ok(ident, None), None
+            path = f"{place} ; {cmd}"
+        elif self._ERRDISABLE.fullmatch(cmd) or cmd == "callhome":
+            path = cmd
+        elif re.fullmatch(
+            r"(?:no )?scheduler (?:job|schedule) name \S+|scheduler logfile size \d+", cmd
+        ):
+            path = cmd
+        elif re.fullmatch(
+            r"(?:no )?event manager (?:applet \S+(?: override \S+)?|environment \S+.*)", cmd
+        ):
+            path = cmd
+        else:
+            return None
+        top = path.split(" ; ")[0]
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if top.startswith(("scheduler", "no scheduler")) and not self._feature_on("scheduler"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if cmd == "callhome":
+            return _ok(ident, None), ("callhome", "callhome")
+        if re.fullmatch(r"scheduler job name \S+", cmd):
+            if any(line.startswith(cmd + " ; ") or line == cmd for line in self.scheduler_lines):
+                return _error(ident, "Error: job exists\n"), context
+            self.scheduler_lines.append(cmd)
+            return _ok(ident, None), ("sched-job", cmd)
+        if re.fullmatch(r"scheduler schedule name \S+", cmd):
+            if cmd not in self.scheduler_lines:
+                self.scheduler_lines.append(cmd)
+            return _ok(ident, None), ("sched-schedule", cmd)
+        if re.fullmatch(r"event manager applet \S+(?: override \S+)?", cmd):
+            if cmd not in self.eem_lines:
+                self.eem_lines.append(cmd)
+            return _ok(ident, None), ("eem-applet", cmd)
+        if kind == "sched-job":
+            self.scheduler_lines.append(path)  # a job keeps every line, repeats too
+            return _ok(ident, None), context
+        kept = {
+            "errdisable": self.errdisable_lines,
+            "callhome": self.callhome_lines,
+            "scheduler": self.scheduler_lines,
+            "no scheduler": self.scheduler_lines,
+            "event manager": self.eem_lines,
+            "no event manager": self.eem_lines,
+            "no errdisable": self.errdisable_lines,
+        }
+        target = next(lines for word, lines in kept.items() if top.startswith(word))
+        self._record(path, target)
+        return _ok(ident, None), context
+
+    def callhome_config_text(self) -> str:
+        """``show running-config callhome``: the lines typed inside ``callhome``."""
+        inner = [line.split(" ; ", 1)[1] for line in self.callhome_lines if " ; " in line]
+        return "\nversion 9.3(16)\ncallhome\n" + "".join(f"  {line}\n" for line in inner)
+
+    def eem_config_text(self) -> str:
+        """``show running-config eem``: each applet with its lines, then the variables."""
+        out = ["", "version 9.3(16)"]
+        for line in self.eem_lines:
+            if " ; " not in line and line.startswith("event manager applet "):
+                out.append(line)
+                out += [
+                    "  " + inner.split(" ; ", 1)[1]
+                    for inner in self.eem_lines
+                    if inner.startswith(line + " ; ")
+                ]
+        out += [line for line in self.eem_lines if line.startswith("event manager environment ")]
+        return "\n".join(out) + "\n"
+
     _PVLAN_VLAN = re.compile(
         r"(?:no )?private-vlan (?:primary|isolated|community)"
         r"|private-vlan association(?: remove)? [0-9,-]+|no private-vlan association"
@@ -1039,6 +1131,12 @@ class FakeSwitch:
                 if not self._feature_on(feature):
                     return _error(ident, "% Invalid command at '^' marker.\n")
                 return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if cmd == "show running-config callhome":
+            return {"jsonrpc": "2.0", "result": {"msg": self.callhome_config_text()}, "id": ident}
+        if cmd == "show running-config eem":
+            return {"jsonrpc": "2.0", "result": {"msg": self.eem_config_text()}, "id": ident}
+        if cmd.startswith(("show callhome", "show interface status err-disabled")):
+            return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
         if cmd == "show running-config sla sender":
             if not self._feature_on("sla_sender"):
                 return _error(ident, "% Invalid command at '^' marker.\n")
@@ -1436,6 +1534,8 @@ class FakeSwitch:
             return _ok(ident, self.bodies[cmd]), context
         if cmd.startswith("show "):
             return self._show(cmd, ident), context
+        if automation_reply := self._automation(user, is_admin, cmd, ident, context):
+            return automation_reply
         if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
@@ -2439,6 +2539,18 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith("show scheduler"):
+            # As on cisco-25gb: refused while the scheduler is off; empty with nothing made.
+            if not self._feature_on("scheduler"):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.bodies.get(cmd))
+        if cmd in (
+            "show errdisable detect",
+            "show errdisable recovery",
+            "show event manager system-policy",
+            "show event manager history events",
+        ):
+            return _ok(ident, load_fixture(cmd.replace(" ", "_")))
         if cmd.startswith("show ip sla") and not self._feature_on("sla_sender"):
             # As on cisco-25gb: the IP SLA show commands exist only while sla sender is on.
             return _error(ident, "% Invalid command\n")

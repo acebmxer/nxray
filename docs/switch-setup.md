@@ -1086,6 +1086,70 @@ running-config sla sender` (as text), and types `ip sla <n>` followed by one of 
 refuses every change to an entry while it is scheduled. Tried on cisco-25gb (NX-OS 9.3(16))
 with throwaway entries.
 
+**With the admin login stored.** The pages that need the broad role or a stored admin
+login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
+SLA, Errdisable, Scheduler, Call Home and EEM) send their changes with the stored admin
+login when the switch is in that mode: NXray's own account then has only the limited
+role's rules, which have none for them. They still read the switch with NXray's account.
+
+**Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role. It reads `show
+errdisable detect`, `show errdisable recovery` and `show interface status err-disabled` (as
+text), and types `errdisable recovery cause <cause>`, `errdisable recovery interval
+<30-65535>` and `errdisable detect cause <cause>`, with the `no` forms of the cause lines
+(the interval has none: set 300). On cisco-25gb (NX-OS 9.3(16)) the switch took the causes
+`bpduguard`, `failed-port-state`, `link-flap`, `loopback`, `psecure-violation`,
+`security-violation`, `storm-control`, `udld` and `vpc-peerlink` and refused `miscabling`
+(listed in Cisco's guide), so the page offers those and `all`. Not tried: `recovery cause
+all`, `detect cause acl-exception` and the `no` forms of the detect lines.
+
+**Scheduler.** The **Scheduler** page needs no rule of its own, so it works with the broad
+role and with a stored admin login, and is off with the limited role. It needs `feature
+scheduler` (Features page): the scheduler's show commands are refused before. It reads
+`show feature`, `show interface brief`, `show scheduler config`, `show scheduler schedule`
+and `show scheduler logfile`, and types `scheduler job name <name>` with the job's lines,
+`no scheduler job name <name>`, `scheduler schedule name <name>` with `job name <job>` and
+one of `time daily`, `time weekly`, `time monthly` or `time start ... [repeat ...]` (and `no
+time`), `no scheduler schedule name <name>` (after `no time`: the switch refuses to delete
+a schedule whose time is set), and `scheduler logfile size <16-1024>`. A job's lines come
+from a fixed menu, never typed: save the configuration, copy it to a bootflash file, turn
+a port off or on, clear a port's counters, or run a show command from a list. The switch
+takes a job's lines only when the job is made ("Error: job exists" after), so a job is
+changed by making it again. A job runs as the account that made it: with the broad role
+the switch refuses the copy to bootflash and clearing counters, which then need the stored
+admin login. Tried on cisco-25gb with throwaway jobs and schedules; not tried: `scheduler
+logfile size`.
+
+**EEM.** The **EEM** page changes EEM only with a stored admin login: an applet's `action
+... cli` lines run as the switch's admin, whoever made the applet, so the broad role denies
+`event manager` (see How much access NXray's account gets). It reads `show interface
+brief`, `show event manager system-policy`, `show event manager history events` and `show
+running-config eem` (as text), and types `event manager applet <name> [override
+<system-policy>]` with its `description`, `event ...` and `action <label> ...` lines (and
+their `no` forms), `no event manager applet <name>`, and `event manager environment <name>
+"<value>"` (and `no event manager environment <name>`). An applet's commands come from the
+same fixed menu as the scheduler's, one `action <label> cli <command>` line each (a command
+of several lines takes the labels `<n>.1`, `<n>.2`, ...). Tried on cisco-25gb: an applet with
+a description, an `event cli match`, `syslog`, `cli` and `event-default` actions, and an
+environment variable (its value must be quoted). The other event and action lines are from
+Cisco's NX-OS 9.3 guide and were not tried; timers and `event none` need `feature evmed`.
+
+**Call Home.** The **Call Home** page needs no rule of its own, so it works with the broad
+role and with a stored admin login, and is off with the limited role. It reads `show vrf`,
+`show callhome`, `show callhome destination-profile`, `show callhome transport` and `show
+running-config callhome` (all as text), and types, inside `callhome`: `email-contact`,
+`phone-contact`, `streetaddress`, `contract-id`, `customer-id`, `site-id` (each removed with
+its bare `no` form), `switch-priority`, `duplicate-message throttle`, `periodic-inventory
+notification`, `enable`, `callhome test`, `destination-profile <name>` with `format`,
+`transport-method`, `index <n> email-addr`, `index <n> http`, `message-level`,
+`message-size` and `alert-group`, `no destination-profile <name>`, and the `transport email
+mail-server|from|reply-to` and `transport http use-vrf|proxy server|proxy enable` lines.
+Tried on cisco-25gb with throwaway values: the contact, profile and transport lines and
+their `no` forms (the switch wants an index on every email or web address, and
+`transport-method` adds a method). Not tried: `enable` (it starts sending), the test
+message, `switch-priority`, `duplicate-message throttle`, `periodic-inventory` and `transport
+http proxy enable`.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type
@@ -1245,7 +1309,7 @@ names) is the same in every mode, so the account stays limited to those ports.
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
 | **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
-| **Limited role, admin login stored** | The listed rules, as in the limited mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
+| **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
 denies are numbered right after the permit for `conf t ; *`, and the other

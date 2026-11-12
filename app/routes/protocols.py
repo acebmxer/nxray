@@ -12,6 +12,7 @@ page shows them before anything is sent.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -43,7 +44,13 @@ from app.routing_protocols import (
 )
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
-from app.switch_connection import SwitchConnection, set_unsaved_changes
+from app.switch_connection import (
+    ROLE_STORED,
+    DecryptionError,
+    SwitchConnection,
+    set_unsaved_changes,
+    stored_admin_login,
+)
 from app.switch_setup import read_switch, scrub_secrets
 
 router = APIRouter()
@@ -150,6 +157,10 @@ class ProtocolSite:
     # A page that only shows (Control-plane policing): no line about changes at the
     # bottom, and its route has no change form to post to.
     read_only: bool = False
+    # A page whose changes need every configuration command (the broad role or the
+    # stored admin login): in the stored mode NXray's own account has only the limited
+    # role's rules, so the change is sent with the stored admin login instead (#92).
+    stored_login: bool = False
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:
@@ -355,8 +366,23 @@ def site_change(
             kept,
             not_config=not change.config,
         )
+    sender = target
+    if site.stored_login and connection.role_mode == ROLE_STORED:
+        try:
+            with open_db(request.app.state.settings.db_path) as conn:
+                login = stored_admin_login(
+                    conn, connection.id, request.app.state.settings.secret_key
+                )
+        except DecryptionError:
+            login = None
+        if login is None:
+            return refuse(
+                "Not changed: the stored admin login is missing or cannot be read. An NXray "
+                "admin types it again on the Switch page."
+            )
+        sender = dataclasses.replace(target, username=login[0], password=login[1])
     try:
-        with NxapiClient(target, transport=request.app.state.nxapi_transport) as client:
+        with NxapiClient(sender, transport=request.app.state.nxapi_transport) as client:
             site.send(client, change, ident, values)
     except NxapiError as exc:
         refused = change_refused(exc, target)

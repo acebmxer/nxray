@@ -186,6 +186,31 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def errdisable_changes_enabled(self) -> bool:
+        """True when NXray may change errdisable detection and recovery: the same as for
+        monitor sessions (the broad role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def callhome_changes_enabled(self) -> bool:
+        """True when NXray may change Call Home: the same as for monitor sessions (the broad
+        role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def scheduler_changes_enabled(self) -> bool:
+        """True when NXray may make scheduler jobs and schedules: the same as for monitor
+        sessions (the broad role or the stored admin login). A job runs as the account
+        that made it, so with the broad role its commands keep that role's limits."""
+        return self.monitor_changes_enabled
+
+    @property
+    def eem_changes_enabled(self) -> bool:
+        """True when NXray may change EEM: with the stored admin login only. An applet's
+        commands run as the switch's admin, so the broad role denies EEM."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
     def vrf_changes_enabled(self) -> bool:
         """True once that role includes the VRF rules (role version 8 or later)."""
         return self.changes_enabled and self.role_version >= 8

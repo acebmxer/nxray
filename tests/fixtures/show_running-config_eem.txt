@@ -1,0 +1,15 @@
+
+!Command: show running-config eem
+!Running configuration last done at: Wed Nov 11 22:39:21 2026
+!Time: Wed Nov 11 22:42:03 2026
+
+version 9.3(16) Bios:version 07.71 
+event manager applet hello
+  action 1 syslog priority notifications msg applet-ran
+event manager applet port-watch
+  event syslog pattern "LINK-3-UPDOWN"
+  action 1.0 cli conf t
+  action 2.0 cli interface Ethernet1/5
+  action 3.0 syslog priority notifications msg port-down
+  action 4.0 event-default
+event manager environment notify "noc@example.net"

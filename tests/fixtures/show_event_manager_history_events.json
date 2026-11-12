@@ -1,0 +1,3 @@
+{
+ "history-events": "Event ID Time of Event        Event Type                   Slot       Policies\n1        05/05/2023 07:51:36  cli                          active(1)  write_memory\n1        04/24/2025 12:16:12  temperature                  active(1)  __pfm_tempev_minor\n2        04/25/2025 04:05:31  temperature                  active(1)  __pfm_tempev_minor\n2        10/26/2026 22:14:11  cli                          active(1)  __syslog_trigger_default\n1        10/26/2026 22:14:11  cli                          active(1)  __syslog_trigger_default\n"
+}

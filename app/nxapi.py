@@ -1718,6 +1718,86 @@ class NxapiClient:
         change = build_ip_sla_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_errdisable(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Errdisable page: the causes it detects and recovers from, or
+        the recovery interval.
+
+        The lines are built from the page's description and the checked values
+        (``errdisable.build_errdisable_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Errdisable description uses this module's checks.
+        from app.errdisable import build_errdisable_change
+
+        change = build_errdisable_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_callhome(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Call Home page: the contact details, the transport, a
+        destination profile, Call Home on or off, or a test message.
+
+        The lines are built from the page's description and the checked values
+        (``callhome.build_callhome_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Call Home description uses this module's checks.
+        from app.callhome import build_callhome_change
+
+        change = build_callhome_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_scheduler(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Scheduler page: the log size, a job (made with its commands from
+        the menu) or a schedule.
+
+        The lines are built from the page's description and the checked values
+        (``scheduler.build_scheduler_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Scheduler description uses this module's checks.
+        from app.scheduler import build_scheduler_change
+
+        change = build_scheduler_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_eem(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the EEM page: an applet (its event, actions and description) or an
+        environment variable.
+
+        The lines are built from the page's description and the checked values
+        (``eem.build_eem_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the EEM description uses this module's checks.
+        from app.eem import build_eem_change
+
+        change = build_eem_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_switch_admin(
         self,
         scope: str,

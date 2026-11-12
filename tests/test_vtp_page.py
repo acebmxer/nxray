@@ -212,3 +212,26 @@ def test_a_port_the_switch_lacks_is_refused(logged_in: TestClient, enabled: Fake
     )
     assert refused.status_code == 400
     assert _config_requests(enabled) == []
+
+
+def test_with_the_admin_login_stored_the_change_is_sent_with_it(
+    logged_in: TestClient, on: FakeSwitch, settings: Settings
+) -> None:
+    """In the stored mode NXray's own account has only the limited rules, which have none
+    for VTP: the change goes with the stored admin login (#92)."""
+    logged_in.post(
+        "/switch/enable-changes",
+        data={
+            "csrf": _csrf(logged_in, "/switch"),
+            "admin_user": "admin",
+            "admin_password": ADMIN_PASSWORD,
+            "ssh_port": "22",
+            "role_mode": "stored",
+            "confirm_save": "yes",
+        },
+    )
+    _db(settings, f"UPDATE switch_connection SET paused_until = {time.time() - 1}")
+    on.requests.clear()
+    done = _change(logged_in, scope="vtp_switch", setting="domain", action="set", v_name="lab")
+    assert done.status_code == 200, _text(done.text)
+    assert _config_requests(on) == [["vtp domain lab"]]

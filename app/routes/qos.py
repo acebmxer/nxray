@@ -64,6 +64,7 @@ SITE = ProtocolSite(
     build=build_qos_change,
     send=_send,
     scroll_tables=True,
+    stored_login=True,
 )
 
 

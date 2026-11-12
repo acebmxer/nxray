@@ -55,6 +55,7 @@ SITE = ProtocolSite(
     check_place=check_ip_sla_place,
     build=build_ip_sla_change,
     send=_send,
+    stored_login=True,
 )
 
 

@@ -53,6 +53,7 @@ SITE = ProtocolSite(
     check_place=check_vtp_place,
     build=build_vtp_change,
     send=_send,
+    stored_login=True,
 )
 
 

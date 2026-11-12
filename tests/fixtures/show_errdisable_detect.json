@@ -1,0 +1,162 @@
+{
+ "TABLE_errdisable": {
+  "ROW_errdisable": [
+   {
+    "cause": "link-flap",
+    "state": "enabled"
+   },
+   {
+    "cause": "udld",
+    "state": "enabled"
+   },
+   {
+    "cause": "bpduguard",
+    "state": "enabled"
+   },
+   {
+    "cause": "loopback",
+    "state": "enabled"
+   },
+   {
+    "cause": "storm-ctrl",
+    "state": "enabled"
+   },
+   {
+    "cause": "dhcp-rate-lim",
+    "state": "enabled"
+   },
+   {
+    "cause": "arp-inspection",
+    "state": "enabled"
+   },
+   {
+    "cause": "sec-violation",
+    "state": "enabled"
+   },
+   {
+    "cause": "psec-violation",
+    "state": "enabled"
+   },
+   {
+    "cause": "vpc-peerlink",
+    "state": "enabled"
+   },
+   {
+    "cause": "port-state-failed",
+    "state": "enabled"
+   },
+   {
+    "cause": "event-debug",
+    "state": "enabled"
+   },
+   {
+    "cause": "event-debug1",
+    "state": "enabled"
+   },
+   {
+    "cause": "event-debug2",
+    "state": "enabled"
+   },
+   {
+    "cause": "event-debug3",
+    "state": "enabled"
+   },
+   {
+    "cause": "event-debug4",
+    "state": "enabled"
+   },
+   {
+    "cause": "ip-addr-conflict",
+    "state": "enabled"
+   },
+   {
+    "cause": "ipqos-mgr-error",
+    "state": "enabled"
+   },
+   {
+    "cause": "ethpm",
+    "state": "enabled"
+   },
+   {
+    "cause": "ipqos-compat-failure",
+    "state": "enabled"
+   },
+   {
+    "cause": "syserr based",
+    "state": "enabled"
+   },
+   {
+    "cause": "CMM miscabling",
+    "state": "enabled"
+   },
+   {
+    "cause": "md-mismatch",
+    "state": "enabled"
+   },
+   {
+    "cause": "hw-res-exhaustion",
+    "state": "enabled"
+   },
+   {
+    "cause": "reinit-no-flap",
+    "state": "enabled"
+   },
+   {
+    "cause": "dcbx-error",
+    "state": "enabled"
+   },
+   {
+    "cause": "vlan-membership-error",
+    "state": "enabled"
+   },
+   {
+    "cause": "pause-rate-limit",
+    "state": "enabled"
+   },
+   {
+    "cause": "inline-power",
+    "state": "enabled"
+   },
+   {
+    "cause": "sw-failure",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-session-down",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-discovery-timeout",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-capabilties-conflict",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-miswired",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-link-fault",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-dying-gasp",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-critical-event",
+    "state": "enabled"
+   },
+   {
+    "cause": "elo-threshold-breached",
+    "state": "enabled"
+   },
+   {
+    "cause": "unknown enum:<38>",
+    "state": "enabled"
+   }
+  ]
+ }
+}

@@ -1,0 +1,31 @@
+
+!Command: show running-config callhome
+!Running configuration last done at: Wed Nov 11 22:37:11 2026
+!Time: Wed Nov 11 22:37:32 2026
+
+version 9.3(16) Bios:version 07.71 
+callhome
+  contract-id K-2002
+  customer-id C-1001
+  site-id rack-4
+  email-contact noc@example.net
+  phone-contact +15550100
+  streetaddress 1 Example Street
+  destination-profile noc
+  destination-profile noc format full-txt
+  destination-profile noc transport-method http
+  destination-profile noc message-size 100000
+  destination-profile noc message-level 5
+  destination-profile noc index 1 email-addr noc@example.net
+  destination-profile noc index 2 email-addr team@example.net
+  destination-profile noc index 1 http https://example.net/callhome
+  destination-profile noc alert-group environmental
+  destination-profile noc alert-group syslog-group-port
+  transport email from noc@example.net
+  transport email reply-to noc@example.net
+  transport email mail-server 192.0.2.10 port 25 priority 60 use-vrf management
+  transport http use-vrf management
+  transport http proxy server 192.0.2.11 port 8080
+
+
+
