@@ -1,0 +1,26 @@
+{
+  "ptp-end": "PTP-END",
+  "TABLE_ptp": {
+    "ROW_ptp": {
+      "interface_name": "Eth1/5",
+      "tx-announce-pkts": "12",
+      "rx-announce-pkts": "0",
+      "tx-sync-pkts": "48",
+      "rx-sync-pkts": "0",
+      "tx-follow-up-pkts": "48",
+      "rx-follow-up-pkts": "0",
+      "tx-delay-req-pkts": "0",
+      "rx-delay-req-pkts": "3",
+      "tx-delay-resp-pkts": "3",
+      "rx-delay-resp-pkts": "0",
+      "tx-pdelay-req-pkts": "0",
+      "rx-pdelay-req-pkts": "0",
+      "tx-pdelay-resp-pkts": "0",
+      "rx-pdelay-resp-pkts": "0",
+      "tx-pdelay-follow-up-pkts": "0",
+      "rx-pdelay-follow-up-pkts": "0",
+      "tx-mgmt-pkts": "0",
+      "rx-mgmt-pkts": "0"
+    }
+  }
+}

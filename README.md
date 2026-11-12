@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-3633%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3672%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -45,7 +45,7 @@ counters, see the control-plane policing (CoPP) policy with what each class pass
 dropped, set the switch's hostname, banner,
 clock and NTP, DNS, logging and
 SNMP and read its log, have the switch run jobs on a schedule (such as a nightly copy of its
-configuration) and act on events with EEM applets, send its messages with Smart Call Home, make and apply IPv4, IPv6 and MAC ACLs, object groups
+configuration) and act on events with EEM applets, send its messages with Smart Call Home, take precise time from a PTP grandmaster and pass it on, stream its data to a collector with telemetry, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
 the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
 switch's configuration, compare them and roll back to one, restart the switch,
@@ -221,6 +221,11 @@ default: *(built)*.
     environment variables, the system policies. *(built; needs the stored admin
     login)* **Smart Call Home**: contact details, destination profiles, the
     transport, a test message. *(built; needs the broad role or a stored admin
+    login)* **PTP**: the clock's source, domain, priorities and notifications,
+    and PTP per port with its role, transmission and intervals, with the
+    clock's and ports' state. *(built; needs the broad role or a stored admin
+    login)* **Telemetry**: destination groups, sensor groups and subscriptions,
+    with each collector's state. *(built; needs the broad role or a stored admin
     login)*
 18. **Security and config tools**: ACLs (IPv4, IPv6 and MAC, object groups,
     VLAN access maps, TCAM regions), port security, DHCP snooping and relay,

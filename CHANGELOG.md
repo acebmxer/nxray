@@ -11,6 +11,24 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage streaming telemetry from the web interface (#75).** The new **Telemetry** page
+  (under Switch) lists the destination profile, every destination group with its
+  collectors, every sensor group with its data source and paths, and every subscription
+  with its groups and intervals, plus each collector's connection state and how much data
+  the switch has collected. It sets the profile's VRF, compression, source interface,
+  retry buffer and node ID, makes and deletes destination groups, sensor groups and
+  subscriptions, adds and removes collectors (address, port, protocol and encoding),
+  paths (DME or YANG, or a show command for NX-API) and a subscription's groups. Each
+  change shows its lines and asks first. It works with the broad role or a stored admin
+  login. The lines and show output were tried on a switch.
+- **Manage PTP from the web interface (#74).** The new **PTP** page (under Switch) shows
+  the switch's PTP clock (its state, domain, source address, priorities, the grandmaster,
+  the offset and path delay) and every port that runs PTP with its state and message
+  counters. It sets the clock's source address, domain, priorities, correction and path
+  delay limits and notifications, and on a port turns PTP on or off and sets its role,
+  multicast or unicast transmission, PTP VLAN, message intervals and unicast masters and
+  slaves. Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login. The lines and show output were tried on a switch.
 - **Manage static MPLS from the web interface (#78).** The new **MPLS** page (under
   Configure) shows whether the MPLS feature set and static MPLS are on, the label range,
   the interfaces with MPLS forwarding, the static bindings and the labels in use. It turns

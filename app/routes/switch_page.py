@@ -53,12 +53,14 @@ from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
 from app.routes.private_vlans import render_private_vlans_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
+from app.routes.ptp import render_ptp_page
 from app.routes.qos import render_qos_page
 from app.routes.routing import render_routing_page
 from app.routes.scheduler import render_scheduler_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
+from app.routes.telemetry import render_telemetry_page
 from app.routes.traffic import render_traffic_page
 from app.routes.tunnels import render_tunnels_page
 from app.routes.udld import render_udld_page
@@ -978,7 +980,7 @@ def switch_save(
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
-    ``loopbacks``, ``tunnels``, ``pbr``, ``itd``, ``mpls``,
+    ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``pbr``, ``itd``, ``mpls``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1054,6 +1056,10 @@ def switch_save(
             return render_loopbacks_page(request, username, error=error, notice=notice)
         if back == "tunnels":
             return render_tunnels_page(request, username, error=error, notice=notice)
+        if back == "ptp":
+            return render_ptp_page(request, username, error=error, notice=notice)
+        if back == "telemetry":
+            return render_telemetry_page(request, username, error=error, notice=notice)
         if back == "pbr":
             return render_pbr_page(request, username, error=error, notice=notice)
         if back == "itd":

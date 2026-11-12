@@ -1,0 +1,27 @@
+{
+  "retry_buffer_size": 10485760,
+  "event_retry_bytes": 0,
+  "timer_retry_bytes": 0,
+  "retries_sent": 0,
+  "retries_dropped": 0,
+  "TABLE_transport_info": {
+    "ROW_transport_info": [
+      {
+        "session_idx": 1,
+        "ip_address": "192.0.2.81",
+        "port": 50002,
+        "encoding_type": "JSON",
+        "transport_type": "HTTP",
+        "transport_status": "Idle"
+      },
+      {
+        "session_idx": 0,
+        "ip_address": "192.0.2.80",
+        "port": 50001,
+        "encoding_type": "GPB",
+        "transport_type": "gRPC",
+        "transport_status": "Connected"
+      }
+    ]
+  }
+}

@@ -126,6 +126,8 @@ KINDS = (
     "ifaddr6",  # an IPv6 address on an interface with its prefix length: 2001:db8::1/128
     "ipv4list",  # one or more IPv4 addresses, written with spaces: 192.0.2.1 192.0.2.2
     "ipv6list",  # one or more IPv6 addresses, written with spaces
+    "telpath",  # a telemetry sensor path or condition: printable, no spaces, not starting
+    # with a double quote: sys/intf or eq(ethpmPhysIf.operSt,"down")
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -735,6 +737,13 @@ def check_value(spec: Field, raw: str) -> str:
         if spec.maximum is not None and len(text) > spec.maximum:
             raise ValueError(f"{spec.label} is at most {spec.maximum} characters")
         return text
+    if kind == "telpath":
+        longest = spec.maximum or 512
+        if not _TELPATH.fullmatch(value) or len(value) > longest:
+            raise ValueError(
+                f"{spec.label} is up to {longest} characters without spaces, such as sys/intf"
+            )
+        return value
     if kind == "schedstart":
         return _sched_start(value, spec.label)
     if kind == "schedrepeat":
@@ -777,6 +786,9 @@ def check_value(spec: Field, raw: str) -> str:
 
 
 _FORBIDDEN = re.compile(r"[;?\r\n]")
+# A telemetry path or condition: printable ASCII without spaces; a double quote first
+# would make the switch read it as a quoted string.
+_TELPATH = re.compile(r"^[\x21\x23-\x7e][\x21-\x7e]*$")
 
 # ---- templates -------------------------------------------------------------------
 

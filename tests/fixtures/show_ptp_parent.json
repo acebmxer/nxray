@@ -1,0 +1,12 @@
+{
+  "clock-id": "00:00:5e:ff:fe:00:53:01",
+  "port-num": 0,
+  "obs-parent-offset": "N/A",
+  "obs-parent-clk-phase-chg": "N/A",
+  "gm-id": "00:00:5e:ff:fe:00:53:01",
+  "gm-class": 248,
+  "gm-accuracy": 254,
+  "gm-scaled-log-variance": 65535,
+  "gm-priority1": 100,
+  "gm-priority2": 255
+}

@@ -1088,8 +1088,8 @@ with throwaway entries.
 
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
-SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD
-and MPLS) send their changes with the stored admin
+SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD,
+MPLS, PTP and Telemetry) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1216,6 +1216,42 @@ their `no` forms (the switch wants an index on every email or web address, and
 `transport-method` adds a method). Not tried: `enable` (it starts sending), the test
 message, `switch-priority`, `duplicate-message throttle`, `periodic-inventory` and `transport
 http proxy enable`.
+
+**PTP.** The **PTP** page (under Switch) needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role. It needs
+`feature ptp` (Features page). It reads `show feature`, `show interface brief`, `show vrf`,
+`show ptp clock`, `show ptp parent`, `show ptp time-property`, `show ptp brief`, `show ptp
+counters all` and `show running-config` (as text, with the role's `show running-config`
+rule; without it the forms start empty), and types `ptp source <IPv4> [vrf <vrf>]`, `ptp
+domain <0-127>`, `ptp priority1|priority2 <0-255>`, `ptp correction-range <10-1000000000>`,
+`ptp correction-range logging`, `ptp mean-path-delay <10-1000000000>`, `ptp management`,
+`ptp notification type parent-change|gm-change`, `ptp notification type high-correction
+interval <1-300>|immediate`, `ptp notification type port-state-change [category
+all|master-slave-only] interval <1-300>|immediate`, and on a front port `ptp`, `ptp
+transmission multicast|unicast`, `ptp role master|slave|dynamic`, `ptp vlan <n>`, `ptp
+announce interval <0-4>`, `ptp announce timeout <2-4>`, `ptp sync interval <-3-1>`, `ptp
+delay-request minimum interval <-1-6>`, `ptp ucast-source <IPv4>`, `ptp master <IPv4>` and
+`ptp slave <IPv4>`, each with its `no` form (which names the value; `no ptp` takes every
+PTP line off a port). The switch refuses a port's `ptp` until the source address is set,
+and removing the source while a port runs PTP. Tried on cisco-25gb (NX-OS 9.3(16)) with
+throwaway values on an empty port.
+
+**Telemetry.** The **Telemetry** page (under Switch) needs no rule of its own, so it works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature telemetry` (Features page). It reads `show feature`, `show vrf`, `show
+telemetry transport`, `show telemetry control database sensor-groups`, `show telemetry
+data collector brief` and `show running-config` (as text, with the role's `show
+running-config` rule; without it only the collectors and running sensor groups are
+listed), and types, inside `telemetry`: `destination-profile` with `use-vrf`,
+`use-compression gzip`, `source-interface`, `use-retry size <10-1500>` and `use-nodeid`;
+`destination-group <n>` with `ip address|ipv6 address <address> port <port> protocol
+gRPC|HTTP|UDP encoding GPB|JSON` and `use-vrf`; `sensor-group <n>` with `data-source
+DME|NX-API|YANG|NATIVE` and `path <path> [depth <0-32>|unbounded] [query-condition <q>]
+[filter-condition <f>]` (an NX-API path is one show command in double quotes, without `|`,
+`<` or `>`); `subscription <n>` with `dst-grp <n>` and `snsr-grp <n> sample-interval
+<ms>`; each with its `no` form, and `no destination-group|sensor-group|subscription <n>`.
+The switch takes gRPC with GPB only and HTTP with JSON only. Tried on cisco-25gb (NX-OS
+9.3(16)) with throwaway groups.
 
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).

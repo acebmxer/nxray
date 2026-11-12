@@ -115,8 +115,9 @@ To check, read-only:
 ### NetFlow
 
 NetFlow (Flexible NetFlow) is another way to measure, but which Nexus 9000
-models support it varies (mainly the -EX and -FX ones). NXray uses sFlow,
-below, which the 9000s have.
+models support it varies (mainly the -EX and -FX ones). An N9K-C92160YC-X
+refuses `feature netflow` ("Netflow feature is not supported on the platform").
+NXray uses sFlow, below, which the 9000s have.
 
 To check, read-only:
 

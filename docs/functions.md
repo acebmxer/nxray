@@ -71,6 +71,8 @@ prose columns; those are a reviewer's job.
 | Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
 | Read the loopbacks (state, description, VRF, addresses) or change them: make or delete one, its description, main and extra IPv4 addresses, IPv6 addresses, VRF, on or off | `app/loopbacks.py` (`load_loopback_page`, `build_loopback_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_loopbacks` |
 | Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
+| Read PTP (the clock's state, the grandmaster, each PTP port's state and counters) or change it: the clock's source address, domain, priorities, limits and notifications; on a port PTP on or off, transmission, role, VLAN, message intervals, unicast source, masters and slaves | `app/ptp.py` (`load_ptp_page`, `build_ptp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ptp` |
+| Read telemetry (destination profile, destination groups with their collectors' state, sensor groups, subscriptions, data collected) or change it: the profile's settings, make or delete a group or subscription, collectors, paths and show-command paths, a subscription's groups and interval | `app/telemetry.py` (`load_telemetry_page`, `build_telemetry_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_telemetry` |
 | Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
 | Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
 | Read static MPLS (the feature set, label range, interfaces with MPLS, bindings, labels in use) or change it: install and turn on MPLS and static MPLS, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
@@ -699,6 +701,14 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_tunnels_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tunnels page, with a message | `tunnels_page`, `switch_save` | v0.2.1 |
 | `tunnels_page` | `(request, username) -> Response` | `GET /tunnels`: every tunnel with its state, mode, ends and address, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `tunnels_change` | `(request, username, form) -> Response` | `POST /tunnels/change`: one change, after a confirm page; needs the stored admin login (sent with that login) | router | v0.2.1 |
+| `check_ptp_place` | `(page, ident) -> None` | Refuses a port that is not one of the switch's front ports | the PTP `ProtocolSite` | v0.2.1 |
+| `render_ptp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the PTP page, with a message | `ptp_page`, `switch_save` | v0.2.1 |
+| `ptp_page` | `(request, username) -> Response` | `GET /ptp`: the PTP clock and the ports that run PTP, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `ptp_change` | `(request, username, form) -> Response` | `POST /ptp/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_telemetry_place` | `(page, ident) -> None` | Nothing: naming a group the switch lacks makes it, as the switch does | the Telemetry `ProtocolSite` | v0.2.1 |
+| `render_telemetry_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Telemetry page, with a message | `telemetry_page`, `switch_save` | v0.2.1 |
+| `telemetry_page` | `(request, username) -> Response` | `GET /telemetry`: the telemetry groups and collectors, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `telemetry_change` | `(request, username, form) -> Response` | `POST /telemetry/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
 | `render_pbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Policy-based routing page, with a message | `pbr_page`, `switch_save` | v0.2.1 |
 | `pbr_page` | `(request, username) -> Response` | `GET /pbr`: the route-maps, applied policies and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `pbr_change` | `(request, username, form) -> Response` | `POST /pbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
@@ -1500,6 +1510,24 @@ would take them out silently.
 | `load_mpls_page` | `(client) -> MplsPage` | One request for the features and layer 3 interfaces, the feature set as text; while static MPLS is on, `show mpls switching` and the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
 | `check_mpls_place` | `(page, ident) -> None` | Refuses interface and binding changes while static MPLS is off, and an interface the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
 | `build_mpls_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the MPLS page | `NxapiClient.configure_mpls`, `routes/mpls` | v0.2.1 |
+
+## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_ptp_config` | `(config) -> PtpConfig` | The `ptp` lines at the top of `show running-config`, and each `interface` block's `ptp` lines | `parse_ptp_view` | v0.2.1 |
+| `parse_ptp_view` | `(clock, parent, prop, brief, counters, config) -> ProtocolView` | The page: the clock with its state and current settings, one place per PTP port with its settings, and a table of each port's state and message counters | `load_ptp_page` | v0.2.1 |
+| `load_ptp_page` | `(client) -> PtpPage` | One request for the feature, ports and VRFs; while ptp is on, one for the clock and ports and the configuration text (a role that may not read the text gives empty forms) | `routes/ptp` | v0.2.1 |
+| `build_ptp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the PTP page | `NxapiClient.configure_ptp`, `routes/ptp` | v0.2.1 |
+
+## `app/telemetry.py` — streaming telemetry: destination groups, sensor groups, subscriptions
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_telemetry_config` | `(config) -> TelemetryConfig` | The `telemetry` block of `show running-config`: the destination profile's lines and each group's and subscription's, by number | `parse_telemetry_view` | v0.2.1 |
+| `parse_telemetry_view` | `(transport, sensor_groups, collectors, config) -> ProtocolView` | The page: the profile, a place per destination group, sensor group and subscription with their current values, and tables of the collectors with their state, the running sensor groups and the data collected (the collectors from the transport list alone when the text is missing) | `load_telemetry_page` | v0.2.1 |
+| `load_telemetry_page` | `(client) -> TelemetryPage` | One request for the feature and VRFs; while telemetry is on, one for the collectors, sensor groups and data collectors, and the configuration text | `routes/telemetry` | v0.2.1 |
+| `build_telemetry_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Telemetry page | `NxapiClient.configure_telemetry`, `routes/telemetry` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

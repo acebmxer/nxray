@@ -57,6 +57,16 @@ the admin login changes them. ``show running-config`` prints each as ``interface
 with its lines, and ``show interface brief`` lists it as ``Tunnel1`` with a state: Cisco's
 guide prints no output for it, so that row's shape is a guess.
 
+PTP lines live in ``ptp_lines`` ("ptp domain 5", "interface Ethernet1/5 ; ptp vlan 250"),
+only while ``feature ptp`` is on. As on cisco-25gb: a line replaces the one it would set
+again, a ``no`` form names the value, a port's ``ptp`` is refused until ``ptp source`` is set,
+``no ptp source`` is refused while a port runs PTP, ``ptp role slave`` needs unicast, and
+``no ptp`` on a port takes every PTP line off it. Telemetry lives in ``telemetry_parts``
+(``destination-group 1`` -> its lines), typed inside ``telemetry``, only while ``feature
+telemetry`` is on; as there, gRPC takes GPB only and HTTP JSON only. ``show
+running-config`` prints both; the ``show ptp`` and ``show telemetry`` commands answer from
+``bodies``.
+
 VRFs made on the switch live in ``vrfs`` (default and management are always
 there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
 entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
@@ -489,6 +499,9 @@ class FakeSwitch:
     mpls_set: str = "uninstalled"
     # ITD services whose counters are on (``itd statistics <service>``).
     itd_counting: set[str] = field(default_factory=set)
+    # PTP lines and telemetry parts (see the module notes).
+    ptp_lines: list[str] = field(default_factory=list)
+    telemetry_parts: dict[str, list[str]] = field(default_factory=dict)
     # Tunnel interfaces (see the module notes): number -> the lines inside it.
     tunnels: dict[int, list[str]] = field(default_factory=dict)
     # Switch admin (see the module notes).
@@ -1253,6 +1266,8 @@ class FakeSwitch:
         for place, lines in places.items():
             out += [place, *(f"  {line}" for line in lines)]
         out += self.tunnel_config()
+        out += self.ptp_config()
+        out += self.telemetry_config()
         out += _nested(
             [p for p in self.protocol_lines if p.startswith(("itd ", "mpls "))]
             + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
@@ -1478,6 +1493,175 @@ class FakeSwitch:
             "fcoe                  1         uninstalled\n"
             f"mpls                  4         {self.mpls_set}\n"
         )
+
+    @staticmethod
+    def _ptp_key(line: str) -> str:
+        """What a PTP line sets, so setting it again replaces it: "ptp domain 5" ->
+        "ptp domain"; unicast peers ("ptp master A") are each their own."""
+        if match := re.match(r"ptp notification type \S+", line):
+            return match.group(0)
+        if line in ("ptp", "ptp management", "ptp correction-range logging"):
+            return line
+        if line.startswith(("ptp master ", "ptp slave ")):
+            return line
+        if line.startswith("ptp source "):
+            return "ptp source"
+        return line.rsplit(" ", 1)[0]
+
+    def _ptp_ports(self) -> set[str]:
+        return {line.split(" ; ")[0] for line in self.ptp_lines if line.endswith(" ; ptp")}
+
+    def _ptp(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A PTP line, at the top or inside a port, or None when ``cmd`` is not one."""
+        undo = cmd.startswith("no ")
+        line = cmd.removeprefix("no ")
+        if line != "ptp" and not line.startswith("ptp "):
+            return None
+        interface = context[1] if context and context[0] == "interface" else None
+        if interface is None and line == "ptp":
+            return None  # "ptp" alone is a port line
+        if not self._feature_on("ptp"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        path = f"interface {interface} ; {cmd}" if interface else cmd
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        place = f"interface {interface} ; " if interface else ""
+        if interface is None and line.startswith("ptp source") and undo and self._ptp_ports():
+            return _error(
+                ident,
+                "ERROR: There are still interfaces with PTP enabled. PTP source IP cannot be set "
+                "to zero\n\n",
+            ), context
+        if interface and line == "ptp" and not undo:
+            if not any(kept.startswith("ptp source ") for kept in self.ptp_lines):
+                return _error(
+                    ident,
+                    "ERROR: PTP cannot be enabled on interface as PTP Source IP is not "
+                    "configured\n\n",
+                ), context
+        if interface and line == "ptp role slave" and not undo:
+            if f"{place}ptp transmission unicast" not in self.ptp_lines:
+                return _error(
+                    ident,
+                    "ERROR: PTP slave-only role is not supported with PTP multicast "
+                    "transmission\n\n",
+                ), context
+        if interface and line == "ptp" and undo:
+            self.ptp_lines[:] = [kept for kept in self.ptp_lines if not kept.startswith(place)]
+            return _ok(ident, None), context
+        if line == "ptp management":
+            self.ptp_lines[:] = [kept for kept in self.ptp_lines if kept != "no ptp management"]
+            if undo:
+                self.ptp_lines.append("no ptp management")
+            return _ok(ident, None), context
+        key = self._ptp_key(line)
+        same = [
+            kept
+            for kept in self.ptp_lines
+            if kept.startswith(place)
+            and " ; " not in kept.removeprefix(place)
+            and self._ptp_key(kept.removeprefix(place)) == key
+        ]
+        if undo:
+            if not same:
+                return _error(ident, "% Not configured\n"), context
+            for kept in same:
+                self.ptp_lines.remove(kept)
+            return _ok(ident, None), context
+        for kept in same:
+            self.ptp_lines.remove(kept)
+        self.ptp_lines.append(place + line)
+        return _ok(ident, None), context
+
+    def ptp_config(self) -> list[str]:
+        """The PTP lines of ``show running-config``: the switch's, then each port's."""
+        out = [line for line in self.ptp_lines if " ; " not in line]
+        ports: dict[str, list[str]] = {}
+        for line in self.ptp_lines:
+            if " ; " in line:
+                place, inner = line.split(" ; ", 1)
+                ports.setdefault(place, []).append(inner)
+        for place, inner in ports.items():
+            out += [place, *(f"  {line}" for line in inner)]
+        return out
+
+    _TELEMETRY_PART = re.compile(
+        r"destination-profile|destination-group \d+|sensor-group \d+|subscription \d+"
+    )
+    _COLLECTOR = re.compile(
+        r"ip(?:v6)? address \S+ port \d+ protocol (gRPC|HTTP|UDP) encoding (GPB|JSON)"
+    )
+
+    @staticmethod
+    def _telemetry_key(line: str) -> str:
+        """What a telemetry line sets, so setting it again replaces it."""
+        for pattern in (
+            r"ip(?:v6)? address \S+ port \d+",
+            r'path (?:"[^"]*"|\S+)',
+            r"(?:snsr-grp|dst-grp) \d+",
+        ):
+            if match := re.match(pattern, line):
+                return match.group(0)
+        return line.split(" ")[0]
+
+    def _telemetry(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """``telemetry``, its parts and their lines, or None when ``cmd`` is not one."""
+        kind = context[0] if context else None
+        if kind != "telemetry" and cmd not in ("telemetry", "no telemetry"):
+            return None
+        if not self._feature_on("telemetry"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        place = context[1] if context else ""
+        path = f"{place} ; {cmd}" if place else cmd
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if cmd == "telemetry":
+            return _ok(ident, None), ("telemetry", "telemetry")
+        if cmd == "no telemetry":
+            self.telemetry_parts.clear()
+            return _ok(ident, None), None
+        if cmd == "exit":
+            return _ok(ident, None), None
+        undo = cmd.startswith("no ")
+        line = cmd.removeprefix("no ")
+        if self._TELEMETRY_PART.fullmatch(line):
+            if undo:
+                self.telemetry_parts.pop(line, None)
+                return _ok(ident, None), ("telemetry", "telemetry")
+            self.telemetry_parts.setdefault(line, [])
+            return _ok(ident, None), ("telemetry", f"telemetry ; {line}")
+        part = place.split(" ; ")[1] if " ; " in place else ""
+        if not part:
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        lines = self.telemetry_parts[part]
+        if not undo and (collector := self._COLLECTOR.fullmatch(line)):
+            protocol, encoding = collector.groups()
+            if (protocol, encoding) in (("HTTP", "GPB"), ("gRPC", "JSON")):
+                return _error(
+                    ident,
+                    f"Telemetry transport protocol {protocol} does not support {encoding} "
+                    "encoding.\n",
+                ), context
+        key = self._telemetry_key(line)
+        same = [kept for kept in lines if self._telemetry_key(kept) == key]
+        for kept in same:
+            lines.remove(kept)
+        if not undo:
+            lines.append(line)
+        return _ok(ident, None), context
+
+    def telemetry_config(self) -> list[str]:
+        """The ``telemetry`` block of ``show running-config``."""
+        if not self._feature_on("telemetry"):
+            return []
+        out = ["telemetry"]
+        for part, lines in self.telemetry_parts.items():
+            out += [f"  {part}", *(f"    {line}" for line in lines)]
+        return out
 
     def tunnel_config(self) -> list[str]:
         """The ``interface TunnelN`` blocks of ``show running-config``."""
@@ -1849,6 +2033,10 @@ class FakeSwitch:
             return loopback_reply
         if tunnel_reply := self._tunnel(user, is_admin, cmd, ident, context):
             return tunnel_reply
+        if ptp_reply := self._ptp(user, is_admin, cmd, ident, context):
+            return ptp_reply
+        if telemetry_reply := self._telemetry(user, is_admin, cmd, ident, context):
+            return telemetry_reply
         if interface is None and (match := re.fullmatch(r"(no )?sflow (.+)", cmd)):
             rule = "conf t ; no sflow *" if match.group(1) else "conf t ; sflow *"
             if not (is_admin or self._role_allows(user, rule, None)):
@@ -2832,6 +3020,11 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith(("show ptp", "show telemetry")):
+            # As on cisco-25gb: "% Invalid command" while the feature is off.
+            if not self._feature_on(cmd.split(" ")[1]):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.bodies.get(cmd))
         if cmd.startswith("show scheduler"):
             # As on cisco-25gb: refused while the scheduler is off; empty with nothing made.
             if not self._feature_on("scheduler"):

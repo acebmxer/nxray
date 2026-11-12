@@ -266,6 +266,18 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def ptp_changes_enabled(self) -> bool:
+        """True when NXray may change PTP: the same as for monitor sessions (the broad role
+        or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def telemetry_changes_enabled(self) -> bool:
+        """True when NXray may change telemetry: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
     def tunnel_changes_enabled(self) -> bool:
         """True when NXray may change tunnel interfaces: with the stored admin login only.
         The broad role lists the interfaces it may change, and the switch refuses to list

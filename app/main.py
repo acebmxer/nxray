@@ -56,6 +56,7 @@ from app.routes import (
     preferences,
     private_vlans,
     protocols,
+    ptp,
     qos,
     routing,
     scheduler,
@@ -65,6 +66,7 @@ from app.routes import (
     switch_accounts,
     switch_admin,
     switch_page,
+    telemetry,
     traffic,
     tunnels,
     udld,
@@ -237,6 +239,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ip_sla.router)
     app.include_router(loopbacks.router)
     app.include_router(tunnels.router)
+    app.include_router(ptp.router)
+    app.include_router(telemetry.router)
     app.include_router(pbr.router)
     app.include_router(itd.router)
     app.include_router(mpls.router)

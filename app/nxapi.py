@@ -1878,6 +1878,47 @@ class NxapiClient:
         change = build_pbr_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_ptp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the PTP page: a setting of the switch's PTP clock (source address,
+        domain, priorities, limits, notifications) or of one port (PTP on or off, role,
+        transmission, VLAN, message intervals, unicast peers).
+
+        The lines are built from the page's description and the checked values
+        (``ptp.build_ptp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PTP description uses this module's checks.
+        from app.ptp import build_ptp_change
+
+        change = build_ptp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_telemetry(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Telemetry page: the destination profile, or make, change or
+        delete a destination group, sensor group or subscription.
+
+        The lines are built from the page's description and the checked values
+        (``telemetry.build_telemetry_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Telemetry description uses this module's checks.
+        from app.telemetry import build_telemetry_change
+
+        change = build_telemetry_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_tunnels(
         self,
         scope: str,
