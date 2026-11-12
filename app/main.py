@@ -43,10 +43,13 @@ from app.routes import (
     health,
     history,
     ip_sla,
+    itd,
     live,
     loopbacks,
     monitor,
+    mpls,
     neighbors,
+    pbr,
     pfc,
     port_channels,
     ports,
@@ -234,6 +237,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ip_sla.router)
     app.include_router(loopbacks.router)
     app.include_router(tunnels.router)
+    app.include_router(pbr.router)
+    app.include_router(itd.router)
+    app.include_router(mpls.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

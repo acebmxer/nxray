@@ -124,6 +124,8 @@ KINDS = (
     "syspolicy",  # an EEM system policy's name: two underscores first, __ethpm_link_flap
     "ifaddr4",  # an IPv4 address on an interface with its prefix length: 192.0.2.1/32
     "ifaddr6",  # an IPv6 address on an interface with its prefix length: 2001:db8::1/128
+    "ipv4list",  # one or more IPv4 addresses, written with spaces: 192.0.2.1 192.0.2.2
+    "ipv6list",  # one or more IPv6 addresses, written with spaces
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -741,6 +743,14 @@ def check_value(spec: Field, raw: str) -> str:
         if not re.fullmatch(r"__[A-Za-z0-9_]{1,60}", value):
             raise ValueError(f"{spec.label} is a system policy's name, such as __ethpm_link_flap")
         return value
+    if kind in ("ipv4list", "ipv6list"):
+        parts = value.replace(",", " ").split()
+        if not parts:
+            raise ValueError(f"{spec.label}: give at least one address")
+        if spec.maximum is not None and len(parts) > spec.maximum:
+            raise ValueError(f"{spec.label}: at most {spec.maximum} addresses")
+        version = 4 if kind == "ipv4list" else 6
+        return " ".join(_address(part, version, spec.label) for part in parts)
     if kind in ("ifaddr4", "ifaddr6"):
         check = validate_ip_interface if kind == "ifaddr4" else validate_ipv6_interface
         try:

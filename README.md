@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-3572%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3633%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -33,7 +33,9 @@ layer (switched or routed), split a 100G port into four, make, change and
 delete port-channels with their LACP options, make VLAN interfaces with IPv4
 and IPv6 addresses, make loopbacks with their addresses, make GRE and IP-in-IP tunnels, make VRFs and move interfaces between them, add static routes, run OSPF,
 OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
-route-maps, prefix-lists and key chains, set up spanning tree (mode, VLAN
+route-maps, prefix-lists and key chains, send chosen traffic to its own next hop
+(policy-based routing), spread traffic over servers with ITD, set up static MPLS labels,
+set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
 with EVPN (NVE interface, VNIs, route-targets), copy ports' or VLANs' traffic to a
@@ -174,7 +176,14 @@ default: *(built)*.
     VRF, on or off. *(built; needs the broad role or a stored admin login)*
     **Tunnels**: GRE and IP-in-IP tunnel interfaces with their mode, source,
     destination, VRFs and address. *(built, not yet tried on a switch; needs the
-    stored admin login)*
+    stored admin login)* **Policy-based routing**: route-maps that send matched
+    traffic to their own next hops, the interfaces they apply to, their counters.
+    *(built; needs the broad role or a stored admin login)* **ITD**: device groups
+    with nodes and health probes, services that spread traffic over them, the
+    counters. *(built; needs the broad role or a stored admin login)* **MPLS**:
+    static labels (the feature set, label range, MPLS on interfaces, bindings that
+    swap or pop a label). *(built, not yet tried on a switch; needs the broad role
+    or a stored admin login)*
 16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the

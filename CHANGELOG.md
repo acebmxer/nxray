@@ -11,6 +11,36 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage static MPLS from the web interface (#78).** The new **MPLS** page (under
+  Configure) shows whether the MPLS feature set and static MPLS are on, the label range,
+  the interfaces with MPLS forwarding, the static bindings and the labels in use. It turns
+  MPLS on step by step (install the feature set, turn it on, turn on static MPLS), sets
+  the label range, turns MPLS forwarding on or off on an interface, and adds and deletes
+  bindings that swap a label, take it off, or have a backup path. Each change shows its
+  lines and asks first. It works with the broad role or a stored admin login. The switch
+  refuses static MPLS while VXLAN is on; the page says so. MPLS Layer 3 VPNs and LDP are
+  not offered: Cisco lists neither for this switch. Built from Cisco's guide and not yet
+  tried on a switch past the feature set.
+- **Manage ITD from the web interface (#80).** The new **ITD** page (under Configure)
+  lists the device groups with their nodes and health probe, the services with their
+  state, virtual address and how they spread traffic, the nodes in service and, when
+  counting is on, what each bucket got. It makes and deletes device groups, nodes and
+  services, sets a group's probe (ping, TCP, UDP or DNS, with its timers), a node's
+  weight, standby node or hot standby, a service's device group, ingress interfaces,
+  virtual address, spreading method, what happens when a node fails, peer service, NAT
+  and access lists, turns a service off or on, and turns counting on, off or clears it.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; the broad role now allows ITD's counters, so a broad role written by an
+  older NXray needs **Update the port list** on the Switch page before counting.
+- **Manage policy-based routing from the web interface (#81).** The new **Policy-based
+  routing** page (under Configure) lists the route-maps with their entries (the ACL each
+  matches, the next hops it sets), the interfaces each route-map is applied to and, when
+  counting is on, the packets each entry sent. It adds and deletes route-map entries, sets
+  an entry's description, IPv4 or IPv6 ACL, IPv4 or IPv6 next hops (with load sharing,
+  order and drop-on-fail) or drop, turns counting on or off, deletes a route-map, and
+  applies a route-map to a VLAN interface, routed port or routed port-channel. Each change
+  shows its lines and asks first. It works with the broad role or a stored admin login.
+  The lines and show output were tried on a switch.
 - **Manage tunnel interfaces from the web interface (#79).** The new **Tunnels** page
   (under Configure) lists every GRE and IP-in-IP tunnel with whether it is up, its mode,
   source, destination, VRFs, address and MTU. It makes and deletes tunnels and sets a

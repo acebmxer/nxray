@@ -427,6 +427,13 @@
     admin login.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_itd_statistics %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed ITD's counters,
+    so the switch refuses Count the traffic and Clear the counters on the ITD page.
+    Press Update the port list to write the role again with them.
+  </p>
+  {% endif %}
   {% if connection.broad_role_without_loopbacks %}
   <p class="warning">
     NXray's broad role on the switch was written before it named the loopbacks,

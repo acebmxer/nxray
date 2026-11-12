@@ -1088,7 +1088,8 @@ with throwaway entries.
 
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
-SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks and Tunnels) send their changes with the stored admin
+SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD
+and MPLS) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1117,6 +1118,46 @@ one `tunnel mode gre ip|ipip ip|ipip decapsulate-any`, `tunnel source <address|i
 path-mtu-discovery age-timer <10-30>`, `tunnel path-mtu-discovery min-mtu <64-9192>`,
 `shutdown` and `no shutdown`, with the `no` forms. Built from Cisco's NX-OS 9.3
 Interfaces Configuration Guide and not yet tried on a switch: cisco-25gb has VXLAN on.
+
+**Policy-based routing.** The **Policy-based routing** page (under Configure) needs no
+rule of its own, so it works with the broad role and with a stored admin login, and is off
+with the limited role. It needs `feature pbr` (Features page). It reads `show route-map`,
+`show ip policy`, `show ipv6 policy` and `show route-map <name> pbr-statistics`, and types
+`route-map <name> permit|deny <n>` with `description`, `match ip address <acl>`, `match
+ipv6 address <acl>`, `set ip next-hop <addresses> [load-share] [force-order]
+[drop-on-fail]`, `set ipv6 next-hop ...` and `set interface null0` (and their `no` forms,
+the next-hop one with the whole line: its bare `no` form removes nothing), `no route-map
+<name>`, `route-map <name> pbr-statistics`, and `ip policy route-map <name>` and `ipv6
+policy route-map <name>` on a VLAN interface, routed port or routed port-channel. Tried on
+cisco-25gb (NX-OS 9.3(16)) with a throwaway route-map and VLAN interface.
+
+**ITD.** The **ITD** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It needs `feature pbr` and `feature itd`
+(Features page). It reads `show itd`, `show running-config` (as text) and `show itd
+<service> statistics`, and types `itd device-group <name>` with its `probe icmp|tcp port
+<n>|udp port <n>|dns host <name>` line (with `frequency`, `timeout`, `retry-down-count`
+and `retry-up-count`) and `node ip <address>` lines (with `weight`, `standby ip` and `mode
+hot-standby`), and `itd <service>` with `device-group`, `ingress interface`, `virtual ip`,
+`load-balance method`, `failaction`, `peer local service`, `nat destination`,
+`access-list`, `exclude access-list`, `shutdown` and `no shutdown`, each with its `no`
+form. The counters are turned on and off with `itd statistics <service>`, `no itd
+statistics <service>` and `clear itd statistics <service>`, typed outside configuration
+mode: the broad role allows them with rules 25 to 27. Tried on cisco-25gb with a
+throwaway device group and service; the counter rules were not.
+
+**MPLS.** The **MPLS** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It turns MPLS on itself, in Cisco's order:
+`install feature-set mpls`, `feature-set mpls`, `feature mpls static` (each with its `no`
+form); the switch refuses static MPLS while VXLAN (`feature nv overlay` or
+`vn-segment-vlan-based`) is on. It reads `show feature`, `show feature-set` (as text),
+`show mpls switching` and `show running-config` (as text), and types `mpls label range
+<min> <max> [static <min> <max>]`, `mpls ip forwarding` on an interface, and `mpls static
+configuration`, `address-family ipv4|ipv6 unicast`, `local-label <label> prefix <prefix>`
+with `next-hop auto-resolve out-label <n>`, `next-hop <address> out-label implicit-null`
+or `next-hop backup <interface> <address> out-label <n>`. Built from Cisco's NX-OS 9.3
+Label Switching Configuration Guide; on cisco-25gb only the feature-set lines were tried.
+MPLS Layer 3 VPNs and LDP are not offered: Cisco's guide lists L3VPN only for Nexus
+3600-R and 9500 -R line cards, and the 92160YC-X has no LDP.
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
@@ -1336,7 +1377,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1364,6 +1405,12 @@ throwaway role and account: the switch keeps `permit interface loopback0-1023` a
 line (unlike the VLAN interfaces, which it writes out one per line), takes it with no
 feature on, lets the account make, change and delete the loopbacks it names and refuses
 the others, and `no permit interface loopback0-1023` takes it out again.
+
+ITD's counters came after that (rules 25 to 27: `itd statistics *`, `no itd statistics *`
+and `clear itd statistics *`, typed outside configuration mode, so `conf t ; *` does not
+cover them). A broad role written before lacks them, and the switch refuses the ITD
+page's **Count the traffic** and **Clear the counters**: the Switch page says so on the
+**Update the port list** card, and pressing it writes the role again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

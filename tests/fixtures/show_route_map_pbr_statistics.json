@@ -1,0 +1,14 @@
+{
+  "TABLE_rmap": {
+    "ROW_rmap": {
+      "name": "pbr-web",
+      "dflt_rtg_pkt_count": "7",
+      "TABLE_pbr": {
+        "ROW_pbr": [
+          {"tag": "1", "action": "permit", "seq": "10", "pbr_pkt_count": "120"},
+          {"tag": "2", "action": "permit", "seq": "20", "pbr_pkt_count": "3"}
+        ]
+      }
+    }
+  }
+}

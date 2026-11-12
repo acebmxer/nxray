@@ -197,6 +197,26 @@ _SWITCHPORT = (
     ),
 )
 
+
+def _nested(paths: list[str]) -> list[str]:
+    """Lines kept as paths ("itd web ; device-group servers") written as the switch prints
+    them: each line under the one it was typed in, two spaces deeper."""
+    tree: dict[str, Any] = {}
+    for path in paths:
+        place = tree
+        for part in path.split(" ; "):
+            place = place.setdefault(part, {})
+    out: list[str] = []
+
+    def walk(place: dict[str, Any], depth: int) -> None:
+        for line, inner in place.items():
+            out.append("  " * depth + line)
+            walk(inner, depth + 1)
+
+    walk(tree, 0)
+    return out
+
+
 # What follows "feature" -> the name show feature uses for it.
 _FEATURE_NAMES = {info.command: name for name, info in CATALOG.items() if info.command is not None}
 
@@ -215,8 +235,14 @@ _PROTOCOL_MODES = (
     (re.compile(r"router isis \S+"), "isis"),
     (re.compile(r"route-map \S+ (?:permit|deny) \d+"), None),
     (re.compile(r"key chain \S+"), None),
+    (re.compile(r"itd device-group \S+"), "itd"),
+    (re.compile(r"itd (?!device-group |statistics )\S+"), "itd"),
+    (re.compile(r"mpls static configuration"), "mpls_static"),
 )
 _PROTOCOL_GLOBAL = (
+    # After the entries' mode: "route-map X pbr-statistics" and "no route-map X".
+    ("route-map ", None),
+    ("mpls label range ", "mpls_static"),
     ("ip prefix-list ", None),
     ("ipv6 prefix-list ", None),
     ("ip pim ", "pim"),
@@ -240,10 +266,13 @@ _PROTOCOL_INTERFACE = (
     (re.compile(r"ipv6 pim "), "pim6"),
     (re.compile(r"ip igmp "), "pim"),
     (re.compile(r"bfd(?: |$)"), "bfd"),
+    (re.compile(r"(?:ip|ipv6) policy route-map "), "pbr"),
+    (re.compile(r"mpls ip forwarding$"), "mpls_static"),
 )
 # Lines inside a protocol's mode that open a deeper mode.
 _PROTOCOL_SUBMODES = re.compile(
-    r"(?:vrf \S+|address-family .+|neighbor \S+(?: remote-as \S+)?|key \d+|template .+)"
+    r"(?:vrf \S+|address-family .+|neighbor \S+(?: remote-as \S+)?|key \d+|template .+"
+    r"|node ip \S+|local-label \d+ prefix \S+)"
 )
 # Interface lines that open a group's mode (HSRP, VRRP, VRRPv3).
 _GROUP_MODES = re.compile(r"(?:hsrp \d+(?: ipv6)?|vrrp \d+|vrrpv3 \d+ address-family ipv[46])")
@@ -456,6 +485,10 @@ class FakeSwitch:
     # "interface nve1 ; member vni 10010 ; suppress-arp", "evpn ; vni 10010 l2 ; rd auto");
     # ``show running-config vxlan`` prints them.
     vxlan_lines: list[str] = field(default_factory=list)
+    # The MPLS feature set: "uninstalled" (as on cisco-25gb), "installed" or "enabled".
+    mpls_set: str = "uninstalled"
+    # ITD services whose counters are on (``itd statistics <service>``).
+    itd_counting: set[str] = field(default_factory=set)
     # Tunnel interfaces (see the module notes): number -> the lines inside it.
     tunnels: dict[int, list[str]] = field(default_factory=dict)
     # Switch admin (see the module notes).
@@ -1151,6 +1184,8 @@ class FakeSwitch:
                 if not self._feature_on(feature):
                     return _error(ident, "% Invalid command at '^' marker.\n")
                 return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if cmd == "show feature-set":
+            return {"jsonrpc": "2.0", "result": {"msg": self.feature_set_text()}, "id": ident}
         if cmd == "show running-config callhome":
             return {"jsonrpc": "2.0", "result": {"msg": self.callhome_config_text()}, "id": ident}
         if cmd == "show running-config eem":
@@ -1218,6 +1253,10 @@ class FakeSwitch:
         for place, lines in places.items():
             out += [place, *(f"  {line}" for line in lines)]
         out += self.tunnel_config()
+        out += _nested(
+            [p for p in self.protocol_lines if p.startswith(("itd ", "mpls "))]
+            + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
+        )
         return "\n".join(out) + "\n" + self.vxlan_config()
 
     def __post_init__(self) -> None:
@@ -1379,6 +1418,66 @@ class FakeSwitch:
             lines[:] = [kept for kept in lines if not kept.startswith("ip address ")]
         lines.append(cmd)
         return _ok(ident, None), context
+
+    def _mpls_set(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """``install feature-set mpls``, ``feature-set mpls``, ``feature mpls static`` and
+        their ``no`` forms, or None. As on cisco-25gb, static MPLS is refused while
+        vn-segment-vlan-based is on; the order follows Cisco's guide."""
+        if cmd not in (
+            "install feature-set mpls",
+            "no install feature-set mpls",
+            "feature-set mpls",
+            "no feature-set mpls",
+            "feature mpls static",
+            "no feature mpls static",
+        ):
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        refused = None
+        if cmd == "install feature-set mpls":
+            self.mpls_set = "installed" if self.mpls_set == "uninstalled" else self.mpls_set
+        elif cmd == "no install feature-set mpls":
+            if self.mpls_set == "enabled":
+                refused = "Feature-set is enabled. Disable it first\n"
+            else:
+                self.mpls_set = "uninstalled"
+        elif cmd == "feature-set mpls":
+            if self.mpls_set == "uninstalled":
+                refused = "Feature-set mpls is not installed\n"
+            else:
+                self.mpls_set = "enabled"
+        elif cmd == "no feature-set mpls":
+            if self._feature_on("mpls_static"):
+                refused = "Disable the mpls features first\n"
+            elif self.mpls_set == "enabled":
+                self.mpls_set = "installed"
+        elif cmd == "feature mpls static":
+            if self.mpls_set != "enabled":
+                refused = "% Invalid command at '^' marker.\n"
+            elif self._feature_on("vnseg_vlan"):
+                refused = "Please disable the vnseg_vlan / vn-segment-vlan-based feature first\n"
+            else:
+                self.feature_state["mpls_static"] = True
+        else:
+            self.feature_state["mpls_static"] = False
+            self.protocol_lines[:] = [
+                p for p in self.protocol_lines if not p.startswith("mpls ") and "mpls ip" not in p
+            ]
+        if refused:
+            return _error(ident, refused), context
+        return _ok(ident, None), context
+
+    def feature_set_text(self) -> str:
+        """``show feature-set``, laid out as Cisco's guide prints it."""
+        return (
+            "Feature Set Name      ID        State\n"
+            "--------------------  --------  --------\n"
+            "fcoe                  1         uninstalled\n"
+            f"mpls                  4         {self.mpls_set}\n"
+        )
 
     def tunnel_config(self) -> list[str]:
         """The ``interface TunnelN`` blocks of ``show running-config``."""
@@ -1707,6 +1806,19 @@ class FakeSwitch:
             return self._show(cmd, ident), context
         if automation_reply := self._automation(user, is_admin, cmd, ident, context):
             return automation_reply
+        if mpls_reply := self._mpls_set(user, is_admin, cmd, ident, context):
+            return mpls_reply
+        if match := re.fullmatch(r"(no |clear )?itd statistics (\S+)", cmd):
+            # Typed outside configuration mode, so a role needs a rule naming it as is.
+            if not self._feature_on("itd"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            if match.group(1) == "no ":
+                self.itd_counting.discard(match.group(2))
+            elif match.group(1) is None:
+                self.itd_counting.add(match.group(2))
+            return _ok(ident, None), context
         if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):

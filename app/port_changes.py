@@ -572,6 +572,14 @@ EEM_DENY_RULES = (
     "rule 23 deny command conf t ; event manager *",
     "rule 24 deny command conf t ; no event manager *",
 )
+# ITD's counters are turned on, off and cleared outside configuration mode, so "conf t
+# ; *" does not cover them (rules 25 to 27, added in BROAD_ITD_VERSION). The lines were
+# tried on cisco-25gb as admin; the rules were not (the fake switch stands in).
+ITD_STATISTICS_RULES = (
+    "rule 25 permit command itd statistics *",
+    "rule 26 permit command no itd statistics *",
+    "rule 27 permit command clear itd statistics *",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -590,6 +598,7 @@ BROAD_RULES = (
     "rule 21 permit command terminal dont-ask",
     "rule 22 permit command reload",
     *EEM_DENY_RULES,
+    *ITD_STATISTICS_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

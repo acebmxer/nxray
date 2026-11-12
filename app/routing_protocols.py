@@ -187,7 +187,7 @@ class ProtocolPage:
         return not self.missing
 
 
-def _layer3_interfaces(brief: dict[str, Any], members: dict[str, str]) -> tuple[str, ...]:
+def layer3_interfaces(brief: dict[str, Any], members: dict[str, str]) -> tuple[str, ...]:
     """VLAN interfaces up to Vlan254 and routed front ports and port-channels,
     never one in the management VRF."""
     svis, routed = parse_brief(brief)
@@ -203,7 +203,7 @@ def load_protocol_page(client: NxapiClient, proto: Protocol) -> ProtocolPage:
     missing = _missing(proto, feature_states(feature))
     members = parse_vrf_members(vrf_members)
     vrfs = tuple(v.name for v in parse_vrfs(vrf_body, members) if v.name != "management")
-    interfaces = _layer3_interfaces(brief, members)
+    interfaces = layer3_interfaces(brief, members)
     if missing or not proto.commands:
         view = None if missing else proto.parse([])
         return ProtocolPage(proto, missing, view, interfaces, vrfs)

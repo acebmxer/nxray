@@ -71,6 +71,9 @@ prose columns; those are a reviewer's job.
 | Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
 | Read the loopbacks (state, description, VRF, addresses) or change them: make or delete one, its description, main and extra IPv4 addresses, IPv6 addresses, VRF, on or off | `app/loopbacks.py` (`load_loopback_page`, `build_loopback_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_loopbacks` |
 | Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
+| Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
+| Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
+| Read static MPLS (the feature set, label range, interfaces with MPLS, bindings, labels in use) or change it: install and turn on MPLS and static MPLS, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -696,6 +699,16 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_tunnels_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tunnels page, with a message | `tunnels_page`, `switch_save` | v0.2.1 |
 | `tunnels_page` | `(request, username) -> Response` | `GET /tunnels`: every tunnel with its state, mode, ends and address, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `tunnels_change` | `(request, username, form) -> Response` | `POST /tunnels/change`: one change, after a confirm page; needs the stored admin login (sent with that login) | router | v0.2.1 |
+| `render_pbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Policy-based routing page, with a message | `pbr_page`, `switch_save` | v0.2.1 |
+| `pbr_page` | `(request, username) -> Response` | `GET /pbr`: the route-maps, applied policies and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pbr_change` | `(request, username, form) -> Response` | `POST /pbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `itd_needs` | `(connection, scope, setting) -> str` | Refuses the counters while the broad role was written before it allowed them (`SwitchConnection.broad_role_without_itd_statistics`) | the ITD `ProtocolSite` | v0.2.1 |
+| `render_itd_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the ITD page, with a message | `itd_page`, `switch_save` | v0.2.1 |
+| `itd_page` | `(request, username) -> Response` | `GET /itd`: the device groups, services and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `itd_change` | `(request, username, form) -> Response` | `POST /itd/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `render_mpls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the MPLS page, with a message | `mpls_page`, `switch_save` | v0.2.1 |
+| `mpls_page` | `(request, username) -> Response` | `GET /mpls`: whether MPLS is on, the label range, interfaces and bindings, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `mpls_change` | `(request, username, form) -> Response` | `POST /mpls/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1224,6 +1237,7 @@ would take them out silently.
 | `parse_routes` | `(body) -> list[Route]` | Every route of `show ip route vrf all` or `show ipv6 route vrf all`, with its source, next hops, distance, metric and age | `load_overview` | v0.1.0 |
 | `load_overview` | `(client) -> ProtocolsOverview` | Which protocols' features are on, and the route table; one request | `routes/protocols` | v0.1.0 |
 | `load_protocol_page` | `(client, proto) -> ProtocolPage` | The features, layer 3 interfaces and VRFs in one request, then the protocol's own show commands when it is on | `routes/protocols` | v0.1.0 |
+| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_mpls_page` | v0.2.1 |
 
 ## `app/protocols_ospf.py` — OSPF and OSPFv3 pages
 
@@ -1454,6 +1468,38 @@ would take them out silently.
 | `parse_tunnel_view` | `(brief, config) -> ProtocolView` | The page: one place per tunnel with its facts and current values (a source address or a source interface), and a note at the switch's 16 tunnels | `load_tunnel_page` | v0.2.1 |
 | `load_tunnel_page` | `(client) -> TunnelPage` | One request for the features and VRFs; while tunnel is on, the brief and the configuration text (a role that may not read the text gives the tunnels without their settings); says VXLAN must go first when it is on | `routes/tunnels` | v0.2.1 |
 | `build_tunnel_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Tunnels page | `NxapiClient.configure_tunnels`, `routes/tunnels` | v0.2.1 |
+
+## `app/pbr.py` — policy-based routing: route-maps that set the next hop, and where they apply
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_policies` | `(ip_body, ipv6_body) -> list[Policy]` | The route-maps applied to interfaces from `show ip policy` and `show ipv6 policy`, IPv4 first | `parse_pbr`, `load_pbr_page` | v0.2.1 |
+| `parse_statistics` | `(body) -> list[tuple[str, str, str, str]]` | `show route-map <name> pbr-statistics`: the packets per entry, then those the routing table routed | `parse_pbr` | v0.2.1 |
+| `parse_pbr` | `(bodies, statistics=None) -> ProtocolView` | The page: each route-map and entry (its ACL match, next hops with their options, drop), each interface's policies, the applied policies and counters as tables | `PBR.parse`, `load_pbr_page` | v0.2.1 |
+| `load_pbr_page` | `(client) -> PbrPage` | One request for the features and layer 3 interfaces; while pbr is on, the route-maps and policies, then each applied route-map's counters | `routes/pbr` | v0.2.1 |
+| `check_pbr_place` | `(page, ident) -> None` | Refuses an interface that is not a VLAN interface, routed port or routed port-channel on the switch | the Policy-based routing `ProtocolSite` | v0.2.1 |
+| `build_pbr_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Policy-based routing page | `NxapiClient.configure_pbr`, `routes/pbr` | v0.2.1 |
+
+## `app/itd.py` — ITD: device groups, nodes, services and their counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_itd_config` | `(config) -> ItdConfig` | The `itd device-group` blocks (with their nodes) and `itd` service blocks of `show running-config` | `parse_itd` | v0.2.1 |
+| `parse_itd` | `(body, config, statistics=None) -> ProtocolView` | The page from `show itd`, the configuration text and each service's statistics: groups, nodes, services and counters as places, the nodes in service and the bucket counters as tables | `ITD.parse`, `load_itd_page` | v0.2.1 |
+| `load_itd_page` | `(client) -> ItdPage` | One request for the features and layer 3 interfaces; while pbr and itd are on, `show itd`, the configuration text and each service's counters | `routes/itd` | v0.2.1 |
+| `check_itd_place` | `(page, ident) -> None` | Nothing: a new device group, node or service name makes one | the ITD `ProtocolSite` | v0.2.1 |
+| `build_itd_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the ITD page | `NxapiClient.configure_itd`, `routes/itd` | v0.2.1 |
+
+## `app/mpls.py` — static MPLS: the feature set, label range, interfaces and bindings
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_feature_set` | `(output) -> str` | The MPLS feature set's state in `show feature-set` (enabled, disabled, installed, uninstalled), or "" | `load_mpls_page` | v0.2.1 |
+| `parse_mpls_config` | `(config) -> MplsConfig` | The label range, the interfaces with `mpls ip forwarding` and the static bindings (both the nested and the one-line form) in `show running-config` | `parse_mpls` | v0.2.1 |
+| `parse_mpls` | `(switching, config, feature_set, static_on) -> ProtocolView` | The page: the switch-wide lines, interfaces and bindings as places, the labels in use as a table | `MPLS.parse`, `load_mpls_page` | v0.2.1 |
+| `load_mpls_page` | `(client) -> MplsPage` | One request for the features and layer 3 interfaces, the feature set as text; while static MPLS is on, `show mpls switching` and the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
+| `check_mpls_place` | `(page, ident) -> None` | Refuses interface and binding changes while static MPLS is off, and an interface the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
+| `build_mpls_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the MPLS page | `NxapiClient.configure_mpls`, `routes/mpls` | v0.2.1 |
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

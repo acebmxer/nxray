@@ -31,14 +31,17 @@ ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 # so no later NXray version can add a command permit it lacks. Above any real
 # ROLE_VERSION. It counts the broad role's own changes instead: 1000 had the account,
 # role, AAA and boot denies; 1001 added the EEM denies (app/port_changes.py
-# EEM_DENY_RULES); 1002 named the loopbacks in its port list (LOOPBACK_PERMIT). A broad
-# role below it is written again by Update the port list on the Switch page.
-BROAD_ROLE_VERSION = 1002
+# EEM_DENY_RULES); 1002 named the loopbacks in its port list (LOOPBACK_PERMIT); 1003
+# allowed ITD's counters (ITD_STATISTICS_RULES). A broad role below it is written again by
+# Update the port list on the Switch page.
+BROAD_ROLE_VERSION = 1003
 # The broad role version that first denied EEM applets: one below it lets the account get
 # past the other denies, which every page warns about.
 BROAD_EEM_DENY_VERSION = 1001
 # The broad role version that first named the loopbacks in its port list.
 BROAD_LOOPBACK_VERSION = 1002
+# The broad role version that first allowed ITD's counters (itd statistics).
+BROAD_ITD_VERSION = 1003
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,16 @@ class SwitchConnection:
             self.changes_enabled
             and self.role_mode == ROLE_BROAD
             and self.role_version < BROAD_LOOPBACK_VERSION
+        )
+
+    @property
+    def broad_role_without_itd_statistics(self) -> bool:
+        """True when the account has a broad role written before it allowed ITD's counters
+        (``BROAD_ITD_VERSION``): Update the port list on the Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_ITD_VERSION
         )
 
     @property
@@ -233,6 +246,24 @@ class SwitchConnection:
         """True when NXray may change EEM: with the stored admin login only. An applet's
         commands run as the switch's admin, so the broad role denies EEM."""
         return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
+    def pbr_changes_enabled(self) -> bool:
+        """True when NXray may change policy-based routing: the same as for monitor sessions
+        (the broad role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def itd_changes_enabled(self) -> bool:
+        """True when NXray may change ITD: the same as for monitor sessions (the broad role or
+        the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def mpls_changes_enabled(self) -> bool:
+        """True when NXray may change MPLS: the same as for monitor sessions (the broad role
+        or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
 
     @property
     def tunnel_changes_enabled(self) -> bool:
@@ -649,6 +680,7 @@ def load_target(conn: sqlite3.Connection, switch_id: int | None, secret_key: str
 
 __all__ = [
     "BROAD_EEM_DENY_VERSION",
+    "BROAD_ITD_VERSION",
     "BROAD_LOOPBACK_VERSION",
     "BROAD_ROLE_VERSION",
     "ROLE_BROAD",

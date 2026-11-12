@@ -1818,6 +1818,66 @@ class NxapiClient:
         change = build_loopback_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_itd(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the ITD page: a device group and its probe, a node, a service and
+        its lines, or a service's counters.
+
+        The lines are built from the page's description and the checked values
+        (``itd.build_itd_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the ITD description uses this module's checks.
+        from app.itd import build_itd_change
+
+        change = build_itd_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_mpls(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the MPLS page: the feature set and static MPLS, the label range,
+        MPLS on an interface, or a static binding and its next hops.
+
+        The lines are built from the page's description and the checked values
+        (``mpls.build_mpls_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the MPLS description uses this module's checks.
+        from app.mpls import build_mpls_change
+
+        change = build_mpls_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_pbr(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Policy-based routing page: a route-map entry's match and set
+        lines, a route-map's counters or deletion, an interface's policy.
+
+        The lines are built from the page's description and the checked values
+        (``pbr.build_pbr_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PBR description uses this module's checks.
+        from app.pbr import build_pbr_change
+
+        change = build_pbr_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_tunnels(
         self,
         scope: str,

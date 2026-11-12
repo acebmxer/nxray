@@ -42,9 +42,12 @@ from app.routes.eem import render_eem_page
 from app.routes.errdisable import render_errdisable_page
 from app.routes.features import render_features_page
 from app.routes.ip_sla import render_ip_sla_page
+from app.routes.itd import render_itd_page
 from app.routes.loopbacks import render_loopbacks_page
 from app.routes.monitor import render_monitor_page
+from app.routes.mpls import render_mpls_page
 from app.routes.neighbors import render_neighbors_page
+from app.routes.pbr import render_pbr_page
 from app.routes.pfc import render_pfc_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
@@ -863,6 +866,8 @@ def switch_enable_changes(
             done += " The role now also denies EEM applets."
         if connection.broad_role_without_loopbacks and new_mode == ROLE_BROAD:
             done += " The role now also names the loopbacks."
+        if connection.broad_role_without_itd_statistics and new_mode == ROLE_BROAD:
+            done += " The role now also allows ITD's counters."
     else:
         parts = []
         if connection.role_version < 2:
@@ -973,7 +978,7 @@ def switch_save(
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
-    ``loopbacks``, ``tunnels``,
+    ``loopbacks``, ``tunnels``, ``pbr``, ``itd``, ``mpls``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1049,6 +1054,12 @@ def switch_save(
             return render_loopbacks_page(request, username, error=error, notice=notice)
         if back == "tunnels":
             return render_tunnels_page(request, username, error=error, notice=notice)
+        if back == "pbr":
+            return render_pbr_page(request, username, error=error, notice=notice)
+        if back == "itd":
+            return render_itd_page(request, username, error=error, notice=notice)
+        if back == "mpls":
+            return render_mpls_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

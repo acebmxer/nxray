@@ -1,0 +1,21 @@
+{
+  "TABLE_nice": {
+    "ROW_nice": {
+      "service_name": "web",
+      "dev_grp": "servers",
+      "vip": "198.51.100.100",
+      "vip_pkt": "530",
+      "percentage": "100.00",
+      "TABLE_node": {
+        "ROW_node": {
+          "TABLE_bucket": {
+            "ROW_bucket": [
+              {"bucket_acl": "web_itd_vip_1_bucket_1", "node": "198.51.100.10", "mode": "Redirect", "orig_node": "198.51.100.10", "acl_pkt": "400", "bucket_per": "75.47"},
+              {"bucket_acl": "web_itd_vip_1_bucket_2", "node": "198.51.100.11", "mode": "Redirect", "orig_node": "198.51.100.11", "acl_pkt": "130", "bucket_per": "24.53"}
+            ]
+          }
+        }
+      }
+    }
+  }
+}
