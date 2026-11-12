@@ -29,6 +29,7 @@ from app.live import LiveCache
 from app.logging_conf import configure_logging
 from app.role_upgrade import upgrade_stored_roles
 from app.routes import (
+    aaa,
     activity,
     alerts,
     auth,
@@ -51,6 +52,7 @@ from app.routes import (
     neighbors,
     pbr,
     pfc,
+    pki,
     port_channels,
     ports,
     preferences,
@@ -65,6 +67,7 @@ from app.routes import (
     spanning_tree,
     switch_accounts,
     switch_admin,
+    switch_files,
     switch_page,
     telemetry,
     traffic,
@@ -78,6 +81,7 @@ from app.routes import (
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
 from app.sflow import SflowCollector, start_collector
+from app.switch_jobs import Jobs
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
 
@@ -177,8 +181,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # sFlow samples added up per switch and minute (app/sflow.py); listened for
     # only with NXRAY_SFLOW_PORT set.
     app.state.sflow_collector = SflowCollector()
-    # ...and a pretend SSH shell opener here (app/switch_ssh.py).
+    # ...and a pretend SSH shell opener here (app/switch_ssh.py), and a pretend SSH
+    # session opener for the switch file pages' commands and copies.
     app.state.ssh_opener = None
+    app.state.ssh_session_opener = None
+    # The switch file pages' slow work (app/switch_jobs.py); tests run it at once.
+    app.state.jobs = Jobs()
     # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
     # this to False so a change alert is sent before the request answers.
     app.state.alert_transport = None
@@ -241,6 +249,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tunnels.router)
     app.include_router(ptp.router)
     app.include_router(telemetry.router)
+    app.include_router(aaa.router)
+    app.include_router(pki.router)
+    app.include_router(switch_files.router)
     app.include_router(pbr.router)
     app.include_router(itd.router)
     app.include_router(mpls.router)

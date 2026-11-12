@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import (
+    current_role,
     login_required,
     may_change,
     note_activity,
@@ -31,7 +32,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
-from app.nxapi import NxapiClient, NxapiError
+from app.nxapi import NxapiClient, NxapiError, SwitchTarget
 from app.protocols import ACTIONS, Protocol, ProtocolChange
 from app.routes.ports import change_refused
 from app.routing_protocols import (
@@ -67,6 +68,35 @@ async def form_fields(request: Request) -> dict[str, str]:
     """The posted form as plain strings (the protocol forms' field names vary)."""
     form = await request.form()
     return {key: value for key, value in form.items() if isinstance(value, str)}
+
+
+NO_ADMIN_LOGIN = (
+    "the stored admin login is missing or cannot be read. An NXray admin types it again "
+    "on the Switch page."
+)
+
+
+def admin_login(request: Request, connection: SwitchConnection) -> tuple[str, str, int] | None:
+    """The stored switch admin login (username, password, SSH port), or None when none
+    is stored or it cannot be decrypted."""
+    try:
+        with open_db(request.app.state.settings.db_path) as conn:
+            return stored_admin_login(conn, connection.id, request.app.state.settings.secret_key)
+    except DecryptionError:
+        return None
+
+
+def reading_target(
+    request: Request, connection: SwitchConnection | None, target: SwitchTarget | None
+) -> SwitchTarget | None:
+    """The login a page reads with: the stored admin login in the stored mode (when it
+    can be read), else NXray's own account."""
+    if connection is None or target is None or connection.role_mode != ROLE_STORED:
+        return target
+    login = admin_login(request, connection)
+    if login is None:
+        return target
+    return dataclasses.replace(target, username=login[0], password=login[1])
 
 
 def _can_change(request: Request, connection: SwitchConnection | None) -> bool:
@@ -161,6 +191,14 @@ class ProtocolSite:
     # stored admin login): in the stored mode NXray's own account has only the limited
     # role's rules, so the change is sent with the stored admin login instead (#92).
     stored_login: bool = False
+    # A page only an NXray admin changes (AAA): operators look, as viewers do.
+    admin_only: bool = False
+    # A template drawn at the bottom of the page, for forms that are not settings (the
+    # CA certificate paste on the SSH and certificates page).
+    extra_template: str = ""
+    # A page whose reads include some NXray's limited account is refused (AAA's RADIUS
+    # groups): in the stored mode it reads with the stored admin login too.
+    stored_read: bool = False
 
 
 def _routing_site(proto: Protocol) -> ProtocolSite:
@@ -204,8 +242,14 @@ def render_site_page(
     connection, target, problem = stored_switch(request)
     status = page = None
     if target is not None:
-        status, page = read_switch(target, site.load, transport=request.app.state.nxapi_transport)
-    can_change = connection is not None and site.enabled(connection) and may_change(request)
+        reader = reading_target(request, connection, target) if site.stored_read else target
+        status, page = read_switch(reader, site.load, transport=request.app.state.nxapi_transport)
+    can_change = (
+        connection is not None
+        and site.enabled(connection)
+        and may_change(request)
+        and (not site.admin_only or current_role(request) == "admin")
+    )
     return templates.TemplateResponse(
         request,
         "protocol.html",
@@ -340,7 +384,8 @@ def site_change(
     action = form.get("action", "")
     if action not in ACTIONS:
         return refuse("Not changed: the form named no action.")
-    status, page = read_switch(target, site.load, transport=request.app.state.nxapi_transport)
+    reader = reading_target(request, connection, target) if site.stored_read else target
+    status, page = read_switch(reader, site.load, transport=request.app.state.nxapi_transport)
     if page is None:
         return refuse(status.message if status else "The switch could not be read.")
     if page.missing:
@@ -368,18 +413,9 @@ def site_change(
         )
     sender = target
     if site.stored_login and connection.role_mode == ROLE_STORED:
-        try:
-            with open_db(request.app.state.settings.db_path) as conn:
-                login = stored_admin_login(
-                    conn, connection.id, request.app.state.settings.secret_key
-                )
-        except DecryptionError:
-            login = None
+        login = admin_login(request, connection)
         if login is None:
-            return refuse(
-                "Not changed: the stored admin login is missing or cannot be read. An NXray "
-                "admin types it again on the Switch page."
-            )
+            return refuse(f"Not changed: {NO_ADMIN_LOGIN}")
         sender = dataclasses.replace(target, username=login[0], password=login[1])
     try:
         with NxapiClient(sender, transport=request.app.state.nxapi_transport) as client:

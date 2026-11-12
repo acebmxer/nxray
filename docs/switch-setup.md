@@ -1253,6 +1253,67 @@ DME|NX-API|YANG|NATIVE` and `path <path> [depth <0-32>|unbounded] [query-conditi
 The switch takes gRPC with GPB only and HTTP with JSON only. Tried on cisco-25gb (NX-OS
 9.3(16)) with throwaway groups.
 
+**AAA.** The **AAA** page (under Switch) changes AAA only with a stored admin login, and only
+for an NXray admin: its lines decide who may sign in to the switch, NXray's own account
+included, so the broad role denies `aaa`, `tacacs-server` and `radius-server` (see How much
+access NXray's account gets). It reads `show aaa authentication`, `show aaa authentication
+login error-enable`, `show aaa accounting`, `show aaa authorization`, `show aaa groups`, `show
+aaa user default-role`, `show radius-server`, `show vrf`, `show radius-server groups`
+(network-operator, and so NXray's limited account, is refused it; with the admin login
+stored the page reads with that login), and `show tacacs-server` and `show tacacs-server
+groups` (refused while `feature tacacs+` is off; the Features page turns it on). It types `aaa authentication login default|console group
+<g> [<g> [<g>]]`, `aaa authentication login default|console local`, `aaa authentication login
+default|console fallback error local`, `aaa authentication login error-enable`, `aaa user
+default-role`, `aaa accounting default group <g> ...` or `local`, `aaa authorization
+commands|config-commands default group <g> ... [local]`, `radius-server host <a> [key 0 <k>]
+[auth-port <p>] [acct-port <p>] [authentication] [accounting] [timeout <s>] [retransmit
+<n>]`, `tacacs-server host <a> [key 0 <k>] [port <p>] [timeout <s>]`, the switch-wide `key 0`,
+`timeout`, `retransmit` and `deadtime` lines, and `aaa group server radius|tacacs+ <g>` with
+`server <a>`, `use-vrf <v>` and `deadtime <m>`; each with its `no` form, which names the
+value. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway servers and groups: the server,
+group and TACACS+ switch-wide lines and their `no` forms. Not tried, as each changes how
+people sign in to a switch in production: the `aaa authentication`, `aaa accounting` and
+`aaa authorization` lines, the RADIUS switch-wide lines and `aaa user default-role`.
+
+**SSH and certificates.** The **SSH and certificates** page (under Switch) needs no rule of
+its own, so it works with the broad role and with a stored admin login, for an NXray admin.
+It reads `show ssh key`, `show crypto key mypubkey rsa`, `show crypto ca trustpoints`, `show
+crypto ca certificates` and `dir bootflash:`, and types: for a new SSH host key `no feature
+ssh`, `ssh key rsa|ecdsa <bits> force` and `feature ssh` in one request (when the switch
+refuses the key, `feature ssh` is sent again on its own, so SSH is not left off); `crypto key
+generate rsa label <l> [exportable] modulus <bits>` and `crypto key zeroize rsa <l>`; `crypto
+ca trustpoint <t>` with `rsakeypair <l>`, `enrollment terminal`, `revocation-check <how>`,
+`delete certificate force` and `delete ca-certificate`; `no crypto ca trustpoint <t>`; and
+`crypto ca import <t> pkcs12 bootflash:<file> <password>` (copy the file there on the Files
+page first). A pasted CA certificate goes over SSH (`crypto ca authenticate <t>`, the
+certificate, `END OF INPUT`), and NXray answers yes only when the switch shows the
+fingerprints of the certificates it read. Tried on cisco-25gb with a throwaway key pair,
+trustpoints and test CA: everything but the new SSH host key, which would replace the key
+of a switch in production. A certificate dated after the switch's clock is refused ("not
+yet valid").
+
+**Files, Software and Tech support.** These three pages (under Switch) read `dir
+bootflash:`, `show version`, `show boot`, `show feature` and `show install all status` with
+the stored admin login when there is one, else with NXray's own account
+(network-operator, and so the limited account, is refused `show boot` and `show install
+all status`: the pages say so, and no image is offered for deleting then). They do
+everything else with the stored admin login, for an NXray admin: copying a
+file to or from bootflash goes over SCP, which needs `feature scp-server` on (Features
+page; the switch's SFTP server closes every session at once, so NXray does not use it);
+deleting a file is `delete bootflash:<file> no-prompt` (never the image the switch runs or
+starts from); an image's checksum is `show file bootflash:<image> md5sum|sha256sum|sha512sum`
+(by the length of the checksum pasted from Cisco's download page); the compatibility check
+is `show install all impact nxos bootflash:<image>`; the install is `install all nxos
+bootflash:<image> non-interruptive`, offered only once the same image's checksum and check
+passed and after the switch's name is typed; and tech-support is `show tech-support`, kept
+gzipped in NXray's data folder. The slow ones run in the background over SSH and their page
+reloads itself until they end; NXray forgets a running one if it restarts. As Cisco's
+upgrade guide says, the install saves the running configuration and, on this model,
+restarts the switch. Tried on cisco-25gb (NX-OS 9.3(16)): the reads, SCP both ways and the
+delete with a throwaway file, the checksums, the compatibility check (which reported
+"disruptive") and tech-support (125 MB in about four minutes, 8 MB gzipped). Not tried: the
+install itself.
+
 **QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
 with a stored admin login, and is off with the limited role (it has no rule numbers left).
 It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type
@@ -1414,7 +1475,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
 | **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
-| **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
+| **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
 denies are numbered right after the permit for `conf t ; *`, and the other
@@ -1482,4 +1543,6 @@ not touched. **Forget this switch** removes it too.
 
 The switch's NX-API uses a self-signed certificate. NXray accepts it without
 checking, and does the same with the switch's SSH host key when turning on
-port changes; see [SECURITY.md](../SECURITY.md).
+port changes and on the file pages; see [SECURITY.md](../SECURITY.md). The **SSH and
+certificates** page shows the host key's fingerprint and makes a new key; SSH clients
+that knew the old one then warn until their known-hosts entry is updated.

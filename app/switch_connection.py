@@ -278,6 +278,27 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def aaa_changes_enabled(self) -> bool:
+        """True when NXray may change AAA (sign-in methods, RADIUS, TACACS+): with the
+        stored admin login only. These decide who may sign in, so the broad role denies
+        them."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
+    def pki_changes_enabled(self) -> bool:
+        """True when NXray may change the SSH host key, key pairs and trustpoints: the
+        same as for monitor sessions (the broad role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def file_changes_enabled(self) -> bool:
+        """True when NXray may copy, delete and install files on bootflash and collect
+        tech-support: with the stored admin login only. These are commands outside
+        configuration mode the broad role does not permit, and SCP signs in as the
+        account that copies."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
     def tunnel_changes_enabled(self) -> bool:
         """True when NXray may change tunnel interfaces: with the stored admin login only.
         The broad role lists the interfaces it may change, and the switch refuses to list

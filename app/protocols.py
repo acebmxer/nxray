@@ -37,6 +37,7 @@ from typing import Any
 
 from app.nxapi import (
     DEFAULT_VRF,
+    FLASH_FILE,
     VLAN_INTERFACE_MAX,
     validate_channel_number,
     validate_description,
@@ -552,7 +553,6 @@ _PHONE = re.compile(r"^\+[0-9]{1,16}$")
 _WEB_URL = re.compile(
     r"^(https?)://([^/:\s]+)(?::([0-9]{1,5}))?(/[A-Za-z0-9._~%!$&'()*+,=:@/-]*)?$"
 )
-_FLASH_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 _EEM_LABEL = re.compile(r"^[0-9]{1,16}(?:\.[0-9])?$")
 _SCHED_DATE = re.compile(r"^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})\s+([0-9]{1,2}:[0-9]{2})$")
 _SCHED_REPEAT = re.compile(r"^(?:([0-9]{1,3}):)?([0-9]{1,2}):([0-9]{2})$")
@@ -578,7 +578,7 @@ def _web_url(value: str, label: str) -> str:
 
 
 def _flash_file(value: str, label: str) -> str:
-    if not _FLASH_FILE.fullmatch(value) or ".." in value:
+    if not FLASH_FILE.fullmatch(value):
         raise ValueError(
             f"{label} is a file name of letters, digits, '.', '_' or '-', such as backup.cfg"
         )

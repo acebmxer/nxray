@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Software — NXray{% endblock %}
+{% block head_extra %}{% if running %}<meta http-equiv="refresh" content="5;url=/software">{% endif %}{% endblock %}
+
+{% block content %}
+{% set title = "Software" %}{% set lead = "The NX-OS image the switch runs and starts from, and installing a new one." %}
+{% include "_switch_files_top.html" %}
+{% if not connection %}
+<div class="card"><p>No switch is set up yet.</p></div>
+{% elif page is none %}
+<div class="card"><p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p></div>
+{% else %}
+{% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
+{% with job = jobs.checksum, what = "The checksum check" %}{% include "_switch_job.html" %}{% endwith %}
+{% with job = jobs.impact, what = "The compatibility check" %}{% include "_switch_job.html" %}{% endwith %}
+{% with job = jobs.install, what = "The install" %}{% include "_switch_job.html" %}{% endwith %}
+
+<section class="card">
+  <h2 class="card-title">Running now</h2>
+  <dl class="facts">
+    <dt>NX-OS version</dt><dd>{{ page.software.version }}</dd>
+    <dt>Image</dt><dd>{{ page.software.running_image or "-" }}</dd>
+    <dt>Starts next time from</dt><dd>{% if not page.boot_known %}<span class="dim">not readable with NXray's account</span>{% else %}{{ page.software.boot_image or "no boot image set" }}{% endif %}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Images on bootflash</h2>
+  {% if page.images %}
+  <table class="table table-devices">
+    <thead><tr><th>Image</th><th>Size</th><th>Date</th></tr></thead>
+    <tbody>{% for f in page.images %}<tr><td>{{ f.name }}{% if f.name == page.software.running_image %} <span class="badge badge-ok">running</span>{% endif %}</td><td class="mono">{{ f.size|bytes }}</td><td class="mono">{{ f.date }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="dim">No .bin image on bootflash.</p>{% endif %}
+  <p class="note">Copy a new image from Cisco's download page to bootflash on the <a href="/files#upload">Files</a> page ({{ page.free|bytes }} free).</p>
+</section>
+
+{% if can_change and page.images %}
+<section class="card" id="install">
+  <h2 class="card-title">Install an image</h2>
+  <p class="lead">Three steps, each for the same image: its checksum, the switch's own compatibility check, then the install. The install is offered only once both checks passed.</p>
+  <div class="form-grid">
+  <form method="post" action="/software/checksum" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <p class="label">1. Check the checksum</p>
+    <label for="sum-image">Image</label>
+    <select id="sum-image" name="image">{% for f in page.images %}<option value="{{ f.name }}">{{ f.name }}</option>{% endfor %}</select>
+    <label for="sum-value">Checksum from Cisco's download page</label>
+    <input id="sum-value" name="checksum" type="text" spellcheck="false" placeholder="MD5, SHA-256 or SHA-512">
+    <p class="hint">The switch reads the whole file: about a minute for 2 GB.</p>
+    <div class="button-row"><button type="submit" class="btn btn-quiet">Check the checksum</button></div>
+  </form>
+  <form method="post" action="/software/check" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <p class="label">2. Compatibility check</p>
+    <label for="check-image">Image</label>
+    <select id="check-image" name="image">{% for f in page.images %}<option value="{{ f.name }}">{{ f.name }}</option>{% endfor %}</select>
+    <p class="hint">show install all impact: changes nothing, takes about three minutes, and says whether the install restarts the switch.</p>
+    <div class="button-row"><button type="submit" class="btn btn-quiet">Run the check</button></div>
+  </form>
+  <form method="post" action="/software/install" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <p class="label">3. Install</p>
+    {% if install.image and not install.why %}
+    <input type="hidden" name="image" value="{{ install.image }}">
+    <p>{{ install.image }} passed both checks.</p>
+    <div class="button-row"><button type="submit" class="btn btn-quiet">Install {{ install.image }}…</button></div>
+    {% else %}
+    <p class="dim">{{ (install.why ~ ".")|capitalize if install.why else "Run steps 1 and 2 for an image first." }}</p>
+    {% endif %}
+  </form>
+  </div>
+</section>
+{% endif %}
+
+{% if page.status and (page.status.compatibility or page.status.images) %}
+<section class="card">
+  <h2 class="card-title">Last install or check</h2>
+  <p class="lead">As the switch keeps it (show install all status).</p>
+  {% if page.status.images %}
+  <table class="table table-devices">
+    <thead><tr><th>Part</th><th>Was</th><th>To</th><th>Upgrade needed</th></tr></thead>
+    <tbody>{% for row in page.status.images %}<tr>{% for c in row %}<td class="mono">{{ c }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  {% for c in page.status.compatibility %}
+  <dl class="facts"><dt>Bootable</dt><dd>{{ c[0] }}</dd><dt>Impact</dt><dd>{{ c[1] }}</dd><dt>Install type</dt><dd>{{ c[2] }}</dd><dt>Reason</dt><dd>{{ c[3] }}</dd></dl>
+  {% endfor %}
+  {% if page.status.stages %}
+  <details class="settings-group"><summary>Its steps</summary>
+  <table class="table table-devices"><tbody>{% for stage, result in page.status.stages %}<tr><td class="wrap">{{ stage }}</td><td>{{ result }}</td></tr>{% endfor %}</tbody></table>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+{% include "_switch_files_bottom.html" %}
+{% endblock %}

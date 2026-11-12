@@ -684,6 +684,12 @@ def validate_checkpoint_name(name: str) -> str:
     return name
 
 
+# A file name on bootflash, the one form NXray names a file in: a letter or digit, then
+# letters, digits, ".", "_" or "-" (backup.cfg, nxos.9.3.16.bin); no folder, no "..".
+# app/protocols.py's "flashfile" field kind checks with the same pattern.
+FLASH_FILE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
+
+
 def validate_show_command(command: str) -> str:
     """Return the command stripped, or raise ValueError if it is not a lone show."""
     cleaned = command.strip()
@@ -1918,6 +1924,72 @@ class NxapiClient:
 
         change = build_telemetry_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_aaa(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the AAA page: the sign-in, accounting and command authorization
+        methods, a RADIUS or TACACS+ server or switch-wide setting, or a server group.
+
+        The lines are built from the page's description and the checked values
+        (``aaa.build_aaa_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the AAA description uses this module's checks.
+        from app.aaa import build_aaa_change
+
+        change = build_aaa_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_pki(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the SSH and certificates page: a new SSH host key, a key pair, or
+        a trustpoint (its settings, a PKCS#12 import, deleting its certificates).
+
+        A new SSH key is made with SSH off (``no feature ssh``, the key, ``feature ssh``);
+        when the switch refuses the key, ``feature ssh`` is sent again on its own so SSH
+        is never left off. The lines are built by ``pki.build_pki_change``.
+        """
+        # Imported here: the description uses this module's checks.
+        from app.pki import SSH_ON, build_pki_change
+
+        change = build_pki_change(scope, setting, action, ident, values)
+        try:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+        except NxapiCommandError:
+            if SSH_ON in change.lines:
+                self._send([SSH_ON], [SSH_ON], self._target.timeout, allow_text=True)
+            raise
+
+    def list_files(self) -> dict[str, Any]:
+        """``dir bootflash:``: its files and folders with their sizes and dates, and the
+        space used and free."""
+        command = "dir bootflash:"
+        (body,) = self._send([command], [command], self._target.timeout)
+        return body
+
+    def delete_file(self, name: str) -> None:
+        """``delete bootflash:<name> no-prompt``: remove one file. ``name`` is checked to
+        be a plain file name (no folder, no other file system) before anything is sent."""
+        if not FLASH_FILE.fullmatch(name):
+            raise ValueError(f"{name!r} is not a bootflash file name NXray deletes")
+        command = f"delete bootflash:{name} no-prompt"
+        (body,) = self._send([command], [command], self._target.timeout, allow_text=True)
+        printed = str(body.get("text", body.get("msg", ""))).strip()
+        if printed:
+            raise NxapiCommandError(f"{command!r}: {printed}")
 
     def configure_tunnels(
         self,

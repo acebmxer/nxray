@@ -73,6 +73,12 @@ prose columns; those are a reviewer's job.
 | Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
 | Read PTP (the clock's state, the grandmaster, each PTP port's state and counters) or change it: the clock's source address, domain, priorities, limits and notifications; on a port PTP on or off, transmission, role, VLAN, message intervals, unicast source, masters and slaves | `app/ptp.py` (`load_ptp_page`, `build_ptp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ptp` |
 | Read telemetry (destination profile, destination groups with their collectors' state, sensor groups, subscriptions, data collected) or change it: the profile's settings, make or delete a group or subscription, collectors, paths and show-command paths, a subscription's groups and interval | `app/telemetry.py` (`load_telemetry_page`, `build_telemetry_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_telemetry` |
+| Read AAA (sign-in and accounting methods, the RADIUS and TACACS+ servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
+| Read the SSH host key, key pairs, trustpoints and certificates, or change them as an NXray admin: a new SSH host key (SSH off and on around it), make or delete a key pair or trustpoint, a trustpoint's key pair, enrolment and revocation check, import a PKCS#12 file, delete its certificates, paste a CA certificate (over SSH) | `app/pki.py` (`load_pki_page`, `build_pki_change`, `check_ca_certificates`), on the same parts as the protocol pages; command from `NxapiClient.configure_pki`; the paste from `switch_ssh.authenticate_ca` |
+| Read the files on bootflash, or (stored admin login, NXray admin) copy one to or from the switch with SCP, or delete one (never the image in use) | `app/switch_files.py` (`load_files_page`, `check_delete`, `check_upload`, `upload_work`); `NxapiClient.list_files`, `NxapiClient.delete_file`; copies through `switch_ssh.Session` |
+| Read the running and boot images and the last install, or (stored admin login, NXray admin) check an image's checksum, run the compatibility check and install it | `app/switch_files.py` (`load_software_page`, `checksum_work`, `impact_work`, `ready_to_install`, `install_work`), as background jobs (`app/switch_jobs.py`) |
+| Collect `show tech-support` (stored admin login, NXray admin), keep it gzipped and download it | `app/switch_files.py` (`tech_work`, `tech_file`), as a background job (`app/switch_jobs.py`) |
+| Run slow switch work after the page has answered, one job of each kind per switch | `app/switch_jobs.py` (`Jobs.start`, `Jobs.get`) |
 | Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
 | Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
 | Read static MPLS (the feature set, label range, interfaces with MPLS, bindings, labels in use) or change it: install and turn on MPLS and static MPLS, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
@@ -436,7 +442,7 @@ None (port changes were off); `pause_seconds` is non-zero only when an
 existing account had to be given the role again. The admin login lives
 only inside `run_repair`.
 
-## `app/switch_ssh.py` — SSH, for lines NX-API refuses
+## `app/switch_ssh.py` — SSH, for lines NX-API refuses, long commands and file copies
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
@@ -445,11 +451,14 @@ only inside `run_repair`.
 | `reload_switch` | `(*, host, port, username, password, timeout, opener=None) -> None` | Types `terminal dont-ask` and `reload`; the session dropping means the switch is restarting, a prompt coming back raises SshCommandError | `routes/config_page.config_reload` | v0.1.0 |
 | `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving over SSH) | v0.1.0 |
 | `run_config` | `(*, host, port, username, password, lines, timeout, opener=None, then=()) -> list[str]` | Types checked lines between `configure terminal` and `end`, stopping at the first refusal, then the fixed `then` commands in the same session, returning their output | `port_changes.enable_port_changes` | v0.1.0 |
+| `open_paramiko_session` | `(host, port, username, password, timeout) -> ParamikoSession` | Signs in like `open_paramiko_shell` for one long command (`stream`) or one SCP copy (`download`, `upload`) at a time | the switch file pages (the default session opener) | v0.2.1 |
+| `authenticate_ca` | `(*, host, port, username, password, trustpoint, pem_lines, fingerprints, timeout, opener=None) -> None` | Types `crypto ca authenticate`, the PEM lines and `END OF INPUT`, then yes only when every fingerprint the switch shows is one of `fingerprints` (else no) | `routes/pki.pki_authenticate` | v0.2.1 |
 
 Errors are `SshUnreachable`, `SshAuthError` and `SshCommandError`, all
 subclasses of `SshError`. The switch's host key is accepted unchecked, as its
 NX-API certificate is. Tests pass a pretend opener through
-`app.state.ssh_opener`.
+`app.state.ssh_opener`, and a pretend session opener through
+`app.state.ssh_session_opener`.
 
 ## `app/port_changes.py` — turning on port changes
 
@@ -709,6 +718,32 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_telemetry_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Telemetry page, with a message | `telemetry_page`, `switch_save` | v0.2.1 |
 | `telemetry_page` | `(request, username) -> Response` | `GET /telemetry`: the telemetry groups and collectors, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `telemetry_change` | `(request, username, form) -> Response` | `POST /telemetry/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `admin_login` | `(request, connection) -> tuple[str, str, int] \| None` | The stored switch admin login (username, password, SSH port), or None when none is stored or it cannot be decrypted | `site_change`, `routes/pki`, `routes/switch_files` | v0.2.1 |
+| `reading_target` | `(request, connection, target) -> SwitchTarget \| None` | The login a page reads with: the stored admin login in the stored mode, else NXray's own account (for pages some of whose reads network-operator is refused) | `render_site_page`, `site_change` (sites marked `stored_read`), `routes/switch_files` | v0.2.1 |
+| `check_aaa_place` | `(page, ident) -> None` | Nothing: a group or server named here is made by the change | the AAA `ProtocolSite` | v0.2.1 |
+| `render_aaa_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the AAA page, with a message | `aaa_page`, `switch_save` | v0.2.1 |
+| `aaa_page` | `(request, username) -> Response` | `GET /aaa`: sign-in and accounting, the RADIUS and TACACS+ servers and groups, read live; every role looks, NXray admins change | router | v0.2.1 |
+| `aaa_change` | `(request, username, form) -> Response` | `POST /aaa/change`: one change, after a confirm page; NXray admins only, with the stored admin login | router | v0.2.1 |
+| `check_pki_place` | `(page, ident) -> None` | Nothing: a key pair or trustpoint named here is made by the change | the SSH and certificates `ProtocolSite` | v0.2.1 |
+| `render_pki_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the SSH and certificates page, with a message | `pki_page`, `pki_authenticate`, `switch_save` | v0.2.1 |
+| `pki_page` | `(request, username) -> Response` | `GET /pki`: the SSH host key, key pairs, trustpoints and certificates, read live; every role looks, NXray admins change | router | v0.2.1 |
+| `pki_change` | `(request, username, form) -> Response` | `POST /pki/change`: one change, after a confirm page; NXray admins only, with the broad role or a stored admin login | router | v0.2.1 |
+| `pki_authenticate` | `(request, username, form) -> Response` | `POST /pki/authenticate`: reads the pasted CA certificates, shows them, and on confirm types them to the switch over SSH, accepting only the same fingerprints | router | v0.2.1 |
+| `render_files_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Files page, with a message | the Files routes | v0.2.1 |
+| `files_page` | `(request, username) -> Response` | `GET /files`: the files on bootflash and the space left; every role looks | router | v0.2.1 |
+| `files_delete` | `(request, username, csrf, name, confirm) -> Response` | `POST /files/delete`: deletes one file after a confirm page (never the image in use); NXray admins, with the stored admin login | router | v0.2.1 |
+| `files_upload` | `(request, username, csrf, upload) -> Response` | `POST /files/upload`: keeps the uploaded file in the data folder and copies it to bootflash with SCP as a job; refuses an existing name or too little room | router | v0.2.1 |
+| `files_download` | `(request, username, name) -> Response` | `GET /files/download`: copies one file off bootflash with SCP straight to the browser | router | v0.2.1 |
+| `render_software_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Software page, with the jobs and whether an image may be installed | the Software routes | v0.2.1 |
+| `software_page` | `(request, username) -> Response` | `GET /software`: the running and boot images, the images on bootflash, the last install; every role looks | router | v0.2.1 |
+| `software_checksum` | `(request, username, csrf, image, checksum) -> Response` | `POST /software/checksum`: has the switch work out an image's checksum and compare it, as a job | router | v0.2.1 |
+| `software_check` | `(request, username, csrf, image) -> Response` | `POST /software/check`: runs `show install all impact` for an image, as a job | router | v0.2.1 |
+| `software_install` | `(request, username, csrf, image, hostname, confirm) -> Response` | `POST /software/install`: once the image's checksum and check passed, asks with the switch's name typed, then installs as a job | router | v0.2.1 |
+| `render_tech_page` | `(request, username, *, error=None, notice=None) -> Response` | Shows the Tech support page with the last collected file and the job | the Tech support routes | v0.2.1 |
+| `tech_page` | `(request, username) -> Response` | `GET /tech-support`: the last collected tech-support; every role looks | router | v0.2.1 |
+| `tech_collect` | `(request, username, csrf) -> Response` | `POST /tech-support/collect`: runs `show tech-support` as a job | router | v0.2.1 |
+| `tech_download` | `(request, username) -> Response` | `GET /tech-support/download`: the last one, gzipped | router | v0.2.1 |
+| `tech_delete` | `(request, username, csrf) -> Response` | `POST /tech-support/delete`: removes it from NXray | router | v0.2.1 |
 | `render_pbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Policy-based routing page, with a message | `pbr_page`, `switch_save` | v0.2.1 |
 | `pbr_page` | `(request, username) -> Response` | `GET /pbr`: the route-maps, applied policies and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `pbr_change` | `(request, username, form) -> Response` | `POST /pbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
@@ -1528,6 +1563,54 @@ would take them out silently.
 | `parse_telemetry_view` | `(transport, sensor_groups, collectors, config) -> ProtocolView` | The page: the profile, a place per destination group, sensor group and subscription with their current values, and tables of the collectors with their state, the running sensor groups and the data collected (the collectors from the transport list alone when the text is missing) | `load_telemetry_page` | v0.2.1 |
 | `load_telemetry_page` | `(client) -> TelemetryPage` | One request for the feature and VRFs; while telemetry is on, one for the collectors, sensor groups and data collectors, and the configuration text | `routes/telemetry` | v0.2.1 |
 | `build_telemetry_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Telemetry page | `NxapiClient.configure_telemetry`, `routes/telemetry` | v0.2.1 |
+
+## `app/aaa.py` — AAA: sign-in and accounting methods, RADIUS and TACACS+ servers and groups
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_aaa` | `(bodies, tacacs) -> ProtocolView` | The page from the AAA, RADIUS and VRF reads and the TACACS+ reads (None while TACACS+ is off): the methods, the switch-wide settings, a place per server group (not the built-in radius group), tables of the servers and groups | `load_aaa_page` | v0.2.1 |
+| `load_aaa_page` | `(client) -> AaaPage` | One request for the AAA, RADIUS and VRF reads; one for TACACS+, which the switch refuses while it is off | `routes/aaa` | v0.2.1 |
+| `build_aaa_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the AAA page; refuses the switch's own radius group | `NxapiClient.configure_aaa`, `routes/aaa` | v0.2.1 |
+
+## `app/pki.py` — SSH and certificates: the host key, key pairs, trustpoints, certificates
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_certificate` | `(trustpoint, role, block) -> Certificate` | One certificate from its printed `subject=`, `issuer=`, `notAfter=` and `SHA1 Fingerprint=` lines | `parse_certificates` | v0.2.1 |
+| `parse_certificates` | `(body) -> list[Certificate]` | Every trustpoint's CA and own certificates from `show crypto ca certificates` (all trustpoints, or one) | `parse_pki` | v0.2.1 |
+| `parse_pki` | `(bodies) -> ProtocolView` | The page: the SSH key, a place per key pair and trustpoint with its current settings, and the certificates table | `load_pki_page` | v0.2.1 |
+| `pkcs12_files` | `(listing) -> tuple[str, ...]` | The `.p12` and `.pfx` files of a `dir bootflash:` body | `load_pki_page` | v0.2.1 |
+| `load_pki_page` | `(client) -> PkiPage` | One request for the key, key pairs, trustpoints and certificates; the file list | `routes/pki` | v0.2.1 |
+| `build_pki_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page, with SSH off and on around a new host key and the trustpoint left before an import | `NxapiClient.configure_pki`, `routes/pki` | v0.2.1 |
+| `check_ca_certificates` | `(pasted) -> PastedCa` | Reads pasted PEM CA certificates (refusing other text, a non-CA or more than 10) and writes them again with their SHA1 fingerprints | `routes/pki.pki_authenticate` | v0.2.1 |
+
+## `app/switch_files.py` — bootflash files, the NX-OS image and install, tech-support
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_listing` | `(body) -> Listing` | `dir bootflash:`: the files and folders with size and date, files first, and the space used, free and total | `load_files_page`, `load_software_page` | v0.2.1 |
+| `parse_software` | `(version, boot) -> Software` | The version, the running image and the boot images from `show version` and `show boot` | `load_files_page`, `load_software_page` | v0.2.1 |
+| `scp_on` | `(feature_body) -> bool` | Whether `show feature` has the SCP server on | `load_files_page` | v0.2.1 |
+| `load_files_page` | `(client) -> FilesPage` | The listing, the images in use (never deleted) and whether SCP is on | `routes/switch_files` | v0.2.1 |
+| `check_delete` | `(page, name) -> None` | ValueError for a name that is not a plain file on bootflash, or an image in use | `files_delete` | v0.2.1 |
+| `check_upload` | `(page, name, size) -> None` | ValueError for a bad or existing name, an empty file, or too little room left | `files_upload` | v0.2.1 |
+| `upload_work` | `(session, local, size, name) -> Callable` | The job copying an upload to bootflash with SCP, removing NXray's copy either way | `files_upload` | v0.2.1 |
+| `save_upload` | `(source, data_dir) -> tuple[Path, int]` | Copies an uploaded file into the data folder, as the request's own copy goes once it ends | `files_upload` | v0.2.1 |
+| `parse_install_status` | `(body) -> InstallStatus` | `show install all status`: the images and versions, the compatibility result and the steps | `load_software_page` | v0.2.1 |
+| `load_software_page` | `(client) -> SoftwarePage` | The version and boot images, the `.bin` images on bootflash, the free space and the last install | `routes/switch_files` | v0.2.1 |
+| `check_image` | `(page, name) -> None` | ValueError unless `name` is an image on bootflash | the Software routes | v0.2.1 |
+| `checksum_word` | `(expected) -> tuple[str, str]` | The pasted checksum in lower case and `md5sum`, `sha256sum` or `sha512sum` for its length | `checksum_work`, `software_checksum` | v0.2.1 |
+| `checksum_work` | `(session, image, expected) -> Callable` | The job having the switch work out the image's checksum and comparing it | `software_checksum` | v0.2.1 |
+| `parse_impact` | `(printed) -> dict[str, str]` | The compatibility check's result, versions and notes from what `show install all impact` prints | `impact_work` | v0.2.1 |
+| `impact_work` | `(session, image) -> Callable` | The job running the switch's compatibility check for an image | `software_check` | v0.2.1 |
+| `ready_to_install` | `(checksum, impact, image) -> str` | Why an image may not be installed yet: both jobs must have passed for it | `render_software_page`, `software_install` | v0.2.1 |
+| `install_work` | `(session, image) -> Callable` | The job running `install all nxos ... non-interruptive`; the session dropping after the restart message is a good end | `software_install` | v0.2.1 |
+| `tech_path` | `(data_dir, switch_id) -> Path` | Where a switch's collected tech-support is kept | the Tech support routes | v0.2.1 |
+| `tech_file` | `(data_dir, switch_id) -> TechFile \| None` | The collected tech-support with its size and time, if any | the Tech support routes | v0.2.1 |
+| `tech_work` | `(session, target) -> Callable` | The job running `show tech-support` into a gzipped file, replacing the last one once whole | `tech_collect` | v0.2.1 |
+
+`app/switch_jobs.py` holds the background jobs (`Jobs`, `Job`): one of each kind per
+switch at a time, in memory only, run at once in tests (`Jobs(background=False)`).
 
 ## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
 

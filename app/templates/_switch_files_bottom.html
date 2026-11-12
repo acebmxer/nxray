@@ -1,0 +1,7 @@
+{#- The line under the Files, Software and Tech support pages about who may change. -#}
+{% set role = current_role(request) %}
+{% if role != "admin" %}
+<p class="note">Your role ({{ role }}) can look here; only an NXray admin copies, deletes, checks, installs or collects.</p>
+{% elif not can_change %}
+<p class="note">{{ changes_off }}</p>
+{% endif %}

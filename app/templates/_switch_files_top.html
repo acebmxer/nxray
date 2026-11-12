@@ -1,0 +1,7 @@
+{#- The top of the Files, Software and Tech support pages: the way back, the title and
+    what is wrong. Set ``title`` and ``lead`` before including it. -#}
+<p class="breadcrumb"><a href="/switch-admin">← Switch admin</a></p>
+<h1 class="page-title">{{ title }}</h1>
+<p class="lead">{{ lead }}</p>
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}

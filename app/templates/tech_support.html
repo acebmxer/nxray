@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Tech support — NXray{% endblock %}
+{% block head_extra %}{% if running %}<meta http-equiv="refresh" content="5;url=/tech-support">{% endif %}{% endblock %}
+
+{% block content %}
+{% set title = "Tech support" %}{% set lead = "show tech-support, collected and kept for a Cisco support case." %}
+{% include "_switch_files_top.html" %}
+{% if not connection %}
+<div class="card"><p>No switch is set up yet.</p></div>
+{% else %}
+{% with job = jobs.techsupport, what = "Collecting show tech-support" %}{% include "_switch_job.html" %}{% endwith %}
+<section class="card">
+  <h2 class="card-title">The last one collected</h2>
+  {% if tech %}
+  <dl class="facts"><dt>Collected</dt><dd class="mono">{{ tech.made|utc }}</dd><dt>Size (gzipped)</dt><dd>{{ tech.size|bytes }}</dd></dl>
+  {% if can_change %}
+  <div class="row-actions">
+    <a class="btn btn-quiet" href="/tech-support/download">Download</a>
+    <form method="post" action="/tech-support/delete" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-quiet">Remove it from NXray</button>
+    </form>
+  </div>
+  {% endif %}
+  <p class="note">It holds the switch's whole configuration: keep it as private as a backup.</p>
+  {% else %}<p class="dim">None yet.</p>{% endif %}
+</section>
+{% if can_change %}
+<section class="card">
+  <h2 class="card-title">Collect it now</h2>
+  <p class="lead">The switch prints over 100 MB over a few minutes and works harder meanwhile; it changes nothing. NXray keeps it gzipped (about 8 MB) in place of the last one.</p>
+  <form method="post" action="/tech-support/collect" class="inline">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary" {% if jobs.techsupport and jobs.techsupport.running %}disabled{% endif %}>Collect show tech-support</button>
+  </form>
+</section>
+{% endif %}
+{% endif %}
+{% include "_switch_files_bottom.html" %}
+{% endblock %}

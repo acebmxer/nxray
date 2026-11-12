@@ -67,6 +67,19 @@ telemetry`` is on; as there, gRPC takes GPB only and HTTP JSON only. ``show
 running-config`` prints both; the ``show ptp`` and ``show telemetry`` commands answer from
 ``bodies``.
 
+AAA lives in ``aaa_lines`` (the top-level lines as typed, "radius-server host 192.0.2.11 key
+0 k") and ``aaa_groups`` (("radius", "g") -> the lines inside); TACACS+ lines are refused
+while ``feature_state["tacacs"]`` is off, and only network-admin may type any of them (the
+broad role denies them). ``show aaa ...``, ``show radius-server ...`` and ``show
+tacacs-server ...`` answer from them in cisco-25gb's shapes. Key pairs live in ``keypairs``
+(label -> size), trustpoints in ``trustpoints`` (name -> {"lines", "ca", "cert"}), the SSH
+host key in ``ssh_key``; ``crypto ca import`` needs its file in ``flash`` and gives the
+trustpoint both certificates and a key pair of its name, as on cisco-25gb. Bootflash files
+live in ``flash`` (name -> bytes); ``dir bootflash:`` lists them and ``delete bootflash:<f>
+no-prompt`` (network-admin only) removes one. ``session_opener()`` gives a pretend SSH
+session for the long commands and SCP copies (``app/switch_ssh.py``), answering from
+``flash``, ``impact_text``, ``install_text`` and ``tech_text``.
+
 VRFs made on the switch live in ``vrfs`` (default and management are always
 there), an interface's VRF in its ``port_state`` (``vrf``). As on cisco-25gb,
 entering a VRF (which makes it) needs a "conf t ; vrf context * ; ..." rule,
@@ -104,6 +117,7 @@ checkpoints. Their shapes follow Cisco's guides, never recorded on cisco-25gb.
 from __future__ import annotations
 
 import base64
+import hashlib
 import ipaddress
 import json
 import re
@@ -112,9 +126,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
 
 from app.features import CATALOG
-from app.switch_ssh import SshAuthError, SshUnreachable
+from app.switch_ssh import SshAuthError, SshCommandError, SshUnreachable
 from tests.conftest import FIXTURES, load_fixture
 
 ADMIN_PASSWORD = "Adm1n-switch-pw"
@@ -504,6 +520,28 @@ class FakeSwitch:
     telemetry_parts: dict[str, list[str]] = field(default_factory=dict)
     # Tunnel interfaces (see the module notes): number -> the lines inside it.
     tunnels: dict[int, list[str]] = field(default_factory=dict)
+    # AAA, key pairs, trustpoints, the SSH key and bootflash (see the module notes).
+    aaa_lines: list[str] = field(default_factory=list)
+    aaa_groups: dict[tuple[str, str], list[str]] = field(default_factory=dict)
+    keypairs: dict[str, int] = field(default_factory=dict)
+    trustpoints: dict[str, dict[str, Any]] = field(default_factory=dict)
+    ssh_key: str = "rsa 2048"
+    ssh_server_on: bool = True
+    flash: dict[str, bytes] = field(
+        default_factory=lambda: {
+            "nxos.9.3.16.bin": b"running image",
+            "nxos.7.0.3.I7.3.bin": b"old image",
+            "backup_initial.cfg": b"hostname nexus-lab\n",
+        }
+    )
+    impact_text: str = ""
+    install_text: str = ""
+    tech_text: bytes = b"`show switchname`\nnexus-lab\n" * 100
+    # What the pretend SSH sessions ran, and whether they may sign in.
+    session_commands: list[str] = field(default_factory=list)
+    # When set, the CA fingerprint the pretend switch shows instead of the real one.
+    ca_fingerprint: str = ""
+    installs: list[str] = field(default_factory=list)
     # Switch admin (see the module notes).
     hostname: str = "nexus-lab"
     admin_lines: list[str] = field(default_factory=list)
@@ -1986,6 +2024,8 @@ class FakeSwitch:
 
         if cmd in self.bodies:
             return _ok(ident, self.bodies[cmd]), context
+        if stage_d_reply := self._stage_d(user, is_admin, cmd, ident, context):
+            return stage_d_reply
         if cmd.startswith("show "):
             return self._show(cmd, ident), context
         if automation_reply := self._automation(user, is_admin, cmd, ident, context):
@@ -3214,6 +3254,323 @@ class FakeSwitch:
                 return _ok(ident, load_fixture(name))
         return _error(ident, "% Invalid command\n")
 
+    # ---- AAA, certificates and bootflash ----------------------------------
+
+    def dir_body(self) -> dict[str, Any]:
+        """``dir bootflash:`` in cisco-25gb's shape, with two of the switch's own folders."""
+        rows = [
+            {"fsize": 4096, "timestring": "Oct 26 22:13:49 2026", "fname": ".rpmstore/"},
+            {"fsize": 4096, "timestring": "May 05 07:47:13 2023", "fname": "scripts/"},
+        ]
+        rows += [
+            {"fsize": len(data), "timestring": "Nov 12 14:13:23 2026", "fname": name}
+            for name, data in sorted(self.flash.items())
+        ]
+        used = sum(len(d) for d in self.flash.values())
+        total = 53586325504
+        return {
+            "usage": "bootflash://sup-local",
+            "bytesused": used,
+            "bytesfree": total - used,
+            "bytestotal": total,
+            "TABLE_dir": {"ROW_dir": rows},
+        }
+
+    @staticmethod
+    def _rows(rows: list[dict[str, Any]]) -> Any:
+        return rows[0] if len(rows) == 1 else rows
+
+    def _aaa_show(self, cmd: str) -> dict[str, Any] | None:
+        """The AAA show commands, from ``aaa_lines`` and ``aaa_groups``."""
+        lines = self.aaa_lines
+
+        def last(prefix: str, default: str) -> str:
+            found = [line[len(prefix) :] for line in lines if line.startswith(prefix)]
+            return found[-1] if found else default
+
+        def methods(service: str) -> str:
+            value = last(f"aaa authentication login {service} ", "local")
+            return value if not value.startswith("fallback") else "local"
+
+        if cmd == "show aaa authentication":
+            return {
+                "TABLE_AuthenMethods": {
+                    "ROW_AuthenMethods": [
+                        {"service": "default", "method": methods("default")},
+                        {"service": "console", "method": methods("console")},
+                    ]
+                }
+            }
+        if cmd == "show aaa authentication login error-enable":
+            on = "aaa authentication login error-enable" in lines
+            return {"status": "enabled" if on else "disabled"}
+        if cmd == "show aaa accounting":
+            row = {"service": "default", "methods": last("aaa accounting default ", "local")}
+            return {"TABLE_acctMethods": {"ROW_acctMethods": row}}
+        if cmd == "show aaa authorization":
+            return {"pki_ssh_cert_author": "local", "pki_ssh_pubkey_author": "local"}
+        if cmd == "show aaa user default-role":
+            on = "no aaa user default-role" not in lines
+            return {"default_role_status": {"udr_status": "enabled" if on else "disabled"}}
+        if cmd == "show aaa groups":
+            names = ["radius", *(name for _, name in self.aaa_groups)]
+            return {"TABLE_groups": {"ROW_groups": self._rows([{"group": n} for n in names])}}
+        for kind, word in (("radius", "radius-server"), ("tacacs+", "tacacs-server")):
+            if cmd == f"show {word}":
+                hosts = [line.split() for line in lines if line.startswith(f"{word} host ")]
+                rows = []
+                for parts in hosts:
+                    row: dict[str, Any] = {"server_ip": parts[2]}
+                    if kind == "radius":
+                        row.update(auth_port=1812, acct_port=1813)
+                    else:
+                        row["port"] = 49
+                    if "key" in parts:
+                        row["secretKey"] = "********"
+                    if "timeout" in parts:
+                        row["timeout"] = int(parts[parts.index("timeout") + 1])
+                    rows.append(row)
+                body: dict[str, Any] = {
+                    "global_timeout": int(last(f"{word} timeout ", "5")),
+                    "global_deadtime": int(last(f"{word} deadtime ", "0")),
+                    "global_source_intf": "any available",
+                    "server_count": len(rows),
+                }
+                if kind == "radius":
+                    body["retransmissionCount"] = int(last(f"{word} retransmit ", "1"))
+                if rows:
+                    body["TABLE_server"] = {"ROW_server": self._rows(rows)}
+                return body
+            if cmd == f"show {word} groups":
+                groups = [{"group_name": "radius", "dead_time": 0}] if kind == "radius" else []
+                for (group_kind, name), inner in self.aaa_groups.items():
+                    if group_kind != kind:
+                        continue
+                    row = {"group_name": name, "dead_time": 0}
+                    servers = [
+                        {"server_ip": i.split()[1]} for i in inner if i.startswith("server ")
+                    ]
+                    for i in inner:
+                        if i.startswith("deadtime "):
+                            row["dead_time"] = int(i.split()[1])
+                        if i.startswith("use-vrf "):
+                            row["vrf_name"] = i.split()[1]
+                    if servers:
+                        row["TABLE_server"] = {"ROW_server": self._rows(servers)}
+                    groups.append(row)
+                body = {"num_of_groups": len(groups)}
+                if groups:
+                    body["TABLE_group"] = {"ROW_group": self._rows(groups)}
+                return body
+        return None
+
+    def _pki_show(self, cmd: str) -> tuple[bool, dict[str, Any] | None]:
+        """The SSH key and certificate show commands: (answered, body)."""
+        if cmd == "show ssh key":
+            kind, bits = self.ssh_key.split()
+            row = {
+                "key_type": kind,
+                "key_time": "Mon Oct 26 22:31:22 2026\n",
+                "key_data": f"ssh-{kind} AAAAfake\n",
+                "key_bitcount": bits,
+                "key_fingerprint": f"SHA256:fake-{kind}-{bits}",
+            }
+            return True, {"TABLE_sessions": {"ROW_sessions": row}}
+        if cmd == "show crypto key mypubkey rsa":
+            rows = [
+                {"key_label": label, "key_size": str(size), "exportable": "yes"}
+                for label, size in self.keypairs.items()
+            ]
+            return True, ({"TABLE_rsa_keys": {"ROW_rsa_keys": self._rows(rows)}} if rows else None)
+        if cmd == "show crypto ca trustpoints":
+            rows = []
+            for name, tp in self.trustpoints.items():
+                pair = next((i.split()[1] for i in tp["lines"] if i.startswith("rsakeypair ")), "")
+                how = next(
+                    (i.split(" ", 1)[1] for i in tp["lines"] if i.startswith("revocation-check ")),
+                    "crl",
+                )
+                rows.append(
+                    {
+                        "trustpoint": name,
+                        "key-pair": tp.get("pair") or pair,
+                        "TABLE_revocation_methods": {
+                            "ROW_revocation_methods": self._rows(
+                                [{"revocation-method": m} for m in how.split()]
+                            )
+                        },
+                    }
+                )
+            return True, (
+                {"TABLE_ca_truspoints": {"ROW_ca_truspoints": self._rows(rows)}} if rows else None
+            )
+        if cmd == "show crypto ca certificates":
+            rows = []
+            for name, tp in self.trustpoints.items():
+                row: dict[str, Any] = {"trustpoint": name}
+                if tp["ca"]:
+                    row["TABLE_ca_cert_chains"] = {
+                        "ROW_ca_cert_chains": {"index": "0", "ca_certificate": tp["ca"]}
+                    }
+                if tp["cert"]:
+                    row["Certificate"] = {"certificate": tp["cert"]}
+                if tp["ca"] or tp["cert"]:
+                    rows.append(row)
+            if not rows:
+                return True, None
+            return True, {"TABLE_ca_certificates": {"ROW_ca_certificates": self._rows(rows)}}
+        return False, None
+
+    def _stage_d(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """Bootflash, AAA, the SSH key and certificates, or None when ``cmd`` is none of
+        them."""
+        denied = _error(ident, "% Permission denied for the role\n")
+        kind = context[0] if context else None
+        if cmd == "dir bootflash:":
+            return _ok(ident, self.dir_body()), context
+        if match := re.fullmatch(r"delete bootflash:(\S+) no-prompt", cmd):
+            if not is_admin:
+                return denied, context
+            if self.flash.pop(match.group(1), None) is None:
+                return _ok(ident, "No such file or directory\n"), context
+            return _ok(ident, None), context
+        if cmd in ("show boot", "show install all status", "show radius-server groups"):
+            # As on cisco-25gb: network-operator is refused these; "show *" allows them.
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+        if cmd.startswith(("show tacacs-server",)) and not self._feature_on("tacacs"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if cmd.startswith("show "):
+            if (body := self._aaa_show(cmd)) is not None:
+                return _ok(ident, body), context
+            answered, pki_body = self._pki_show(cmd)
+            if answered:
+                return _ok(ident, pki_body), context
+            return None
+        # ---- AAA lines: network-admin only (the broad role denies them).
+        if kind == "aaa-group":
+            if cmd == "exit":
+                return _ok(ident, None), None
+            if re.fullmatch(r"(no )?(server \S+|use-vrf \S+|deadtime \d+)", cmd):
+                inner = self.aaa_groups[(context[1].split(" ", 1)[0], context[1].split(" ", 1)[1])]
+                line = cmd.removeprefix("no ")
+                if cmd.startswith("no "):
+                    if line not in inner:
+                        return _error(ident, "% Not configured\n"), context
+                    inner.remove(line)
+                else:
+                    word = line.split()[0]
+                    if word != "server":
+                        inner[:] = [i for i in inner if i.split()[0] != word]
+                    if line not in inner:
+                        inner.append(line)
+                return _ok(ident, None), context
+        if match := re.fullmatch(r"(no )?aaa group server (radius|tacacs\+) (\S+)", cmd):
+            if not is_admin:
+                return denied, context
+            if match.group(2) == "tacacs+" and not self._feature_on("tacacs"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            key = (match.group(2), match.group(3))
+            if match.group(1):
+                self.aaa_groups.pop(key, None)
+                return _ok(ident, None), context
+            self.aaa_groups.setdefault(key, [])
+            return _ok(ident, None), ("aaa-group", f"{key[0]} {key[1]}")
+        # 802.1X's own aaa lines are left to the edge features' handler.
+        if re.match(r"(no )?(aaa |radius-server |tacacs-server )", cmd) and " dot1x " not in cmd:
+            if not is_admin:
+                return denied, context
+            line = cmd.removeprefix("no ")
+            if "tacacs-server" in line and not self._feature_on("tacacs"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            if cmd.startswith("no "):
+                if line.startswith(("radius-server host ", "tacacs-server host ")):
+                    host = " ".join(line.split()[:3])
+                    self.aaa_lines[:] = [i for i in self.aaa_lines if not i.startswith(host)]
+                    return _ok(ident, None), context
+                if re.fullmatch(r"(tacacs|radius)-server (timeout|deadtime|retransmit)", line):
+                    return _error(ident, "% Incomplete command\n"), context
+                if line == "aaa user default-role":
+                    self.aaa_lines.append(cmd)
+                    return _ok(ident, None), context
+                if line not in self.aaa_lines:
+                    return _error(ident, "% Not configured\n"), context
+                self.aaa_lines.remove(line)
+                return _ok(ident, None), context
+            if line == "aaa user default-role":
+                self.aaa_lines[:] = [i for i in self.aaa_lines if i != "no aaa user default-role"]
+                return _ok(ident, None), context
+            self.aaa_lines.append(line)
+            return _ok(ident, None), context
+        # ---- SSH key and certificates: network-admin or the broad role.
+        path = f"{context[1]} ; {cmd}" if kind == "trustpoint" else cmd
+        if kind == "trustpoint" or re.match(r"(no )?(crypto |ssh key |feature ssh$)", cmd):
+            if not (is_admin or self._role_matches(user, f"conf t ; {path}", None)):
+                return denied, context
+        if cmd in ("no feature ssh", "feature ssh"):
+            self.ssh_server_on = cmd == "feature ssh"
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"ssh key (rsa|ecdsa) (\d+) force", cmd):
+            if self.ssh_server_on:
+                return _error(ident, "Please disable ssh server first: no feature ssh\n"), context
+            self.ssh_key = f"{match.group(1)} {match.group(2)}"
+            return _ok(ident, None), context
+        if match := re.fullmatch(
+            r"crypto key generate rsa label (\S+)(?: exportable)? modulus (\d+)", cmd
+        ):
+            if match.group(1) in self.keypairs:
+                return _ok(ident, "key-pair already generated\n"), context
+            self.keypairs[match.group(1)] = int(match.group(2))
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"crypto key zeroize rsa (\S+)", cmd):
+            self.keypairs.pop(match.group(1), None)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"(no )?crypto ca trustpoint (\S+)", cmd):
+            name = match.group(2)
+            if match.group(1):
+                self.trustpoints.pop(name, None)
+                return _ok(ident, None), None
+            self.trustpoints.setdefault(name, {"lines": [], "ca": "", "cert": ""})
+            return _ok(ident, None), ("trustpoint", f"crypto ca trustpoint {name}")
+        if match := re.fullmatch(r"crypto ca import (\S+) pkcs12 bootflash:(\S+) (\S+)", cmd):
+            name, file, _ = match.groups()
+            if name not in self.trustpoints:
+                return _error(ident, "% trustpoint not found\n"), context
+            if file not in self.flash:
+                return _error(ident, "failed to read the pkcs12 file\n"), context
+            self.trustpoints[name].update(
+                ca="subject= /CN=lab-ca\nissuer= /CN=lab-ca\nnotAfter=Dec 11 20:14:31 2027 GMT\n"
+                "SHA1 Fingerprint=C4:5F\n",
+                cert="subject= /CN=nexus-lab\nissuer= /CN=lab-ca\nnotAfter=Dec 11 20:14:31 "
+                "2027 GMT\nSHA1 Fingerprint=87:99\n",
+                pair=name,
+            )
+            self.keypairs[name] = 2048
+            return _ok(ident, None), context
+        if kind == "trustpoint":
+            name = context[1].split()[-1]
+            tp = self.trustpoints[name]
+            if cmd == "exit":
+                return _ok(ident, None), None
+            if cmd == "delete certificate force":
+                tp["cert"] = ""
+                return _ok(ident, None), context
+            if cmd == "delete ca-certificate":
+                if tp["cert"]:
+                    return _error(ident, "delete the identity certificate first\n"), context
+                tp["ca"] = ""
+                return _ok(ident, None), context
+            line = cmd.removeprefix("no ")
+            if cmd.startswith("no "):
+                tp["lines"] = [i for i in tp["lines"] if i != line]
+            else:
+                word = line.split()[0]
+                tp["lines"] = [i for i in tp["lines"] if i.split()[0] != word] + [line]
+            return _ok(ident, None), context
+        return None
+
     # ---- SSH ----------------------------------------------------------------
 
     def ssh_opener(self):
@@ -3229,6 +3586,69 @@ class FakeSwitch:
 
         return opener
 
+    def session_opener(self):
+        """An opener for app.state.ssh_session_opener (see app/switch_ssh.py)."""
+
+        def opener(host: str, port: int, username: str, password: str, timeout: float):
+            if not self.ssh_reachable:
+                raise SshUnreachable(f"could not open SSH to {host}:{port}: refused")
+            known = self.users.get(username)
+            if not known or known[0] != password:
+                raise SshAuthError("the switch refused the SSH username or password")
+            self.signed_in.add(username)
+            return FakeSession(self, username)
+
+        return opener
+
+
+class FakeSession:
+    """The pretend switch's SSH session for long commands and SCP copies."""
+
+    def __init__(self, switch: FakeSwitch, user: str) -> None:
+        self.switch = switch
+        self.user = user
+        self.closed = False
+
+    def stream(self, command: str, timeout: float):
+        self.switch.session_commands.append(command)
+        if match := re.fullmatch(r"show file bootflash:(\S+) (md5|sha256|sha512)sum", command):
+            data = self.switch.flash.get(match.group(1))
+            if data is None:
+                raise SshCommandError(f"{command!r}: No such file or directory")
+            yield (hashlib.new(match.group(2), data).hexdigest() + "\n").encode()
+            return
+        if command.startswith("show install all impact nxos bootflash:"):
+            yield self.switch.impact_text.encode()
+            return
+        if match := re.fullmatch(r"install all nxos bootflash:(\S+) non-interruptive", command):
+            self.switch.installs.append(match.group(1))
+            text = self.switch.install_text
+            yield text.encode()
+            if "reboot" in text or "reloaded" in text:
+                raise SshUnreachable("the switch closed the SSH session")
+            return
+        if command == "show tech-support":
+            data = self.switch.tech_text
+            for start in range(0, len(data), 1000):
+                yield data[start : start + 1000]
+            return
+        raise SshCommandError(f"{command!r}: % Invalid command")
+
+    def download(self, remote: str):
+        name = remote.removeprefix("bootflash:")
+        data = self.switch.flash.get(name)
+        if data is None:
+            raise SshCommandError(f"copying {remote}: No such file or directory")
+        return len(data), iter([data[: len(data) // 2], data[len(data) // 2 :]])
+
+    def upload(self, source, size: int, remote: str, progress) -> None:
+        data = source.read(size)
+        progress(len(data))
+        self.switch.flash[remote.removeprefix("bootflash:")] = data
+
+    def close(self) -> None:
+        self.closed = True
+
 
 class FakeShell:
     """The pretend switch's command line, for the lines NXray types over SSH."""
@@ -3240,10 +3660,53 @@ class FakeShell:
         self.mode: list[str] = []  # e.g. ["config", "role", "role-interface"]
         self.role: Role | None = None
         self.closed = False
+        # A CA certificate being pasted: the trustpoint, the lines typed, and whether
+        # the switch asked to accept it.
+        self.pasting: str | None = None
+        self.pasted: list[str] = []
+        self.asked = False
+
+    def converse(self, line: str, expect: re.Pattern[str]) -> str:
+        """As on cisco-25gb: ``crypto ca authenticate <t>`` asks for the certificate,
+        ``END OF INPUT`` shows its fingerprint and asks to accept it."""
+        self.switch.ssh_lines.append(line)
+        if match := re.fullmatch(r"crypto ca authenticate (\S+)", line):
+            if match.group(1) not in self.switch.trustpoints:
+                return "% trustpoint not found"
+            self.pasting, self.pasted = match.group(1), []
+            return (
+                "input (cut & paste) CA certificate (chain) in PEM format;\n"
+                "end the input with a line containing only END OF INPUT :"
+            )
+        if line == "END OF INPUT" and self.pasting is not None:
+            pem = "\n".join(self.pasted)
+            try:
+                cert = x509.load_pem_x509_certificate(pem.encode())
+            except ValueError:
+                self.pasting = None
+                return "certificate verify failed\ncould not perform CA authentication"
+            digest = self.switch.ca_fingerprint or cert.fingerprint(hashes.SHA1()).hex().upper()
+            shown = ":".join(digest[i : i + 2] for i in range(0, len(digest), 2))
+            self.asked = True
+            return (
+                f"Fingerprint(s): SHA1 Fingerprint={shown}\n\n"
+                "Do you accept this certificate? [yes/no]:"
+            )
+        return self.run(line)
+
+    def type_lines(self, lines: list[str]) -> None:
+        self.switch.ssh_lines.extend(lines)
+        self.pasted.extend(lines)
 
     def run(self, line: str) -> str:
         self.switch.ssh_lines.append(line)
         invalid = "% Invalid command at '^' marker."
+        if self.asked and line in ("yes", "no"):
+            if line == "yes" and self.pasting is not None:
+                subject = "subject= /CN=pasted-ca\nissuer= /CN=pasted-ca\n"
+                self.switch.trustpoints[self.pasting]["ca"] = subject
+            self.asked, self.pasting = False, None
+            return ""
         if any(line.startswith(prefix) for prefix in self.switch.ssh_reject):
             return invalid
         if not self.mode and line == "terminal dont-ask":

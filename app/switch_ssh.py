@@ -6,8 +6,16 @@ names a command inside interface configuration), so those lines are typed
 into an SSH shell instead, signed in with the admin login the person enters
 on the Switch page. Restarting the switch (``reload_switch``, from the Config
 page) also goes over SSH with an admin login typed for it: ``reload`` asks a
-question, which NX-API cannot answer. Nothing else uses SSH, and no SSH login
-is stored.
+question, which NX-API cannot answer.
+
+The switch file pages use SSH too, with the stored admin login: ``Session`` runs one
+command and streams what it prints (``show tech-support``, the install check, the
+install itself, which take minutes and print far more than NX-API answers with), and
+copies files to and from bootflash with SCP. The switch's SFTP server closes every
+session at once (seen on cisco-25gb, NX-OS 9.3(16), with ``feature sftp-server`` on),
+so the copies use the older SCP protocol, which needs ``feature scp-server``. Pasting
+a CA certificate (``crypto ca authenticate``) answers the switch's questions in a shell
+(``authenticate_ca``).
 
 Like the NX-API client, this accepts the switch's SSH host key without
 checking it: the switch generates its own key, NXray has no copy to compare
@@ -19,8 +27,8 @@ from __future__ import annotations
 import contextlib
 import re
 import time
-from collections.abc import Callable
-from typing import Protocol
+from collections.abc import Callable, Iterator
+from typing import BinaryIO, Protocol
 
 import paramiko
 
@@ -59,6 +67,15 @@ class Shell(Protocol):
         """Type one line, wait for the next prompt, return what was printed."""
         ...
 
+    def converse(self, line: str, expect: re.Pattern[str]) -> str:
+        """Type one line and wait for ``expect`` (a question the switch asks) or the
+        next prompt, whichever comes first; return what was printed."""
+        ...
+
+    def type_lines(self, lines: list[str]) -> None:
+        """Type lines the switch reads as input to a question, waiting for nothing."""
+        ...
+
     def close(self) -> None: ...
 
 
@@ -84,11 +101,11 @@ class ParamikoShell:
         self._read_until_prompt()
         self.run("terminal length 0")
 
-    def _read_until_prompt(self) -> str:
+    def _read_until_prompt(self, expect: re.Pattern[str] | None = None) -> str:
         deadline = time.monotonic() + self._timeout
         received = ""
         while True:
-            if _PROMPT.search(received):
+            if _PROMPT.search(received) or (expect is not None and expect.search(received)):
                 return received
             if time.monotonic() > deadline:
                 raise SshUnreachable(
@@ -111,6 +128,16 @@ class ParamikoShell:
         lines = output.replace("\r", "").split("\n")
         return "\n".join(lines[1:-1]).strip()
 
+    def converse(self, line: str, expect: re.Pattern[str]) -> str:
+        self._channel.sendall((line + "\n").encode())
+        output = self._read_until_prompt(expect)
+        # Drop the echoed command (first line); a question has no prompt after it.
+        return "\n".join(output.replace("\r", "").split("\n")[1:]).strip()
+
+    def type_lines(self, lines: list[str]) -> None:
+        for line in lines:
+            self._channel.sendall((line + "\n").encode())
+
     def close(self) -> None:
         try:
             self._channel.close()
@@ -118,10 +145,10 @@ class ParamikoShell:
             self._client.close()
 
 
-def open_paramiko_shell(
+def _connect(
     host: str, port: int, username: str, password: str, timeout: float
-) -> ParamikoShell:
-    """Sign in over SSH with a password and open a shell. The default opener."""
+) -> paramiko.SSHClient:
+    """A signed-in paramiko SSHClient; SshAuthError or SshUnreachable when not."""
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(_AcceptHostKey())
     try:
@@ -144,6 +171,14 @@ def open_paramiko_shell(
     except (OSError, paramiko.SSHException) as exc:
         client.close()
         raise SshUnreachable(f"could not open SSH to {host}:{port}: {exc}") from exc
+    return client
+
+
+def open_paramiko_shell(
+    host: str, port: int, username: str, password: str, timeout: float
+) -> ParamikoShell:
+    """Sign in over SSH with a password and open a shell. The default opener."""
+    client = _connect(host, port, username, password, timeout)
     try:
         return ParamikoShell(client, timeout)
     except paramiko.SSHException as exc:
@@ -247,5 +282,225 @@ def reload_switch(
         )
     finally:
         # The session is usually gone already; closing it may fail in any way.
+        with contextlib.suppress(Exception):
+            shell.close()
+
+
+# ---- one command, file copies ---------------------------------------------------------
+
+# How much of a file is read or sent at a time.
+_CHUNK = 256 * 1024
+
+
+class Session(Protocol):
+    """A signed-in SSH connection for one long command or one file copy at a time.
+    Tests provide a pretend one."""
+
+    def stream(self, command: str, timeout: float) -> Iterator[bytes]:
+        """Run ``command`` (a fixed command NXray builds) and yield what it prints as it
+        comes. SshCommandError when it ends with an error status and printed nothing."""
+        ...
+
+    def download(self, remote: str) -> tuple[int, Iterator[bytes]]:
+        """Copy ``remote`` (``bootflash:name``) off the switch with SCP: its size, and
+        its bytes as they come. SshCommandError when the switch refuses."""
+        ...
+
+    def upload(
+        self, source: BinaryIO, size: int, remote: str, progress: Callable[[int], None]
+    ) -> None:
+        """Copy ``size`` bytes from ``source`` to ``remote`` with SCP, calling
+        ``progress`` with the bytes sent so far. SshCommandError when refused."""
+        ...
+
+    def close(self) -> None: ...
+
+
+# (host, port, username, password, timeout) -> Session
+SessionOpener = Callable[[str, int, str, str, float], Session]
+
+
+def _scp_answer(channel: paramiko.Channel, step: str) -> None:
+    """Read SCP's one-byte answer: 0 is yes, 1 or 2 come with the switch's reason."""
+    code = channel.recv(1)
+    if code == b"\0":
+        return
+    if not code:
+        raise SshCommandError(f"{step}: the switch closed the copy")
+    reason = b""
+    while not reason.endswith(b"\n"):
+        more = channel.recv(1)
+        if not more:
+            break
+        reason += more
+    message = reason.decode("utf-8", errors="replace").strip() or "refused"
+    raise SshCommandError(f"{step}: {message}")
+
+
+class ParamikoSession:
+    """``Session`` over paramiko: one exec channel per command or copy."""
+
+    def __init__(self, client: paramiko.SSHClient, timeout: float) -> None:
+        self._client = client
+        self._timeout = timeout
+
+    def _channel(self, command: str, timeout: float) -> paramiko.Channel:
+        transport = self._client.get_transport()
+        if transport is None or not transport.is_active():
+            raise SshUnreachable("the switch closed the SSH session")
+        channel = transport.open_session(timeout=self._timeout)
+        channel.settimeout(timeout)
+        channel.exec_command(command)
+        return channel
+
+    def stream(self, command: str, timeout: float) -> Iterator[bytes]:
+        channel = self._channel(command, timeout)
+        printed = False
+        try:
+            while True:
+                try:
+                    chunk = channel.recv(_CHUNK)
+                except TimeoutError as exc:
+                    raise SshUnreachable(
+                        f"the switch stopped answering over SSH within {timeout:g} seconds"
+                    ) from exc
+                if not chunk:
+                    break
+                printed = True
+                yield chunk
+            status = channel.recv_exit_status()
+            if status and not printed:
+                complaint = channel.recv_stderr(65536).decode("utf-8", errors="replace").strip()
+                raise SshCommandError(f"{command!r}: {complaint or f'error status {status}'}")
+        finally:
+            channel.close()
+
+    def download(self, remote: str) -> tuple[int, Iterator[bytes]]:
+        channel = self._channel(f"scp -f {remote}", self._timeout)
+        try:
+            channel.sendall(b"\0")
+            header = b""
+            while not header.endswith(b"\n"):
+                more = channel.recv(1)
+                if not more:
+                    raise SshCommandError(f"copying {remote}: the switch closed the copy")
+                header += more
+                if header[:1] in (b"\1", b"\2") and header.endswith(b"\n"):
+                    reason = header[1:].decode("utf-8", errors="replace").strip()
+                    raise SshCommandError(f"copying {remote}: {reason}")
+            match = re.fullmatch(rb"C[0-7]{4} ([0-9]+) [^\n]*\n", header)
+            if match is None:
+                raise SshCommandError(f"copying {remote}: the switch sent no file")
+            size = int(match.group(1))
+            channel.sendall(b"\0")
+        except BaseException:
+            channel.close()
+            raise
+
+        def body() -> Iterator[bytes]:
+            try:
+                left = size
+                while left:
+                    chunk = channel.recv(min(_CHUNK, left))
+                    if not chunk:
+                        raise SshCommandError(f"copying {remote}: the copy stopped early")
+                    left -= len(chunk)
+                    yield chunk
+                _scp_answer(channel, f"copying {remote}")
+                channel.sendall(b"\0")
+            finally:
+                channel.close()
+
+        return size, body()
+
+    def upload(
+        self, source: BinaryIO, size: int, remote: str, progress: Callable[[int], None]
+    ) -> None:
+        name = remote.split(":", 1)[-1].rsplit("/", 1)[-1]
+        channel = self._channel(f"scp -t {remote}", self._timeout)
+        try:
+            _scp_answer(channel, f"copying to {remote}")
+            channel.sendall(f"C0644 {size} {name}\n".encode())
+            _scp_answer(channel, f"copying to {remote}")
+            sent = 0
+            while sent < size:
+                chunk = source.read(min(_CHUNK, size - sent))
+                if not chunk:
+                    raise SshCommandError(f"copying to {remote}: the file ended early")
+                channel.sendall(chunk)
+                sent += len(chunk)
+                progress(sent)
+            channel.sendall(b"\0")
+            _scp_answer(channel, f"copying to {remote}")
+        finally:
+            channel.close()
+
+    def close(self) -> None:
+        self._client.close()
+
+
+def open_paramiko_session(
+    host: str, port: int, username: str, password: str, timeout: float
+) -> ParamikoSession:
+    """Sign in over SSH with a password for commands and copies. The default opener."""
+    return ParamikoSession(_connect(host, port, username, password, timeout), timeout)
+
+
+# ---- pasting a CA certificate -------------------------------------------------------------
+
+_PASTE_QUESTION = re.compile(r"END OF INPUT\s*:\s*$")
+_ACCEPT_QUESTION = re.compile(r"\[yes/no\]:?\s*$")
+_FINGERPRINT = re.compile(r"Fingerprint=([0-9A-Fa-f:]+)")
+
+
+def authenticate_ca(
+    *,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    trustpoint: str,
+    pem_lines: list[str],
+    fingerprints: frozenset[str],
+    timeout: float,
+    opener: ShellOpener | None = None,
+) -> None:
+    """Give trustpoint ``trustpoint`` its CA certificate: ``crypto ca authenticate``,
+    the PEM lines, ``END OF INPUT``, then yes to the switch's question, but only when
+    every SHA1 fingerprint it shows is one of ``fingerprints`` (the certificates NXray
+    read); otherwise no.
+
+    The trustpoint name and the PEM lines are checked by the caller. SshCommandError
+    with the switch's words when it refuses the certificate.
+    """
+    shell = (opener or open_paramiko_shell)(host, port, username, password, timeout)
+    try:
+        shell.run("configure terminal")
+        asked = shell.converse(f"crypto ca authenticate {trustpoint}", _PASTE_QUESTION)
+        if not _PASTE_QUESTION.search(asked):
+            raise SshCommandError(
+                f"crypto ca authenticate {trustpoint}: {refused(asked) or asked or 'no question'}"
+            )
+        shell.type_lines(pem_lines)
+        answer = shell.converse("END OF INPUT", _ACCEPT_QUESTION)
+        if not _ACCEPT_QUESTION.search(answer):
+            lines = [line.strip() for line in answer.splitlines() if line.strip()]
+            shell.run("end")
+            raise SshCommandError(
+                f"crypto ca authenticate {trustpoint}: {'; '.join(lines) or 'refused'}"
+            )
+        shown = {found.upper() for found in _FINGERPRINT.findall(answer)}
+        if not shown or not shown <= {f.upper() for f in fingerprints}:
+            shell.run("no")
+            shell.run("end")
+            raise SshCommandError(
+                f"crypto ca authenticate {trustpoint}: the switch showed a different "
+                "certificate, so NXray answered no"
+            )
+        complaint = refused(shell.run("yes"))
+        shell.run("end")
+        if complaint:
+            raise SshCommandError(f"crypto ca authenticate {trustpoint}: {complaint}")
+    finally:
         with contextlib.suppress(Exception):
             shell.close()

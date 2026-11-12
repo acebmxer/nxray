@@ -191,9 +191,12 @@
   {% endif %}
 </section>
 {% endfor %}
+{% if site.extra_template %}{% include site.extra_template %}{% endif %}
 {% endif %}
 
 {% if site.read_only %}
+{% elif site.admin_only and role == "operator" %}
+<p class="note">Your role (operator) can look at {{ site.subject }}; only an NXray admin changes {{ "them" if site.subject.endswith("s") else "it" }}.</p>
 {% elif role in ("admin", "operator") and not can_change %}
 <p class="note">{{ site.changes_name }} changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %}.</p>
 {% elif role not in ("admin", "operator") %}

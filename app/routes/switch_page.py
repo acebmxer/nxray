@@ -34,6 +34,7 @@ from app.port_changes import (
     missing_changes,
 )
 from app.role_upgrade import SETUP_LOCK
+from app.routes.aaa import render_aaa_page
 from app.routes.callhome import render_callhome_page
 from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
@@ -49,6 +50,7 @@ from app.routes.mpls import render_mpls_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.pbr import render_pbr_page
 from app.routes.pfc import render_pfc_page
+from app.routes.pki import render_pki_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
 from app.routes.private_vlans import render_private_vlans_page
@@ -980,7 +982,8 @@ def switch_save(
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
-    ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``pbr``, ``itd``, ``mpls``,
+    ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
+    ``mpls``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1060,6 +1063,10 @@ def switch_save(
             return render_ptp_page(request, username, error=error, notice=notice)
         if back == "telemetry":
             return render_telemetry_page(request, username, error=error, notice=notice)
+        if back == "aaa":
+            return render_aaa_page(request, username, error=error, notice=notice)
+        if back == "pki":
+            return render_pki_page(request, username, error=error, notice=notice)
         if back == "pbr":
             return render_pbr_page(request, username, error=error, notice=notice)
         if back == "itd":

@@ -11,6 +11,50 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Manage the switch's SSH host key and certificates from the web interface (#88).** The new
+  **SSH and certificates** page (under Switch) shows the SSH host key with its fingerprint,
+  the RSA key pairs, the trustpoints and every certificate the switch holds (whose it is,
+  subject, issuer, expiry, fingerprint). It makes a new SSH host key (RSA or ECDSA; SSH is
+  turned off and on again around it, and back on even when the switch refuses the key),
+  makes and deletes key pairs and trustpoints, sets a trustpoint's key pair, enrolment and
+  revocation check, imports a certificate with its key from a PKCS#12 file on bootflash,
+  deletes a trustpoint's certificates, and gives a trustpoint its CA certificate pasted in
+  PEM form: NXray reads it, shows it, and accepts it on the switch only when the switch
+  shows the same fingerprint. Each change shows its lines and asks first. It works with
+  the broad role or a stored admin login, for an NXray admin. Tried on a switch with
+  throwaway key pairs and trustpoints, except a new SSH host key.
+- **Collect show tech-support from the web interface (#86).** The new **Tech support** page
+  (under Switch) runs `show tech-support` in the background (over 100 MB, a few minutes;
+  the page shows how far it got), keeps it gzipped in NXray, and offers it for download
+  until it is collected again or removed. It needs the stored admin login and an NXray
+  admin. Tried on a switch.
+- **Browse and manage bootflash files from the web interface (#85).** The new **Files** page
+  (under Switch) lists bootflash's files with their size and date and the space used and
+  free, copies a file from your computer to bootflash or from bootflash to your computer,
+  and deletes a file after asking. The image the switch runs or starts from is marked and
+  never deleted, and an existing file is never replaced. Copies use SCP, which needs
+  `scp-server` on (Features page). It needs the stored admin login and an NXray admin.
+  Tried on a switch with a throwaway file.
+- **Upgrade the NX-OS image from the web interface (#84).** The new **Software** page (under
+  Switch) shows the running version and image, the image the switch starts from next, the
+  images on bootflash and the last install or check. For a new image (copied there on the
+  Files page) it checks the checksum pasted from Cisco's download page, runs the switch's
+  own compatibility check (which says whether the install restarts the switch) and then
+  installs it, only once both passed and after the switch's name is typed; each step runs
+  in the background and the page follows it. It needs the stored admin login and an NXray
+  admin. The checks were tried on a switch; the install itself was not, as it restarts the
+  switch.
+- **Manage AAA, TACACS+ and RADIUS from the web interface (#83).** The new **AAA** page
+  (under Switch) shows how people sign in (default and console), whether a failed sign-in
+  says why, accounting, command authorization, and the RADIUS and TACACS+ servers and
+  server groups. It sets sign-in through up to three server groups or the switch's own
+  accounts, the fallback to them, accounting, TACACS+ command authorization, servers
+  (address, key, ports, timeout, tries), the switch-wide key, timeout, tries and dead time,
+  and server groups with their servers, VRF and dead time. Each change shows its lines and
+  asks first, with a warning where a change can lock everyone out. Keys are never shown
+  back. It needs the stored admin login and an NXray admin: NXray's broad role still
+  refuses these lines. The server and group lines were tried on a switch; the sign-in,
+  accounting and authorization lines were not.
 - **Manage streaming telemetry from the web interface (#75).** The new **Telemetry** page
   (under Switch) lists the destination profile, every destination group with its
   collectors, every sensor group with its data source and paths, and every subscription

@@ -1,0 +1,23 @@
+{
+  "TABLE_Current_Bootvar": {
+    "ROW_Current_Bootvar": {
+      "current_sup_module": "sup-1",
+      "current_image": "bootflash:/nxos.9.3.16.bin",
+      "current_poap_status": "Disabled"
+    }
+  },
+  "TABLE_bootvar_show": {
+    "ROW_bootvar_show": [
+      {"Str1": " Current Boot Variables: sup-1"},
+      {"Str1": "NXOS variable = bootflash:/nxos.9.3.16.bin"},
+      {"Str1": "Boot POAP Disabled"}
+    ]
+  },
+  "TABLE_Startup_Bootvar": {
+    "ROW_Startup_Bootvar": {
+      "start_sup_module": "sup-1",
+      "start_image": "bootflash:/nxos.9.3.16.bin",
+      "start_poap_status": "Disabled"
+    }
+  }
+}

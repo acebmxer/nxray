@@ -1,0 +1,11 @@
+{#- One background job's state (app/switch_jobs.py): ``job`` and ``what`` (its name in words). -#}
+{% if job %}
+{% if job.running %}
+<p class="note" role="status">{{ what }}{% if job.subject %} ({{ job.subject }}){% endif %} is running, started by {{ job.username }} {{ job.seconds }} seconds ago. {{ job.progress }} This page reloads itself until it ends.</p>
+{% elif job.state == "done" %}
+<p class="alert alert-ok" role="status">{{ what }}{% if job.subject %} ({{ job.subject }}){% endif %} ended after {{ job.seconds }} seconds: {{ job.message }}</p>
+{% else %}
+<p class="alert alert-error" role="alert">{{ what }}{% if job.subject %} ({{ job.subject }}){% endif %} stopped after {{ job.seconds }} seconds: {{ job.message }}</p>
+{% endif %}
+{% if job.output %}<details class="settings-group"><summary>What the switch printed</summary><pre class="mono wrap">{{ job.output }}</pre></details>{% endif %}
+{% endif %}
