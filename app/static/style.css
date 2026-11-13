@@ -169,15 +169,28 @@ code {
 .nav { flex: 1; padding: 4px 8px 12px; }
 .nav-group { margin-top: 12px; }
 .nav-heading {
-  display: block;
-  padding: 0 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 10px 4px;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  font: inherit;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+  text-align: left;
   color: var(--text-3);
   white-space: nowrap;
+  cursor: pointer;
 }
+.nav-heading:hover { color: var(--text); }
+.nav-heading .icon { width: 12px; height: 12px; }
+.nav-group-shut .nav-heading .icon { transform: rotate(-90deg); }
+.nav-group-shut .nav-items { display: none; }
 
 .navlink {
   display: flex;
@@ -230,6 +243,8 @@ code {
 
 .shell-narrow .nav-heading, .shell-narrow .nav-words, .shell-narrow .brand-name,
 .shell-narrow .version { display: none; }
+/* The narrow menu has no headings to unfold a group with: every group shows. */
+.shell-narrow .nav-group-shut .nav-items { display: block; }
 .shell-narrow .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .shell-narrow .nav-group:first-child { border-top: 0; }
 .shell-narrow .navlink { justify-content: center; padding: 0; }

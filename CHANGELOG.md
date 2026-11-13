@@ -11,6 +11,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Fold the menu's groups shut (#94).** Pressing a group's heading in the left menu
+  (Monitor, Configure, Switch, Admin) hides or shows its pages, so the groups not in use
+  take no room. The browser remembers which groups are shut; the group holding the open
+  page always opens, and the narrow menu still shows every page.
 - **Manage the switch's SSH host key and certificates from the web interface (#88).** The new
   **SSH and certificates** page (under Switch) shows the SSH host key with its fingerprint,
   the RSA key pairs, the trustpoints and every certificate the switch holds (whose it is,

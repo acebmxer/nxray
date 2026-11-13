@@ -51,6 +51,7 @@ prose columns; those are a reviewer's job.
 | Draw the front panel, or colour a port by state, speed, VLAN, port-channel, traffic or errors | `app/face.py`, `draw_face` |
 | Refresh figures on a page by themselves, or share one switch reading between browsers | `app/live.py`, `LiveCache.get`; the answers are in `app/routes/live.py`; `app/static/live.js` is the browser side ([Live figures](live.md)) |
 | Know a browser's theme (system, light, dark) or menu width | `app/preferences.py`, `ui_preferences` (a template global) |
+| Fold the menu's groups shut and open, and remember which are shut in the browser | `app/static/nav.js` (the headings and `nav-group-here` are in `base.html`) |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |

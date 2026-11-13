@@ -87,15 +87,23 @@
       {% set shown = [] %}
       {% for item in nav if item[0] == group and (not item[5] or nav_role == "admin") %}{% set _ = shown.append(item) %}{% endfor %}
       {% if shown %}
-      <div class="nav-group">
-        <span class="nav-heading">{{ group }}</span>
+      {% set holds = namespace(here=false) %}
+      {% for item in shown if item[4] == lit.prefix %}{% set holds.here = true %}{% endfor %}
+      {#- The heading folds its group shut and open (static/nav.js); the group holding
+          the open page always starts open. -#}
+      <div class="nav-group{% if holds.here %} nav-group-here{% endif %}" data-nav-group="{{ group }}">
+        <button type="button" class="nav-heading" data-nav-toggle aria-expanded="true" aria-controls="nav-{{ group|lower }}" title="Show or hide the {{ group }} pages"><span>{{ group }}</span>{{ icon("fold") }}</button>
+        <div class="nav-items" id="nav-{{ group|lower }}">
         {% for item in shown %}
         <a class="navlink{% if item[4] == lit.prefix %} navlink-on{% endif %}" href="{{ item[1] }}" title="{{ item[2] }}"{% if item[4] == lit.prefix %} aria-current="page"{% endif %}>{{ icon(item[3]) }}<span class="nav-words">{{ item[2] }}</span></a>
         {% endfor %}
+        </div>
       </div>
       {% endif %}
       {% endfor %}
     </nav>
+    {#- Not deferred: it folds the groups before the menu is first drawn. -#}
+    <script src="/static/nav.js"></script>
     <div class="side-foot">
       <a class="navlink{% if path.startswith('/account') %} navlink-on{% endif %}" href="/account" title="Your account">{{ icon("account") }}<span class="nav-words">{{ username }}{% if nav_role %} <span class="who">({{ nav_role }})</span>{% endif %}</span></a>
       {% if nav_role == "admin" %}
