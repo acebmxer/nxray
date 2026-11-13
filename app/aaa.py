@@ -21,6 +21,22 @@ is refused it: the page then says so); ``show tacacs-server`` and ``show tacacs-
 groups`` in a third (the switch refuses them while ``feature tacacs+`` is off). With the
 admin login stored, the page reads with it.
 
+LDAP (issue #95, stage E6): while ``feature ldap`` is on, the page also shows ``show
+ldap-server`` and ``show ldap-server groups`` (text) and ``show running-config | section
+ldap`` (text, for the search maps), and sets the LDAP servers (address, TLS, port, wait,
+the bind DN and its password, which is never shown back), the switch-wide wait, port and
+skip time, LDAP server groups (servers, VRF, skip time, certificate DN match, group
+validation, search map) and search maps by name. Tried on cisco-25gb (2026-11-13) with a
+throwaway server at 10.250.250.250, group and search map, all removed afterwards:
+``feature ldap``; ``ldap-server host <a>`` and, as lines of their own, ``enable-ssl``,
+``port <p>``, ``timeout <s>``, ``rootDN "<dn>" password <pw>`` and ``test rootDN <dn>
+password <pw> idle-time <m>``; ``ldap-server timeout|port|deadtime <n>``; ``ldap
+search-map <m>``; ``aaa group server ldap <g>`` with ``server``, ``use-vrf``, ``deadtime``,
+``enable Cert-DN-match``, ``enable user-server-group`` and ``ldap-search-map <m>``. The
+search map's attribute lines (``userprofile ...``) were refused as typed, so none is
+offered, and the ``no`` forms of the server's port, wait, TLS and bind lines and of the
+group's two ``enable`` lines were not tried.
+
 Tried on cisco-25gb (NX-OS 9.3(16), 2026-11-12) with throwaway servers at documentation
 addresses (192.0.2.x) and throwaway groups, all removed afterwards: ``feature tacacs+``,
 ``tacacs-server host <a> key 0 <k> port <p> timeout <s>`` (without a key it warns "no key
@@ -38,6 +54,7 @@ default-role`` (from Cisco's NX-OS 9.3 Security Configuration Guide).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,6 +88,10 @@ PAGE_COMMANDS = (
 # broad role and the admin login may read it.
 RADIUS_GROUPS_COMMAND = "show radius-server groups"
 TACACS_COMMANDS = ("show tacacs-server", "show tacacs-server groups")
+# LDAP's, as text; the first is refused while feature ldap is off.
+LDAP_SERVER_COMMAND = "show ldap-server"
+LDAP_GROUPS_COMMAND = "show ldap-server groups"
+LDAP_CONFIG_COMMAND = "show running-config | section ldap"
 SERVICES = ("default", "console")
 AUTHORIZATIONS = ("commands", "config-commands")
 # What ``show aaa authorization`` names, in words; anything else keeps its own name.
@@ -366,7 +387,9 @@ _TACACS = Scope(
 )
 
 
-def _group_scope(key: str, label: str, kind: str, help_text: str) -> Scope:
+def _group_scope(
+    key: str, label: str, kind: str, help_text: str, extra: tuple[Setting, ...] = ()
+) -> Scope:
     return Scope(
         key=key,
         label=label,
@@ -402,6 +425,7 @@ def _group_scope(key: str, label: str, kind: str, help_text: str) -> Scope:
                 group="Settings",
                 fields=(Field("minutes", "Minutes", "int", 0, 1440),),
             ),
+            *extra,
         ),
     )
 
@@ -417,6 +441,136 @@ _TACACS_GROUP = _group_scope(
     "TACACS+ group",
     "tacacs+",
     "A list of TACACS+ servers that sign-in, accounting and command checks name.",
+)
+
+
+_LDAP_SERVER = "ldap-server host {host}"
+_LDAP = Scope(
+    key="ldap",
+    label="LDAP servers",
+    ident=(),
+    enter=(),
+    help="The LDAP servers the switch may ask, and what holds for all of them. Needs ldap on "
+    "(Features page).",
+    settings=(
+        Setting(
+            key="host",
+            label="Server",
+            line=_LDAP_SERVER,
+            fields=(Field("host", "Server", "host", placeholder="192.0.2.10"),),
+            group="Servers",
+            help="Add a server first, then set what it needs. Remove deletes it with all of "
+            "its settings.",
+        ),
+        Setting(
+            key="ssl",
+            label="Encrypt with TLS",
+            line=_LDAP_SERVER + " enable-ssl",
+            fields=(Field("host", "Server", "host"),),
+            group="Servers",
+        ),
+        Setting(
+            key="port",
+            label="Server port",
+            line=_LDAP_SERVER + " port {port}",
+            fields=(
+                Field("host", "Server", "host"),
+                Field("port", "Port", "int", 1, 65535, hint="Default 389; 636 with TLS"),
+            ),
+            group="Servers",
+        ),
+        Setting(
+            key="timeout",
+            label="Server wait",
+            line=_LDAP_SERVER + " timeout {seconds}",
+            fields=(
+                Field("host", "Server", "host"),
+                Field("seconds", "Seconds", "int", 1, 60, hint="Without it the switch-wide wait"),
+            ),
+            group="Servers",
+        ),
+        Setting(
+            key="bind",
+            label="Bind account",
+            line=_LDAP_SERVER + ' rootDN "{dn}" password {password}',
+            no_line="no " + _LDAP_SERVER + ' rootDN "{dn}"',
+            fields=(
+                Field("host", "Server", "host"),
+                Field(
+                    "dn",
+                    "Bind DN",
+                    "quoted",
+                    maximum=128,
+                    placeholder="cn=admin,dc=example,dc=com",
+                ),
+                Field("password", "Password", "secret", hint="Never shown back"),
+            ),
+            group="Servers",
+            help="The account the switch signs in to the directory with to look users up.",
+        ),
+        Setting(
+            key="timeout_all",
+            label="Wait for an answer",
+            line="ldap-server timeout {seconds}",
+            fields=(Field("seconds", "Seconds", "int", 1, 60, hint="Default 5"),),
+            group="All servers",
+        ),
+        Setting(
+            key="port_all",
+            label="Port",
+            line="ldap-server port {port}",
+            fields=(Field("port", "Port", "int", 1, 65535, hint="Default 389"),),
+            group="All servers",
+        ),
+        Setting(
+            key="deadtime",
+            label="Skip a server that did not answer",
+            line="ldap-server deadtime {minutes}",
+            fields=(Field("minutes", "Minutes", "int", 0, 1440, hint="0: never skip"),),
+            group="All servers",
+        ),
+    ),
+)
+_LDAP_GROUP = _group_scope(
+    "ldap_group",
+    "LDAP group",
+    "ldap",
+    "A list of LDAP servers that sign-in names.",
+    extra=(
+        Setting(
+            key="search_map",
+            label="Search map",
+            line="ldap-search-map {map}",
+            group="Settings",
+            fields=(Field("map", "Search map", "name"),),
+            help="Make the search map under LDAP search maps first.",
+        ),
+        Setting(
+            key="cert_dn",
+            label="Match the certificate's DN",
+            line="enable Cert-DN-match",
+            no_line="no enable Cert-DN-match",
+            group="Settings",
+        ),
+        Setting(
+            key="user_group",
+            label="Check the user's group",
+            line="enable user-server-group",
+            no_line="no enable user-server-group",
+            group="Settings",
+        ),
+    ),
+)
+_LDAP_MAP = Scope(
+    key="ldap_map",
+    label="LDAP search map",
+    ident=(Field("map", "Search map", "name", hint="Letters, digits, . _ -"),),
+    enter=("ldap search-map {map}",),
+    create=True,
+    create_label="Make an LDAP search map",
+    delete=("no ldap search-map {map}",),
+    delete_warning="A group that names this map stops using it.",
+    help="Names how a group looks users up. Its attribute lines are set on the switch.",
 )
 
 
@@ -503,10 +657,166 @@ def _values_of(body: Any, tacacs: bool) -> dict[str, dict[str, str]]:
     return values
 
 
-def parse_aaa(bodies: list[Any], radius_groups: Any, tacacs: list[Any] | None) -> ProtocolView:
+@dataclass(frozen=True)
+class LdapReads:
+    """What the page reads while feature ldap is on, all as the text the switch prints:
+    ``show ldap-server``, ``show ldap-server groups`` (empty with no group) and ``show
+    running-config | section ldap`` (None when the account may not read it)."""
+
+    servers: str
+    groups: str = ""
+    config: str | None = None
+
+
+def parse_ldap_servers(output: str) -> tuple[dict[str, str], list[dict[str, str]]]:
+    """``show ldap-server`` as (the switch-wide timeout, port and deadtime, the servers).
+
+    Each server has ``host``, ``port``, ``timeout``, ``dn`` and ``tls`` ("yes"/"no")."""
+    wide: dict[str, str] = {}
+    servers: list[dict[str, str]] = []
+    for raw in output.splitlines():
+        line = raw.strip()
+        if match := re.fullmatch(r"(timeout|port|deadtime)\s*:\s*(\d+)", line):
+            wide[match.group(1)] = match.group(2)
+        elif match := re.fullmatch(r"(\S+):", line):
+            servers.append({"host": match.group(1), "tls": "no"})
+        elif servers and (
+            match := re.match(r"timeout:\s*(\d+)\s+port:\s*(\d+)(?:\s+rootDN:\s*(.*))?", line)
+        ):
+            servers[-1].update(timeout=match.group(1), port=match.group(2))
+            servers[-1]["dn"] = (match.group(3) or "").strip()
+        elif servers and line == "enable-ssl: true":
+            servers[-1]["tls"] = "yes"
+    return wide, servers
+
+
+def parse_ldap_groups(output: str) -> list[dict[str, Any]]:
+    """``show ldap-server groups`` as one dict per group: ``name``, ``vrf``, ``servers``
+    (addresses), ``map`` (the search map), ``cert_dn`` and ``user_group`` (booleans)."""
+    groups: list[dict[str, Any]] = []
+    for raw in output.splitlines():
+        line = raw.strip()
+        if match := re.fullmatch(r"group (\S+):", line):
+            groups.append(
+                {"name": match.group(1), "vrf": "", "servers": [], "map": "", "cert_dn": False,
+                 "user_group": False}
+            )  # fmt: skip
+        elif not groups:
+            continue
+        elif match := re.fullmatch(r"Use-vrf:\s*(\S+)", line):
+            groups[-1]["vrf"] = match.group(1)
+        elif match := re.match(r"server:\s*(\S+)", line):
+            groups[-1]["servers"].append(match.group(1))
+        elif match := re.fullmatch(r"Search map:\s*(\S+)", line):
+            groups[-1]["map"] = match.group(1)
+        elif line == "CERT-DN match enabled":
+            groups[-1]["cert_dn"] = True
+        elif line == "Group validation enabled":
+            groups[-1]["user_group"] = True
+    return groups
+
+
+def parse_ldap_config(config: str | None) -> tuple[list[str], dict[str, str]]:
+    """``show running-config | section ldap`` as (the search maps, each group's skip time
+    by name). Both empty when the account may not read the configuration."""
+    maps: list[str] = []
+    deadtimes: dict[str, str] = {}
+    group = ""
+    for raw in (config or "").splitlines():
+        if not raw[:1].isspace() and (match := re.fullmatch(r"ldap search-map (\S+)", raw)):
+            maps.append(match.group(1))
+        if match := re.fullmatch(r"aaa group server ldap (\S+)", raw):
+            group = match.group(1)
+        elif raw[:1].isspace() and group:
+            if match := re.fullmatch(r"deadtime (\d+)", raw.strip()):
+                deadtimes[group] = match.group(1)
+        elif not raw[:1].isspace():
+            group = ""
+    return maps, deadtimes
+
+
+def _ldap_view(reads: LdapReads) -> tuple[list[Instance], list[Table]]:
+    """The LDAP instances and tables of a page, from the reads."""
+    wide, servers = parse_ldap_servers(reads.servers)
+    maps, deadtimes = parse_ldap_config(reads.config)
+    values: dict[str, dict[str, str]] = {}
+    for key, setting, blank in (
+        ("timeout", "timeout_all", "seconds"),
+        ("port", "port_all", "port"),
+        ("deadtime", "deadtime", "minutes"),
+    ):
+        if wide.get(key):
+            values[setting] = {blank: wide[key]}
+    instances = [
+        Instance(
+            "ldap",
+            {},
+            "LDAP, all servers",
+            (
+                ("Wait (seconds)", wide.get("timeout", "-")),
+                ("Port", wide.get("port", "-")),
+                ("Skip a silent server (minutes)", wide.get("deadtime", "0")),
+                ("Servers", str(len(servers))),
+            ),
+            values,
+        )
+    ]
+    for group in parse_ldap_groups(reads.groups):
+        group_values: dict[str, dict[str, str]] = {}
+        if group["vrf"]:
+            group_values["vrf"] = {"vrf": group["vrf"]}
+        if group["map"]:
+            group_values["search_map"] = {"map": group["map"]}
+        if group["cert_dn"]:
+            group_values["cert_dn"] = {}
+        if group["user_group"]:
+            group_values["user_group"] = {}
+        if deadtimes.get(group["name"]):
+            group_values["deadtime"] = {"minutes": deadtimes[group["name"]]}
+        instances.append(
+            Instance(
+                "ldap_group",
+                {"group": group["name"]},
+                group["name"],
+                (
+                    ("Servers", ", ".join(group["servers"]) or "none"),
+                    ("VRF", group["vrf"] or "default"),
+                    ("Search map", group["map"] or "none"),
+                    ("Skip for (minutes)", deadtimes.get(group["name"], "0")),
+                ),
+                group_values,
+            )
+        )
+    instances += [Instance("ldap_map", {"map": name}, name) for name in maps]
+    tables = [
+        Table(
+            "LDAP servers",
+            ("Server", "Port", "Wait (s)", "Bind DN", "TLS"),
+            tuple(
+                (
+                    server["host"],
+                    server.get("port", "389"),
+                    server.get("timeout", "switch-wide"),
+                    server.get("dn") or "-",
+                    server["tls"],
+                )
+                for server in servers
+            ),
+            empty="No LDAP server is set.",
+        )
+    ]
+    return instances, tables
+
+
+def parse_aaa(
+    bodies: list[Any],
+    radius_groups: Any,
+    tacacs: list[Any] | None,
+    ldap: LdapReads | None = None,
+) -> ProtocolView:
     """The page from the first request's bodies (``PAGE_COMMANDS`` order), the RADIUS
-    groups (None when the account may not read them) and the TACACS+ bodies (None while
-    TACACS+ is off)."""
+    groups (None when the account may not read them), the TACACS+ bodies (None while
+    TACACS+ is off) and the LDAP reads (None while LDAP is off)."""
     authen, error_enable, accounting, authorization, groups, default_role = bodies[:6]
     radius = bodies[6]
     login = _methods_text(table_rows(authen, "TABLE_AuthenMethods", "ROW_AuthenMethods"), "method")
@@ -573,6 +883,21 @@ def parse_aaa(bodies: list[Any], radius_groups: Any, tacacs: list[Any] | None) -
                 empty="No TACACS+ server is set.",
             )
         )
+    if ldap is None:
+        notes.append(
+            "LDAP is off on the switch (feature ldap): an NXray admin turns it on on the "
+            "Features page to set LDAP servers, groups and search maps."
+        )
+    else:
+        ldap_instances, ldap_tables = _ldap_view(ldap)
+        instances += ldap_instances
+        tables += ldap_tables
+        if ldap.config is None:
+            notes.append(
+                "NXray's account may not read the configuration, so the LDAP search maps and "
+                "each LDAP group's skip time are not shown: store the switch admin login on "
+                "the Switch page to see them."
+            )
     names = [text(r.get("group")) for r in table_rows(groups, "TABLE_groups", "ROW_groups")]
     tables.append(
         Table(
@@ -594,7 +919,16 @@ AAA = Protocol(
     features=(),
     commands=(),
     parse=lambda bodies: ProtocolView(),
-    scopes=(_METHODS, _RADIUS, _RADIUS_GROUP, _TACACS, _TACACS_GROUP),
+    scopes=(
+        _METHODS,
+        _RADIUS,
+        _RADIUS_GROUP,
+        _TACACS,
+        _TACACS_GROUP,
+        _LDAP,
+        _LDAP_GROUP,
+        _LDAP_MAP,
+    ),
     about=(
         "AAA (authentication, authorization and accounting) decides who may sign in, what "
         "they may type and where it is recorded. Changes need the stored admin login and an "
@@ -612,6 +946,7 @@ class AaaPage:
     vrfs: tuple[str, ...]
     groups: tuple[str, ...]  # every server group's name
     tacacs_on: bool
+    ldap_on: bool = False
     problem: str = ""
     missing: tuple[str, ...] = ()  # always empty: RADIUS needs no feature
 
@@ -629,16 +964,33 @@ def load_aaa_page(client: NxapiClient) -> AaaPage:
         tacacs: list[Any] | None = client.show(*TACACS_COMMANDS)
     except NxapiCommandError:
         tacacs = None
+    ldap = _read_ldap(client)
     groups = tuple(
         text(r.get("group")) for r in table_rows(bodies[4], "TABLE_groups", "ROW_groups")
     )
     return AaaPage(
         AAA,
-        parse_aaa(bodies, radius_groups, tacacs),
+        parse_aaa(bodies, radius_groups, tacacs, ldap),
         vrf_choices(bodies[7]),
         tuple(g for g in groups if g),
         tacacs is not None,
+        ldap is not None,
     )
+
+
+def _read_ldap(client: NxapiClient) -> LdapReads | None:
+    """LDAP's text reads; None while the switch refuses ``show ldap-server`` (ldap is off)."""
+    try:
+        servers = client.show_text(LDAP_SERVER_COMMAND)
+    except NxapiCommandError:
+        return None
+    reads = {}
+    for key, command in (("groups", LDAP_GROUPS_COMMAND), ("config", LDAP_CONFIG_COMMAND)):
+        try:  # no group makes the switch refuse the groups; the account may not read the config
+            reads[key] = client.show_text(command)
+        except NxapiCommandError:
+            reads[key] = "" if key == "groups" else None
+    return LdapReads(servers, reads["groups"] or "", reads["config"])
 
 
 def build_aaa_change(

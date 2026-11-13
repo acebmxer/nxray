@@ -1,0 +1,12 @@
+Smart Licensing is ENABLED
+
+Registration:
+  Status: UNREGISTERED
+  Export-Controlled Functionality: Not Allowed
+
+License Authorization: 
+  Status: No Licenses in Use
+
+Smart License Conversion:
+  Automatic Conversion Enabled: False
+  Status: Not started

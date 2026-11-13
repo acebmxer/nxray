@@ -74,7 +74,9 @@ prose columns; those are a reviewer's job.
 | Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
 | Read PTP (the clock's state, the grandmaster, each PTP port's state and counters) or change it: the clock's source address, domain, priorities, limits and notifications; on a port PTP on or off, transmission, role, VLAN, message intervals, unicast source, masters and slaves | `app/ptp.py` (`load_ptp_page`, `build_ptp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ptp` |
 | Read telemetry (destination profile, destination groups with their collectors' state, sensor groups, subscriptions, data collected) or change it: the profile's settings, make or delete a group or subscription, collectors, paths and show-command paths, a subscription's groups and interval | `app/telemetry.py` (`load_telemetry_page`, `build_telemetry_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_telemetry` |
-| Read AAA (sign-in and accounting methods, the RADIUS and TACACS+ servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
+| Read AAA (sign-in and accounting methods, the RADIUS, TACACS+ and LDAP servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time, an LDAP server's TLS, port, wait and bind account, an LDAP group's search map and certificate DN match, an LDAP search map | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
+| Read the licence features, whether the switch is registered with Cisco and its identity, or reserve licences | `app/licensing.py` (`load_licensing_page`, `build_licensing_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_licensing` |
+| Read which of gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker and OpenFlow are on and what the switch says of them, or change gRPC's port, calls at once and certificate, NETCONF's sessions and idle time and an NX-SDK service | `app/programmability.py` (`load_programmability_page`, `build_programmability_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_programmability` |
 | Read the SSH host key, key pairs, trustpoints and certificates, or change them as an NXray admin: a new SSH host key (SSH off and on around it), make or delete a key pair or trustpoint, a trustpoint's key pair, enrolment and revocation check, import a PKCS#12 file, delete its certificates, paste a CA certificate (over SSH) | `app/pki.py` (`load_pki_page`, `build_pki_change`, `check_ca_certificates`), on the same parts as the protocol pages; command from `NxapiClient.configure_pki`; the paste from `switch_ssh.authenticate_ca` |
 | Read the files on bootflash, or (stored admin login, NXray admin) copy one to or from the switch with SCP, or delete one (never the image in use) | `app/switch_files.py` (`load_files_page`, `check_delete`, `check_upload`, `upload_work`); `NxapiClient.list_files`, `NxapiClient.delete_file`; copies through `switch_ssh.Session` |
 | Read the running and boot images and the last install, or (stored admin login, NXray admin) check an image's checksum, run the compatibility check and install it | `app/switch_files.py` (`load_software_page`, `checksum_work`, `impact_work`, `ready_to_install`, `install_work`), as background jobs (`app/switch_jobs.py`) |
@@ -804,6 +806,12 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_evb_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Edge Virtual Bridging page, with a message | `evb_page`, `switch_save` | v0.3.0 |
 | `evb_page` | `(request, username) -> Response` | `GET /evb`: EVB's settings, hosts and VSIs, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `evb_change` | `(request, username, form) -> Response` | `POST /evb/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_licensing_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Smart Licensing page, with a message | `licensing_page`, `switch_save` | v0.3.0 |
+| `licensing_page` | `(request, username) -> Response` | `GET /licensing`: the licences and the registration, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `licensing_change` | `(request, username, form) -> Response` | `POST /licensing/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_programmability_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Programmability page, with a message | `programmability_page`, `switch_save` | v0.3.0 |
+| `programmability_page` | `(request, username) -> Response` | `GET /programmability`: the interfaces, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `programmability_change` | `(request, username, form) -> Response` | `POST /programmability/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_tunnel_encryption_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN tunnel encryption page, with a message | `tunnel_encryption_page`, `switch_save` | v0.3.0 |
 | `tunnel_encryption_page` | `(request, username) -> Response` | `GET /tunnel-encryption`: the key chains, policies, peers, links and sessions, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `tunnel_encryption_change` | `(request, username, form) -> Response` | `POST /tunnel-encryption/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
@@ -1769,9 +1777,35 @@ pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_aaa` | `(bodies, tacacs) -> ProtocolView` | The page from the AAA, RADIUS and VRF reads and the TACACS+ reads (None while TACACS+ is off): the methods, the switch-wide settings, a place per server group (not the built-in radius group), tables of the servers and groups | `load_aaa_page` | v0.2.1 |
+| `parse_aaa` | `(bodies, radius_groups, tacacs, ldap=None) -> ProtocolView` | The page from the AAA, RADIUS and VRF reads and the TACACS+ reads (None while TACACS+ is off): the methods, the switch-wide settings, a place per server group (not the built-in radius group), tables of the servers and groups | `load_aaa_page` | v0.2.1 |
+| `parse_ldap_servers` | `(output) -> tuple[dict, list[dict]]` | `show ldap-server` as text: the switch-wide timeout, port and skip time, and each server's address, port, wait, bind DN and TLS | `_ldap_view` | v0.3.0 |
+| `parse_ldap_groups` | `(output) -> list[dict]` | `show ldap-server groups` as text: each group's name, VRF, servers, search map and whether certificate DN match and group validation are on | `_ldap_view` | v0.3.0 |
+| `parse_ldap_config` | `(config) -> tuple[list[str], dict[str, str]]` | `show running-config \| section ldap` as text: the search maps and each group's skip time | `_ldap_view` | v0.3.0 |
 | `load_aaa_page` | `(client) -> AaaPage` | One request for the AAA, RADIUS and VRF reads; one for TACACS+, which the switch refuses while it is off | `routes/aaa` | v0.2.1 |
 | `build_aaa_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the AAA page; refuses the switch's own radius group | `NxapiClient.configure_aaa`, `routes/aaa` | v0.2.1 |
+
+## `app/licensing.py` — Smart Licensing: the licences and the registration
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_summary` | `(output) -> tuple[tuple[str, str], ...]` | `show license summary` as text: whether Smart Licensing is on, the registration, export control and licence authorization | `parse_licensing` | v0.3.0 |
+| `parse_udi` | `(output) -> str` | The model and serial number after `UDI:` in `show license udi` | `parse_licensing` | v0.3.0 |
+| `parse_usage` | `(output) -> tuple[tuple[str, ...], ...]` | The rows of `show license usage`: feature, installed, count, status, expiry and comments | `parse_licensing` | v0.3.0 |
+| `parse_licensing` | `(on, usage, summary=None, udi=None, config=None) -> ProtocolView` | The page: the usage table, and while it is on the registration facts and the reservation setting | `SMART_LICENSING.parse`, `load_licensing_page` | v0.3.0 |
+| `load_licensing_page` | `(client) -> LicensingPage` | `show feature` and `show license usage`; while it is on, the summary, the UDI and the licence lines of the configuration | `routes/licensing` | v0.3.0 |
+| `check_licensing_place` | `(page, ident) -> None` | Nothing to check: the page's one scope is the whole switch | the Smart Licensing `ProtocolSite` | v0.3.0 |
+| `build_licensing_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_licensing`, `routes/licensing` | v0.3.0 |
+
+## `app/programmability.py` — gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker, OpenFlow
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_facts` | `(output) -> tuple[tuple[str, str], ...]` | The `Name : value` lines of a command's text as (name, value) pairs | `parse_programmability` | v0.3.0 |
+| `parse_programmability_config` | `(config) -> dict` | The top-level `grpc`, `netconf` and `nxsdk` lines of `show running-config` as setting values by scope | `parse_programmability` | v0.3.0 |
+| `parse_programmability` | `(states, config=None, grpc=None, nxsdk=None, openflow=None) -> ProtocolView` | The page: a place for each interface whose feature is on, a note naming those off and a table of all six | `PROGRAMMABILITY.parse`, `load_programmability_page` | v0.3.0 |
+| `load_programmability_page` | `(client) -> ProgrammabilityPage` | `show feature`; for each feature that is on, the configuration text and its own show command as text | `routes/programmability` | v0.3.0 |
+| `check_programmability_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Programmability `ProtocolSite` | v0.3.0 |
+| `build_programmability_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_programmability`, `routes/programmability` | v0.3.0 |
 
 ## `app/pki.py` — SSH and certificates: the host key, key pairs, trustpoints, certificates
 

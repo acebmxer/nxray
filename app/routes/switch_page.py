@@ -48,6 +48,7 @@ from app.routes.flexlink import render_flexlink_page
 from app.routes.igmp_snooping import render_snooping_page
 from app.routes.ip_sla import render_ip_sla_page
 from app.routes.itd import render_itd_page
+from app.routes.licensing import render_licensing_page
 from app.routes.loopbacks import render_loopbacks_page
 from app.routes.monitor import render_monitor_page
 from app.routes.mpls import render_mpls_page
@@ -61,6 +62,7 @@ from app.routes.pki import render_pki_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
 from app.routes.private_vlans import render_private_vlans_page
+from app.routes.programmability import render_programmability_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.ptp import render_ptp_page
 from app.routes.qos import render_qos_page
@@ -1005,7 +1007,8 @@ def switch_save(
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
     ``mpls``, ``nat``, ``track``, ``epbr``, ``igmp-snooping``, ``nbm``, ``trm``, ``flexlink``,
-    ``vmtracker``, ``evb``, ``tunnel-encryption``, ``ngoam``,
+    ``vmtracker``, ``evb``, ``tunnel-encryption``, ``ngoam``, ``programmability``,
+    ``licensing``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1113,6 +1116,10 @@ def switch_save(
             return render_vmtracker_page(request, username, error=error, notice=notice)
         if back == "evb":
             return render_evb_page(request, username, error=error, notice=notice)
+        if back == "programmability":
+            return render_programmability_page(request, username, error=error, notice=notice)
+        if back == "licensing":
+            return render_licensing_page(request, username, error=error, notice=notice)
         if back == "tunnel-encryption":
             return render_tunnel_encryption_page(request, username, error=error, notice=notice)
         if back == "ngoam":

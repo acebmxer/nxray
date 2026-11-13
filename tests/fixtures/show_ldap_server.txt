@@ -1,0 +1,14 @@
+timeout      : 5
+port         : 389
+deadtime     : 2
+total number of servers : 1
+
+following LDAP servers are configured:
+    10.250.250.250:
+                idle time:5
+                test user:test
+                test password:********
+                test DN:cn=a,dc=b
+        timeout: 7    port: 636    rootDN: cn=admin,dc=example,dc=com
+        enable-ssl: true
+        referral-disable: false

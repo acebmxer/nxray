@@ -652,6 +652,10 @@ class FakeSwitch:
     te_chains: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     te_key_strings: dict[tuple[str, str], str] = field(default_factory=dict)
     ngoam_lines: list[str] = field(default_factory=list)
+    # Stage E6: gRPC, NETCONF, NX-SDK, Smart Licensing and LDAP lines, as paths like
+    # ``l2_lines``; ``nxsdk_apps`` are the NX-SDK application services the switch has.
+    mgmt_lines: list[str] = field(default_factory=list)
+    nxsdk_apps: set[str] = field(default_factory=set)
     ngoam_key: str = ""
     ngoam_ran: list[str] = field(default_factory=list)
     ngoam_counts: dict[str, int] = field(
@@ -1377,6 +1381,8 @@ class FakeSwitch:
                 if not self._feature_on(feature):
                     return _error(ident, "% Invalid command at '^' marker.\n")
                 return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if reply := self._mgmt_ascii(cmd, ident):
+            return reply
         if cmd == "show feature-set":
             return {"jsonrpc": "2.0", "result": {"msg": self.feature_set_text()}, "id": ident}
         if cmd == "show running-config callhome":
@@ -1464,6 +1470,7 @@ class FakeSwitch:
         out += self.epbr_config()
         out += _nested(self.mcast_lines)
         out += _nested(self.l2_lines)
+        out += _nested(self.mgmt_lines)
         out += self.te_config()
         out += _nested(self.ngoam_lines)
         out += _nested(
@@ -3613,6 +3620,8 @@ class FakeSwitch:
 
         if cmd in self.bodies:
             return _ok(ident, self.bodies[cmd]), context
+        if mgmt_reply := self._mgmt(user, is_admin, cmd, ident, context):
+            return mgmt_reply
         if stage_d_reply := self._stage_d(user, is_admin, cmd, ident, context):
             return stage_d_reply
         if extras_reply := self._vxlan_extras(user, is_admin, cmd, ident, context):
@@ -4701,6 +4710,163 @@ class FakeSwitch:
             if on is not None:
                 row["cfcFeatureCtrlOpStatus2"] = "enabled" if on else "disabled"
         return body
+
+    # ---- gRPC, NETCONF, NX-SDK, Smart Licensing and LDAP (stage E6) ----------------------
+
+    _MGMT_FEATURES = (
+        ("grpc ", "grpc"),
+        ("netconf ", "netconf"),
+        ("nxsdk ", "nxsdk_mgr"),
+        ("license smart reservation", "license-smart"),
+        ("ldap-server ", "ldap"),
+        ("ldap search-map ", "ldap"),
+        ("aaa group server ldap ", "ldap"),
+    )
+    # Show commands that print ``texts`` while their feature is on, and are
+    # "% Invalid command" while it is off (as cisco-25gb did).
+    _MGMT_SHOWS = (
+        ("show ldap-server", "ldap"),
+        ("show grpc ", "grpc"),
+        ("show nxsdk ", "nxsdk_mgr"),
+        ("show openflow ", "openflow"),
+        ("show license summary", "license-smart"),
+        ("show license udi", "license-smart"),
+    )
+
+    def ldap_config_text(self) -> str:
+        """``show running-config | section ldap``: the LDAP lines, each group's inside it."""
+        keep = [line for line in self.mgmt_lines if "ldap" in line.split(" ; ")[0]]
+        return "\n".join(_nested(keep)) + "\n" if keep else ""
+
+    def _mgmt_ascii(self, cmd: str, ident: int) -> dict[str, Any] | None:
+        invalid = _error(ident, "% Invalid command\n")
+        if cmd == "show running-config | section ldap":
+            if not self._feature_on("ldap"):
+                return invalid
+            return {"jsonrpc": "2.0", "result": {"msg": self.ldap_config_text()}, "id": ident}
+        if cmd == "show running-config | section license":
+            lines = [line for line in self.mgmt_lines if line.startswith("license smart")]
+            text = "\n".join(["feature license smart", *lines]) + "\n"
+            return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
+        if cmd == "show ldap-server groups" and not self.texts.get(cmd):
+            return _error(ident, "Invalid params\n")  # as with no group made
+        for prefix, feature in self._MGMT_SHOWS:
+            if cmd.startswith(prefix):
+                if not self._feature_on(feature):
+                    return invalid
+                return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if cmd == "show license usage":
+            return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        return None
+
+    def _mgmt(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """The lines of gRPC, NETCONF, NX-SDK, Smart Licensing and LDAP, or None when ``cmd``
+        is none of them. Ranges, the ``no`` forms and the refusals are as probed on
+        cisco-25gb (2026-11-13)."""
+        kind = context[0] if context else None
+        if kind == "ldap-group":
+            if cmd == "exit":
+                return _ok(ident, None), None
+            bare = cmd.removeprefix("no ")
+            word = bare.split()[0] if bare.split() else ""
+            if word in ("server", "use-vrf", "deadtime", "enable", "ldap-search-map"):
+                if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                    return _error(ident, "% Permission denied for the role\n"), context
+                path = f"{context[1]} ; {bare}"
+                if cmd.startswith("no "):
+                    self.mgmt_lines[:] = [i for i in self.mgmt_lines if i != path]
+                    return _ok(ident, None), context
+                if word in ("use-vrf", "deadtime", "ldap-search-map"):
+                    start = f"{context[1]} ; {word} "
+                    self.mgmt_lines[:] = [i for i in self.mgmt_lines if not i.startswith(start)]
+                if path not in self.mgmt_lines:
+                    self.mgmt_lines.append(path)
+                return _ok(ident, None), context
+            return None
+        undo = cmd.startswith("no ")
+        bare = cmd.removeprefix("no ")
+        if kind is not None:
+            return None
+        feature = next((f for prefix, f in self._MGMT_FEATURES if bare.startswith(prefix)), None)
+        if feature is None:
+            return None
+        if not self._feature_on(feature):
+            return _error(ident, "% Invalid command\n"), context
+        if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        ranges = {
+            "grpc port": (1024, 65535),
+            "grpc gnmi max-concurrent-calls": (1, 16),
+            "netconf sessions": (1, 10),
+            "netconf idle-timeout": (0, 1440),
+        }
+        for head, (low, high) in ranges.items():
+            if match := re.fullmatch(rf"{head} (\d+)", bare):
+                if not low <= int(match.group(1)) <= high:
+                    return _error(ident, f"% Invalid number, range is ({low}:{high})\n"), context
+                self.mgmt_lines[:] = [i for i in self.mgmt_lines if not i.startswith(head + " ")]
+                if not undo:
+                    self.mgmt_lines.append(bare)
+                return _ok(ident, None), context
+        if re.fullmatch(r"(grpc port|grpc gnmi max-concurrent-calls|netconf sessions)", bare):
+            return _error(ident, "% Incomplete command\n"), context
+        if match := re.fullmatch(r"grpc certificate (\S+)", bare):
+            self.mgmt_lines[:] = [
+                i for i in self.mgmt_lines if not i.startswith("grpc certificate")
+            ]
+            if not undo:
+                self.mgmt_lines.append(bare)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"nxsdk service-name (\S+)", bare):
+            if len(match.group(1)) > 20:
+                return _error(ident, "% String exceeded max length of (20)\n"), context
+            if not undo and match.group(1) not in self.nxsdk_apps:
+                return _error(ident, f"Err: Service {match.group(1)} not found \n"), context
+            self.mgmt_lines[:] = [i for i in self.mgmt_lines if i != bare]
+            if not undo:
+                self.mgmt_lines.append(bare)
+            return _ok(ident, None), context
+        if bare == "license smart reservation":
+            self.mgmt_lines[:] = [i for i in self.mgmt_lines if i != bare]
+            if not undo:
+                self.mgmt_lines.append(bare)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"ldap search-map (\S+)", bare):
+            self.mgmt_lines[:] = [i for i in self.mgmt_lines if i != bare]
+            if not undo:
+                self.mgmt_lines.append(bare)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"aaa group server ldap (\S+)", bare):
+            start = bare
+            if undo:
+                self.mgmt_lines[:] = [
+                    i for i in self.mgmt_lines if i != start and not i.startswith(start + " ; ")
+                ]
+                return _ok(ident, None), context
+            if start not in self.mgmt_lines:
+                self.mgmt_lines.append(start)
+            return _ok(ident, None), ("ldap-group", start)
+        if match := re.fullmatch(
+            r"ldap-server (host (\S+)(?: (.*))?|(timeout|port|deadtime) (\d+))", bare
+        ):
+            if match.group(4):
+                head = f"ldap-server {match.group(4)} "
+                self.mgmt_lines[:] = [i for i in self.mgmt_lines if not i.startswith(head)]
+                if not undo:
+                    self.mgmt_lines.append(bare)
+                return _ok(ident, None), context
+            if undo and not match.group(3):  # no ldap-server host <a>: the server goes
+                start = f"ldap-server host {match.group(2)}"
+                self.mgmt_lines[:] = [i for i in self.mgmt_lines if not i.startswith(start)]
+                return _ok(ident, None), context
+            if undo:
+                self.mgmt_lines[:] = [i for i in self.mgmt_lines if i != bare]
+            elif bare not in self.mgmt_lines:
+                self.mgmt_lines.append(bare)
+            return _ok(ident, None), context
+        return _error(ident, "% Invalid command\n"), context
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
         if cmd.startswith("show epbr "):

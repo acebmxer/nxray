@@ -1371,6 +1371,22 @@ disable`, each with its `no` form, as the switch's own command list gives them; 
 lists no per-port EVB lines. The shows were read on cisco-25gb, where EVB was on; the lines
 were not tried there (they are switch-wide settings EVB already has).
 
+**Smart Licensing and Programmability.** The **Smart Licensing** and **Programmability** pages
+(under Switch) need no rule of their own, so they work with the broad role and with a stored
+admin login, and are off with the limited role. Smart Licensing reads `show feature`, `show
+license usage` and, with `feature license smart` on, `show license summary`, `show license udi`
+and `show running-config | section license`; it types `license smart reservation` (and its `no`
+form). The feature is turned on on the Features page (`license smart enable`), and the switch
+then writes a Call Home section (the CiscoTAC-1 profile over http) itself. Programmability
+reads `show feature`, `show running-config` and, for each feature that is on, `show grpc gnmi
+service statistics`, `show nxsdk internal service` and `show openflow switch 1`; it types
+`grpc port <1024-65535>`, `grpc gnmi max-concurrent-calls <1-16>`, `grpc certificate <name>`,
+`netconf sessions <1-10>`, `netconf idle-timeout <0-1440>` and `nxsdk service-name <name>`,
+each with its `no` form, which names the value. All were tried on cisco-25gb with the feature
+turned on and off again; `nxsdk service-name` is refused unless an application of that name is
+installed, and OpenFlow's switch lines are refused until the TCAM has an OpenFlow region (a
+restart), so NXray only shows OpenFlow.
+
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
 errdisable detect`, `show errdisable recovery` and `show interface status err-disabled` (as
@@ -1482,7 +1498,12 @@ commands|config-commands default group <g> ... [local]`, `radius-server host <a>
 <n>]`, `tacacs-server host <a> [key 0 <k>] [port <p>] [timeout <s>]`, the switch-wide `key 0`,
 `timeout`, `retransmit` and `deadtime` lines, and `aaa group server radius|tacacs+ <g>` with
 `server <a>`, `use-vrf <v>` and `deadtime <m>`; each with its `no` form, which names the
-value. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway servers and groups: the server,
+value. With `feature ldap` on it also reads `show ldap-server`, `show ldap-server groups` and
+`show running-config | section ldap` (as text) and types `ldap-server host <a>` with `enable-ssl`,
+`port <p>`, `timeout <s>` and `rootDN "<dn>" password <pw>` on lines of their own, `ldap-server
+timeout|port|deadtime <n>`, `ldap search-map <m>`, and `aaa group server ldap <g>` with
+`server`, `use-vrf`, `deadtime`, `enable Cert-DN-match`, `enable user-server-group` and
+`ldap-search-map <m>`. Tried on cisco-25gb (NX-OS 9.3(16)) (NX-OS 9.3(16)) with throwaway servers and groups: the server,
 group and TACACS+ switch-wide lines and their `no` forms. Not tried, as each changes how
 people sign in to a switch in production: the `aaa authentication`, `aaa accounting` and
 `aaa authorization` lines, the RADIUS switch-wide lines and `aaa user default-role`.

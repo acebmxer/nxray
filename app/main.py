@@ -49,6 +49,7 @@ from app.routes import (
     igmp_snooping,
     ip_sla,
     itd,
+    licensing,
     live,
     loopbacks,
     monitor,
@@ -64,6 +65,7 @@ from app.routes import (
     ports,
     preferences,
     private_vlans,
+    programmability,
     protocols,
     ptp,
     qos,
@@ -275,6 +277,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(flexlink.router)
     app.include_router(vmtracker.router)
     app.include_router(evb.router)
+    app.include_router(programmability.router)
+    app.include_router(licensing.router)
     app.include_router(tunnel_encryption.router)
     app.include_router(ngoam.router)
     app.include_router(copp.router)

@@ -146,7 +146,7 @@
 </section>
 {% endfor %}
 
-{% for scope in proto.scopes %}
+{% for scope in (page.shown_scopes if page.shown_scopes is defined else proto.scopes) %}
 {% set sidx = loop.index %}
 <section class="card" id="{{ scope.key }}">
   <h2 class="card-title">{{ scope.label }}</h2>

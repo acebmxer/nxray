@@ -11,6 +11,29 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up LDAP sign-in on the AAA page (#95).** With `feature ldap` on, the **AAA** page also
+  shows the LDAP servers (port, wait, bind account, TLS) and groups, and sets a server and its
+  TLS, port, wait and bind account (the password is never shown back), the switch-wide wait,
+  port and skip time, LDAP groups (servers, VRF, skip time, certificate DN match, group
+  validation, search map) and search maps by name. Like the rest of AAA it needs the stored
+  admin login and an NXray admin. Tried on a switch with a throwaway server, group and
+  search map, all removed; a search map's attribute lines were refused as typed, so they are
+  set on the switch, and the `no` forms of the server's port, wait, TLS and bind lines were
+  not tried.
+- **Manage Smart Licensing (#95).** The new **Smart Licensing** page (under Switch) shows the
+  licence features and their use, and, while Smart Licensing is on, whether the switch is
+  registered, what it may export and its identity (model and serial number), and reserves
+  licences. Turning it on is done on the Features page, and the switch then writes a Call Home
+  section to Cisco itself. Registering with a token, renewing and deregistering are not
+  offered (they need a Cisco account). Needs the broad role or a stored admin login.
+- **See and set gRPC, NETCONF and NX-SDK, and see RESTCONF, Container Tracker and OpenFlow
+  (#95).** The new **Programmability** page (under Switch) shows which of the six is on and,
+  for each that is, what the switch says of it, and sets the gRPC port, calls at once and
+  certificate, NETCONF's sessions and idle time, and an NX-SDK application service. RESTCONF
+  and Container Tracker have no setting on this switch beyond their feature; OpenFlow is shown
+  only: the Nexus 9200 has no OpenFlow TCAM region, and carving one needs a restart, so its
+  switch lines are refused. A feature is turned on on the Features page. Needs the broad role
+  or a stored admin login.
 - **Ping, traceroute and pathtrace across the VXLAN fabric (#95).** The new **VXLAN OAM**
   page (under Configure) runs VXLAN OAM's ping, traceroute and pathtrace from the switch, to
   an address in a VNI or a VRF, to a host found by its traffic, or to a MAC address, with the

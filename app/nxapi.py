@@ -2136,6 +2136,44 @@ class NxapiClient:
         message = result.get("msg") if isinstance(result, dict) else None
         return message if isinstance(message, str) else ""
 
+    def configure_programmability(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Programmability page: a gRPC, NETCONF or NX-SDK setting.
+
+        The lines are built from the page's description and the checked values
+        (``programmability.build_programmability_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.programmability import build_programmability_change
+
+        change = build_programmability_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_licensing(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Smart Licensing page: the licence reservation.
+
+        The lines are built from the page's description and the checked values
+        (``licensing.build_licensing_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.licensing import build_licensing_change
+
+        change = build_licensing_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_ptp(
         self,
         scope: str,

@@ -1,0 +1,12 @@
+feature ldap
+ldap-server deadtime 2
+ldap-server host 10.250.250.250 rootDN "cn=admin,dc=example,dc=com"  password 7 V3gwwtKb port 636 timeout 7 
+ldap-server host 10.250.250.250 enable-ssl
+ldap search-map smap
+aaa group server ldap lgrp
+  server 10.250.250.250
+  deadtime 3
+  enable Cert-DN-match
+  enable user-server-group
+  use-vrf management
+  ldap-search-map smap

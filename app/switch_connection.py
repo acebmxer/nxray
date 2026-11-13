@@ -376,6 +376,19 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def programmability_changes_enabled(self) -> bool:
+        """True when NXray may change gRPC, NETCONF and NX-SDK settings: the same as for
+        monitor sessions (the broad role or the stored admin login; the limited role has no
+        rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def licensing_changes_enabled(self) -> bool:
+        """True when NXray may change Smart Licensing: the same as for monitor sessions (the
+        broad role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
     def ptp_changes_enabled(self) -> bool:
         """True when NXray may change PTP: the same as for monitor sessions (the broad role
         or the stored admin login; the limited role has no rules for it)."""

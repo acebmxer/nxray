@@ -53,7 +53,7 @@ counters, see the control-plane policing (CoPP) policy with what each class pass
 dropped, set the switch's hostname, banner,
 clock and NTP, DNS, logging and
 SNMP and read its log, have the switch run jobs on a schedule (such as a nightly copy of its
-configuration) and act on events with EEM applets, send its messages with Smart Call Home, take precise time from a PTP grandmaster and pass it on, stream its data to a collector with telemetry, set how people sign in to it (its own accounts, RADIUS or TACACS+) and what is recorded, see and replace its SSH host key and manage its certificates, browse, copy and delete the files on its bootflash, check and install a new NX-OS image, collect show tech-support for a support case, make and apply IPv4, IPv6 and MAC ACLs, object groups
+configuration) and act on events with EEM applets, send its messages with Smart Call Home, take precise time from a PTP grandmaster and pass it on, stream its data to a collector with telemetry, set how people sign in to it (its own accounts, RADIUS, TACACS+ or LDAP) and what is recorded, see and replace its SSH host key and manage its certificates, browse, copy and delete the files on its bootflash, check and install a new NX-OS image, collect show tech-support for a support case, see its licences and Smart Licensing registration, set its gRPC, NETCONF and NX-SDK interfaces and see RESTCONF, Container Tracker and OpenFlow, make and apply IPv4, IPv6 and MAC ACLs, object groups
 and VLAN access maps, size the TCAM regions, set port security, DHCP snooping,
 the DHCP relay, dynamic ARP inspection and IP Source Guard, keep backups of the
 switch's configuration, compare them and roll back to one, restart the switch,
@@ -301,6 +301,14 @@ default: *(built)*.
     TACACS+ server groups), accounting and TACACS+ command authorization, the
     servers and groups. *(built; needs the stored admin login and an NXray admin;
     the sign-in, accounting and authorization lines not yet tried on a switch)*
+    **LDAP** (on the AAA page): servers, groups and search maps. *(built; needs the stored
+    admin login and an NXray admin; tried on a switch with throwaway objects, the search
+    map's attribute lines left to the switch)* **Smart Licensing**: the licences in use,
+    the registration and the reservation. *(built; needs the broad role or a stored admin
+    login; registering, renewing and deregistering not offered)* **Programmability**:
+    gRPC, NETCONF and NX-SDK settings, and the state of RESTCONF, Container Tracker and
+    OpenFlow. *(built; needs the broad role or a stored admin login; OpenFlow shown only: the
+    Nexus 9200 needs a restart to carve its TCAM)*
     **SSH and certificates**: the SSH host key and a new one, key pairs,
     trustpoints, a CA certificate pasted or a PKCS#12 file imported. *(built;
     needs the broad role or a stored admin login, and an NXray admin; a new SSH
