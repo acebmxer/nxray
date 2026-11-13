@@ -137,6 +137,12 @@ def test_with_the_feature_off_the_page_says_so(logged_in: TestClient, switch: Fa
     assert switch.requests == [["show feature", "show vrf"]]
 
 
+def test_feature_off_links_to_its_row_on_the_features_page(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    assert 'href="/features#feature-telemetry"' in logged_in.get("/telemetry").text
+
+
 def test_page_reads_the_switch(logged_in: TestClient, enabled: FakeSwitch) -> None:
     page = logged_in.get("/telemetry")
     assert page.status_code == 200, _text(page.text)

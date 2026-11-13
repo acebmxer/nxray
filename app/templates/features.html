@@ -67,7 +67,7 @@
     </thead>
     <tbody>
       {% for f in members %}
-      <tr>
+      <tr id="{{ feature_anchor(f.name) }}">
         <td class="mono">{{ f.label }}</td>
         <td>{{ f.description or "—" }}{% if f.used_by %}<br><span class="dim">Used by {{ f.used_by|join(", ") }}.</span>{% endif %}</td>
         <td><span class="badge {{ 'badge-ok' if f.enabled else 'badge-unknown' }}">{{ "on" if f.enabled else "off" }}</span></td>

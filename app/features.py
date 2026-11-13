@@ -332,6 +332,13 @@ CATALOG: dict[str, FeatureInfo] = {
 NXSDK_APP = re.compile(r"^nxsdk_app\d+$")
 NXSDK_APPS_NAME = "nxsdk_app1-32"
 
+
+def feature_anchor(name: str) -> str:
+    """The id of a feature's row on the Features page (``/features#feature-lldp``),
+    so a page that says a feature is off can link straight to it."""
+    return "feature-" + re.sub(r"[^A-Za-z0-9_-]+", "-", name)
+
+
 # Features NXray never turns off, and why.
 KEEP_ON = {
     "nxapi": "NXray talks to the switch through NX-API; turning it off cuts NXray off.",

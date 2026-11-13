@@ -503,6 +503,7 @@ the switch applies them at once and there is no wait.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `feature_anchor` | `(name: str) -> str` | The id of a feature's row on the Features page (`feature-lldp`), so a page that says a feature is off links straight to it | templates (`protocol.html`, `routing.html`, `port_channels.html`, `_devices.html`, `ports.html`, `_port_forms.html`, `features.html`) | v0.3.0 |
 | `feature_states` | `(body) -> dict[str, bool]` | Every feature name in `show feature` and whether any instance of it is on | `parse_features` | v0.1.0 |
 | `lacp_channels` | `(channel_body) -> list[str]` | Port-channels running LACP, with their ports, from `show port-channel summary` | `parse_features` | v0.1.0 |
 | `load_features` | `(client) -> FeatureView` | The Features page, from one request of `FEATURE_COMMANDS_TO_READ` | `routes/features` | v0.1.0 |

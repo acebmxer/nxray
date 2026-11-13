@@ -10,6 +10,7 @@ from app.features import (
     GROUPS,
     KEEP_ON,
     NXSDK_APPS_NAME,
+    feature_anchor,
     feature_states,
     lacp_channels,
     parse_features,
@@ -281,3 +282,10 @@ def test_set_feature_waits_longer_than_a_show() -> None:
     with NxapiClient(target, transport=httpx.MockTransport(handler)) as client:
         client.set_feature("lldp", True)
     assert seen == [120.0]
+
+
+def test_feature_anchor_is_a_safe_row_id() -> None:
+    assert feature_anchor("lldp") == "feature-lldp"
+    assert feature_anchor("interface-vlan") == "feature-interface-vlan"
+    assert feature_anchor("hsrp_engine") == "feature-hsrp_engine"
+    assert feature_anchor("a b/c.d") == "feature-a-b-c-d"

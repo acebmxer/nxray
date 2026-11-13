@@ -560,6 +560,10 @@ a.btn { text-decoration: none; }
 .table-features th:nth-child(3) { width: 4.5rem; }
 .table-features th:nth-child(4) { width: 14rem; }
 .table-features td:nth-child(4) { white-space: normal; }
+/* A link from another page (/features#feature-lldp) scrolls to that row and picks it out. */
+.table-features tbody tr { scroll-margin-top: calc(var(--strip-h) + 16px); }
+.table-features tbody tr:target td { background: var(--row-sel); }
+.table-features tbody tr:target td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .table-users .row-form input[type="password"] { width: 9rem; height: 26px; }
 .table-users select { height: 26px; }
 .table-users .badge + .inline { margin-left: 6px; }

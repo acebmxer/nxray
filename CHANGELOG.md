@@ -278,6 +278,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Changed
 
+- **A "turn it on on the Features page" link opens that feature's row (#93).** When a
+  page says a feature is off (Telemetry, PTP, VXLAN, LACP, LLDP, VLAN interfaces and the
+  other pages that need one), its Features link now scrolls to that feature on the
+  Features page and picks out its row, instead of opening the top of the list.
 - **The Ports page switch picture shows each port's speed in its normal view
   (#58).** A port that is up is now coloured by the speed it runs at (1G, 10G,
   25G, 40G, 100G), the same colours as the Speed view (40G is now pink, no longer

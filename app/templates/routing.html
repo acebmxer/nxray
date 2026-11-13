@@ -49,7 +49,7 @@
   <h2 class="card-title">VLAN interfaces</h2>
   <p class="lead">A VLAN interface gives the switch its own address in a VLAN: devices there can reach the switch and use it as their gateway, and the switch routes between its VLAN interfaces and routed ports.</p>
   {% if not view.interface_vlan_on %}
-  <p>VLAN interfaces are off on the switch. {% if role == "admin" %}Turn on interface-vlan on the <a href="/features">Features</a> page.{% else %}An NXray admin turns on interface-vlan on the <a href="/features">Features</a> page.{% endif %}</p>
+  <p>VLAN interfaces are off on the switch. {% if role == "admin" %}Turn on interface-vlan on the <a href="/features#{{ feature_anchor('interface-vlan') }}">Features</a> page.{% else %}An NXray admin turns on interface-vlan on the <a href="/features#{{ feature_anchor('interface-vlan') }}">Features</a> page.{% endif %}</p>
   {% elif view.vlan_interfaces %}
   <table class="table table-devices">
     <thead>

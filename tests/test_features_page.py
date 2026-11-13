@@ -130,6 +130,12 @@ def test_nav_has_features(logged_in: TestClient, switch: FakeSwitch) -> None:
     assert 'href="/features"' in logged_in.get("/").text
 
 
+def test_each_feature_row_can_be_linked_to(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/features").text
+    assert '<tr id="feature-lldp">' in html
+    assert '<tr id="feature-interface-vlan">' in html
+
+
 def test_viewers_and_operators_look_but_get_no_buttons(
     logged_in: TestClient, enabled: FakeSwitch
 ) -> None:

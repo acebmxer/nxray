@@ -115,6 +115,7 @@ def test_page_says_when_vlan_interfaces_are_off(logged_in: TestClient, switch: F
     assert response.status_code == 200
     text = _text(response.text)
     assert "VLAN interfaces are off on the switch" in text
+    assert 'href="/features#feature-interface-vlan"' in response.text
     assert "No front port or port-channel is routed" in text
     # Port changes are off, so no forms.
     assert "/routing/vlan-interface/create" not in response.text

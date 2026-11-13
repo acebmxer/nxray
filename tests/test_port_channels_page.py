@@ -148,6 +148,7 @@ def test_lacp_off_allows_static_only(logged_in: TestClient, enabled: FakeSwitch)
     enabled.channels.clear()
     text = _text(logged_in.get("/port-channels").text)
     assert "LACP is off on the switch, so only static port-channels can be made" in text
+    assert 'href="/features#feature-lacp"' in logged_in.get("/port-channels").text
     assert "The switch has no port-channels." in text
     response = _post(
         logged_in, "/port-channels/create", number="5", ports="Ethernet1/5", mode="active"

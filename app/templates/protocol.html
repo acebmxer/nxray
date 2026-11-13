@@ -116,7 +116,7 @@
 {% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
 {% if page.missing %}
 <section class="card">
-  <p>{% for name in page.missing %}{{ feature_command(name) }}{% if not loop.last %} and {% endif %}{% endfor %} {{ "is" if page.missing|length == 1 else "are" }} off on the switch, so {{ proto.name }} is not running. {% if role == "admin" %}Turn {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% endif %}</p>
+  <p>{% for name in page.missing %}{{ feature_command(name) }}{% if not loop.last %} and {% endif %}{% endfor %} {{ "is" if page.missing|length == 1 else "are" }} off on the switch, so {{ proto.name }} is not running. {% if role == "admin" %}Turn {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features#{{ feature_anchor(page.missing[0]) }}">Features</a> page.{% else %}An NXray admin turns {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features#{{ feature_anchor(page.missing[0]) }}">Features</a> page.{% endif %}</p>
 </section>
 {% else %}
 {% for n in page.view.notes %}<p class="note">{{ n }}</p>{% endfor %}

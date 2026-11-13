@@ -17,6 +17,7 @@ from app import __version__
 from app.activity import record_activity, utc_time
 from app.alerts import notify_change, switch_label
 from app.db import open_db
+from app.features import feature_anchor
 from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
 from app.nxapi import SwitchTarget, shared_reads
 from app.port_changes import ROLE_VERSION, missing_changes
@@ -314,6 +315,8 @@ templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
 templates.env.globals["live_choices"] = LIVE_CHOICES
 templates.env.globals["refreshes_whole_page"] = refreshes_whole_page
+# Links to one feature's row on the Features page.
+templates.env.globals["feature_anchor"] = feature_anchor
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 
