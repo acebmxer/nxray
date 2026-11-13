@@ -11,6 +11,61 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **See the VMs servers announce over Edge Virtual Bridging (#95).** The new **Edge Virtual
+  Bridging** page (under Configure) shows the switch's VDP role, address, timers and
+  counters, and the hosts and virtual station interfaces the servers' virtual switches
+  announced, and sets the VDP address, the answer wait, the keep-alive and batch answers.
+  Each change shows its lines and asks first. It needs the evb feature and works with the
+  broad role or a stored admin login. The page was read on a switch; the settings follow the
+  switch's own command list and were not tried there.
+- **Follow VMware VMs to their ports with VM Tracker (#95).** The new **VM Tracker** page
+  (under Configure) shows each vCenter connection and its state and the VMs behind each
+  port, and sets up a connection (its address, VRF, login, extension key, timers, whether it
+  makes VLANs and which ones), connects it, syncs it now, turns VM Tracker off on a port and
+  hands the VLANs to fabric auto-configuration. The vCenter password is never shown back.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; syncing now needs Update the port list on the Switch page for a broad role
+  written before. Tried on a switch with a throwaway connection, without a vCenter:
+  connecting and the VM list were not tried.
+- **Pair a port with a backup that takes over at once: Flex Links (#95).** The new **Flex
+  Links** page (under Configure) shows the pairs with their state and makes or deletes a
+  pair of ports or port-channels, with its preemption mode and delay and multicast fast
+  convergence. Each change shows its lines and asks first. It needs the flexlink feature and
+  works with the broad role or a stored admin login. Cisco supports Flex Links on some Nexus
+  9300 models only; a Nexus 9200 refuses the feature, and the page says so plainly. Built
+  from Cisco's guide, not tried on a switch that takes it.
+- **Route multicast across a VXLAN EVPN fabric (#95).** The new **Multicast over VXLAN**
+  page (under Configure) sets up tenant routed multicast: the switch-wide choices (shortest
+  path only, the distributed designated router, multicast in EVPN, an anycast border leaf),
+  the NVE interface's multicast source, each layer 3 VNI's multicast group, each VRF's flow
+  spreading and MVPN route-targets, and the BGP process's ipv4 mvpn and l2vpn evpn families
+  (with advertise-pip for vPC border leafs), with a table of the layer 3 VNIs. The BGP page
+  now also takes the ipv4 mvpn and l2vpn evpn families on a neighbor, with Rewrite
+  route-targets' AS. Each change shows its lines and asks first. It needs the ngmvpn feature
+  and works with the broad role or a stored admin login. The feature and the switch-wide,
+  VRF and NVE lines were tried on a switch; the route-target, layer 3 VNI and BGP lines need
+  BGP and EVPN running and were not.
+- **Reserve bandwidth for media multicast with non-blocking multicast (#95).** The new
+  **Non-blocking multicast** page (under Configure) shows NBM's defaults, flow policies, host
+  policies, flows, defined flows and each interface's bandwidth left, and sets the mode and
+  default flow bandwidth, DSCP and policer, the unicast share and ASM ranges, flow policies
+  and their groups (with critical priority), which senders and receivers are allowed, flow
+  definitions and external links, for the whole switch or an NBM VRF. It says plainly when
+  VXLAN is on (Cisco does not support NBM with it) or the TCAM has no room for NBM. Each
+  change shows its lines and asks first. It needs the nbm feature and works with the broad
+  role or a stored admin login. Tried on a switch with throwaway policies.
+- **Set up IGMP snooping (#95).** The new **IGMP snooping** page (under Configure) shows
+  snooping switch-wide and in every VLAN, the queriers, router ports, the groups hosts
+  joined with their ports, and each VLAN's static groups and report filters. It turns
+  snooping on or off, sets report suppression, the general query proxy, group timeouts,
+  event history and snooping in VXLAN VLANs for the whole switch, and per VLAN a querier
+  with its timers and version, fast leave, explicit tracking, report flooding, router ports,
+  static groups and report filters, and shows each VLAN's counters, with buttons that clear a
+  VLAN's learned groups, counters or tracked IGMPv3 hosts. Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login; clearing needs Update
+  the port list on the Switch page for a broad role written before. The VLAN lines and the
+  clears were tried on a switch in a throwaway VLAN; the switch-wide lines were not (they
+  follow Cisco's guide).
 - **Steer traffic through firewalls and other appliances with enhanced policy-based routing
   (#95).** The new **Enhanced policy routing** page (under Configure) shows the ePBR
   services with their end-points, reverse end-points and health probes, the policies with

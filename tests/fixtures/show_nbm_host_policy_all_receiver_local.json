@@ -1,0 +1,30 @@
+{
+ "TABLE_vrf": {
+  "ROW_vrf": {
+   "vrf-name": "default",
+   "policyType": "Local Receiver",
+   "defaultHostPolicy": "Allow",
+   "numPolicies": 2,
+   "TABLE_host_policies": {
+    "ROW_host_policies": [
+     {
+      "seqNum": 20,
+      "source": "192.0.2.10",
+      "group": "239.250.1.0",
+      "groupMask": 24,
+      "host": "192.0.2.20",
+      "permission": "Deny"
+     },
+     {
+      "seqNum": 30,
+      "source": "0.0.0.0",
+      "group": "239.250.2.0",
+      "groupMask": 24,
+      "host": "0.0.0.0",
+      "permission": "Allow"
+     }
+    ]
+   }
+  }
+ }
+}

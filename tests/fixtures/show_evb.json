@@ -1,0 +1,12 @@
+{
+ "evb_role": "VDP bridge",
+ "evb_vdp_mac": "0180.c200.0000",
+ "evb_rwd": 25,
+ "evb_rka": 25,
+ "evb_cnt_recv_vdpdu": 0,
+ "evb_cnt_drop_vdpdu": 0,
+ "evb_cnt_recv_tlv": 0,
+ "evb_cnt_recv_mgr_tlv": 0,
+ "evb_cnt_recv_assoc_tlv": 0,
+ "evb_cnt_recv_cmd": 0
+}

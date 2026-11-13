@@ -1,0 +1,42 @@
+!Command: show running-config nbm
+!Running configuration last done at: Fri Nov 13 04:44:19 2026
+
+version 9.3(16) Bios:version 07.71
+feature nbm
+
+nbm mode pim-active
+nbm host-policy
+  sender
+    default permit
+    10 host 192.0.2.10 group 239.250.1.0/24 deny
+  receiver
+    default permit
+    20 host 192.0.2.20 source 192.0.2.10 group 239.250.1.0/24 deny
+    30 host 0.0.0.0 source 0.0.0.0 group 239.250.2.0/24 permit
+  pim
+    default permit
+    40 source 192.0.2.10 group 239.250.1.0/24 deny
+nbm reserve unicast fabric bandwidth 10
+nbm flow reserve-bandwidth receiver-only
+nbm flow asm range 239.250.0.0/16 
+nbm flow dscp 46
+nbm flow bandwidth 100 kbps
+nbm flow-policy
+  policy nxprobefp
+    bandwidth 3000000 kbps
+    dscp 34
+    no policer
+    ip group-range 239.250.1.1 to 239.250.1.255
+    ip group 239.250.2.1
+      priority critical
+  policy nxprobefp2
+    bandwidth 2000000 kbps
+    ip group-range 239.250.4.0 to 239.250.4.9
+nbm flow-definition 239.250.1.5 192.0.2.10
+  egress-interface eth1/54
+  stage-flow
+  egress-host 192.0.2.30
+interface Ethernet1/53
+  no switchport
+  nbm external-link
+  no shutdown

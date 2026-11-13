@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-3838%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3947%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -36,11 +36,16 @@ OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, send chosen traffic to its own next hop
 (policy-based routing), spread traffic over servers with ITD, steer it through firewalls and other appliances with enhanced policy-based routing, set up static MPLS labels and Layer 3 VPNs over segment routing,
 translate addresses with NAT (static and dynamic, once the switch has TCAM space for it), make tracked objects that
-follow an interface, a route or an IP SLA entry for HSRP, VRRP and EEM,
+follow an interface, a route or an IP SLA entry for HSRP, VRRP and EEM, reserve bandwidth for
+media multicast with non-blocking multicast,
 set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
-with EVPN (NVE interface, VNIs, route-targets), copy ports' or VLANs' traffic to a
+with EVPN (NVE interface, VNIs, route-targets) and route multicast across it, set up IGMP
+snooping per VLAN (queriers, router ports, static groups) and clear what it learned, pair a
+port with a backup that takes over at once (Flex Links, on the Nexus 9300 models that do
+them), follow VMware VMs to their ports from vCenter with VM Tracker, see the VMs servers
+announce over Edge Virtual Bridging, copy ports' or VLANs' traffic to a
 port or an analyzer (SPAN and ERSPAN), mark, limit and queue traffic with QoS
 class-maps and policy-maps, set each port's priority flow control and read its pause
 counters, see the control-plane policing (CoPP) policy with what each class passed and
@@ -202,11 +207,42 @@ default: *(built)*.
     ACL matches send traffic through a chain of services, spread over the end-points,
     where they apply, each end-point's state and the counters; services and policies in
     use are changed in an ePBR session. *(built; needs the broad role or a stored admin
-    login; tried on a switch, the 92160YC-X takes ePBR)*
+    login; tried on a switch, the 92160YC-X takes ePBR)* **Non-blocking multicast (NBM)**:
+    the mode and default flow settings, flow policies with their groups' bandwidth, mark,
+    policer and priority, which senders and receivers may use them, flow definitions,
+    external links, per NBM VRF too, with the flows and each interface's bandwidth left.
+    *(built; needs the broad role or a stored admin login; tried on a switch, the 92160YC-X
+    takes NBM, but Cisco does not support it with VXLAN on, and it needs TCAM space carved
+    with a restart, which the page says)*
 16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the
     tunnels' health. *(built)*
+    **Multicast over VXLAN EVPN (tenant routed multicast)**: the switch-wide choices, the
+    NVE interface's multicast source, each layer 3 VNI's group, each VRF's flow spreading and
+    MVPN route-targets, BGP's ipv4 mvpn and l2vpn evpn families (on the BGP page for the
+    neighbors). *(built; needs the broad role or a stored admin login; the feature and the
+    switch-wide, VRF and NVE lines tried on a switch, the route-target, layer 3 VNI and BGP
+    lines not, since they need BGP and EVPN running)*
+    **IGMP snooping**: switch-wide and per VLAN, the querier and its timers, fast leave,
+    explicit tracking, report suppression and flooding, router ports, static groups, report
+    filters, with the groups hosts joined and each VLAN's counters, and clearing a VLAN's
+    groups and counters. *(built; needs the broad role or a stored admin login; the VLAN
+    lines and the clears tried on a switch, the switch-wide lines not, since they are
+    settings the switch already has)*
+    **Flex Links**: pairs of an active and a backup port or port-channel, with preemption
+    and multicast fast convergence. *(built from Cisco's guide; needs the broad role or a
+    stored admin login; not tried live: the N9K-C92160YC-X does not do Flex Links, it
+    refuses the feature, and the page says so; Cisco lists them for some Nexus 9300 models
+    only)*
+    **VM Tracker**: vCenter connections (address, login, timers, VLANs it may make),
+    connecting and syncing, VM Tracker per port, fabric auto-configuration, with the VMs on
+    each port. *(built; needs the broad role or a stored admin login; the connection lines
+    tried on a switch with no vCenter, so connecting, syncing and the VM list not tried)*
+    **Edge Virtual Bridging**: the VDP address, timers and batch answers, with the hosts and
+    VSIs servers announce. *(built; needs the broad role or a stored admin login; the page
+    read on a switch, the settings not tried, since they are settings the switch already
+    has)*
     **Monitor sessions**: SPAN and ERSPAN source sessions. *(built; needs the
     broad role or a stored admin login)*
     **QoS**: class-maps, policy-maps (classification, network-qos, queuing),

@@ -41,9 +41,12 @@ from app.routes import (
     eem,
     epbr,
     errdisable,
+    evb,
     features,
+    flexlink,
     health,
     history,
+    igmp_snooping,
     ip_sla,
     itd,
     live,
@@ -51,6 +54,7 @@ from app.routes import (
     monitor,
     mpls,
     nat,
+    nbm,
     neighbors,
     pbr,
     pfc,
@@ -74,10 +78,12 @@ from app.routes import (
     telemetry,
     track,
     traffic,
+    trm,
     tunnels,
     udld,
     users,
     vlans,
+    vmtracker,
     vpc,
     vtp,
     vxlan,
@@ -261,6 +267,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(mpls.router)
     app.include_router(nat.router)
     app.include_router(track.router)
+    app.include_router(igmp_snooping.router)
+    app.include_router(nbm.router)
+    app.include_router(trm.router)
+    app.include_router(flexlink.router)
+    app.include_router(vmtracker.router)
+    app.include_router(evb.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

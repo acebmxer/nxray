@@ -1,0 +1,29 @@
+!Command: show running-config
+!Running configuration last done at: Fri Nov 13 04:40:12 2026
+
+version 9.3(16) Bios:version 07.71
+vlan 1-2,10,69,79,250,253-254
+vlan 250
+  name nxprobe-e3
+vlan configuration 250
+  ip igmp snooping group-timeout never
+  ip igmp snooping proxy general-queries mrt 7
+  ip igmp snooping querier 192.0.2.250
+  ip igmp snooping mrouter interface Ethernet1/53
+  ip igmp snooping last-member-query-interval 3
+  ip igmp snooping fast-leave
+  no ip igmp snooping report-suppression
+  ip igmp snooping v3-report-suppression
+  ip igmp snooping report-flood all
+  ip igmp snooping report-flood interface Ethernet1/53
+  ip igmp snooping proxy-leave use-group-address
+  ip igmp snooping report-policy route-map nxprobe-rm interface Ethernet1/53
+  ip igmp snooping static-group 232.1.2.3 source 192.0.2.10 interface Ethernet1/53
+  ip igmp snooping static-group 239.1.2.3 interface Ethernet1/53
+  no ip igmp snooping link-local-groups-suppression
+  ip igmp snooping querier-timeout 300
+  ip igmp snooping query-interval 100
+  ip igmp snooping query-max-response-time 8
+  ip igmp snooping robustness-variable 3
+  ip igmp snooping startup-query-count 3
+  ip igmp snooping startup-query-interval 40

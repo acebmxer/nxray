@@ -1089,7 +1089,9 @@ with throwaway entries.
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
 SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD,
-Enhanced policy routing, MPLS, NAT, Tracked objects, PTP and Telemetry) send their changes with the stored admin
+Enhanced policy routing, MPLS, NAT, Tracked objects, IGMP snooping, Non-blocking multicast,
+Multicast over VXLAN, Flex Links, VM Tracker, Edge Virtual Bridging, PTP and Telemetry) send
+their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1230,6 +1232,106 @@ list threshold weight|percentage`, and inside one `delay [up <0-180>] [down <0-1
 `vrf member <vrf>` (route objects), `object <n> [not|weight <1-255>]` and `threshold
 weight|percentage [up <n>] [down <n>]` (lists), each with its `no` form, and `no track <n>`.
 Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects.
+
+**IGMP snooping.** The **IGMP snooping** page (under Configure) needs no rule of its own and
+no feature (snooping is on by default), so it works with the broad role and with a stored
+admin login, and is off with the limited role. It reads `show interface brief`, `show ip
+igmp snooping`, `show ip igmp snooping groups detail`, `show ip igmp snooping querier`, and
+as text `show ip igmp snooping mrouter` and `show running-config`. Switch-wide it types `[no]
+ip igmp snooping`, `ip igmp snooping report-suppression`, `v3-report-suppression`,
+`link-local-groups-suppression`, `proxy general-queries [mrt <1-25>]`, `group-timeout
+<1-10080>|never`, `event-history <buffer> size small|medium|large`, `vxlan` and
+`disable-nve-static-router-port`; inside `vlan configuration <n>` it types `[no] ip igmp
+snooping`, `querier <address>`, `query-interval`, `query-max-response-time`,
+`querier-timeout`, `startup-query-interval`, `startup-query-count`, `robustness-variable`,
+`last-member-query-interval`, `version 2|3`, `fast-leave`, `explicit-tracking`,
+`group-timeout`, `report-suppression`, `v3-report-suppression`,
+`link-local-groups-suppression`, `report-flood all`, `proxy-leave use-group-address`, `proxy
+general-queries`, `mrouter interface <port>`, `static-group <group> [source <address>]
+interface <port>`, `report-flood interface <port>` and `report-policy|access-group
+route-map|prefix-list <name> interface <port>`, each with its `no` form. The VLAN lines were
+tried on cisco-25gb (NX-OS 9.3(16)) in a throwaway VLAN; the switch-wide lines follow
+Cisco's 9.3 guides and were not tried (they are settings the switch already has). Typed
+inside `vlan configuration`, a switch-wide-only line changes the whole switch, so the page
+sends only the lines above there. It also reads `show ip igmp snooping statistics` and clears,
+outside configuration mode and one VLAN at a time, with `clear ip igmp snooping groups *|<group>
+[<source>] vlan <n>`, `clear ip igmp snooping statistics vlan <n>` and `clear ip igmp snooping
+explicit-tracking vlan <n>`: the broad role allows them with rules 31 to 33. Those lines were
+tried on cisco-25gb as admin in a throwaway VLAN (the switch has no form for every VLAN at
+once); the rules were not (the fake switch stands in).
+
+**Non-blocking multicast.** The **Non-blocking multicast** page (under Configure) works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature nbm` (Features page). It reads `show feature`, `show interface brief`, `show
+vrf`, `show vrf interface`, `show hardware access-list tcam region` (as text), `show nbm
+defaults`, `show nbm flow-policy`, `show nbm host-policy all sender|receiver local|receiver
+external`, `show nbm flows summary`, `show nbm flows static`, `show nbm interface bandwidth`
+and `show running-config` (as text). It types, at the top level or inside `nbm vrf <vrf>`,
+`nbm mode pim-active|pim-passive`, `nbm flow bandwidth <n> kbps|mbps|gbps`, `nbm flow dscp`,
+`nbm flow policer`, `nbm reserve unicast fabric bandwidth <percent>`, `nbm flow asm range
+<groups>`, `nbm flow reserve-bandwidth receiver-only`; `nbm flow-policy` with `policy <name>`
+and inside it `bandwidth`, `dscp`, `policer`, `ip group-range <first> to <last>` and `ip
+group <group>` with `priority critical`; `nbm host-policy` with `sender`, `receiver` and
+`pim` entries (`<n> host ... group ... permit|deny`, `no <n>`) and `default permit|deny`;
+`nbm flow-definition <group> <source>` with `stage-flow`, `egress-interface` and
+`egress-host`; and `nbm external-link` on a routed front port; each with its `no` form. Tried
+on cisco-25gb (N9K-C92160YC-X, NX-OS 9.3(16)) with throwaway policies, the feature turned
+back off: the switch takes NBM. Cisco's guide says NBM is not supported with VXLAN on and
+needs the `ing-nbm` TCAM region (with `ing-racl 256` and `ing-l3-vlan-qos 256`, after a
+restart); the page says so when either applies, as on cisco-25gb.
+
+**Multicast over VXLAN.** The **Multicast over VXLAN** page (under Configure) works with the
+broad role and with a stored admin login, and is off with the limited role. It needs
+`feature ngmvpn` (Features page) on a VXLAN EVPN switch. It reads `show feature`, `show
+vrf` and `show running-config` (as text), and types `ip multicast overlay-spt-only`, `ip
+multicast overlay-distributed-dr`, `advertise evpn multicast` and `ip pim
+evpn-border-leaf`; in `interface nve1` `mcast-routing override source-interface <loopback>`
+and in `member vni <n> associate-vrf` `mcast-group <group>`; in `vrf context <vrf>` `ip
+multicast multipath s-g-hash next-hop-based`, and in its `address-family ipv4 unicast`
+`route-target both auto mvpn` and `route-target import|export <value> mvpn`; in `router bgp
+<as>` `address-family ipv4 mvpn|l2vpn evpn` with `advertise-pip`, `retain route-target all`
+and `maximum-paths`; each with its `no` form. The neighbors' `address-family ipv4 mvpn` and
+`l2vpn evpn` (with `send-community extended` and `rewrite-rt-asn`) are on the BGP page,
+whose role rules cover them. Tried on cisco-25gb: `feature ngmvpn`, the first three
+switch-wide lines, the VRF's `s-g-hash` line and `mcast-routing override`; the MVPN
+route-targets, the layer 3 VNI's group and the BGP lines need BGP and EVPN on and were not
+tried on a switch.
+
+**Flex Links.** The **Flex Links** page (under Configure) works with the broad role and with
+a stored admin login, and is off with the limited role. It needs `feature flexlink`
+(Features page). It reads `show feature`, `show version` and `show interface brief`, and
+while the feature is on `show interface switchport backup` and `show running-config` as
+text. On the active port it types `switchport backup interface <backup>` and `switchport
+backup interface <backup> preemption mode forced|bandwidth|off`, `... preemption delay
+<1-300>` and `... multicast fast-convergence`, each with its `no` form. Cisco's 9.3 guide
+lists Flex Links for the Nexus 9300-EX, -FX, -FX2 and -GX, the 9364C, the 93108TC-FX3H and
+-FX3P and the 93180YC-FX3 only: cisco-25gb (N9K-C92160YC-X) refused `feature flexlink`
+("Feature flexlink is not supported on this platform"), and the page says so on a Nexus
+9200. None of the lines was tried on a switch.
+
+**VM Tracker.** The **VM Tracker** page (under Configure) works with the broad role and with
+a stored admin login, and is off with the limited role. It needs `feature vmtracker` (on by
+default). It reads `show feature`, `show interface brief`, `show vmtracker status`, and as
+text `show vmtracker info detail` and `show running-config`. It types `vmtracker fabric
+auto-config` (which needs `feature fabric forwarding`), `vmtracker connection <name>` and
+inside it `remote ip address <address> [port <port>] [vrf <vrf>]`, `username <user> password 0
+<password>` (stored as `password 5`, never shown back), `connect`, `set extension-key <key>`,
+`set interval find-new-host|sync-full-info|pending-task-polling <seconds>`, `autovlan enable`
+and `allowed-vlans <list>|except <list>|all`; `[no] vmtracker enable` on a port; and, outside
+configuration mode, `vmtracker connection <name> refresh`: the broad role allows it with rule
+34. Tried on cisco-25gb with a throwaway connection to a documentation address (no vCenter
+there): every configuration line above but `connect` was taken; the switch refuses every
+`no remote` form, so an address is changed, never removed. `connect`, syncing with a real
+vCenter, the VM list and the refresh rule were not tried.
+
+**Edge Virtual Bridging.** The **Edge Virtual Bridging** page (under Configure) works with
+the broad role and with a stored admin login, and is off with the limited role. It needs
+`feature evb` (Features page). It reads `show feature`, `show evb`, and as text `show evb
+hosts`, `show evb vsi` and `show running-config`. It types `evb mac <address>`, `evb
+resource-wait-delay <exponent>`, `evb reinit-keep-alive <exponent>` and `evb batch-response
+disable`, each with its `no` form, as the switch's own command list gives them; the switch
+lists no per-port EVB lines. The shows were read on cisco-25gb, where EVB was on; the lines
+were not tried there (they are switch-wide settings EVB already has).
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
@@ -1546,7 +1648,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1591,6 +1693,14 @@ Clearing ePBR's counters came after that (rule 30: `clear epbr statistics *`, ty
 configuration mode). A broad role written before lacks it, and the switch refuses **Clear
 the counters** on the Enhanced policy routing page: the Switch page says so on the **Update
 the port list** card, and pressing it writes the role again with it.
+
+Clearing IGMP snooping's groups and counters and syncing a VM Tracker connection now came
+next (rules 31 to 33: `clear ip igmp snooping groups *`, `clear ip igmp snooping statistics *`
+and `clear ip igmp snooping explicit-tracking *`; rule 34: `vmtracker connection *`, all typed
+outside configuration mode). A broad role written before lacks them, and the switch refuses
+the Clear buttons on the IGMP snooping page and **Sync now** on the VM Tracker page: the
+Switch page says so on the **Update the port list** card, and pressing it writes the role
+again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

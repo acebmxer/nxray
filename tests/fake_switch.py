@@ -96,6 +96,33 @@ an interface takes one policy per family. ``clear epbr statistics policy <name>`
 outside configuration mode and kept in ``epbr_cleared``; the ``show epbr`` commands answer
 from ``bodies``.
 
+IGMP snooping, NBM and multicast over VXLAN live in ``mcast_lines``, as paths ("ip igmp
+snooping report-suppression", "vlan configuration 250 ; ip igmp snooping fast-leave", "nbm
+flow-policy ; policy video ; dscp 34", "nbm host-policy ; sender ; 10 host 192.0.2.10 group
+239.1.1.0/24 deny", "interface Ethernet1/5 ; nbm external-link", "vrf context red ; ip
+multicast multipath s-g-hash next-hop-based"); a ``no`` form removes the line and what is
+under it, a host policy entry is removed by its number and a host policy's ``default``
+replaces the one before (refused while entries exist, as on cisco-25gb). The NBM lines need
+``feature nbm``, the TRM ones ``feature ngmvpn``; a flow policy's name may not hold a ``-``.
+The NVE interface's and VRF address families' TRM lines are kept with the VXLAN lines. The
+``show ip igmp snooping`` and ``show nbm`` commands answer from ``bodies`` (``show nbm``
+refused while nbm is off), ``show ip igmp snooping mrouter`` as text from ``texts``.
+
+Flex Links, VM Tracker and Edge Virtual Bridging live in ``l2_lines``, as paths ("interface
+Ethernet1/1 ; switchport backup interface Ethernet1/2 preemption mode forced", "vmtracker
+connection vc1 ; remote ip address 192.0.2.50 port 443 vrf management", "evb mac
+0180.c200.0003"). As on cisco-25gb: ``feature flexlink`` is refused unless
+``flexlink_supported`` (the 92160YC-X does not do Flex Links); a connection's ``remote``
+parts merge into one line and its ``no`` forms are refused; a login is written ``password 5``
+and its ``no`` form takes any password; interval ``no`` forms need a value; ``allowed-vlans
+except`` is written as the VLANs left; ``vmtracker fabric auto-config`` needs fabric
+forwarding; ``no vmtracker enable`` is kept on a port, ``vmtracker enable`` removes it. The
+extension key is kept apart (``vmtracker_keys``), never shown. ``vmtracker connection <name>
+refresh`` and ``clear ip igmp snooping ... vlan <n>`` are typed outside configuration mode
+and kept in ``l2_ran``. ``show vmtracker status``, ``show evb`` and ``show interface switchport
+backup`` are built from the lines; ``texts`` answers ``show vmtracker info detail`` and
+``show evb hosts|vsi``.
+
 AAA lives in ``aaa_lines`` (the top-level lines as typed, "radius-server host 192.0.2.11 key
 0 k") and ``aaa_groups`` (("radius", "g") -> the lines inside); TACACS+ lines are refused
 while ``feature_state["tacacs"]`` is off, and only network-admin may type any of them (the
@@ -328,6 +355,28 @@ _PROTOCOL_INTERFACE = (
     (re.compile(r"mpls ip forwarding$"), "mpls"),
 )
 # Lines inside a protocol's mode that open a deeper mode.
+# IGMP snooping and NBM lines that are on by default: the switch writes their no forms only.
+_MCAST_DEFAULT_ON = frozenset(
+    {
+        "ip igmp snooping",
+        "ip igmp snooping explicit-tracking",
+        "ip igmp snooping report-suppression",
+        "ip igmp snooping link-local-groups-suppression",
+        "nbm flow policer",
+        "policer",
+        "ip multicast overlay-spt-only",
+    }
+)
+# Lines that hold one value, so a new one replaces the old (the key is what matches).
+_MCAST_ONE_VALUE = re.compile(
+    r"ip igmp snooping (?:querier-timeout|querier|query-interval|query-max-response-time"
+    r"|startup-query-count|startup-query-interval|robustness-variable"
+    r"|last-member-query-interval|version|group-timeout|proxy general-queries"
+    r"|event-history \S+)(?= |$)"
+    r"|nbm mode(?= )|nbm flow bandwidth(?= )|nbm flow dscp(?= )"
+    r"|nbm reserve unicast fabric bandwidth(?= )|bandwidth(?= )|dscp(?= )"
+    r"|mcast-routing override source-interface(?= )|maximum-paths(?= )"
+)
 _PROTOCOL_SUBMODES = re.compile(
     r"(?:vrf \S+|address-family .+|neighbor \S+(?: remote-as \S+)?|key \d+|template .+"
     r"|node ip \S+|local-label \d+ prefix \S+|mpls|connected-prefix-sid-map)"
@@ -366,6 +415,7 @@ _TCAM_NAMES = {
     "ing-l2-qos": "Ingress L2 QOS",
     "ing-sup": "Ingress SUP",
     "egr-racl": "Egress RACL",
+    "ing-nbm": "Ingress NBM",
 }
 _TCAM_DEFAULTS = {
     "nat": 0,
@@ -376,6 +426,7 @@ _TCAM_DEFAULTS = {
     "ing-l2-qos": 256,
     "ing-sup": 512,
     "egr-racl": 1792,
+    "ing-nbm": 0,  # as on cisco-25gb
 }
 
 # Switch admin lines: what identifies the line a new one replaces (and its
@@ -569,6 +620,13 @@ class FakeSwitch:
     epbr_session_open: bool = False
     epbr_cleared: list[str] = field(default_factory=list)
     _epbr_saved: Any = None
+    # IGMP snooping, NBM and multicast over VXLAN (see the module notes).
+    mcast_lines: list[str] = field(default_factory=list)
+    # Flex Links, VM Tracker and EVB (see the module notes).
+    l2_lines: list[str] = field(default_factory=list)
+    l2_ran: list[str] = field(default_factory=list)
+    vmtracker_keys: dict[str, str] = field(default_factory=dict)
+    flexlink_supported: bool = False
     # AAA, key pairs, trustpoints, the SSH key and bootflash (see the module notes).
     aaa_lines: list[str] = field(default_factory=list)
     aaa_groups: dict[tuple[str, str], list[str]] = field(default_factory=dict)
@@ -1299,6 +1357,17 @@ class FakeSwitch:
             if not self._feature_on("sla_sender"):
                 return _error(ident, "% Invalid command at '^' marker.\n")
             return {"jsonrpc": "2.0", "result": {"msg": self.sla_config_text()}, "id": ident}
+        if cmd == "show ip igmp snooping mrouter":
+            return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        if cmd == "show interface switchport backup":
+            if not self._feature_on("Flexlink"):
+                return _error(ident, "% Invalid command\n")
+            return {"jsonrpc": "2.0", "result": {"msg": self.backup_text()}, "id": ident}
+        for feature, prefix in (("vmtracker", "show vmtracker"), ("evb", "show evb")):
+            if cmd.startswith(prefix):
+                if not self._feature_on(feature):
+                    return _error(ident, "% Invalid command\n")
+                return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
         if cmd == "show hardware access-list tcam region":
             return {"jsonrpc": "2.0", "result": {"msg": self.tcam_regions()}, "id": ident}
         if cmd == "show ip dhcp snooping binding":
@@ -1361,6 +1430,15 @@ class FakeSwitch:
         out += self.nat_config()
         out += self.track_config()
         out += self.epbr_config()
+        out += _nested(self.mcast_lines)
+        out += _nested(self.l2_lines)
+        out += _nested(
+            [
+                p
+                for p in self.protocol_lines
+                if p.startswith("router bgp ") or p == "ip pim evpn-border-leaf"
+            ]
+        )
         out += _nested(
             [p for p in self.protocol_lines if p.startswith(("itd ", "mpls ", "segment-routing"))]
             + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
@@ -2242,6 +2320,414 @@ class FakeSwitch:
         (re.compile(r"list threshold (?:weight|percentage)"), "threshold"),
     )
 
+    def _multicast(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """An IGMP snooping, NBM or multicast over VXLAN line, or None when ``cmd`` is not
+        one (see the module notes)."""
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        kind = context[0] if context else None
+        invalid = _error(ident, "% Invalid command\n")
+        denied = _error(ident, "% Permission denied for the role\n")
+
+        def allowed(path: str, interface: str | None = None) -> bool:
+            return is_admin or self._role_matches(user, f"conf t ; {path}", interface)
+
+        def keep(path: str, enters: bool = False) -> tuple[dict[str, Any], Any]:
+            if not allowed(path):
+                return denied, context
+            lines = self.mcast_lines
+            parts = path.split(" ; ")
+            last, place = parts[-1], " ; ".join(parts[:-1])
+
+            def sibling(line: str) -> str:
+                return f"{place} ; {line}" if place else line
+
+            def drop(test: Any) -> int:
+                before = len(lines)
+                lines[:] = [line for line in lines if not test(line)]
+                return before - len(lines)
+
+            negated = last.startswith("no ")
+            word = last.removeprefix("no ")
+            if negated and parts[-2:-1] in (["sender"], ["receiver"], ["pim"]):
+                number = word.split()[0]
+                drop(lambda line: line.startswith(sibling(f"{number} ")))
+                return _ok(ident, None), context
+            if re.fullmatch(r"default (permit|deny)", last):
+                if any(re.match(rf"{re.escape(place)} ; \d+ ", line) for line in lines):
+                    return _error(
+                        ident,
+                        "Default Sender host policy cannot be modified after configuring "
+                        "custom policies.Please delete all custom sender host policies and "
+                        "retry.\n",
+                    ), context
+                drop(lambda line: line.startswith(sibling("default ")))
+            elif word in _MCAST_DEFAULT_ON:
+                # On by default: the switch writes only the no form.
+                drop(lambda line: line in (sibling(word), sibling(f"no {word}")))
+                if negated:
+                    lines.append(path)
+                return _ok(ident, None), context
+            elif negated:
+                gone = sibling(word)
+                if not drop(lambda line: line == gone or line.startswith(gone + " ")):
+                    if " " in word:  # "no ... group-timeout 5": the value need not match
+                        key = sibling(word.rsplit(" ", 1)[0]) + " "
+                        drop(lambda line: line.startswith(key))
+                return _ok(ident, None), context
+            elif key_match := _MCAST_ONE_VALUE.match(word):
+                key = sibling(key_match.group(0))
+                drop(lambda line: line.startswith(key + " ") and " ; " not in line[len(key) :])
+            if path not in lines:
+                lines.append(path)
+            if enters:
+                return _ok(ident, None), ("mcast", path)
+            return _ok(ident, None), context
+
+        if kind is None:
+            if bare.startswith("ip igmp snooping") or re.fullmatch(r"vlan configuration \d+", bare):
+                return keep(cmd, enters=bare.startswith("vlan configuration"))
+            if bare.startswith("nbm "):
+                if not self._feature_on("nbm"):
+                    return invalid, context
+                if bare.startswith("nbm flow-policy") or bare.startswith("nbm host-policy"):
+                    return keep(cmd, enters=True)
+                if re.fullmatch(r"nbm (vrf \S+|flow-definition \S+ \S+)", bare):
+                    return keep(cmd, enters=True)
+                return keep(cmd)
+            if bare in (
+                "ip multicast overlay-spt-only",
+                "ip multicast overlay-distributed-dr",
+                "advertise evpn multicast",
+            ):
+                if not self._feature_on("ngmvpn"):
+                    return invalid, context
+                return keep(cmd)
+            return None
+        if kind == "interface" and context and bare == "nbm external-link":
+            if not self._feature_on("nbm"):
+                return invalid, context
+            path = f"interface {context[1]} ; {cmd}"
+            if not allowed(path, context[1]):
+                return denied, context
+            self._record(path, self.mcast_lines)
+            return _ok(ident, None), context
+        if kind == "vrf" and context and bare == "ip multicast multipath s-g-hash next-hop-based":
+            if not self._feature_on("ngmvpn"):
+                return invalid, context
+            return keep(f"vrf context {context[1]} ; {cmd}")
+        if kind != "mcast" or context is None:
+            return None
+        parent = context[1]
+        if parent.endswith("nbm flow-policy") and re.fullmatch(r"policy \S+", bare):
+            if "-" in bare:
+                return _error(
+                    ident,
+                    f"ERROR: FLOW POLICY {bare.split()[1]}\nERROR: Use of '-' not permitted in "
+                    "Policy name.\n",
+                ), context
+            return keep(f"{parent} ; {cmd}", enters=True)
+        enters = (
+            (" ; policy " in f" ; {parent}" and re.fullmatch(r"ip group \S+", bare) is not None)
+            or (parent.endswith("nbm host-policy") and bare in ("sender", "receiver", "pim"))
+            or (
+                parent.startswith("nbm vrf ")
+                and (bare.startswith(("nbm flow-policy", "nbm host-policy", "nbm flow-definition")))
+            )
+        )
+        return keep(f"{parent} ; {cmd}", enters=enters and not undo)
+
+    # ---- Flex Links, VM Tracker and EVB -------------------------------------------------
+
+    _L2_ONE_VALUE = re.compile(
+        r"evb (?:mac|resource-wait-delay|reinit-keep-alive)(?= )"
+        r"|set interval \S+(?= )|username(?= )|allowed-vlans(?= )"
+    )
+
+    def _l2_keep(self, path: str) -> None:
+        """Keep a line, replacing the one it sets again."""
+        place, _, last = path.rpartition(" ; ")
+        sibling = f"{place} ; " if place else ""
+        if key := self._L2_ONE_VALUE.match(last):
+            start = sibling + key.group(0) + " "
+            self.l2_lines[:] = [
+                line
+                for line in self.l2_lines
+                if not (line.startswith(start) and " ; " not in line[len(start) :])
+            ]
+        if path not in self.l2_lines:
+            self.l2_lines.append(path)
+
+    def _l2_drop(self, start: str) -> None:
+        self.l2_lines[:] = [
+            line for line in self.l2_lines if line != start and not line.startswith(start + " ")
+        ]
+
+    @staticmethod
+    def _vlan_set(text: str) -> set[int]:
+        found: set[int] = set()
+        for part in text.split(","):
+            low, _, high = part.partition("-")
+            found.update(range(int(low), int(high or low) + 1))
+        return found
+
+    @staticmethod
+    def _vlan_text(numbers: set[int]) -> str:
+        parts, ordered = [], sorted(numbers)
+        while ordered:
+            low = high = ordered.pop(0)
+            while ordered and ordered[0] == high + 1:
+                high = ordered.pop(0)
+            parts.append(f"{low}-{high}" if high > low else str(low))
+        return ",".join(parts)
+
+    def _l2_features(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A Flex Links, VM Tracker or EVB line, VM Tracker's refresh or an IGMP snooping
+        clear; None when ``cmd`` is not one (see the module notes)."""
+        kind = context[0] if context else None
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        invalid = _error(ident, "% Invalid command\n")
+        denied = _error(ident, "% Permission denied for the role\n")
+        if kind is None and (
+            cmd.startswith("clear ip igmp snooping ")
+            or re.fullmatch(r"vmtracker connection \S+ refresh", cmd)
+        ):
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            if cmd.startswith("vmtracker"):
+                name = cmd.split()[2]
+                if not self._feature_on("vmtracker") or f"vmtracker connection {name}" not in (
+                    self.l2_lines
+                ):
+                    return _error(ident, "ERROR: failure\n"), context
+            else:
+                match = re.fullmatch(
+                    r"clear ip igmp snooping (?:groups (?:\*|\S+(?: \S+)?)|statistics"
+                    r"|explicit-tracking) vlan (\d+)",
+                    cmd,
+                )
+                if not match:
+                    return invalid, context
+                if int(match.group(1)) not in self.vlans:
+                    return _error(ident, "Invalid params\n"), context
+            self.l2_ran.append(cmd)
+            return _ok(ident, None), context
+
+        def allowed(path: str, interface: str | None = None) -> bool:
+            return is_admin or self._role_matches(user, f"conf t ; {path}", interface)
+
+        if kind is None:
+            if bare.startswith("evb "):
+                if not self._feature_on("evb"):
+                    return invalid, context
+                if not allowed(cmd):
+                    return denied, context
+                if undo:
+                    words = bare.split()
+                    self._l2_drop(bare if words[1] == "batch-response" else " ".join(words[:2]))
+                else:
+                    self._l2_keep(cmd)
+                return _ok(ident, None), context
+            if bare == "vmtracker fabric auto-config":
+                if not self._feature_on("vmtracker"):
+                    return invalid, context
+                if not undo and not self._feature_on("hmm"):
+                    return _error(
+                        ident,
+                        "Verify feature fabric forwarding is enabled before enabling auto-config\n",
+                    ), context
+                if not allowed(cmd):
+                    return denied, context
+                if undo:
+                    self._l2_drop(bare)
+                else:
+                    self._l2_keep(cmd)
+                return _ok(ident, None), context
+            if match := re.fullmatch(r"vmtracker connection (\S+)", bare):
+                if not self._feature_on("vmtracker"):
+                    return invalid, context
+                if not allowed(cmd):
+                    return denied, context
+                if undo:
+                    self._l2_drop(bare)
+                    self.vmtracker_keys.pop(match.group(1), None)
+                    return _ok(ident, None), context
+                self._l2_keep(bare)
+                return _ok(ident, None), ("vmt-conn", bare)
+            return None
+        if kind == "interface" and context:
+            interface = context[1]
+            place = f"interface {interface}"
+            if bare == "vmtracker enable":
+                if not self._feature_on("vmtracker"):
+                    return invalid, context
+                if not allowed(f"{place} ; {cmd}", interface):
+                    return denied, context
+                if undo:
+                    self._l2_keep(f"{place} ; no vmtracker enable")
+                else:
+                    self._l2_drop(f"{place} ; no vmtracker enable")
+                return _ok(ident, None), context
+            if match := re.fullmatch(r"switchport backup interface (\S+)(?: (.+))?", bare):
+                if not self._feature_on("Flexlink"):
+                    return invalid, context
+                if not allowed(f"{place} ; {cmd}", interface):
+                    return denied, context
+                backup, rest = match.group(1), match.group(2) or ""
+                base = f"{place} ; switchport backup interface {backup}"
+                if undo:
+                    if rest.startswith("preemption "):
+                        self._l2_drop(f"{base} {' '.join(rest.split()[:2])}")
+                    elif rest:
+                        self._l2_drop(f"{base} {rest}")
+                    else:
+                        self._l2_drop(base)
+                    return _ok(ident, None), context
+                if rest.startswith("preemption "):
+                    self._l2_drop(f"{base} {' '.join(rest.split()[:2])}")
+                self._l2_keep(f"{base} {rest}".rstrip())
+                if rest and base not in self.l2_lines:
+                    self.l2_lines.append(base)
+                return _ok(ident, None), context
+            return None
+        if kind != "vmt-conn" or context is None:
+            return None
+        parent = context[1]
+        name = parent.split()[-1]
+        if not allowed(f"{parent} ; {cmd}"):
+            return denied, context
+        if bare.startswith("remote"):
+            if undo:
+                return _error(ident, "Please specify IP and Port together - 1\n"), context
+            match = re.fullmatch(
+                r"remote(?: ip address (\S+))?(?: port (\d+))?(?: vrf (\S+))?", cmd
+            )
+            if not match or not any(match.groups()):
+                return _error(ident, "Invalid params\n"), context
+            start = f"{parent} ; remote "
+            old = next((line for line in self.l2_lines if line.startswith(start)), "")
+            parts = dict(re.findall(r"(ip address|port|vrf) (\S+)", old))
+            for key, value in zip(("ip address", "port", "vrf"), match.groups(), strict=True):
+                if value:
+                    parts[key] = value
+            self._l2_drop(start.rstrip())
+            order = ("ip address", "port", "vrf")
+            written = " ".join(f"{k} {parts[k]}" for k in order if k in parts)
+            self.l2_lines.append(f"{start}{written}")
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"username (\S+) password (?:[05] )?(\S+)", bare):
+            if undo:
+                self._l2_drop(f"{parent} ; username {match.group(1)}")
+            else:
+                hidden = f"password 5 Enc{len(match.group(2))}"  # never the password itself
+                self._l2_keep(f"{parent} ; username {match.group(1)} {hidden}")
+            return _ok(ident, None), context
+        if bare.startswith("username"):
+            return _error(ident, "% Incomplete command\n"), context
+        if bare == "connect":
+            if undo:
+                self._l2_drop(f"{parent} ; connect")
+            else:
+                self._l2_keep(f"{parent} ; connect")
+            return _ok(ident, None), context
+        if match := re.fullmatch(
+            r"set interval (find-new-host|sync-full-info|pending-task-polling)(?: (\d+))?", bare
+        ):
+            if match.group(2) is None:
+                return _error(ident, "% Incomplete command\n"), context
+            low = 1 if match.group(1) == "pending-task-polling" else 0
+            if not low <= int(match.group(2)) <= 65355:
+                return _error(ident, "% Invalid number, range is (0:65355)\n"), context
+            if undo:
+                self._l2_drop(f"{parent} ; set interval {match.group(1)}")
+            else:
+                self._l2_keep(f"{parent} ; {bare}")
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"set extension-key (\S+)", bare):
+            if undo:
+                self.vmtracker_keys.pop(name, None)
+            else:
+                self.vmtracker_keys[name] = match.group(1)
+            return _ok(ident, None), context
+        if bare == "autovlan enable":
+            if undo:
+                self._l2_keep(f"{parent} ; no autovlan enable")
+            else:
+                self._l2_drop(f"{parent} ; no autovlan enable")
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"allowed-vlans (?:(all)|except (\S+)|(\S+))", cmd):
+            self._l2_drop(f"{parent} ; allowed-vlans")
+            if match.group(2):
+                kept = set(range(1, 4095)) - self._vlan_set(match.group(2))
+                self.l2_lines.append(f"{parent} ; allowed-vlans {self._vlan_text(kept)}")
+            elif match.group(3):
+                self.l2_lines.append(f"{parent} ; allowed-vlans {match.group(3)}")
+            return _ok(ident, None), context
+        return invalid, context
+
+    def backup_text(self) -> str:
+        """``show interface switchport backup``, laid out as in Cisco's guide."""
+        out = [
+            "",
+            "Switch Backup Interface Pairs:",
+            "",
+            "Active Interface        Backup Interface        State",
+            "-" * 72,
+        ]
+        for line in self.l2_lines:
+            if match := re.fullmatch(r"interface (\S+) ; switchport backup interface (\S+)", line):
+                out.append(f"{match.group(1):<24}{match.group(2):<24}Active Down/Backup Down")
+        return "\n".join(out) + "\n"
+
+    def vmtracker_status(self) -> dict[str, Any] | None:
+        """``show vmtracker status`` from the connections, as on cisco-25gb."""
+        rows = []
+        for line in self.l2_lines:
+            if match := re.fullmatch(r"vmtracker connection (\S+)", line):
+                remote = next(
+                    (x for x in self.l2_lines if x.startswith(f"{line} ; remote ip address ")),
+                    "",
+                )
+                address = remote.split()[6] if remote else ""
+                connected = f"{line} ; connect" in self.l2_lines
+                rows.append(
+                    {
+                        "name": match.group(1),
+                        "host_or_ip": address,
+                        "conn_status": "Connected" if connected else "No Connect",
+                    }
+                )
+        if not rows:
+            return None
+        return {"TABLE_connection": {"ROW_connection": rows[0] if len(rows) == 1 else rows}}
+
+    def evb_state(self) -> dict[str, Any]:
+        """``show evb`` from the evb lines, as cisco-25gb printed it with its defaults."""
+        values = {"mac": "0180.c200.0000", "resource-wait-delay": 25, "reinit-keep-alive": 25}
+        for line in self.l2_lines:
+            pattern = r"evb (mac|resource-wait-delay|reinit-keep-alive) (\S+)"
+            if match := re.fullmatch(pattern, line):
+                values[match.group(1)] = (
+                    int(match.group(2)) if match.group(2).isdigit() else match.group(2)
+                )
+        return {
+            "evb_role": "VDP bridge",
+            "evb_vdp_mac": values["mac"],
+            "evb_rwd": values["resource-wait-delay"],
+            "evb_rka": values["reinit-keep-alive"],
+            "evb_cnt_recv_vdpdu": 0,
+            "evb_cnt_drop_vdpdu": 0,
+            "evb_cnt_recv_tlv": 0,
+            "evb_cnt_recv_mgr_tlv": 0,
+            "evb_cnt_recv_assoc_tlv": 0,
+            "evb_cnt_recv_cmd": 0,
+        }
+
     @classmethod
     def _track_kind(cls, definition: str) -> str:
         return next(
@@ -2766,6 +3252,10 @@ class FakeSwitch:
             elif match.group(1) is None:
                 self.itd_counting.add(match.group(2))
             return _ok(ident, None), context
+        if l2_reply := self._l2_features(user, is_admin, cmd, ident, context):
+            return l2_reply
+        if mcast_reply := self._multicast(user, is_admin, cmd, ident, context):
+            return mcast_reply
         if nat_reply := self._nat(user, is_admin, cmd, ident, context):
             return nat_reply
         if track_reply := self._track(user, is_admin, cmd, ident, context):
@@ -3047,6 +3537,11 @@ class FakeSwitch:
             name = _FEATURE_NAMES.get(match.group(2))
             if name is None:
                 return _error(ident, f"% Invalid command at '^' marker: {cmd}\n"), context
+            if name == "Flexlink" and not match.group(1) and not self.flexlink_supported:
+                # As on cisco-25gb (N9K-C92160YC-X).
+                return _error(
+                    ident, "Feature flexlink is not supported on this platform\n"
+                ), context
             if name == "tunnel" and not match.group(1) and self._feature_on("nve"):
                 # As on cisco-25gb.
                 return _error(
@@ -3824,6 +4319,21 @@ class FakeSwitch:
                         ident,
                         "ERROR: Cannot get pbr statistics data, please enable EPBR statistics\n",
                     )
+            return _ok(ident, self.bodies.get(cmd))
+        if cmd == "show vmtracker status":
+            if not self._feature_on("vmtracker"):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.vmtracker_status())
+        if cmd == "show evb":
+            if not self._feature_on("evb"):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.evb_state())
+        if cmd.startswith("show nbm"):
+            # As on cisco-25gb: "% Invalid command" while nbm is off.
+            if not self._feature_on("nbm"):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.bodies.get(cmd))
+        if cmd.startswith("show ip igmp snooping"):
             return _ok(ident, self.bodies.get(cmd))
         if cmd.startswith("show ip nat"):
             # As on cisco-25gb: "% Invalid command" while nat is off.

@@ -448,6 +448,20 @@
     page. Press Update the port list to write the role again with it.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_snooping_clear %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed clearing IGMP
+    snooping's groups and counters, so the switch refuses the Clear buttons on the IGMP
+    snooping page. Press Update the port list to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_vmtracker_refresh %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed syncing a VM Tracker
+    connection now, so the switch refuses Sync now on the VM Tracker page. Press Update
+    the port list to write the role again with it.
+  </p>
+  {% endif %}
   {% if connection.broad_role_without_loopbacks %}
   <p class="warning">
     NXray's broad role on the switch was written before it named the loopbacks,

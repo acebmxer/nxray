@@ -133,6 +133,10 @@ KINDS = (
     # port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
     "urlpath",  # the page an HTTP health probe asks for: index.html or /status/health;
     # letters, digits and . _ ~ % / -, up to 128 characters
+    "ipv4any",  # one IPv4 address, or any (also typed 0.0.0.0), sent as 0.0.0.0: an NBM
+    # host policy's host or sender
+    "account",  # a user name another system signs NXray's switch in with: letters, digits
+    # and . _ @ -, up to 64, such as administrator@vsphere.local (a VM Tracker connection)
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -796,6 +800,17 @@ def check_value(spec: Field, raw: str) -> str:
         if not re.fullmatch(r"__[A-Za-z0-9_]{1,60}", value):
             raise ValueError(f"{spec.label} is a system policy's name, such as __ethpm_link_flap")
         return value
+    if kind == "account":
+        if not _ACCOUNT.fullmatch(value):
+            raise ValueError(
+                f"{spec.label} is 1 to 64 letters, digits, '.', '_', '@' or '-', starting with "
+                "a letter or digit, such as administrator@vsphere.local"
+            )
+        return value
+    if kind == "ipv4any":
+        if value.lower() in ("any", "0.0.0.0"):
+            return "0.0.0.0"
+        return _address(value, 4, spec.label)
     if kind in ("ipv4list", "ipv6list"):
         parts = value.replace(",", " ").split()
         if not parts:
@@ -835,6 +850,8 @@ _FORBIDDEN = re.compile(r"[;?\r\n]")
 _TELPATH = re.compile(r"^[\x21\x23-\x7e][\x21-\x7e]*$")
 # A web page an HTTP probe fetches, as the switch takes it after ``http get``.
 _URLPATH = re.compile(r"^[A-Za-z0-9._~%/-]{1,128}$")
+# A user name for a server the switch signs in to (vCenter).
+_ACCOUNT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$")
 
 # ---- templates -------------------------------------------------------------------
 

@@ -28,7 +28,8 @@ route); the VPN address families of the process (``vpnv4 unicast``, ``vpnv6
 unicast``) for Layer 3 VPNs over segment routing (MPLS page); neighbors (remote
 AS, description, update source, multihop, timers, password, BFD, shutdown,
 local AS, private AS removal and the session options) and each neighbor's
-address families, labelled unicast and the VPN families included (route-maps,
+address families, labelled unicast, the VPN families and the VXLAN overlay families
+(``l2vpn evpn``, ``ipv4 mvpn``) included (route-maps,
 prefix-lists, filter-lists, soft reconfiguration, next-hop-self, communities,
 route reflector client, maximum prefixes, allowas-in, default route, weight,
 AS override, unsuppress-map). Route-maps, prefix-lists and AS-path lists are
@@ -38,7 +39,10 @@ The VPN and labelled-unicast lines (``address-family vpnv4|vpnv6 unicast``,
 ``allocate-label option-b``, ``allocate-label all``, a neighbor's
 ``address-family ipv4 labeled-unicast``) follow Cisco's NX-OS 9.3 Label
 Switching guide ("Configuring Segment Routing") and were not tried on a
-switch: cisco-25gb refuses ``feature mpls l3vpn`` while VXLAN is on.
+switch: cisco-25gb refuses ``feature mpls l3vpn`` while VXLAN is on. The overlay families
+(a neighbor's ``address-family l2vpn evpn`` and ``ipv4 mvpn``, and ``rewrite-rt-asn``) follow
+Cisco's NX-OS 9.3 VXLAN guide ("Configure Tenant Routed Multicast") and were not tried on a
+switch either: the probe that would have turned BGP and EVPN on was not run.
 
 Tried on cisco-25gb (NX-OS 9.3(16)) as NXray's restricted account, all
 accepted: ``router bgp 65001`` with ``router-id``, ``log-neighbor-changes``,
@@ -86,7 +90,11 @@ ADDRESS_FAMILIES = ("ipv4 unicast", "ipv6 unicast", "ipv4 multicast", "ipv6 mult
 VPN_FAMILIES = ("vpnv4 unicast", "vpnv6 unicast")
 # What a neighbor may exchange: the above, and IPv4 routes with their MPLS labels.
 LABELED_UNICAST = "ipv4 labeled-unicast"
-NEIGHBOR_FAMILIES = (*ADDRESS_FAMILIES, LABELED_UNICAST, *VPN_FAMILIES)
+# The VXLAN EVPN overlay's families (Multicast over VXLAN page, VXLAN page): EVPN routes and
+# tenant routed multicast's MVPN routes, default VRF only. The process's own part of them is
+# on the Multicast over VXLAN page.
+OVERLAY_FAMILIES = ("ipv4 mvpn", "l2vpn evpn")
+NEIGHBOR_FAMILIES = (*ADDRESS_FAMILIES, LABELED_UNICAST, *VPN_FAMILIES, *OVERLAY_FAMILIES)
 
 
 def _asn_field() -> Field:
@@ -834,6 +842,14 @@ _NEIGHBOR_AF_SETTINGS = (
         group="Loops",
     ),
     Setting(
+        "rewrite_rt_asn",
+        "Rewrite route-targets' AS",
+        "rewrite-rt-asn",
+        help="l2vpn evpn and ipv4 mvpn: put this switch's AS into the route-targets of routes "
+        "from an eBGP neighbor (Cisco's spine setting for multicast over VXLAN)",
+        group="Loops",
+    ),
+    Setting(
         "suppress_inactive",
         "Only active routes",
         "suppress-inactive",
@@ -932,7 +948,8 @@ NEIGHBOR_AF = Scope(
             NEIGHBOR_FAMILIES,
             "Which kind of routes: IPv4 or IPv6, unicast (normal) or multicast; labelled "
             "unicast for IPv4 routes with their MPLS labels; vpnv4 or vpnv6 for Layer 3 VPN "
-            "routes (those three in the default VRF only)",
+            "routes; l2vpn evpn for VXLAN EVPN and ipv4 mvpn for multicast over VXLAN (those "
+            "five in the default VRF only)",
         ),
     ),
     (_ENTER, _IN_VRF, "neighbor {address}", "address-family {af}"),

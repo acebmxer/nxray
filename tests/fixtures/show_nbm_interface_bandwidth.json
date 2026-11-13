@@ -1,0 +1,50 @@
+{
+ "TABLE_bw": {
+  "ROW_bw": [
+   {
+    "index": 3,
+    "ifname": "Vlan253",
+    "iod": 2,
+    "slot": 1,
+    "unit": 0,
+    "slice": 0,
+    "fab_unicast_percentage": 255,
+    "ingr_fl_bw_available": "   2147483.646",
+    "ingr_fl_bw_usable": "   2147483.646",
+    "ingr_fl_bw_capacity": "   2147483.646",
+    "ingr_unicast": "         0.000",
+    "ingr_unicast_rsvd_percent": "       0.000 %",
+    "egr_fl_bw_available": "   2147483.646",
+    "egr_fl_bw_usable": "   2147483.646",
+    "egr_fl_bw_capacity": "   2147483.646",
+    "egr_unicast": "         0.000",
+    "egr_unicast_rsvd_percent": "       0.000 %",
+    "nbr_dev_id": "",
+    "nbr_dev_name": "",
+    "external": "F"
+   },
+   {
+    "index": 4,
+    "ifname": "Vlan1",
+    "iod": 3,
+    "slot": 1,
+    "unit": 0,
+    "slice": 0,
+    "fab_unicast_percentage": 255,
+    "ingr_fl_bw_available": "   2147483.646",
+    "ingr_fl_bw_usable": "   2147483.646",
+    "ingr_fl_bw_capacity": "   2147483.646",
+    "ingr_unicast": "         0.000",
+    "ingr_unicast_rsvd_percent": "       0.000 %",
+    "egr_fl_bw_available": "   2147483.646",
+    "egr_fl_bw_usable": "   2147483.646",
+    "egr_fl_bw_capacity": "   2147483.646",
+    "egr_unicast": "         0.000",
+    "egr_unicast_rsvd_percent": "       0.000 %",
+    "nbr_dev_id": "",
+    "nbr_dev_name": "",
+    "external": "F"
+   }
+  ]
+ }
+}

@@ -592,6 +592,21 @@ NAT_CLEAR_RULES = (
 # covers. The line was tried on cisco-25gb as admin; the rule was not (the fake switch
 # stands in).
 EPBR_CLEAR_RULES = ("rule 30 permit command clear epbr statistics *",)
+# IGMP snooping's learned groups, counters and tracked IGMPv3 hosts are cleared outside
+# configuration mode, one VLAN at a time (rules 31 to 33, added in
+# BROAD_SNOOPING_CLEAR_VERSION). The lines were tried on cisco-25gb as admin; the rules were
+# not (the fake switch stands in).
+SNOOPING_CLEAR_RULES = (
+    "rule 31 permit command clear ip igmp snooping groups *",
+    "rule 32 permit command clear ip igmp snooping statistics *",
+    "rule 33 permit command clear ip igmp snooping explicit-tracking *",
+)
+# A VM Tracker connection is synced now with ``vmtracker connection <name> refresh``, typed
+# outside configuration mode (rule 34, added in BROAD_VMTRACKER_VERSION; outside
+# configuration mode that is the command's only form). The line was typed on cisco-25gb as
+# admin, with no vCenter to sync from ("ERROR: failure"); the rule was not tried (the fake
+# switch stands in).
+VMTRACKER_REFRESH_RULES = ("rule 34 permit command vmtracker connection *",)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -613,6 +628,8 @@ BROAD_RULES = (
     *ITD_STATISTICS_RULES,
     *NAT_CLEAR_RULES,
     *EPBR_CLEAR_RULES,
+    *SNOOPING_CLEAR_RULES,
+    *VMTRACKER_REFRESH_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

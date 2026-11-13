@@ -1,0 +1,35 @@
+!Command: show running-config
+!Shaped after Cisco's NX-OS 9.3 VXLAN guide (Configure Tenant Routed Multicast); the
+!overlay-distributed-dr, advertise evpn multicast, s-g-hash and mcast-routing override
+!lines were typed on cisco-25gb, the rest follow the guide.
+
+version 9.3(16) Bios:version 07.71
+feature ngmvpn
+feature nv overlay
+advertise evpn multicast
+ip multicast overlay-distributed-dr
+ip pim evpn-border-leaf
+vrf context red
+  vni 50001
+  ip multicast multipath s-g-hash next-hop-based
+  address-family ipv4 unicast
+    route-target both auto mvpn
+    route-target import 65001:50001 mvpn
+vrf context blue
+  vni 50002
+interface nve1
+  host-reachability protocol bgp
+  mcast-routing override source-interface loopback10
+  member vni 50001 associate-vrf
+    mcast-group 239.3.3.3
+  member vni 50002 associate-vrf
+router bgp 65001
+  address-family ipv4 mvpn
+    retain route-target all
+  address-family l2vpn evpn
+    advertise-pip
+    maximum-paths 4
+  neighbor 192.0.2.1
+    remote-as 65001
+    address-family ipv4 mvpn
+      send-community extended

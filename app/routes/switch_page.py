@@ -42,13 +42,17 @@ from app.routes.dot1x import render_dot1x_page
 from app.routes.eem import render_eem_page
 from app.routes.epbr import render_epbr_page
 from app.routes.errdisable import render_errdisable_page
+from app.routes.evb import render_evb_page
 from app.routes.features import render_features_page
+from app.routes.flexlink import render_flexlink_page
+from app.routes.igmp_snooping import render_snooping_page
 from app.routes.ip_sla import render_ip_sla_page
 from app.routes.itd import render_itd_page
 from app.routes.loopbacks import render_loopbacks_page
 from app.routes.monitor import render_monitor_page
 from app.routes.mpls import render_mpls_page
 from app.routes.nat import render_nat_page
+from app.routes.nbm import render_nbm_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.pbr import render_pbr_page
 from app.routes.pfc import render_pfc_page
@@ -67,9 +71,11 @@ from app.routes.switch_admin import render_switch_admin_page
 from app.routes.telemetry import render_telemetry_page
 from app.routes.track import render_track_page
 from app.routes.traffic import render_traffic_page
+from app.routes.trm import render_trm_page
 from app.routes.tunnels import render_tunnels_page
 from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
+from app.routes.vmtracker import render_vmtracker_page
 from app.routes.vpc import render_vpc_page
 from app.routes.vtp import render_vtp_page
 from app.routes.vxlan import render_vxlan_page
@@ -879,6 +885,10 @@ def switch_enable_changes(
             done += " The role now also allows clearing NAT's translations and counters."
         if connection.broad_role_without_epbr_clear and new_mode == ROLE_BROAD:
             done += " The role now also allows clearing ePBR's counters."
+        if connection.broad_role_without_snooping_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing IGMP snooping's groups and counters."
+        if connection.broad_role_without_vmtracker_refresh and new_mode == ROLE_BROAD:
+            done += " The role now also allows syncing a VM Tracker connection now."
     else:
         parts = []
         if connection.role_version < 2:
@@ -990,7 +1000,8 @@ def switch_save(
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
-    ``mpls``, ``nat``, ``track``, ``epbr``,
+    ``mpls``, ``nat``, ``track``, ``epbr``, ``igmp-snooping``, ``nbm``, ``trm``, ``flexlink``,
+    ``vmtracker``, ``evb``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1086,6 +1097,18 @@ def switch_save(
             return render_nat_page(request, username, error=error, notice=notice)
         if back == "track":
             return render_track_page(request, username, error=error, notice=notice)
+        if back == "igmp-snooping":
+            return render_snooping_page(request, username, error=error, notice=notice)
+        if back == "nbm":
+            return render_nbm_page(request, username, error=error, notice=notice)
+        if back == "trm":
+            return render_trm_page(request, username, error=error, notice=notice)
+        if back == "flexlink":
+            return render_flexlink_page(request, username, error=error, notice=notice)
+        if back == "vmtracker":
+            return render_vmtracker_page(request, username, error=error, notice=notice)
+        if back == "evb":
+            return render_evb_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

@@ -86,6 +86,12 @@ prose columns; those are a reviewer's job.
 | Read NAT (the inside and outside interfaces, static and dynamic translations, pools, timeouts and limits, the translations, the pools in use, the counters, whether the switch has TCAM space for NAT) or change it: an interface's side, a static translation (an address or one TCP or UDP port, in a VRF, with a route), an address pool, a dynamic translation to a pool or to an interface's address, a timeout or limit, clearing the translations or counters | `app/nat.py` (`load_nat_page`, `build_nat_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_nat` |
 | Read enhanced policy-based routing (the services with their end-points, reverse end-points and probes, the policies with their matches and service chains, where they are applied, each end-point's probe state, the counters) or change it: a service's probe, service interface and VRF, an end-point and its reverse end-point and probes, a policy's counting, a match and its spreading, a step of a chain, an interface's IPv4 or IPv6 policy (forward or reverse), clearing a policy's counters; a service or policy in use goes through an ePBR session | `app/epbr.py` (`load_epbr_page`, `build_epbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_epbr` |
 | Read the tracked objects (each one's state, changes and the lists using it) or change them: make or delete an object that follows an interface, a route or an IP SLA entry, or a list of others, and set its wait, VRF, list members or thresholds | `app/track.py` (`load_track_page`, `build_track_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_track` |
+| Read IGMP snooping (switch-wide and per VLAN, the queriers, router ports, static groups, report filters, the groups hosts joined, each VLAN's counters) or change it: snooping on or off, report suppression, the general query proxy, group timeouts, event history and snooping in VXLAN VLANs for the whole switch; a VLAN's querier and its timers, version, fast leave, explicit tracking, report flooding, router ports, static groups and report filters; clearing a VLAN's learned groups, counters or tracked IGMPv3 hosts | `app/igmp_snooping.py` (`load_snooping_page`, `build_snooping_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_igmp_snooping` |
+| Read non-blocking multicast (the defaults, flow policies, host policies, flows, defined flows, interface bandwidth, whether VXLAN or the TCAM rule it out) or change it: the mode and default flow settings (per NBM VRF too), flow policies and their groups, sender and receiver entries and defaults, flow definitions, external links | `app/nbm.py` (`load_nbm_page`, `build_nbm_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_nbm` |
+| Read multicast over VXLAN (tenant routed multicast: the switch-wide lines, the layer 3 VNIs' groups, the VRFs' MVPN settings, BGP's overlay families) or change it | `app/trm.py` (`load_trm_page`, `build_trm_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_trm`; the neighbors' `ipv4 mvpn` and `l2vpn evpn` families are on the BGP page (`app/protocols_bgp.py`) |
+| Read Flex Links (the pairs, their state and preemption; on a Nexus 9200 the page says the switch does not do them) or change them: make or delete a pair, its preemption mode and delay, multicast fast convergence | `app/flexlink.py` (`load_flexlink_page`, `build_flexlink_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_flexlink` |
+| Read VM Tracker (the vCenter connections and their state, the VMs on each port, the ports it is off on) or change it: fabric auto-configuration, a connection's address, login (the password never shown back), connect, extension key, timers, automatic VLANs and the VLANs allowed, VM Tracker on a port, syncing a connection now | `app/vmtracker.py` (`load_vmtracker_page`, `build_vmtracker_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vmtracker` |
+| Read Edge Virtual Bridging (the VDP role, address, timers and counters, the hosts and VSIs servers announced) or change it: the VDP address, the answer wait and keep-alive, batch answers | `app/evb.py` (`load_evb_page`, `build_evb_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_evb` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -764,12 +770,32 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `nat_page` | `(request, username) -> Response` | `GET /nat`: the NAT setup, translations and counters and the TCAM space, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `nat_change` | `(request, username, form) -> Response` | `POST /nat/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `epbr_needs` | `(connection, scope, setting) -> str` | Refuses clearing the counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_epbr_clear`) | the Enhanced policy-based routing `ProtocolSite` | v0.3.0 |
+| `snooping_needs` | `(connection, scope, setting) -> str` | Refuses clearing a VLAN's groups or counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_snooping_clear`) | the IGMP snooping `ProtocolSite` | v0.3.0 |
+| `vmtracker_needs` | `(connection, scope, setting) -> str` | Refuses syncing a connection now while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_vmtracker_refresh`) | the VM Tracker `ProtocolSite` | v0.3.0 |
 | `render_epbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Enhanced policy-based routing page, with a message | `epbr_page`, `switch_save` | v0.3.0 |
 | `epbr_page` | `(request, username) -> Response` | `GET /epbr`: the ePBR services, policies, where they apply, the chains' state and the counters, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `epbr_change` | `(request, username, form) -> Response` | `POST /epbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_track_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tracked objects page, with a message | `track_page`, `switch_save` | v0.3.0 |
 | `track_page` | `(request, username) -> Response` | `GET /track`: the tracked objects with their state, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `track_change` | `(request, username, form) -> Response` | `POST /track/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_snooping_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the IGMP snooping page, with a message | `snooping_page`, `switch_save` | v0.3.0 |
+| `snooping_page` | `(request, username) -> Response` | `GET /igmp-snooping`: snooping's settings, queriers, router ports and groups, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `snooping_change` | `(request, username, form) -> Response` | `POST /igmp-snooping/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_nbm_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Non-blocking multicast page, with a message | `nbm_page`, `switch_save` | v0.3.0 |
+| `nbm_page` | `(request, username) -> Response` | `GET /nbm`: NBM's settings, policies, flows and bandwidth, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `nbm_change` | `(request, username, form) -> Response` | `POST /nbm/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_trm_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Multicast over VXLAN page, with a message | `trm_page`, `switch_save` | v0.3.0 |
+| `trm_page` | `(request, username) -> Response` | `GET /trm`: the TRM settings and layer 3 VNIs, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `trm_change` | `(request, username, form) -> Response` | `POST /trm/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_flexlink_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Flex Links page, with a message | `flexlink_page`, `switch_save` | v0.3.0 |
+| `flexlink_page` | `(request, username) -> Response` | `GET /flexlink`: the Flex Link pairs and their state, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `flexlink_change` | `(request, username, form) -> Response` | `POST /flexlink/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_vmtracker_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VM Tracker page, with a message | `vmtracker_page`, `switch_save` | v0.3.0 |
+| `vmtracker_page` | `(request, username) -> Response` | `GET /vmtracker`: the vCenter connections and the VMs on each port, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `vmtracker_change` | `(request, username, form) -> Response` | `POST /vmtracker/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_evb_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Edge Virtual Bridging page, with a message | `evb_page`, `switch_save` | v0.3.0 |
+| `evb_page` | `(request, username) -> Response` | `GET /evb`: EVB's settings, hosts and VSIs, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `evb_change` | `(request, username, form) -> Response` | `POST /evb/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1276,7 +1302,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1298,7 +1324,7 @@ would take them out silently.
 | `parse_routes` | `(body) -> list[Route]` | Every route of `show ip route vrf all` or `show ipv6 route vrf all`, with its source, next hops, distance, metric and age | `load_overview` | v0.1.0 |
 | `load_overview` | `(client) -> ProtocolsOverview` | Which protocols' features are on, and the route table; one request | `routes/protocols` | v0.1.0 |
 | `load_protocol_page` | `(client, proto) -> ProtocolPage` | The features, layer 3 interfaces and VRFs in one request, then the protocol's own show commands when it is on | `routes/protocols` | v0.1.0 |
-| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_epbr_page`, `load_mpls_page`, `load_nat_page` | v0.2.1 |
+| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_epbr_page`, `load_mpls_page`, `load_nat_page`, `nbm.load_nbm_page` | v0.2.1 |
 
 ## `app/protocols_ospf.py` — OSPF and OSPFv3 pages
 
@@ -1377,7 +1403,7 @@ would take them out silently.
 | `parse_monitor` | `(bodies, origin="") -> ProtocolView` | The page from `show monitor session all` and the ERSPAN source address: a place per local or ERSPAN source session, the address, and a table of every session | `MONITOR.parse`, `load_monitor_page` | v0.2.1 |
 | `load_monitor_page` | `(client) -> MonitorPage` | One request for the ports and features, one for the sessions (no session is a note, not a table), one for the configuration text | `routes/monitor` | v0.2.1 |
 | `build_monitor_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Monitor sessions page | `NxapiClient.configure_monitor`, `routes/monitor` | v0.2.1 |
-| `all_port_names` | `(brief) -> tuple[str, ...]` | Every front port and port-channel in `show interface brief`, routed ports too | `load_monitor_page`, `load_qos_page`, `track.track_interfaces` | v0.2.1 |
+| `all_port_names` | `(brief) -> tuple[str, ...]` | Every front port and port-channel in `show interface brief`, routed ports too | `load_monitor_page`, `load_qos_page`, `track.track_interfaces`, `igmp_snooping.load_snooping_page` | v0.2.1 |
 
 ## `app/qos.py` — QoS: class-maps, policy-maps (qos, network-qos, queuing), where they are applied, the counters, and every setting
 
@@ -1608,6 +1634,76 @@ session the switch left open with `epbr session` + `abort`.
 `TRACK_MAX` (512, checked on the switch) and `TRACK_HINT` are shared with the HSRP and VRRP
 pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by number.
 
+## `app/igmp_snooping.py` — IGMP snooping: switch-wide, per VLAN, queriers, router ports and groups
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_snooping_config` | `(config) -> list[VlanConfig]` | The `vlan configuration <n>` blocks of `show running-config`: each VLAN's snooping lines as setting values (the default-on ones read from their `no` forms) and its router ports, static groups, report flooding ports and report filters | `parse_snooping` | v0.3.0 |
+| `parse_mrouter` | `(output) -> list[tuple[str, ...]]` | `show ip igmp snooping mrouter` as text: VLAN, port, how it was learned, up for, expires | `parse_snooping` | v0.3.0 |
+| `parse_snooping_counters` | `(body) -> list[tuple[str, ...]]` | Each VLAN's counters from `show ip igmp snooping statistics`: reports, queries and leaves received, reports forwarded, invalid packets, since when | `parse_snooping` | v0.3.0 |
+| `parse_snooping` | `(bodies, config, mrouter=None) -> ProtocolView` | The page: the whole switch, each VLAN (with its current values), its places and its Clear buttons, and the VLAN, group, querier, router port and counter tables | `IGMP_SNOOPING.parse`, `load_snooping_page` | v0.3.0 |
+| `load_snooping_page` | `(client) -> SnoopingPage` | One request for the ports and snooping's state, groups, queriers and counters; the router ports and the configuration as text | `routes/igmp_snooping` | v0.3.0 |
+| `check_snooping_place` | `(page, ident) -> None` | Refuses a VLAN or port the switch does not have (it takes them silently), unless a line on the page already names the port | the IGMP snooping `ProtocolSite` | v0.3.0 |
+| `build_snooping_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_igmp_snooping`, `routes/igmp_snooping` | v0.3.0 |
+
+## `app/nbm.py` — non-blocking multicast: flow and host policies, flows and bandwidth
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_nbm_config` | `(config) -> dict[str, NbmConfig]` | The NBM lines of `show running-config`, per VRF (the top level and each `nbm vrf` block): its own lines, flow policies and their groups, host policy entries, flow definitions | `parse_nbm` | v0.3.0 |
+| `parse_nbm` | `(bodies, config) -> ProtocolView` | The page: the settings per VRF, policies, groups, entries, definitions and external links as places, and the defaults, policies, host policies, flows, defined flows and interface bandwidth tables | `NBM.parse`, `load_nbm_page` | v0.3.0 |
+| `load_nbm_page` | `(client) -> NbmPage` | One request for the feature, interfaces and VRFs, the TCAM regions as text (whether VXLAN is on or the `ing-nbm` region is empty); while nbm is on, its state and the configuration text | `routes/nbm` | v0.3.0 |
+| `check_nbm_place` | `(page, ident) -> None` | Refuses a VRF the switch does not have (`nbm vrf` would make it) and an interface that is not a routed front port | the Non-blocking multicast `ProtocolSite` | v0.3.0 |
+| `build_nbm_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a flow policy's name is letters and digits only | `NxapiClient.configure_nbm`, `routes/nbm` | v0.3.0 |
+
+## `app/trm.py` — multicast over VXLAN EVPN (tenant routed multicast)
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_trm_config` | `(config, ngmvpn_on=True) -> TrmConfig` | The TRM lines of `show running-config`: the switch-wide ones, the NVE interface's multicast source and layer 3 VNIs with their groups, the VRFs' VNI, flow spreading and MVPN route-targets, the BGP process's AS and overlay families | `parse_trm`, `load_trm_page` | v0.3.0 |
+| `parse_trm` | `(config, ngmvpn_on=True) -> ProtocolView` | The page: its places and the layer 3 VNI table | `TRM.parse`, `load_trm_page` | v0.3.0 |
+| `load_trm_page` | `(client) -> TrmPage` | One request for the features and VRFs; while ngmvpn is on, the configuration text | `routes/trm` | v0.3.0 |
+| `check_trm_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, an NVE interface or layer 3 VNI the VXLAN page has not made, and an AS other than the BGP process's | the Multicast over VXLAN `ProtocolSite` | v0.3.0 |
+| `build_trm_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; advertise-pip goes in the l2vpn evpn family only | `NxapiClient.configure_trm`, `routes/trm` | v0.3.0 |
+
+## `app/flexlink.py` — Flex Links: pairs of an active and a backup port
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_flexlink_config` | `(config) -> list[Pair]` | The ports with `switchport backup interface` lines in `show running-config`, and the preemption and multicast options in them | `parse_flexlink` | v0.3.0 |
+| `parse_backup_state` | `(output) -> list[tuple[str, str, str]]` | `show interface switchport backup` as text: active port, backup port, state (Eth and Po names written out) | `parse_flexlink` | v0.3.0 |
+| `parse_flexlink` | `(config, state) -> ProtocolView` | The page: a place per pair with its state and settings, and the pairs table | `FLEXLINK.parse`, `load_flexlink_page` | v0.3.0 |
+| `model_note` | `(version) -> str` | The plain refusal for a Nexus 9200 (from `show version`), which does not do Flex Links; "" for any other model | `load_flexlink_page` | v0.3.0 |
+| `load_flexlink_page` | `(client) -> FlexlinkPage` | One request for the features, model and ports; while Flex Links are on, the pairs' state and the configuration as text | `routes/flexlink` | v0.3.0 |
+| `check_flexlink_place` | `(page, ident) -> None` | Refuses a port the switch lacks as a layer 2 port (unless a pair names it) and a port backing itself up | the Flex Links `ProtocolSite` | v0.3.0 |
+| `build_flexlink_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a setting's line carries the backup port, so the pair's own line is not typed again before it | `NxapiClient.configure_flexlink`, `routes/flexlink` | v0.3.0 |
+
+## `app/vmtracker.py` — VM Tracker: vCenter connections and the VMs on each port
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vmtracker_config` | `(config) -> VmtrackerConfig` | The VM Tracker lines of `show running-config`: fabric auto-configuration, each connection's settings (which have a password, never the password) and the ports with `no vmtracker enable` | `parse_vmtracker` | v0.3.0 |
+| `parse_status` | `(body) -> dict[str, tuple[str, str]]` | `show vmtracker status`: each connection's vCenter address and state | `parse_vmtracker` | v0.3.0 |
+| `parse_vm_info` | `(output) -> list[tuple[str, ...]]` | `show vmtracker info detail` as text: port, host, host NIC, VM, state, port group, VLANs | `parse_vmtracker` | v0.3.0 |
+| `parse_vmtracker` | `(config, status=None, info=None) -> ProtocolView` | The page: the whole switch, a place per connection with its state and settings, the ports it is off on, Sync now per connection, and the connection and VM tables | `VMTRACKER.parse`, `load_vmtracker_page` | v0.3.0 |
+| `load_vmtracker_page` | `(client) -> VmtrackerPage` | One request for the feature and ports; while vmtracker is on, the status, the VMs as text and the configuration text | `routes/vmtracker` | v0.3.0 |
+| `check_vmtracker_place` | `(page, ident) -> None` | Refuses a port the switch lacks (unless listed) and a fifth vCenter connection | the VM Tracker `ProtocolSite` | v0.3.0 |
+| `build_vmtracker_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_vmtracker`, `routes/vmtracker` | v0.3.0 |
+
+## `app/evb.py` — Edge Virtual Bridging: VDP, its hosts and VSIs
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `wait_time` | `(exponent) -> str` | An EVB timer exponent in words: 25 -> "25 (about 335 seconds)" | `parse_evb` | v0.3.0 |
+| `parse_rows` | `(output, first, width) -> list[tuple[str, ...]]` | The rows of an EVB table printed as text, under the heading starting with `first` | `parse_hosts`, `parse_vsis` | v0.3.0 |
+| `parse_hosts` | `(output) -> list[tuple[str, ...]]` | `show evb hosts` as text: host, VNI, VLAN, bridge domain, MAC, IP address, port | `parse_evb` | v0.3.0 |
+| `parse_vsis` | `(output) -> list[tuple[str, ...]]` | `show evb vsi` as text: manager, VSI, port, profile, M-state, E-state, wait/keep-alive | `parse_evb` | v0.3.0 |
+| `parse_evb_config` | `(config) -> dict[str, dict[str, str]]` | The switch-wide `evb` lines of `show running-config`, as setting values | `parse_evb` | v0.3.0 |
+| `parse_evb` | `(state, hosts=None, vsis=None, config=None) -> ProtocolView` | The page: the whole switch with its role, address, timers and counters, and the host and VSI tables | `EVB.parse`, `load_evb_page` | v0.3.0 |
+| `load_evb_page` | `(client) -> EvbPage` | `show feature`; while evb is on, `show evb`, its hosts and VSIs as text and the configuration text | `routes/evb` | v0.3.0 |
+| `check_evb_place` | `(page, ident) -> None` | Nothing to check: the page's one scope is the whole switch | the Edge Virtual Bridging `ProtocolSite` | v0.3.0 |
+| `build_evb_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_evb`, `routes/evb` | v0.3.0 |
+
 ## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
 
 | Function | Signature | Does | Used by | Since |
@@ -1678,7 +1774,7 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page`, and other pages' configuration readers (`nat.parse_nat_config`, `track.parse_track_config`, ...) | v0.2.1 |
+| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page`, and other pages' configuration readers (`nat.parse_nat_config`, `track.parse_track_config`, `igmp_snooping.parse_snooping_config`, `nbm.parse_nbm_config`, `trm.parse_trm_config`, ...) | v0.2.1 |
 | `parse_vxlan` | `(bodies, config=None) -> ProtocolView` | The page from `show nve interface`, `show nve peers`, `show nve vni` and the configuration (None when the role may not read it): the NVE interface, VLAN to VNI lines, member VNIs, EVPN blocks and VRF lines as places, the peers and VNIs as tables | `VXLAN.parse`, `load_vxlan_page` | v0.2.1 |
 | `load_vxlan_page` | `(client) -> VxlanPage` | One request for the features, VLANs and VRFs, then the `show nve` commands and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vxlan` | v0.2.1 |
 | `build_vxlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VXLAN page | `NxapiClient.configure_vxlan`, `routes/vxlan` | v0.2.1 |
@@ -1695,7 +1791,7 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
-| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page`, `nat.load_nat_page`, `epbr.load_epbr_page`, `track.load_track_page` | v0.1.0 |
+| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page`, `nat.load_nat_page`, `epbr.load_epbr_page`, `track.load_track_page`, `nbm.load_nbm_page`, `trm.load_trm_page` | v0.1.0 |
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
@@ -1715,7 +1811,7 @@ address, or an address and mask), `ethertype` (0x0600-0xffff), and `arpip` and
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `parse_acl_config` | `(config) -> AclConfig` | The IPv4, IPv6 and MAC ACLs, their entry lines and statistics, the object groups, VLAN access maps and filters, the TCAM sizes set, and the interfaces and ports the ACLs apply on, from `show running-config` | `parse_acls` | v0.1.0 |
-| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls`, `nat.nat_regions` | v0.1.0 |
+| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls`, `nat.nat_regions`, `nbm.load_nbm_page` | v0.1.0 |
 | `parse_acls` | `(bodies, config_text=None, tcam_text=None) -> ProtocolView` | The ACLs page: each IPv4, IPv6 and MAC ACL with its entries and where it applies, each object group, VLAN access map entry and VLAN filter, each interface with its ACLs, a table of every ACL, one of the groups and maps, and one of the TCAM regions; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
 | `needs_v14` | `(scope, setting) -> bool` | Whether an ACLs page change needs role version 14 (MAC ACLs, object groups, VLAN access maps and filters, TCAM, MAC port ACLs) | `routes/security.acl_needs` | v0.1.0 |
 | `layer3_names` | `(brief) -> tuple[str, ...]` | VLAN interfaces up to Vlan254 and routed ports and port-channels in `show interface brief` | `load_acls_page` | v0.1.0 |

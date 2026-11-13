@@ -1957,6 +1957,129 @@ class NxapiClient:
         change = build_track_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_igmp_snooping(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the IGMP snooping page: a switch-wide or VLAN setting, a VLAN's router
+        port, static group, report flooding port or report filter.
+
+        The lines are built from the page's description and the checked values
+        (``igmp_snooping.build_snooping_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.igmp_snooping import build_snooping_change
+
+        change = build_snooping_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_nbm(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Non-blocking multicast page: NBM's mode and flow defaults, a flow
+        policy or one of its groups, a host policy entry or default, a flow definition, or an
+        external link.
+
+        The lines are built from the page's description and the checked values
+        (``nbm.build_nbm_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.nbm import build_nbm_change
+
+        change = build_nbm_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_trm(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Multicast over VXLAN page: a switch-wide line, the NVE interface's
+        multicast source, a layer 3 VNI's group, a VRF's MVPN settings, or a BGP overlay
+        family.
+
+        The lines are built from the page's description and the checked values
+        (``trm.build_trm_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.trm import build_trm_change
+
+        change = build_trm_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_flexlink(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Flex Links page: a pair of an active and a backup port, or its
+        preemption and multicast settings.
+
+        The lines are built from the page's description and the checked values
+        (``flexlink.build_flexlink_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.flexlink import build_flexlink_change
+
+        change = build_flexlink_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vmtracker(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VM Tracker page: fabric auto-configuration, a vCenter connection or
+        one of its settings (the password masked in the labels), a port, or syncing a
+        connection now.
+
+        The lines are built from the page's description and the checked values
+        (``vmtracker.build_vmtracker_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.vmtracker import build_vmtracker_change
+
+        change = build_vmtracker_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_evb(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Edge Virtual Bridging page: the VDP address, timers or batch
+        answers.
+
+        The lines are built from the page's description and the checked values
+        (``evb.build_evb_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.evb import build_evb_change
+
+        change = build_evb_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_ptp(
         self,
         scope: str,

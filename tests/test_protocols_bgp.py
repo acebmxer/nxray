@@ -544,6 +544,7 @@ CASES = [
     ("neighbor_af", "allowas_in", {"count": "2"}, "allowas-in 2"),
     ("neighbor_af", "as_override", {}, "as-override"),
     ("neighbor_af", "disable_peer_as_check", {}, "disable-peer-as-check"),
+    ("neighbor_af", "rewrite_rt_asn", {}, "rewrite-rt-asn"),
     ("neighbor_af", "suppress_inactive", {}, "suppress-inactive"),
 ]
 
