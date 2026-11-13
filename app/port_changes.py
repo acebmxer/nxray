@@ -580,6 +580,13 @@ ITD_STATISTICS_RULES = (
     "rule 26 permit command no itd statistics *",
     "rule 27 permit command clear itd statistics *",
 )
+# NAT's translations and counters are cleared outside configuration mode too (rules 28 and
+# 29, added in BROAD_NAT_VERSION). The lines were tried on cisco-25gb as admin; the rules
+# were not (the fake switch stands in).
+NAT_CLEAR_RULES = (
+    "rule 28 permit command clear ip nat translation *",
+    "rule 29 permit command clear ip nat statistics",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -599,6 +606,7 @@ BROAD_RULES = (
     "rule 22 permit command reload",
     *EEM_DENY_RULES,
     *ITD_STATISTICS_RULES,
+    *NAT_CLEAR_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

@@ -1089,7 +1089,7 @@ with throwaway entries.
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
 SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD,
-MPLS, PTP and Telemetry) send their changes with the stored admin
+MPLS, NAT, Tracked objects, PTP and Telemetry) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1171,6 +1171,40 @@ option-b`, `allocate-label all` in `address-family ipv4 unicast`, and a neighbor
 `address-family ipv4 labeled-unicast|vpnv4 unicast|vpnv6 unicast`. None of these lines was
 tried on a switch. Layer 3 VPNs over LDP are not offered: Cisco's guide lists them only for
 Nexus 3600-R and 9500 -R line cards, and the 92160YC-X has no LDP.
+
+**NAT.** The **NAT** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It needs `feature nat` (Features page) and,
+on a Nexus 9000, TCAM space in the `nat` region (`hardware access-list tcam region nat
+<size>`, on the ACLs page; it counts only after Save config and a restart of the switch).
+It reads `show feature`, `show interface brief`, `show vrf`, `show vrf interface`, `show
+hardware access-list tcam region` (as text: the page says plainly when the nat region is
+0), `show ip nat translations verbose`, `show ip nat statistics`, `show ip nat max` and
+`show running-config` (as text), and types `ip nat inside` and `ip nat outside` on a VLAN
+interface, routed port or routed port-channel; `ip nat inside|outside source static
+[tcp|udp] <address> [<port>] <address> [<port>] [vrf <vrf> [match-in-vrf]] [add-route]`;
+`ip nat pool <name> <first> <last> prefix-length <n>`; `ip nat inside|outside source list
+<acl> pool <pool> [vrf <vrf>] [overload] [add-route]`; `ip nat inside source list <acl>
+interface <interface> overload`; `ip nat translation timeout|tcp-timeout|udp-timeout|
+icmp-timeout|syn-timeout|finrst-timeout <seconds>` and `ip nat translation max-entries
+[all-host] <1-1023>`, each with its `no` form. It clears with `clear ip nat translation
+all`, `clear ip nat translation inside <global> <local>`, `clear ip nat translation outside
+<local> <global>` and `clear ip nat statistics`, typed outside configuration mode: the broad
+role allows them with rules 28 and 29. Tried on cisco-25gb (NX-OS 9.3(16)), whose nat region
+is 0, with throwaway translations and pools: every line above was taken except `ip nat
+inside` and `ip nat outside` on an interface ("Nat tcam not carved") and the SYN and FIN/RST
+timeouts, which need the `tcp-nat` region. The clear rules were not tried (the fake switch
+stands in).
+
+**Tracked objects.** The **Tracked objects** page (under Configure) needs no rule of its
+own and no feature, so it works with the broad role and with a stored admin login, and is
+off with the limited role. It reads `show interface brief`, `show vrf`, `show track` and
+`show running-config` (as text), and types `track <1-512> interface <interface>
+line-protocol|ip routing|ipv6 routing`, `track <n> ip|ipv6 route <prefix> reachability`,
+`track <n> ip sla <entry> state|reachability`, `track <n> list boolean and|or` and `track <n>
+list threshold weight|percentage`, and inside one `delay [up <0-180>] [down <0-180>]`,
+`vrf member <vrf>` (route objects), `object <n> [not|weight <1-255>]` and `threshold
+weight|percentage [up <n>] [down <n>]` (lists), each with its `no` form, and `no track <n>`.
+Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects.
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
@@ -1487,7 +1521,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1521,6 +1555,12 @@ and `clear itd statistics *`, typed outside configuration mode, so `conf t ; *` 
 cover them). A broad role written before lacks them, and the switch refuses the ITD
 page's **Count the traffic** and **Clear the counters**: the Switch page says so on the
 **Update the port list** card, and pressing it writes the role again with them.
+
+Clearing NAT's translations and counters came after that (rules 28 and 29: `clear ip nat
+translation *` and `clear ip nat statistics`, typed outside configuration mode). A broad
+role written before lacks them, and the switch refuses the NAT page's Clear buttons: the
+Switch page says so on the **Update the port list** card, and pressing it writes the role
+again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

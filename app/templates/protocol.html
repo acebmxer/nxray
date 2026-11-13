@@ -11,7 +11,7 @@
 </select>
 {% elif f.kind == "flag" %}
 <label class="check"><input id="{{ uid }}" type="checkbox" name="{{ name }}" value="yes" {% if value %}checked{% endif %}> {{ f.choices[0] }}</label>
-{% elif f.kind == "interface" %}
+{% elif f.kind in ("interface", "ifname") %}
 <select id="{{ uid }}" name="{{ name }}">
   {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
   {% for i in page.interfaces %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}

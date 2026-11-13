@@ -50,6 +50,7 @@ from app.protocols import (
     table_rows,
 )
 from app.switch import text
+from app.track import TRACK_HINT
 
 PAGE_COMMANDS = (
     "show interface brief",
@@ -222,7 +223,7 @@ _APPLET = Scope(
             "A tracked object changes",
             "event track {track} state {state}",
             (
-                Field("track", "Track object", "int", 1, 500),
+                Field("track", "Track object", "int", 1, 500, hint=TRACK_HINT),
                 Field("state", "State", "choice", choices=("up", "down", "any")),
             ),
         ),

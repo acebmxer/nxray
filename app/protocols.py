@@ -129,6 +129,8 @@ KINDS = (
     "ipv6list",  # one or more IPv6 addresses, written with spaces
     "telpath",  # a telemetry sensor path or condition: printable, no spaces, not starting
     # with a double quote: sys/intf or eq(ethpmPhysIf.operSt,"down")
+    "ifname",  # any interface the switch has, by name, only to read its state: a front
+    # port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -308,6 +310,37 @@ def _switch_port(value: str, label: str) -> str:
         return validate_port_name(f"Ethernet{match.group(1)}" if match else value)
     except ValueError as exc:
         raise ValueError(f"{label}: a front port such as Ethernet1/3 or a port-channel") from exc
+
+
+_TUNNEL = re.compile(r"(?i)^tunnel\s*([0-9]{1,5})$")
+
+
+def _ifname(value: str, label: str) -> str:
+    """Any interface by the name the switch writes: Ethernet1/5, port-channel10, Vlan300,
+    loopback0, mgmt0, nve1, Tunnel5. Only for lines that read an interface's state (a
+    tracked object), so a VLAN interface above NXray's own range is taken too."""
+    if _CHANNEL.fullmatch(value):
+        return _channel_name(value, label)
+    if match := re.fullmatch(r"(?i)vlan\s*([0-9]{1,4})", value):
+        try:
+            return f"Vlan{validate_vlan_id(match.group(1))}"
+        except ValueError as exc:
+            raise ValueError(f"{label}: {exc}") from exc
+    if _LOOPBACK.fullmatch(value):
+        return _source(value, label)
+    if match := _TUNNEL.fullmatch(value):
+        if int(match.group(1)) > 65535:
+            raise ValueError(f"{label}: tunnels are numbered 0 to 65535")
+        return f"Tunnel{int(match.group(1))}"
+    if value.lower() in ("mgmt0", "nve1"):
+        return value.lower()
+    match = _ETHERNET.fullmatch(value)
+    try:
+        return validate_port_name(f"Ethernet{match.group(1)}" if match else value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{label} is an interface such as Ethernet1/49, port-channel10, Vlan10 or loopback0"
+        ) from exc
 
 
 def _channel_name(value: str, label: str) -> str:
@@ -675,6 +708,8 @@ def check_value(spec: Field, raw: str) -> str:
         return _interface(value, spec.label)
     if kind == "source":
         return _source(value, spec.label)
+    if kind == "ifname":
+        return _ifname(value, spec.label)
     if kind == "mac":
         return _mac(value, spec.label)
     if kind == "maddr4":

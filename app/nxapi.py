@@ -1884,6 +1884,46 @@ class NxapiClient:
         change = build_pbr_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_nat(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the NAT page: an interface's side, a static or dynamic translation,
+        a pool, a timeout or limit, or clearing the translations or counters.
+
+        The lines are built from the page's description and the checked values
+        (``nat.build_nat_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the NAT description uses this module's checks.
+        from app.nat import build_nat_change
+
+        change = build_nat_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_track(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Tracked objects page: make or delete an object, or set its
+        wait, VRF, list members or thresholds.
+
+        The lines are built from the page's description and the checked values
+        (``track.build_track_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Tracked objects description uses this module's checks.
+        from app.track import build_track_change
+
+        change = build_track_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_ptp(
         self,
         scope: str,

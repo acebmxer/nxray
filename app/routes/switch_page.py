@@ -47,6 +47,7 @@ from app.routes.itd import render_itd_page
 from app.routes.loopbacks import render_loopbacks_page
 from app.routes.monitor import render_monitor_page
 from app.routes.mpls import render_mpls_page
+from app.routes.nat import render_nat_page
 from app.routes.neighbors import render_neighbors_page
 from app.routes.pbr import render_pbr_page
 from app.routes.pfc import render_pfc_page
@@ -63,6 +64,7 @@ from app.routes.security import render_acls_page, render_dhcp_page, render_port_
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
 from app.routes.telemetry import render_telemetry_page
+from app.routes.track import render_track_page
 from app.routes.traffic import render_traffic_page
 from app.routes.tunnels import render_tunnels_page
 from app.routes.udld import render_udld_page
@@ -872,6 +874,8 @@ def switch_enable_changes(
             done += " The role now also names the loopbacks."
         if connection.broad_role_without_itd_statistics and new_mode == ROLE_BROAD:
             done += " The role now also allows ITD's counters."
+        if connection.broad_role_without_nat_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing NAT's translations and counters."
     else:
         parts = []
         if connection.role_version < 2:
@@ -983,7 +987,7 @@ def switch_save(
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
-    ``mpls``,
+    ``mpls``, ``nat``, ``track``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1073,6 +1077,10 @@ def switch_save(
             return render_itd_page(request, username, error=error, notice=notice)
         if back == "mpls":
             return render_mpls_page(request, username, error=error, notice=notice)
+        if back == "nat":
+            return render_nat_page(request, username, error=error, notice=notice)
+        if back == "track":
+            return render_track_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

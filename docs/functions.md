@@ -83,6 +83,8 @@ prose columns; those are a reviewer's job.
 | Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
 | Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
 | Read MPLS (the feature set, label range, interfaces with MPLS, bindings, segment routing and prefix SIDs, VPN VRFs, labels in use, the VPN Fabric licence) or change it: install and turn on MPLS, static MPLS, segment routing and Layer 3 VPNs, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop, the global block, a prefix SID, a VRF's route distinguisher and route-targets | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
+| Read NAT (the inside and outside interfaces, static and dynamic translations, pools, timeouts and limits, the translations, the pools in use, the counters, whether the switch has TCAM space for NAT) or change it: an interface's side, a static translation (an address or one TCP or UDP port, in a VRF, with a route), an address pool, a dynamic translation to a pool or to an interface's address, a timeout or limit, clearing the translations or counters | `app/nat.py` (`load_nat_page`, `build_nat_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_nat` |
+| Read the tracked objects (each one's state, changes and the lists using it) or change them: make or delete an object that follows an interface, a route or an IP SLA entry, or a list of others, and set its wait, VRF, list members or thresholds | `app/track.py` (`load_track_page`, `build_track_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_track` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -756,6 +758,13 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_mpls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the MPLS page, with a message | `mpls_page`, `switch_save` | v0.2.1 |
 | `mpls_page` | `(request, username) -> Response` | `GET /mpls`: whether MPLS is on, the label range, interfaces and bindings, read live; every role looks, operators and admins change | router | v0.2.1 |
 | `mpls_change` | `(request, username, form) -> Response` | `POST /mpls/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `nat_needs` | `(connection, scope, setting) -> str` | Refuses clearing while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_nat_clear`) | the NAT `ProtocolSite` | v0.3.0 |
+| `render_nat_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the NAT page, with a message | `nat_page`, `switch_save` | v0.3.0 |
+| `nat_page` | `(request, username) -> Response` | `GET /nat`: the NAT setup, translations and counters and the TCAM space, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `nat_change` | `(request, username, form) -> Response` | `POST /nat/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_track_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tracked objects page, with a message | `track_page`, `switch_save` | v0.3.0 |
+| `track_page` | `(request, username) -> Response` | `GET /track`: the tracked objects with their state, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `track_change` | `(request, username, form) -> Response` | `POST /track/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1262,7 +1271,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1284,7 +1293,7 @@ would take them out silently.
 | `parse_routes` | `(body) -> list[Route]` | Every route of `show ip route vrf all` or `show ipv6 route vrf all`, with its source, next hops, distance, metric and age | `load_overview` | v0.1.0 |
 | `load_overview` | `(client) -> ProtocolsOverview` | Which protocols' features are on, and the route table; one request | `routes/protocols` | v0.1.0 |
 | `load_protocol_page` | `(client, proto) -> ProtocolPage` | The features, layer 3 interfaces and VRFs in one request, then the protocol's own show commands when it is on | `routes/protocols` | v0.1.0 |
-| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_mpls_page` | v0.2.1 |
+| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_mpls_page`, `load_nat_page` | v0.2.1 |
 
 ## `app/protocols_ospf.py` — OSPF and OSPFv3 pages
 
@@ -1363,7 +1372,7 @@ would take them out silently.
 | `parse_monitor` | `(bodies, origin="") -> ProtocolView` | The page from `show monitor session all` and the ERSPAN source address: a place per local or ERSPAN source session, the address, and a table of every session | `MONITOR.parse`, `load_monitor_page` | v0.2.1 |
 | `load_monitor_page` | `(client) -> MonitorPage` | One request for the ports and features, one for the sessions (no session is a note, not a table), one for the configuration text | `routes/monitor` | v0.2.1 |
 | `build_monitor_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Monitor sessions page | `NxapiClient.configure_monitor`, `routes/monitor` | v0.2.1 |
-| `all_port_names` | `(brief) -> tuple[str, ...]` | Every front port and port-channel in `show interface brief`, routed ports too | `load_monitor_page`, `load_qos_page` | v0.2.1 |
+| `all_port_names` | `(brief) -> tuple[str, ...]` | Every front port and port-channel in `show interface brief`, routed ports too | `load_monitor_page`, `load_qos_page`, `track.track_interfaces` | v0.2.1 |
 
 ## `app/qos.py` — QoS: class-maps, policy-maps (qos, network-qos, queuing), where they are applied, the counters, and every setting
 
@@ -1501,7 +1510,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_loopbacks` | `(bodies) -> list[Loopback]` | Every loopback in number order from `show interface brief`, `show ip interface vrf all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`: on or off, description, VRF, IPv4 (main first) and IPv6 addresses | `parse_loopback_view` | v0.2.1 |
+| `parse_loopbacks` | `(bodies) -> list[Loopback]` | Every loopback in number order from `show interface brief`, `show ip interface vrf all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`: on or off, description, VRF, IPv4 (main first) and IPv6 addresses | `parse_loopback_view`, `load_nat_page`, `track.track_interfaces` (from the brief alone, for the names) | v0.2.1 |
 | `parse_loopback_view` | `(bodies) -> ProtocolView` | The page: one place per loopback with its facts and current values | `LOOPBACKS.parse`, `load_loopback_page` | v0.2.1 |
 | `load_loopback_page` | `(client) -> LoopbackPage` | One request for every read; the VRFs a loopback can move into (never default or management) | `routes/loopbacks` | v0.2.1 |
 | `build_loopback_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Loopbacks page | `NxapiClient.configure_loopbacks`, `routes/loopbacks` | v0.2.1 |
@@ -1548,6 +1557,35 @@ would take them out silently.
 | `load_mpls_page` | `(client) -> MplsPage` | One request for the features, layer 3 interfaces, VRFs and licences, the feature set as text; while static MPLS or segment routing is on, `show mpls switching`; while either or Layer 3 VPNs are on, the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
 | `check_mpls_place` | `(page, ident) -> None` | Refuses bindings while static MPLS is off, interfaces while static MPLS and segment routing are off, prefix SIDs while segment routing is off (and an index or absolute label out of range), VPN VRFs while Layer 3 VPNs are off, and an interface or VRF the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
 | `build_mpls_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the MPLS page | `NxapiClient.configure_mpls`, `routes/mpls` | v0.2.1 |
+
+## `app/nat.py` — NAT: inside and outside interfaces, translations, pools, timeouts, counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_nat_config` | `(config) -> NatConfig` | The `ip nat` lines of `show running-config` (statics with their ports, VRF and options, pools with a length or netmask, dynamic translations to a pool or an interface, timeouts and limits) and each interface's side | `parse_nat` | v0.3.0 |
+| `nat_regions` | `(tcam_text) -> list[tuple[str, str, str]]` | The `nat`, `tcp-nat` and `mcast-nat` regions of `show hardware access-list tcam region`, read with the ACLs page's `parse_tcam_regions` | `load_nat_page` | v0.3.0 |
+| `parse_translations` | `(body) -> list[tuple[str, ...]]` | `show ip nat translations verbose`: protocol, the four addresses (with ports), VRF, packets each way and the time left (never, for a static) | `parse_nat` | v0.3.0 |
+| `parse_statistics` | `(statistics, maxima) -> list[tuple[str, str]]` | `show ip nat statistics` and `show ip nat max` as (what, value) rows in plain words | `parse_nat` | v0.3.0 |
+| `parse_lists_in_use` | `(statistics) -> list[tuple[str, ...]]` | The dynamic translations `show ip nat statistics` lists, with each pool's size, addresses in use and misses | `parse_nat` | v0.3.0 |
+| `parse_nat` | `(bodies, config, regions=None) -> ProtocolView` | The page: interfaces, statics, pools, dynamic translations, the timeouts and limits and clearing as places (only the state when the configuration could not be read), and the TCAM, translations, lists in use and counters tables | `NAT.parse`, `load_nat_page` | v0.3.0 |
+| `load_nat_page` | `(client) -> NatPage` | One request for the feature, layer 3 interfaces, loopbacks and VRFs, the TCAM regions as text (a plain warning when the nat region is 0); while nat is on, the translations, counters and maxima and the configuration text | `routes/nat` | v0.3.0 |
+| `check_nat_place` | `(page, ident) -> None` | Refuses an interface or VRF the switch does not have (the switch takes a static in an unknown VRF silently) | the NAT `ProtocolSite` | v0.3.0 |
+| `build_nat_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the NAT page; when a translation or pool is made, refuses ports without TCP or UDP, a VRF option without a VRF, an option on the side that does not take it, and a pool whose last address comes first | `NxapiClient.configure_nat`, `routes/nat` | v0.3.0 |
+
+## `app/track.py` — tracked objects: interfaces, routes, IP SLA entries and lists
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_track_state` | `(body) -> list[TrackState]` | `show track`: each object's kind, what it follows, state, changes, VRF, the lists using it, a list's members and thresholds, in number order | `parse_track` | v0.3.0 |
+| `parse_track_config` | `(config) -> list[TrackConfig]` | The `track` blocks of `show running-config`: each object's kind and identity (an IP SLA object with no word follows `state`) and its lines | `parse_track` | v0.3.0 |
+| `parse_track` | `(body, config) -> ProtocolView` | The page: one place per object with its state, wait, VRF, members and thresholds (none when the configuration could not be read), and the state table | `TRACK.parse`, `load_track_page` | v0.3.0 |
+| `track_interfaces` | `(brief) -> tuple[str, ...]` | Every interface an object can follow: front ports and port-channels, VLAN interfaces, loopbacks | `load_track_page` | v0.3.0 |
+| `load_track_page` | `(client) -> TrackPage` | One request for the interfaces and VRFs, one for `show track`, one for the configuration text | `routes/track` | v0.3.0 |
+| `check_track_place` | `(page, ident) -> None` | Refuses an interface the switch does not have, unless an object already follows it (objects outlive their interface) | the Tracked objects `ProtocolSite` | v0.3.0 |
+| `build_track_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a route object's network must be of its family | `NxapiClient.configure_track`, `routes/track` | v0.3.0 |
+
+`TRACK_MAX` (512, checked on the switch) and `TRACK_HINT` are shared with the HSRP and VRRP
+pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by number.
 
 ## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
 
@@ -1619,7 +1657,7 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page` | v0.2.1 |
+| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page`, and other pages' configuration readers (`nat.parse_nat_config`, `track.parse_track_config`, ...) | v0.2.1 |
 | `parse_vxlan` | `(bodies, config=None) -> ProtocolView` | The page from `show nve interface`, `show nve peers`, `show nve vni` and the configuration (None when the role may not read it): the NVE interface, VLAN to VNI lines, member VNIs, EVPN blocks and VRF lines as places, the peers and VNIs as tables | `VXLAN.parse`, `load_vxlan_page` | v0.2.1 |
 | `load_vxlan_page` | `(client) -> VxlanPage` | One request for the features, VLANs and VRFs, then the `show nve` commands and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vxlan` | v0.2.1 |
 | `build_vxlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VXLAN page | `NxapiClient.configure_vxlan`, `routes/vxlan` | v0.2.1 |
@@ -1636,7 +1674,7 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
-| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page` | v0.1.0 |
+| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page`, `nat.load_nat_page`, `track.load_track_page` | v0.1.0 |
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
@@ -1656,7 +1694,7 @@ address, or an address and mask), `ethertype` (0x0600-0xffff), and `arpip` and
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `parse_acl_config` | `(config) -> AclConfig` | The IPv4, IPv6 and MAC ACLs, their entry lines and statistics, the object groups, VLAN access maps and filters, the TCAM sizes set, and the interfaces and ports the ACLs apply on, from `show running-config` | `parse_acls` | v0.1.0 |
-| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls` | v0.1.0 |
+| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls`, `nat.nat_regions` | v0.1.0 |
 | `parse_acls` | `(bodies, config_text=None, tcam_text=None) -> ProtocolView` | The ACLs page: each IPv4, IPv6 and MAC ACL with its entries and where it applies, each object group, VLAN access map entry and VLAN filter, each interface with its ACLs, a table of every ACL, one of the groups and maps, and one of the TCAM regions; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
 | `needs_v14` | `(scope, setting) -> bool` | Whether an ACLs page change needs role version 14 (MAC ACLs, object groups, VLAN access maps and filters, TCAM, MAC port ACLs) | `routes/security.acl_needs` | v0.1.0 |
 | `layer3_names` | `(brief) -> tuple[str, ...]` | VLAN interfaces up to Vlan254 and routed ports and port-channels in `show interface brief` | `load_acls_page` | v0.1.0 |
@@ -1762,7 +1800,7 @@ reason)` return the alerts a sample starts or resolves.
 | --- | --- | --- | --- | --- |
 | `load_routing` | `(client) -> RoutingView` | Whether interface-vlan is on, the VLANs, the VRFs, the static routes, every VLAN interface and routed port with its VRF and addresses; one request, plus one for the VLAN interfaces | `routes/routing` | v0.1.0 |
 | `long_name` | `(name: str) -> str` | `Eth1/3` (as `show ip interface` writes it) -> `Ethernet1/3` | `parse_ipv4`, `parse_ipv6` | v0.1.0 |
-| `parse_brief` | `(brief_body) -> tuple[list[str], list[dict]]` | VLAN interface names, and the rows of routed front ports and port-channels, from `show interface brief` | `load_routing` | v0.1.0 |
+| `parse_brief` | `(brief_body) -> tuple[list[str], list[dict]]` | VLAN interface names, and the rows of routed front ports and port-channels, from `show interface brief` | `load_routing`, `track.track_interfaces` | v0.1.0 |
 | `parse_ipv4` | `(body) -> dict[str, tuple[str, list[Address], dict]]` | Interface -> (VRF, IPv4 addresses with the main one first, row) from `show ip interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
 | `parse_ipv6` | `(body) -> dict[str, tuple[str, list[Address], str]]` | Interface -> (VRF, IPv6 addresses, link-local address) from `show ipv6 interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
 | `parse_routed_port` | `(row, ipv4, ipv6, descriptions) -> L3Interface` | One routed front port or port-channel from its `show interface brief` row and the address tables | `load_routing` | v0.1.0 |

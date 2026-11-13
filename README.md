@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-3705%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3797%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -35,6 +35,8 @@ and IPv6 addresses, make loopbacks with their addresses, make GRE and IP-in-IP t
 OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, send chosen traffic to its own next hop
 (policy-based routing), spread traffic over servers with ITD, set up static MPLS labels and Layer 3 VPNs over segment routing,
+translate addresses with NAT (static and dynamic, once the switch has TCAM space for it), make tracked objects that
+follow an interface, a route or an IP SLA entry for HSRP, VRRP and EEM,
 set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
@@ -185,7 +187,17 @@ default: *(built)*.
     swap or pop a label) and Layer 3 VPNs over segment routing (the global block,
     prefix SIDs, each VRF's route distinguisher and route-targets, with the VPN
     address families on the BGP page). *(built, not yet tried on a switch; needs the
-    broad role or a stored admin login)*
+    broad role or a stored admin login)* **NAT**: inside and outside interfaces,
+    static translations (addresses or TCP and UDP ports, in a VRF, with a route),
+    pools, dynamic translations to a pool or an interface's address, timeouts and
+    limits, the translations and counters, clearing them, and whether the switch has
+    TCAM space for NAT. *(built; needs the broad role or a stored admin login; the
+    translation, pool, timeout and clear lines tried on a switch; inside and outside
+    on an interface not, since the switch refuses them while its NAT TCAM region is
+    0, as on cisco-25gb)* **Tracked objects**: objects that follow an interface, a
+    route, an IP SLA entry or a list of others (all, any, by weight or percentage),
+    with their wait, VRF and state, for HSRP, VRRP and EEM. *(built; needs the broad
+    role or a stored admin login)*
 16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the

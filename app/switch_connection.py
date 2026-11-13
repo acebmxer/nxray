@@ -32,9 +32,10 @@ ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 # ROLE_VERSION. It counts the broad role's own changes instead: 1000 had the account,
 # role, AAA and boot denies; 1001 added the EEM denies (app/port_changes.py
 # EEM_DENY_RULES); 1002 named the loopbacks in its port list (LOOPBACK_PERMIT); 1003
-# allowed ITD's counters (ITD_STATISTICS_RULES). A broad role below it is written again by
-# Update the port list on the Switch page.
-BROAD_ROLE_VERSION = 1003
+# allowed ITD's counters (ITD_STATISTICS_RULES); 1004 allowed clearing NAT's translations and
+# counters (NAT_CLEAR_RULES). A broad role below it is written again by Update the port list
+# on the Switch page.
+BROAD_ROLE_VERSION = 1004
 # The broad role version that first denied EEM applets: one below it lets the account get
 # past the other denies, which every page warns about.
 BROAD_EEM_DENY_VERSION = 1001
@@ -42,6 +43,8 @@ BROAD_EEM_DENY_VERSION = 1001
 BROAD_LOOPBACK_VERSION = 1002
 # The broad role version that first allowed ITD's counters (itd statistics).
 BROAD_ITD_VERSION = 1003
+# The broad role version that first allowed clearing NAT's translations and counters.
+BROAD_NAT_VERSION = 1004
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,17 @@ class SwitchConnection:
             self.changes_enabled
             and self.role_mode == ROLE_BROAD
             and self.role_version < BROAD_ITD_VERSION
+        )
+
+    @property
+    def broad_role_without_nat_clear(self) -> bool:
+        """True when the account has a broad role written before it allowed clearing NAT's
+        translations and counters (``BROAD_NAT_VERSION``): Update the port list on the
+        Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_NAT_VERSION
         )
 
     @property
@@ -257,6 +271,18 @@ class SwitchConnection:
     def itd_changes_enabled(self) -> bool:
         """True when NXray may change ITD: the same as for monitor sessions (the broad role or
         the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def nat_changes_enabled(self) -> bool:
+        """True when NXray may change NAT: the same as for monitor sessions (the broad role or
+        the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def track_changes_enabled(self) -> bool:
+        """True when NXray may change tracked objects: the same as for monitor sessions (the
+        broad role or the stored admin login; the limited role has no rules for them)."""
         return self.monitor_changes_enabled
 
     @property
@@ -715,6 +741,7 @@ __all__ = [
     "BROAD_EEM_DENY_VERSION",
     "BROAD_ITD_VERSION",
     "BROAD_LOOPBACK_VERSION",
+    "BROAD_NAT_VERSION",
     "BROAD_ROLE_VERSION",
     "ROLE_BROAD",
     "ROLE_LIMITED",

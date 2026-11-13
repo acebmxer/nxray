@@ -11,6 +11,29 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up NAT from the web interface (#95).** The new **NAT** page (under Configure) shows
+  the inside and outside interfaces, the static and dynamic translations, the address pools,
+  the timeouts and limits, every translation in use with its packets and time left, the
+  pools in use and the counters, and whether the switch has TCAM space for NAT: while its
+  nat region is 0 the page says so plainly, since the switch then refuses inside and outside
+  on interfaces. It marks an interface inside or outside, adds and deletes static
+  translations (an address, or one TCP or UDP port, in a VRF, with a route), address pools,
+  dynamic translations to a pool (sharing addresses by port if wanted) or to an interface's
+  address, sets the timeouts and the most translations, and clears the translations or
+  counters. Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login; clearing needs a broad role written by this version, so the Switch
+  page asks for Update the port list. Tried on a switch with throwaway translations and
+  pools, except inside and outside on an interface, which the switch refuses without NAT
+  TCAM space.
+- **Make tracked objects from the web interface (#95).** The new **Tracked objects** page
+  (under Configure) shows every object with what it follows, its state, how often it
+  changed and the lists that use it. It makes and deletes objects that follow an
+  interface's link or routing, a route (in a VRF too) or an IP SLA entry, and lists of other
+  objects (all up, any up, or enough by weight or percentage, with their thresholds), and
+  sets how long an object waits before it changes state. Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login. The tracked object
+  fields on the HSRP, VRRP and EEM pages now point to it. Tried on a switch with throwaway
+  objects.
 - **Fold the menu's groups shut (#94).** Pressing a group's heading in the left menu
   (Monitor, Configure, Switch, Admin) hides or shows its pages, so the groups not in use
   take no room. The browser remembers which groups are shut; the group holding the open

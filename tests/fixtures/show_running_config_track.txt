@@ -1,0 +1,44 @@
+
+
+version 9.3(16) Bios:version 07.71 
+track 250 interface loopback250 line-protocol
+ delay up 180 down 4
+
+track 251 interface Vlan250 ip routing
+ delay up 7
+track 252 interface loopback250 ipv6 routing
+ delay down 9
+
+track 253 ip route 198.51.100.0/24 reachability
+  vrf member management
+track 254 ipv6 route 2001:db8::/32 reachability
+  vrf member management
+track 255 ip sla 250
+track 256 ip sla 251
+track 257 ip sla 252 reachability
+ delay up 3 down 3
+
+track 258 list boolean and
+  object 250
+  object 270
+  object 252 not
+track 259 list boolean or
+  object 250
+track 260 list threshold weight
+  object 250
+  object 251 weight 20 
+  object 252 weight 255 
+  object 253
+  threshold weight up 30 down 5 
+track 261 list threshold percentage
+  object 250
+  object 251
+  threshold percentage up 60 
+track 263 interface Ethernet1/53 line-protocol
+track 264 ip sla 2147483647
+track 266 interface loopback250 ip routing
+track 500 interface loopback250 line-protocol
+track 501 interface loopback250 line-protocol
+track 512 interface loopback250 line-protocol
+
+

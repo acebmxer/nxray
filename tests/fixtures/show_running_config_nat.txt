@@ -1,0 +1,32 @@
+
+
+version 9.3(16) Bios:version 07.71 
+feature nat
+
+ip nat pool inside-pool 198.51.100.100 198.51.100.110 prefix-length 24
+ip nat pool outside-pool 198.51.100.120 198.51.100.130 netmask 255.255.255.0
+ip nat pool mgmt-pool 198.51.100.140 198.51.100.150 prefix-length 24
+ip nat pool back-pool 10.250.5.10 10.250.5.20 prefix-length 24
+ip nat inside source list nat-inside pool inside-pool overload 
+ip nat inside source list nat-mgmt pool mgmt-pool vrf management overload 
+ip nat inside source list nat-pat interface loopback250 overload 
+ip nat outside source list nat-outside pool outside-pool 
+ip nat outside source list nat-back pool back-pool add-route 
+ip nat inside source static 10.250.0.10 198.51.100.10 
+ip nat inside source static 10.250.0.11 198.51.100.11 add-route 
+ip nat inside source static 10.250.0.14 198.51.100.14 vrf management 
+ip nat inside source static 10.250.0.15 198.51.100.15 vrf management match-in-vrf 
+ip nat inside source static 10.250.0.17 198.51.100.17 vrf nosuchvrf 
+ip nat inside source static tcp 10.250.0.12 80 198.51.100.12 8080 
+ip nat inside source static udp 10.250.0.13 53 198.51.100.13 5353 
+ip nat outside source static 198.51.100.20 10.250.0.20 
+ip nat outside source static 198.51.100.21 10.250.0.21 add-route 
+ip nat inside source static 10.250.0.16 198.51.100.16 group 5 
+ip nat translation tcp-timeout 172800
+ip nat translation udp-timeout 600
+ip nat translation timeout 86401
+ip nat translation max-entries 1023
+ip nat translation max-entries all-host 100
+ip nat translation icmp-timeout 60
+
+

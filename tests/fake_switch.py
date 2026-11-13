@@ -67,6 +67,20 @@ telemetry`` is on; as there, gRPC takes GPB only and HTTP JSON only. ``show
 running-config`` prints both; the ``show ptp`` and ``show telemetry`` commands answer from
 ``bodies``.
 
+NAT lives in ``nat_lines`` (the top-level ``ip nat`` lines as typed) and ``nat_sides``
+(interface -> {"inside", "outside"}), only while ``feature nat`` is on. As on cisco-25gb: an
+interface's ``ip nat inside|outside`` is refused while the TCAM ``nat`` region is 0 ("Nat
+tcam not carved"), the SYN and FIN/RST timeouts while ``tcp-nat`` is; a line replaces the one
+it would set again (a static by its addresses, ports and VRF, a timeout by its word); one ACL
+goes with one pool; a static's ``no`` form names its addresses, a list's the whole line;
+``clear ip nat ...`` is typed outside configuration mode and kept in ``nat_cleared``. The
+``show ip nat`` commands answer from ``bodies``. Tracked objects live in ``tracks`` (number
+-> [its line, the lines inside]); as there, numbers are 1 to 512, typing an object's line
+again enters it, an object cannot change kind except a boolean list from and to or, a list
+cannot hold itself, an object a list uses cannot be deleted, ``vrf member`` is for route
+objects only, and ``delay up``/``delay down`` add up. ``show track`` is built from them,
+every object down unless ``track_up`` names it.
+
 AAA lives in ``aaa_lines`` (the top-level lines as typed, "radius-server host 192.0.2.11 key
 0 k") and ``aaa_groups`` (("radius", "g") -> the lines inside); TACACS+ lines are refused
 while ``feature_state["tacacs"]`` is off, and only network-admin may type any of them (the
@@ -329,6 +343,7 @@ _LAYER2_INTERFACE = re.compile(
 )
 _TCAM_NAMES = {
     "nat": "NAT ACL",
+    "tcp-nat": "TCP NAT ACL",
     "ing-ifacl": "Ingress PACL",
     "vacl": "VACL",
     "ing-racl": "Ingress RACL",
@@ -338,6 +353,7 @@ _TCAM_NAMES = {
 }
 _TCAM_DEFAULTS = {
     "nat": 0,
+    "tcp-nat": 0,
     "ing-ifacl": 0,
     "vacl": 0,
     "ing-racl": 1536,
@@ -524,6 +540,12 @@ class FakeSwitch:
     telemetry_parts: dict[str, list[str]] = field(default_factory=dict)
     # Tunnel interfaces (see the module notes): number -> the lines inside it.
     tunnels: dict[int, list[str]] = field(default_factory=dict)
+    # NAT and tracked objects (see the module notes).
+    nat_lines: list[str] = field(default_factory=list)
+    nat_sides: dict[str, set[str]] = field(default_factory=dict)
+    nat_cleared: list[str] = field(default_factory=list)
+    tracks: dict[int, list[str]] = field(default_factory=dict)
+    track_up: set[int] = field(default_factory=set)
     # AAA, key pairs, trustpoints, the SSH key and bootflash (see the module notes).
     aaa_lines: list[str] = field(default_factory=list)
     aaa_groups: dict[tuple[str, str], list[str]] = field(default_factory=dict)
@@ -1313,6 +1335,8 @@ class FakeSwitch:
         out += self.tunnel_config()
         out += self.ptp_config()
         out += self.telemetry_config()
+        out += self.nat_config()
+        out += self.track_config()
         out += _nested(
             [p for p in self.protocol_lines if p.startswith(("itd ", "mpls ", "segment-routing"))]
             + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
@@ -1724,6 +1748,312 @@ class FakeSwitch:
             out += [f"  {part}", *(f"    {line}" for line in lines)]
         return out
 
+    def _tcam_size(self, region: str) -> int:
+        """A TCAM region's size, as ``tcam_regions`` shows it."""
+        size = _TCAM_DEFAULTS.get(region, 0)
+        for path in self.security_lines:
+            words = path.split()
+            if path.startswith("hardware access-list tcam region ") and words[4] == region:
+                size = int(words[5])
+        return size
+
+    _NAT_TIMEOUT = re.compile(
+        r"ip nat translation (timeout|tcp-timeout|udp-timeout|icmp-timeout|syn-timeout"
+        r"|finrst-timeout)(?: (\d+))?"
+    )
+
+    @staticmethod
+    def _nat_key(line: str) -> str:
+        """What a NAT line sets, so typing it again replaces it and its ``no`` form finds it:
+        a static by its side, protocol, addresses, ports and VRF; a list by its ACL; a pool by
+        its name; a timeout or limit by its words."""
+        words = line.split()
+        if line.startswith("ip nat pool "):
+            return " ".join(words[:4])
+        if " source list " in line:
+            return " ".join(words[:6])
+        if " source static " in line:
+            rest = words[4:]
+            vrf = rest[rest.index("vrf") + 1] if "vrf" in rest[:-1] else ""
+            kept = [w for w in rest if w not in ("match-in-vrf", "add-route", "vrf", vrf)]
+            if "group" in kept:
+                kept = kept[: kept.index("group")]
+            return " ".join([*words[:4], *kept, vrf])
+        if line.startswith("ip nat translation max-entries all-host"):
+            return "ip nat translation max-entries all-host"
+        if line.startswith("ip nat translation max-entries"):
+            return "ip nat translation max-entries"
+        return " ".join(words[:4])
+
+    def _nat(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A NAT line, on an interface or at the top, or ``clear ip nat ...``; None when
+        ``cmd`` is not one."""
+        undo = cmd.startswith("no ")
+        line = cmd.removeprefix("no ")
+        interface = context[1] if context and context[0] == "interface" else None
+        if cmd.startswith("clear ip nat "):
+            if not self._feature_on("nat"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            if not re.fullmatch(
+                r"clear ip nat (?:statistics|translation (?:all|inside \S+ \S+(?: outside \S+ "
+                r"\S+)?|outside \S+ \S+))",
+                cmd,
+            ):
+                return _error(ident, "% Invalid command\n"), context
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return _error(ident, "% Permission denied for the role\n"), context
+            self.nat_cleared.append(cmd)
+            return _ok(ident, None), context
+        if not line.startswith("ip nat "):
+            return None
+        if not self._feature_on("nat"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        path = f"interface {interface} ; {cmd}" if interface else cmd
+        if not (is_admin or self._role_matches(user, f"conf t ; {path}", interface)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if interface is not None:
+            side = line.split()[2] if len(line.split()) == 3 else ""
+            if side not in ("inside", "outside"):
+                return _error(ident, "% Invalid command\n"), context
+            if not undo and self._tcam_size("nat") == 0:
+                return _error(ident, "Error: Nat tcam not carved.\n"), context
+            sides = self.nat_sides.setdefault(interface, set())
+            (sides.discard if undo else sides.add)(side)
+            if not sides:
+                self.nat_sides.pop(interface)
+            return _ok(ident, None), context
+        if timeout := self._NAT_TIMEOUT.fullmatch(line):
+            word, value = timeout.groups()
+            if word in ("syn-timeout", "finrst-timeout") and self._tcam_size("tcp-nat") == 0:
+                return _error(
+                    ident, "Error: FINRST/SYN timer config failed. TCP-NAT tcam not configured.\n"
+                ), context
+            if value is None and (not undo or word != "timeout"):
+                return _error(ident, "% Incomplete command\n"), context
+            if value is not None and not 60 <= int(value) <= 172800:
+                return _error(ident, "% Invalid number, range is (60:172800)\n"), context
+        key = self._nat_key(line)
+        same = [kept for kept in self.nat_lines if self._nat_key(kept) == key]
+        if undo:
+            if " source " in line and not same:
+                return _error(ident, "Translation not found.\n"), context
+            if " source list " in line and same and same[0] != line:
+                return _error(ident, "% Incomplete command\n"), context
+            for kept in same:
+                self.nat_lines.remove(kept)
+            return _ok(ident, None), context
+        if " source list " in line and same and same[0] != line:
+            pool = same[0].split()[7] if " pool " in same[0] else ""
+            return _error(
+                ident, f"Access-list {line.split()[5]} already mapped to {pool} pool\n"
+            ), context
+        for kept in same:
+            self.nat_lines.remove(kept)
+        self.nat_lines.append(line)
+        return _ok(ident, None), context
+
+    def nat_config(self) -> list[str]:
+        """The NAT lines of ``show running-config``: the top-level ones, then each
+        interface's side."""
+        if not self._feature_on("nat"):
+            return []
+        out = ["feature nat", *self.nat_lines]
+        for interface, sides in self.nat_sides.items():
+            out += [f"interface {interface}", *(f"  ip nat {side}" for side in sorted(sides))]
+        return out
+
+    _TRACK_KINDS = (
+        (re.compile(r"interface \S+ (?:line-protocol|ip routing|ipv6 routing)"), "interface"),
+        (re.compile(r"(?:ip|ipv6) route \S+ reachability"), "route"),
+        (re.compile(r"ip sla \d+(?: (?:state|reachability))?"), "sla"),
+        (re.compile(r"list boolean (?:and|or)"), "boolean"),
+        (re.compile(r"list threshold (?:weight|percentage)"), "threshold"),
+    )
+
+    @classmethod
+    def _track_kind(cls, definition: str) -> str:
+        return next(
+            (kind for pattern, kind in cls._TRACK_KINDS if pattern.fullmatch(definition)), ""
+        )
+
+    def _track(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A ``track`` line, or a line inside one; None when ``cmd`` is not one."""
+        undo = cmd.startswith("no ")
+        line = cmd.removeprefix("no ")
+        inside = context is not None and context[0] == "track"
+        if not inside or line.startswith("track "):
+            match = re.fullmatch(r"track (\S+)(?: (.+))?", line)
+            if match is None or (context is not None and not inside):
+                return None
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return _error(ident, "% Permission denied for the role\n"), context
+            if not match.group(1).isdigit() or not 1 <= int(match.group(1)) <= 512:
+                return _error(ident, "% Invalid number, range is (1:512)\n"), None
+            number, definition = int(match.group(1)), match.group(2)
+            if undo:
+                users = [
+                    n
+                    for n, obj in self.tracks.items()
+                    if f"object {number}" in [" ".join(i.split()[:2]) for i in obj[1:]]
+                ]
+                if users:
+                    return _error(
+                        ident, "ERROR: Object is currently tracked, cannot remove\n"
+                    ), None
+                self.tracks.pop(number, None)
+                return _ok(ident, None), None
+            kept = self.tracks.get(number)
+            if definition is None:
+                if kept is None:
+                    return _error(ident, "% Incomplete command\n"), None
+                return _ok(ident, None), ("track", str(number))
+            definition = re.sub(r"^(ip sla \d+) state$", r"\1", definition)
+            kind = self._track_kind(definition)
+            if not kind:
+                return _error(ident, "% Invalid command\n"), None
+            if kept is None:
+                self.tracks[number] = [definition]
+            elif kept[0] != definition:
+                if kind == "boolean" and self._track_kind(kept[0]) == "boolean":
+                    kept[0] = definition
+                else:
+                    return _error(ident, "ERROR: Cannot modify already existing object\n"), None
+            return _ok(ident, None), ("track", str(number))
+        if cmd == "exit":
+            return _ok(ident, None), None
+        number = int(context[1])
+        obj = self.tracks[number]
+        if not (
+            is_admin or self._role_matches(user, f"conf t ; track {number} {obj[0]} ; {cmd}", None)
+        ):
+            return _error(ident, "% Permission denied for the role\n"), context
+        kind = self._track_kind(obj[0])
+        inner = obj[1:]
+
+        def keep(lines: list[str]) -> tuple[dict[str, Any], tuple[str, str] | None]:
+            obj[1:] = lines
+            return _ok(ident, None), context
+
+        if delay := re.fullmatch(r"delay(?: up (\d+))?(?: down (\d+))?", line):
+            if undo:
+                return keep([i for i in inner if not i.startswith("delay")])
+            if any(v is not None and int(v) > 180 for v in delay.groups()):
+                return _error(ident, "% Invalid number, range is (0:180)\n"), context
+            old = next((i for i in inner if i.startswith("delay")), "")
+            was = re.fullmatch(r"delay(?: up (\d+))?(?: down (\d+))?", old) if old else None
+            up = delay.group(1) or (was.group(1) if was else None)
+            down = delay.group(2) or (was.group(2) if was else None)
+            merged = "delay" + (f" up {up}" if up else "") + (f" down {down}" if down else "")
+            return keep([i for i in inner if not i.startswith("delay")] + [merged])
+        if line.startswith("vrf member "):
+            if kind != "route":
+                return _error(ident, "ERROR: Object is not an ip route object\n"), context
+            rest = [i for i in inner if not i.startswith("vrf member ")]
+            return keep(rest if undo else [*rest, line])
+        if obj_match := re.fullmatch(r"object (\d+)(?: (not|weight \d+))?", line):
+            if kind not in ("boolean", "threshold"):
+                return _error(ident, "% Invalid command\n"), context
+            member = int(obj_match.group(1))
+            if member == number:
+                return _error(ident, "ERROR: Track list cannot contain itself\n"), context
+            option = obj_match.group(2) or ""
+            if (
+                option == "not"
+                and kind != "boolean"
+                or option.startswith("weight")
+                and (obj[0] != "list threshold weight")
+            ):
+                return _error(ident, "% Invalid command\n"), context
+            rest = [i for i in inner if i.split()[:2] != ["object", str(member)]]
+            return keep(rest if undo else [*rest, line])
+        if thr := re.fullmatch(
+            r"threshold (weight|percentage)(?: up (\d+))?(?: down (\d+))?", line
+        ):
+            if obj[0] != f"list threshold {thr.group(1)}":
+                return _error(ident, "% Invalid command\n"), context
+            rest = [i for i in inner if not i.startswith("threshold ")]
+            up, down = thr.group(2), thr.group(3)
+            if not undo and up and down and int(up) <= int(down):
+                word = "Weight" if thr.group(1) == "weight" else "Percentage"
+                return _error(
+                    ident, f"ERROR: Threshold {word} Up should be more than Down\n"
+                ), context
+            return keep(rest if undo else [*rest, line])
+        return _error(ident, "% Invalid command\n"), context
+
+    def track_config(self) -> list[str]:
+        """The ``track`` blocks of ``show running-config``, as the switch indents them."""
+        out = []
+        for number in sorted(self.tracks):
+            definition, *inner = self.tracks[number]
+            out += [f"track {number} {definition}", *(f"  {line}" for line in inner)]
+        return out
+
+    def track_body(self) -> dict[str, Any] | None:
+        """``show track``, shaped as on cisco-25gb; None (as there) with no objects."""
+        types = {
+            "list boolean and": "Booleanand",
+            "list boolean or": "Booleanor",
+            "list threshold weight": "thresholdweight",
+            "list threshold percentage": "thresholdpercentage",
+        }
+        params = {"line-protocol": "Line-Protocol", "ip routing": "IP-Routing"}
+        params["ipv6 routing"] = "IPv6-Routing"
+        rows_out = []
+        for number in sorted(self.tracks):
+            definition, *inner = self.tracks[number]
+            words = definition.split()
+            row: dict[str, Any] = {
+                "st_obj_id": number,
+                "st_obj_state": "UP" if number in self.track_up else "DOWN",
+                "st_obj_chg_cnt": 1,
+                "st_last_chg_time": "00:01:00",
+            }
+            if words[0] == "interface":
+                row |= {
+                    "st_obj_type": "interface",
+                    "st_obj_instance": words[1],
+                    "st_obj_param": params[" ".join(words[2:])],
+                }
+            elif words[1] == "route":
+                row |= {
+                    "st_obj_type": "route" if words[0] == "ip" else "v6route",
+                    "st_obj_instance": words[2],
+                    "st_obj_param": "Reachability",
+                }
+            elif words[1] == "sla":
+                row |= {"st_obj_type": "sla", "st_obj_instance": words[2]}
+                row["st_obj_param"] = "Line-Protocol"  # as on the switch, whatever it follows
+            else:
+                row["st_obj_type"] = types[definition]
+                members = [
+                    f" object {i.split()[1]} "
+                    + ("UP" if int(i.split()[1]) in self.track_up else "DOWN")
+                    for i in inner
+                    if i.startswith("object ")
+                ]
+                if members:
+                    row["st_track_list_obj"] = members if len(members) > 1 else members[0]
+            vrf = next((i.split()[2] for i in inner if i.startswith("vrf member ")), "")
+            if vrf:
+                row["st_vrf"] = vrf
+            used = [
+                f"    Track List  {n}"
+                for n, obj in self.tracks.items()
+                if any(i.split()[:2] == ["object", str(number)] for i in obj[1:])
+            ]
+            if used:
+                row["st_track_list_info"] = used if len(used) > 1 else used[0]
+            rows_out.append(row)
+        if not rows_out:
+            return None
+        detail = rows_out if len(rows_out) > 1 else rows_out[0]
+        return {"TABLE_track_detail": {"ROW_track_detail": detail}}
+
     def tunnel_config(self) -> list[str]:
         """The ``interface TunnelN`` blocks of ``show running-config``."""
         out = []
@@ -2066,6 +2396,10 @@ class FakeSwitch:
             elif match.group(1) is None:
                 self.itd_counting.add(match.group(2))
             return _ok(ident, None), context
+        if nat_reply := self._nat(user, is_admin, cmd, ident, context):
+            return nat_reply
+        if track_reply := self._track(user, is_admin, cmd, ident, context):
+            return track_reply
         if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
@@ -3106,6 +3440,13 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith("show ip nat"):
+            # As on cisco-25gb: "% Invalid command" while nat is off.
+            if not self._feature_on("nat"):
+                return _error(ident, "% Invalid command\n")
+            return _ok(ident, self.bodies.get(cmd))
+        if cmd == "show track":
+            return _ok(ident, self.track_body())
         if cmd.startswith(("show ptp", "show telemetry")):
             # As on cisco-25gb: "% Invalid command" while the feature is off.
             if not self._feature_on(cmd.split(" ")[1]):

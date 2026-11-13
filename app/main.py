@@ -49,6 +49,7 @@ from app.routes import (
     loopbacks,
     monitor,
     mpls,
+    nat,
     neighbors,
     pbr,
     pfc,
@@ -70,6 +71,7 @@ from app.routes import (
     switch_files,
     switch_page,
     telemetry,
+    track,
     traffic,
     tunnels,
     udld,
@@ -255,6 +257,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pbr.router)
     app.include_router(itd.router)
     app.include_router(mpls.router)
+    app.include_router(nat.router)
+    app.include_router(track.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)
