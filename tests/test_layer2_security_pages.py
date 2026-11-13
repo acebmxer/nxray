@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.nxapi import NxapiClient, NxapiCommandError
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
 
 
@@ -319,6 +320,52 @@ def test_restart_asks_saves_first_and_reloads(
     assert enabled.ssh_lines[-2:] == ["terminal dont-ask", "reload"]
     activity = _text(logged_in.get("/activity").text)
     assert "Restarted the switch, after saving its configuration" in activity
+
+
+def test_restart_refused_by_the_role_asks_for_the_admin_login(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The switch refuses "reload" to NXray's own account (issue #96): NXray asks for the
+    # admin login instead of stopping, and that login restarts the switch.
+    def refused(self: NxapiClient) -> None:
+        raise NxapiCommandError(
+            "The switch refused a command: 'reload': % Permission denied for the role"
+        )
+
+    monkeypatch.setattr(NxapiClient, "reload_switch", refused)
+    _db(settings, "UPDATE switch_connection SET role_version = 18")
+    first = logged_in.post("/config/reload", data={"csrf": _csrf(logged_in), "confirm": "yes"})
+    text = _text(first.text)
+    assert "does not let NXray's own account restart" in text
+    assert "Switch admin username" in text and 'name="with_login"' in first.text
+    assert enabled.reloads == 0
+    done = logged_in.post(
+        "/config/reload",
+        data={"csrf": _csrf(logged_in), "confirm": "yes", "with_login": "yes",
+              "admin_user": "admin", "admin_password": ADMIN_PASSWORD, "ssh_port": "22"},
+    )  # fmt: skip
+    assert done.status_code == 200, _text(done.text)
+    assert "the switch is restarting" in _text(done.text)
+    assert enabled.reloads == 1
+
+
+def test_restart_uses_the_stored_admin_login_without_asking(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    from app.db import open_db
+    from app.switch_connection import set_admin_login
+
+    with open_db(settings.db_path) as conn:
+        set_admin_login(
+            conn, 1, admin_user="admin", admin_password=ADMIN_PASSWORD, ssh_port=22,
+            secret_key=settings.secret_key,
+        )  # fmt: skip
+    # Nothing unsaved and no login to ask for: it restarts at once, as with the own account.
+    done = logged_in.post("/config/reload", data={"csrf": _csrf(logged_in)})
+    assert done.status_code == 200, _text(done.text)
+    assert "the switch is restarting" in _text(done.text)
+    assert enabled.reloads == 1
+    assert enabled.ssh_lines[-2:] == ["terminal dont-ask", "reload"]
 
 
 def test_restart_without_saving_and_bad_input(

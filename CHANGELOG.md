@@ -414,6 +414,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Restart the switch no longer stops at "Permission denied for the role" (#96).** When the
+  switch refuses to let NXray's own account restart it (NX-OS lets only the network-admin
+  role do that), the page now asks for the switch admin login and restarts with it over SSH,
+  instead of ending on the error. With a switch admin login stored on the Switch page, the
+  restart uses it and asks for nothing.
+
 - **Pages that need every configuration command work with the admin login stored
   (#92).** With **Limited role, and store the switch admin login**, the Monitor sessions,
   QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X and IP SLA pages offered
