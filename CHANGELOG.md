@@ -449,6 +449,23 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Changed
 
+- **Moving between pages is faster (#98).** A page you open now reuses what the switch
+  answered for the page before, for 15 seconds (`NXRAY_PAGE_READ_SECONDS`, 0 turns it off):
+  the switch answers one request at a time and needs up to a second for one command, so the
+  same lists (features, interface brief, VRFs, the all-ports reads, one port's settings) were
+  read again by page after page. Tried on a Nexus 92160YC-X: 15 pages in a row took 17.5 to
+  18.2 s before and 6.1 to 6.7 s with it, and a port's page after the Ports page 0.7 to 1.0 s
+  instead of 2.0 to 3.4 s. CPU, memory, temperatures, fans, power, uptime and the queue counters are
+  always read fresh; port states and rates can be up to 15 seconds old on a page you open
+  (the Live choice in the top bar is unchanged). Sending a form, or reloading the page in the browser (F5), reads the
+  switch again; a change made at the switch's own command line shows after those seconds or
+  after a reload. The self-refreshing pages are unchanged.
+- **The dashboard, VXLAN OAM, Tunnel encryption and Flex Links open about 1.4 seconds faster
+  (#97).** They asked the switch for `show version`, which it needs about 1.5 seconds to
+  answer; they now ask for the commands that give the same facts (`show hostname`,
+  `show inventory`, `show module`, `show system uptime`, `show system reset-reason`), which
+  take about 0.1 second together. The Software and Files pages still need `show version` for
+  the image the switch is running, so they keep it, and reuse the answer for five minutes.
 - **A "turn it on on the Features page" link opens that feature's row (#93).** When a
   page says a feature is off (Telemetry, PTP, VXLAN, LACP, LLDP, VLAN interfaces and the
   other pages that need one), its Features link now scrolls to that feature on the

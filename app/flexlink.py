@@ -14,7 +14,7 @@ The page is described with the same parts as the Monitor sessions page
 interface`` line, each setting the one line it sends with checked values in its blanks.
 ``NxapiClient.configure_flexlink`` sends them.
 
-Read from the switch: ``show feature``, ``show version`` and ``show interface brief`` in one
+Read from the switch: ``show feature``, ``show inventory`` and ``show interface brief`` in one
 request; while the feature is on, ``show interface switchport backup`` as text (its columns
 Active Interface, Backup Interface and State) and ``show running-config`` as text, where the
 pairs' lines are read.
@@ -53,11 +53,11 @@ from app.protocols import (
 )
 from app.routing import long_name
 from app.spanning_tree import switch_port_names
-from app.switch import text
+from app.switch import chassis_model
 from app.vxlan import parse_vxlan_config
 
 FEATURE = "Flexlink"  # as show feature names it; the command is feature flexlink
-PAGE_COMMANDS = ("show feature", "show version", "show interface brief")
+PAGE_COMMANDS = ("show feature", "show inventory", "show interface brief")
 STATE_COMMAND = "show interface switchport backup"
 CONFIG_COMMAND = "show running-config"
 DELAY_MAX = 300
@@ -281,11 +281,10 @@ class FlexlinkPage:
     missing: tuple[str, ...] = ()  # the Flexlink feature, when it is off
 
 
-def model_note(version: Any) -> str:
+def model_note(inventory: Any) -> str:
     """The plain refusal for a switch Cisco's guide does not list (a Nexus 9200), from
-    ``show version``; "" for any other."""
-    chassis = text(version.get("chassis_id")) if isinstance(version, dict) else ""
-    if re.search(r"\bC92\d", chassis):
+    ``show inventory``; "" for any other."""
+    if re.search(r"\bC92\d", chassis_model(inventory)):
         return NOT_ON_9200
     return ""
 
@@ -293,9 +292,9 @@ def model_note(version: Any) -> str:
 def load_flexlink_page(client: NxapiClient) -> FlexlinkPage:
     """One request for the features, model and ports; while Flex Links are on, the pairs'
     state and the configuration text."""
-    feature, version, brief = client.show(*PAGE_COMMANDS)
+    feature, inventory, brief = client.show(*PAGE_COMMANDS)
     ports = tuple(switch_port_names(brief or {}))
-    problem = model_note(version)
+    problem = model_note(inventory)
     if not feature_states(feature).get(FEATURE, False):
         return FlexlinkPage(FLEXLINK, ProtocolView(), ports, problem, (FEATURE,))
     try:

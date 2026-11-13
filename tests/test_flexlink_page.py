@@ -25,6 +25,7 @@ from app.flexlink import (
     parse_flexlink,
     parse_flexlink_config,
 )
+from tests.conftest import inventory_body
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
 
 # Laid out as in Cisco's NX-OS 9.3 Layer 2 Switching guide.
@@ -111,8 +112,10 @@ def test_the_page_view():
 
 
 def test_the_model_note_is_for_a_nexus_9200_only():
-    assert model_note({"chassis_id": "Nexus9000 C92160YC-X chassis"}) == NOT_ON_9200
-    assert model_note({"chassis_id": "Nexus9000 C93180YC-EX chassis"}) == ""
+    assert (
+        model_note(inventory_body("Nexus9000 C92160YC-X chassis", "N9K-C92160YC-X")) == NOT_ON_9200
+    )
+    assert model_note(inventory_body("Nexus9000 C93180YC-EX chassis", "N9K-C93180YC-EX")) == ""
     assert model_note(None) == ""
 
 

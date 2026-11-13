@@ -19,7 +19,7 @@ from app.alerts import notify_change, switch_label
 from app.db import open_db
 from app.features import feature_anchor
 from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
-from app.nxapi import SwitchTarget, shared_reads
+from app.nxapi import SwitchTarget, page_reads, shared_reads
 from app.port_changes import ROLE_VERSION, missing_changes
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
@@ -101,6 +101,42 @@ async def share_switch_reads(
         return await call_next(request)
     finally:
         shared_reads.reset(token)
+
+
+def reload_asked(request: Request) -> bool:
+    """True when the browser reloaded the page (F5, Ctrl+Shift+R): it sends
+    ``Cache-Control: max-age=0`` or ``no-cache`` for a reload and nothing for a link."""
+    asked = request.headers.get("cache-control", "").lower()
+    return "no-cache" in asked or "max-age=0" in asked
+
+
+async def reuse_page_reads(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """HTTP middleware: a page a person opens reads the switch through the recent
+    answers (``app/page_reads.py``), so moving between pages does not ask the switch
+    for the same things again. A form sent forgets them all, and so does a reload;
+    a page refreshing itself reads through the live cache instead."""
+    reads = request.app.state.page_reads
+    if request.method not in ("GET", "HEAD"):
+        try:
+            return await call_next(request)
+        finally:
+            reads.clear()
+    seconds = request.app.state.settings.page_read_seconds
+    if (
+        seconds <= 0
+        or request.headers.get("x-requested-with") == LIVE_REQUEST
+        or request.url.path.startswith("/live/")
+    ):
+        return await call_next(request)
+    if reload_asked(request):
+        reads.clear()
+    token = page_reads.set(reads.reader(seconds))
+    try:
+        return await call_next(request)
+    finally:
+        page_reads.reset(token)
 
 
 def request_target(request: Request) -> str:

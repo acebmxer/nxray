@@ -23,7 +23,7 @@ blanks, and ``build_change`` building the lines. ``NxapiClient.configure_tunnel_
 sends them. A key's string is typed in hexadecimal, stored by the switch encrypted
 (``key-octet-string 7 ...``) and never shown back, as the AAA page does with server keys.
 
-Read from the switch: ``show feature``, ``show version``, ``show interface brief`` and ``show
+Read from the switch: ``show feature``, ``show inventory``, ``show interface brief`` and ``show
 vrf interface`` in one request; while the feature is on, ``show key chain``,
 ``show tunnel-encryption session``, ``show tunnel-encryption policy``, ``show
 tunnel-encryption info global`` and ``show running-config`` as text.
@@ -68,11 +68,11 @@ from app.protocols import (
 from app.protocols_policy import _lifetimes
 from app.routing import parse_vrf_members
 from app.routing_protocols import layer3_interfaces
-from app.switch import text
+from app.switch import chassis_model
 from app.vxlan import parse_vxlan_config
 
 FEATURE = "tun_enc_mgr"  # as show feature names it; the command is feature tunnel-encryption
-PAGE_COMMANDS = ("show feature", "show version", "show interface brief", "show vrf interface")
+PAGE_COMMANDS = ("show feature", "show inventory", "show interface brief", "show vrf interface")
 KEY_CHAIN_COMMAND = "show key chain"
 SESSION_COMMAND = "show tunnel-encryption session"
 POLICY_COMMAND = "show tunnel-encryption policy"
@@ -610,10 +610,10 @@ class TunnelEncryptionPage:
     missing: tuple[str, ...] = ()  # the tunnel-encryption feature, when it is off
 
 
-def model_note(version: Any) -> str:
+def model_note(inventory: Any) -> str:
     """The plain refusal for a switch Cisco's guide does not list (anything but a Nexus
-    9300-FX2, as ``show version`` names it); "" for a 9300-FX2 or an unknown model."""
-    chassis = text(version.get("chassis_id")) if isinstance(version, dict) else ""
+    9300-FX2, as ``show inventory`` names it); "" for a 9300-FX2 or an unknown model."""
+    chassis = chassis_model(inventory)
     if not chassis or re.search(r"\bC93\w*-FX2\b", chassis):
         return ""
     return NOT_THIS_MODEL
@@ -629,13 +629,13 @@ def _text_or_none(client: NxapiClient, command: str) -> str | None:
 def load_tunnel_encryption_page(client: NxapiClient) -> TunnelEncryptionPage:
     """One request for the features, model and interfaces; while the feature is on,
     the key chains, sessions, policies, global state and configuration as text."""
-    feature, version, brief, vrf_members = client.show(*PAGE_COMMANDS)
+    feature, inventory, brief, vrf_members = client.show(*PAGE_COMMANDS)
     interfaces = tuple(
         name
         for name in layer3_interfaces(brief or {}, parse_vrf_members(vrf_members))
         if not name.startswith("Vlan")
     )
-    problem = model_note(version)
+    problem = model_note(inventory)
     if not feature_states(feature).get(FEATURE, False):
         return TunnelEncryptionPage(
             TUNNEL_ENCRYPTION, ProtocolView(), interfaces, problem, (FEATURE,)

@@ -17,6 +17,7 @@ from app.ngoam import (
     PAGE_COMMANDS,
     STATS_COMMANDS,
     build_ngoam_change,
+    loop_refused,
     parse_acl_status,
     parse_counters,
     parse_ngoam,
@@ -25,6 +26,7 @@ from app.ngoam import (
 )
 from app.port_changes import BROAD_RULES, NGOAM_RULES, ROLE_NAME
 from app.switch_connection import BROAD_NGOAM_VERSION
+from tests.conftest import inventory_body
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -96,6 +98,13 @@ def test_the_counters_and_acl_are_read():
     assert parse_counters([]) == ()
     assert parse_acl_status(ACL) == "1"
     assert parse_acl_status("") == ""
+
+
+def test_loop_detection_is_refused_on_a_nexus_9200_only():
+    assert loop_refused(inventory_body("Nexus9000 C92160YC-X chassis", "N9K-C92160YC-X"))
+    assert not loop_refused(inventory_body("Nexus9000 C93180YC-EX chassis", "N9K-C93180YC-EX"))
+    assert not loop_refused(None)
+    assert not loop_refused({})
 
 
 def test_the_page_view():

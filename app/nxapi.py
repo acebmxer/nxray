@@ -794,6 +794,19 @@ shared_reads: ContextVar[Callable[[tuple[str, ...], bool, Callable[[], Any]], An
     ContextVar("nxray_shared_reads", default=None)
 )
 
+# Set for the length of one page a person opened (app/page_reads.py): ``show`` then
+# hands its commands to it, and it answers those it read a few seconds ago from
+# memory and asks the switch only for the rest. ``(switch, commands, read)``:
+# ``switch`` names the switch and account, ``read(missing)`` asks the switch for some
+# of the commands. None, the default, reads the switch every time.
+page_reads: ContextVar[
+    Callable[
+        [tuple[str, ...], list[str], Callable[[list[str]], list[dict[str, Any]]]],
+        list[dict[str, Any]],
+    ]
+    | None
+] = ContextVar("nxray_page_reads", default=None)
+
 
 class NxapiClient:
     """A connection to one switch's NX-API.
@@ -836,10 +849,18 @@ class NxapiClient:
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
+        timeout = self._target.timeout
+        if (reuse := page_reads.get()) is not None:
+            target = self._target
+            return reuse(
+                (target.host, str(target.port), target.username),
+                cleaned,
+                lambda missing: self._send(missing, missing, timeout),
+            )
         return self._shared(
             ("show", *cleaned),
             False,
-            lambda: self._send(cleaned, cleaned, self._target.timeout),
+            lambda: self._send(cleaned, cleaned, timeout),
         )
 
     def show_text(self, command: str) -> str:

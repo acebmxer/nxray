@@ -217,6 +217,10 @@ SAVE_BUSY = (
 
 _RECORDED = {
     "show version": "show_version",
+    "show inventory": "show_inventory",
+    "show module": "show_module",
+    "show system uptime": "show_system_uptime",
+    "show system reset-reason": "show_system_reset-reason",
     "show environment": "show_environment",
     "show system resources": "show_system_resources",
     "show interface brief": "show_interface_brief",

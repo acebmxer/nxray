@@ -1,0 +1,34 @@
+{
+  "TABLE_inv": {
+    "ROW_inv": [
+      {
+        "name": "\"Chassis\"",
+        "desc": "\"Nexus9000 C92160YC-X chassis\"",
+        "productid": "N9K-C92160YC-X",
+        "vendorid": "V02",
+        "serialnum": "SAL0000000A"
+      },
+      {
+        "name": "\"Slot 1\"",
+        "desc": "\"48x10G + 4x40G + 2x100G Ethernet Module\"",
+        "productid": "N9K-C92160YC-X",
+        "vendorid": "V02",
+        "serialnum": "SAL0000000A"
+      },
+      {
+        "name": "\"Power Supply 1\"",
+        "desc": "\"Nexus9000 C92160YC-X chassis Power Supply\"",
+        "productid": "NXA-PAC-650W-PE",
+        "vendorid": "V01",
+        "serialnum": "SAL0000000B"
+      },
+      {
+        "name": "\"Fan 1\"",
+        "desc": "\"Nexus9000 C92160YC-X chassis Fan Module\"",
+        "productid": "NXA-FAN-30CFM-F",
+        "vendorid": "V01",
+        "serialnum": "N/A"
+      }
+    ]
+  }
+}

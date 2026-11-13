@@ -25,6 +25,7 @@ from app.tunnel_encryption import (
     parse_tunnel_encryption,
     parse_tunnel_encryption_config,
 )
+from tests.conftest import inventory_body
 from tests.fake_switch import ADMIN_PASSWORD, FakeSwitch
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -121,8 +122,11 @@ def test_the_page_view():
 
 
 def test_the_model_note():
-    assert model_note({"chassis_id": "Nexus9000 C92160YC-X chassis"}) == NOT_THIS_MODEL
-    assert model_note({"chassis_id": "Nexus9000 C93240YC-FX2 Chassis"}) == ""
+    assert (
+        model_note(inventory_body("Nexus9000 C92160YC-X chassis", "N9K-C92160YC-X"))
+        == NOT_THIS_MODEL
+    )
+    assert model_note(inventory_body("Nexus9000 C93240YC-FX2 Chassis", "N9K-C93240YC-FX2")) == ""
     assert model_note({}) == ""
 
 

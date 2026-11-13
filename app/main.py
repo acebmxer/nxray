@@ -21,12 +21,14 @@ from app.dependencies import (
     RedirectToLogin,
     add_security_headers,
     current_role,
+    reuse_page_reads,
     share_switch_reads,
     templates,
 )
 from app.history import start_sampler
 from app.live import LiveCache
 from app.logging_conf import configure_logging
+from app.page_reads import PageReads
 from app.role_upgrade import upgrade_stored_roles
 from app.routes import (
     aaa,
@@ -195,6 +197,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.nxapi_transport = None
     # The newest switch readings the self-refreshing pages share (app/live.py).
     app.state.live_cache = LiveCache()
+    # The recent answers a page a person opens reuses (app/page_reads.py).
+    app.state.page_reads = PageReads()
     # sFlow samples added up per switch and minute (app/sflow.py); listened for
     # only with NXRAY_SFLOW_PORT set.
     app.state.sflow_collector = SflowCollector()
@@ -232,6 +236,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.middleware("http")(share_switch_reads)
+    app.middleware("http")(reuse_page_reads)
     app.middleware("http")(add_security_headers)
     app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)

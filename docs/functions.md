@@ -28,6 +28,7 @@ prose columns; those are a reviewer's job.
 | Limit a route to a role | `app/dependencies.py`, `operator_required` / `admin_required` |
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
+| Reuse a switch answer read a few seconds ago, or stop doing so | `app/page_reads.py` (`PageReads`, `lifetime`); the middleware is `dependencies.reuse_page_reads`, the setting `NXRAY_PAGE_READ_SECONDS` |
 | Two-factor sign-in codes, backup codes, the setup QR code | `app/totp.py`; per account in `app/users.py` |
 | Built-in HTTPS: the certificate and nginx's config | `app/tls.py`; started by `docker/entrypoint.sh` |
 | Require a login on a route | `app/dependencies.py`, `login_required` |
@@ -194,6 +195,8 @@ really invalidates rather than merely asking the browser to forget.
 | `request_target` | `(request) -> str` | The request's path plus query string, kept in `?next=` across sign-in | `dependencies.login_required`, `dependencies.live_login_required` | v0.2.1 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
 | `share_switch_reads` | `(request, call_next) -> Response` | HTTP middleware: a whole-page refresh (`X-Requested-With: nxray-live` on a page `refreshes_whole_page` names) reads the switch through the live cache, so many open pages cost one read per interval; any other request reads the switch itself | `main.create_app` | v0.2.0 |
+| `reuse_page_reads` | `(request, call_next) -> Response` | HTTP middleware: a page a person opens reads the switch through the recent answers (`page_reads.PageReads`), so moving between pages does not ask for the same things again; a request that is not a GET, and a browser reload, forget them all; pages refreshing themselves are left alone | `main.create_app` | v0.3.0 |
+| `reload_asked` | `(request) -> bool` | True when the browser reloaded the page (`Cache-Control: max-age=0` or `no-cache`) | `dependencies.reuse_page_reads` | v0.3.0 |
 | `live_login_required` | `(request) -> str` | Like `login_required` for self-refreshing figures: does not slide the session | `routes/live` | v0.2.0 |
 | `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`), and sends it as an alert when the Alerts page asks for changes (`alerts.notify_change`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
@@ -341,7 +344,14 @@ self-signed certificate is accepted on purpose.
 | `parse_environment` | `(body) -> Environment` | Temperatures, fans, power supplies from `show environment` | `switch.load_dashboard` | v0.1.0 |
 | `parse_port_summary` | `(body) -> PortSummary` | Ethernet port counts from `show interface brief` | `switch.load_dashboard` | v0.1.0 |
 | `parse_resources` | `(body) -> Resources` | CPU and memory use from `show system resources` | `switch.load_dashboard` | v0.1.0 |
-| `parse_version` | `(body) -> SystemInfo` | Hostname, model, NX-OS version, uptime from `show version` | `switch.load_dashboard` | v0.1.0 |
+| `parse_version` | `(body) -> SystemInfo` | Hostname, model, NX-OS version, uptime from `show version` | `switch_setup`, `switch_repair` | v0.1.0 |
+| `parse_identity` | `(hostname, inventory, module, uptime, reset) -> SystemInfo` | The same hostname, model, NX-OS version, uptime and last restart reason, from five quick commands instead of the 1.5 second `show version` | `switch.load_dashboard` | v0.3.0 |
+| `uptime_words` | `(days, hours, minutes) -> str` | "3 days, 2 hours, 5 minutes" from an uptime's numbers | `switch.parse_version`, `switch.parse_identity` | v0.3.0 |
+| `chassis_row` | `(inventory) -> dict` | The chassis row of `show inventory`: the one named "Chassis", else the first | `switch.chassis_description`, `switch.chassis_model` | v0.3.0 |
+| `chassis_description` | `(inventory) -> str` | The chassis as the inventory words it ("Nexus9000 C92160YC-X chassis"); "" when it names none | `switch.parse_identity` | v0.3.0 |
+| `chassis_model` | `(inventory) -> str` | The chassis description and product id together, what the pages that depend on the model look for a model name in | `ngoam.loop_refused`, `flexlink.model_note`, `tunnel_encryption.model_note` | v0.3.0 |
+| `module_version` | `(module) -> str` | The NX-OS version the active module runs, from `show module` | `switch.parse_identity` | v0.3.0 |
+| `last_reset_reason` | `(reset) -> str` | The newest restart reason, from `show system reset-reason` | `switch.parse_identity` | v0.3.0 |
 | `rows` | `(body, table: str, row: str) -> list[dict]` | An NX-OS table's rows as a list, one row or many | every parser | v0.1.0 |
 | `section` | `(body, key: str) -> dict` | A nested object of an NX-OS body, or `{}` | `switch.parse_environment` | v0.1.0 |
 | `text` | `(value) -> str` | A value from NX-OS JSON as stripped text; `""` for missing or null | every parser | v0.2.1 |
@@ -1107,6 +1117,14 @@ list shown in the top bar. Held in `app.state.live_cache`.
 | `live_problem_message` | `(answer) -> str` | The banner for a failed read, saying the figures shown are older and when NXray tries again | `live_dashboard` | v0.2.0 |
 | `shared_readings` | `(request, switch_id, target, ports_floor=None) -> (LiveAnswer, NeighborView \| None)` | The newest port reading and neighbour/MAC reading through the cache, shared by every live page; `ports_floor` slows the port read for pages that need it less often | `live_ports`, `live_port`, `live_neighbors` | v0.2.0 |
 | `no_cache` | `(response) -> Response` | Marks a response not to be stored by the browser | `live_dashboard` | v0.2.0 |
+
+## `app/page_reads.py` — recent switch answers for the pages a person opens
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `lifetime` | `(command: str, seconds: int) -> int` | How many seconds the answer to a show command is kept: `seconds` for the listed whole-switch and per-port reads, longer for `show version`, 0 for everything else (counters, running figures, state a page is opened to look at) | `page_reads.PageReads` | v0.3.0 |
+
+`PageReads` keeps the answers per switch, account and command; `reader(seconds)` is the function `nxapi.page_reads` holds for one page being opened, asking the switch only for the commands it has no recent answer to and handing each page its own copy. `clear()` forgets everything (a form sent, a browser reload). Held in `app.state.page_reads`; the lifetime is `NXRAY_PAGE_READ_SECONDS`.
 
 ## `app/history.py` — history
 

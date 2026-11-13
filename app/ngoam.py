@@ -24,7 +24,7 @@ The page is described with the same parts as the Monitor sessions page
 blanks, and ``build_ngoam_change`` building the lines. ``NxapiClient.configure_ngoam`` sends
 them, and for a tool returns what the switch printed, shown on the page as it is.
 
-Read from the switch: ``show feature``, ``show version`` and ``show interface brief`` in one
+Read from the switch: ``show feature``, ``show inventory`` and ``show interface brief`` in one
 request; while ngoam is on, ``show ngoam loopback|traceroute|pathtrace
 statistics summary`` in one request, ``show ngoam acl status`` and ``show running-config``
 as text.
@@ -81,12 +81,12 @@ from app.protocols import (
     build_change,
     table_rows,
 )
-from app.switch import text
+from app.switch import chassis_model, text
 from app.vxlan import VNI_MAX, parse_vxlan_config
 
 FEATURE = "ngoam"
 VXLAN_FEATURE = "nve"
-PAGE_COMMANDS = ("show feature", "show version", "show interface brief")
+PAGE_COMMANDS = ("show feature", "show inventory", "show interface brief")
 STATS_COMMANDS = (
     "show ngoam loopback statistics summary",
     "show ngoam traceroute statistics summary",
@@ -1039,17 +1039,16 @@ class NgoamPage:
     missing: tuple[str, ...] = ()  # the ngoam feature, when it is off
 
 
-def loop_refused(version: Any) -> bool:
+def loop_refused(inventory: Any) -> bool:
     """True for a switch Cisco's guide does not list for loop detection (a Nexus 9200, as
-    ``show version`` names it)."""
-    chassis = text(version.get("chassis_id")) if isinstance(version, dict) else ""
-    return bool(re.search(r"\bC92\d", chassis))
+    ``show inventory`` names it)."""
+    return bool(re.search(r"\bC92\d", chassis_model(inventory)))
 
 
 def load_ngoam_page(client: NxapiClient) -> NgoamPage:
     """One request for the features, model and ports; while ngoam is on, one for the
     counters, and the ACL status and the configuration text."""
-    feature, version, brief = client.show(*PAGE_COMMANDS)
+    feature, inventory, brief = client.show(*PAGE_COMMANDS)
     ports = all_port_names(brief or {})
     states = feature_states(feature)
     problem = "" if states.get(VXLAN_FEATURE, False) else VXLAN_OFF
@@ -1067,7 +1066,7 @@ def load_ngoam_page(client: NxapiClient) -> NgoamPage:
         config: str | None = client.show_text(CONFIG_COMMAND)
     except NxapiCommandError:
         config = None
-    view = parse_ngoam(config, counters, acl, loop_refused(version))
+    view = parse_ngoam(config, counters, acl, loop_refused(inventory))
     return NgoamPage(NGOAM, view, ports, problem)
 
 

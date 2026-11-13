@@ -17,9 +17,15 @@ from typing import Any
 
 from app.nxapi import NxapiClient
 
-# The commands one dashboard load runs, in one NX-API request.
+# The commands one dashboard load runs, in one NX-API request. The first five give
+# the identity block: ``show version`` would give it in one command, but the switch
+# needs about 1.5 seconds for it and under 120 ms for these five together (#97).
 DASHBOARD_COMMANDS = (
-    "show version",
+    "show hostname",
+    "show inventory",
+    "show module",
+    "show system uptime",
+    "show system reset-reason",
     "show environment",
     "show system resources",
     "show interface brief",
@@ -208,24 +214,95 @@ class Dashboard:
     ports: PortSummary
 
 
+def uptime_words(days: Any, hours: Any, minutes: Any) -> str:
+    """Words such as "3 days, 2 hours, 5 minutes" from the numbers an uptime is given
+    as; the larger units are left out while they are zero."""
+    day, hour, minute = to_int(days) or 0, to_int(hours) or 0, to_int(minutes) or 0
+    parts = []
+    if day:
+        parts.append(f"{day} day{'s' if day != 1 else ''}")
+    if hour or day:
+        parts.append(f"{hour} hour{'s' if hour != 1 else ''}")
+    parts.append(f"{minute} minute{'s' if minute != 1 else ''}")
+    return ", ".join(parts)
+
+
 def parse_version(body: dict[str, Any]) -> SystemInfo:
     """Identity and uptime from ``show version``."""
-    days = to_int(body.get("kern_uptm_days")) or 0
-    hours = to_int(body.get("kern_uptm_hrs")) or 0
-    minutes = to_int(body.get("kern_uptm_mins")) or 0
-    parts = []
-    if days:
-        parts.append(f"{days} day{'s' if days != 1 else ''}")
-    if hours or days:
-        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
-    parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
-
     return SystemInfo(
         hostname=str(body.get("host_name") or "unknown"),
         model=str(body.get("chassis_id") or "unknown"),
         nxos_version=str(body.get("nxos_ver_str") or "unknown"),
-        uptime=", ".join(parts),
+        uptime=uptime_words(
+            body.get("kern_uptm_days"), body.get("kern_uptm_hrs"), body.get("kern_uptm_mins")
+        ),
         last_reset_reason=str(body.get("rr_reason") or ""),
+    )
+
+
+def chassis_row(inventory: Any) -> dict[str, Any]:
+    """The chassis row of ``show inventory``: the one named "Chassis", else the first."""
+    found = rows(inventory, "TABLE_inv", "ROW_inv") if isinstance(inventory, dict) else []
+    named = [row for row in found if text(row.get("name")).strip('"').lower() == "chassis"]
+    return (named or found or [{}])[0]
+
+
+def chassis_description(inventory: Any) -> str:
+    """The chassis as the inventory words it ("Nexus9000 C92160YC-X chassis"); "" when
+    the inventory names none."""
+    return text(chassis_row(inventory).get("desc")).strip('"').strip()
+
+
+def chassis_model(inventory: Any) -> str:
+    """The chassis description and product id together ("Nexus9000 C92160YC-X chassis
+    N9K-C92160YC-X"), what the pages that depend on the model look for a model name
+    in; "" when the inventory names none."""
+    row = chassis_row(inventory)
+    return " ".join(
+        part for part in (chassis_description(inventory), text(row.get("productid"))) if part
+    )
+
+
+def module_version(module: Any) -> str:
+    """The NX-OS version the active module runs, from ``show module``; "" when it
+    names none."""
+    if not isinstance(module, dict):
+        return ""
+    found = rows(module, "TABLE_modinfo", "ROW_modinfo")
+    active = [row for row in found if text(row.get("status")).lower().startswith("active")]
+    chosen = (active or found or [{}])[0]
+    versions = rows(module, "TABLE_modwwninfo", "ROW_modwwninfo")
+    mine = [row for row in versions if text(row.get("modwwn")) == text(chosen.get("modinf"))]
+    return text(((mine or versions or [{}])[0]).get("sw"))
+
+
+def last_reset_reason(reset: Any) -> str:
+    """The newest restart reason, from ``show system reset-reason`` (it lists them
+    newest first); "" when the switch lists none."""
+    if not isinstance(reset, dict):
+        return ""
+    for slot in rows(reset, "TABLE_reason", "ROW_reason"):
+        for entry in rows(slot, "TABLE_rr", "ROW_rr"):
+            return text(entry.get("reason"))
+    return ""
+
+
+def parse_identity(
+    hostname: Any, inventory: Any, module: Any, uptime: Any, reset: Any
+) -> SystemInfo:
+    """The same identity and uptime ``parse_version`` reads from ``show version``, from
+    the bodies of ``show hostname``, ``show inventory``, ``show module``, ``show system
+    uptime`` and ``show system reset-reason``."""
+    hostname = hostname if isinstance(hostname, dict) else {}
+    uptime = uptime if isinstance(uptime, dict) else {}
+    return SystemInfo(
+        hostname=text(hostname.get("hostname")) or "unknown",
+        model=chassis_description(inventory) or "unknown",
+        nxos_version=module_version(module) or "unknown",
+        uptime=uptime_words(
+            uptime.get("kn_up_days"), uptime.get("kn_up_hrs"), uptime.get("kn_up_mins")
+        ),
+        last_reset_reason=last_reset_reason(reset),
     )
 
 
@@ -326,9 +403,11 @@ def parse_port_summary(body: dict[str, Any]) -> PortSummary:
 
 def load_dashboard(client: NxapiClient) -> Dashboard:
     """Everything the dashboard shows, from one NX-API request."""
-    version, environment, resources, interfaces = client.show(*DASHBOARD_COMMANDS)
+    hostname, inventory, module, uptime, reset, environment, resources, interfaces = client.show(
+        *DASHBOARD_COMMANDS
+    )
     return Dashboard(
-        system=parse_version(version),
+        system=parse_identity(hostname, inventory, module, uptime, reset),
         environment=parse_environment(environment),
         resources=parse_resources(resources),
         ports=parse_port_summary(interfaces),

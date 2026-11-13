@@ -1,0 +1,32 @@
+{
+  "TABLE_modwwninfo": {
+    "ROW_modwwninfo": {
+      "modwwn": 1,
+      "sw": "9.3(16)",
+      "hw": "1.3",
+      "slottype": "NA"
+    }
+  },
+  "TABLE_modmacinfo": {
+    "ROW_modmacinfo": {
+      "modmac": 1,
+      "mac": " 00-00-5e-00-53-00 to 00-00-5e-00-53-4d  ",
+      "serialnum": "SAL0000000A"
+    }
+  },
+  "TABLE_modinfo": {
+    "ROW_modinfo": {
+      "modinf": 1,
+      "ports": 54,
+      "modtype": "48x10G + 4x40G + 2x100G Ethernet Module",
+      "model": "N9K-C92160YC-X",
+      "status": "active *"
+    }
+  },
+  "TABLE_moddiaginfo": {
+    "ROW_moddiaginfo": {
+      "mod": 1,
+      "diagstatus": "Pass"
+    }
+  }
+}
