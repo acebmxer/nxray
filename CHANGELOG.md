@@ -11,6 +11,34 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Set up the TWAMP server (#95).** The new **TWAMP server** page (under Configure) shows the
+  server's state while `feature sla twamp-server` is on (turned on on the Features page),
+  sets its port and idle time and puts the responder line in or takes it out. Tried on a
+  switch where the feature was already on; everything put back. Needs the broad role or a
+  stored admin login.
+- **Make RMON events and alarms (#95).** The new **RMON** page (under Configure) lists the
+  switch's events, alarms and high-capacity alarms and makes or deletes them: an event writes
+  to the log, sends a trap to a community, or both; an alarm watches one SNMP object (given by
+  its dotted number) and fires events when it rises past or falls below a threshold. The
+  switch keeps an event's description and owner when it is entered again, so these can be
+  changed but only emptied by deleting the event; the page says so. Tried on a switch with
+  throwaway events and alarms, all removed. Needs the broad role or a stored admin login.
+- **Set up flow analytics objects (#95).** The new **Flow analytics** page (under Configure)
+  reads the switch's flow exporters, records, monitors, profiles, filters and events and the
+  system settings (`feature analytics`, turned on on the Features page), and makes, changes
+  and deletes them. Tried on a switch with throwaway objects, all removed: the Nexus 9200 takes
+  the lines but cannot put a monitor on a port and keeps only the IPv4 5-tuple in a record, so
+  the page only sets the objects up. Needs the broad role or a stored admin login.
+- **See maintenance mode and take snapshots (#95).** The new **Maintenance mode** page (under
+  Switch) shows the switch's mode and its maintenance profiles, sets how maintenance mode
+  behaves (time limit, waits before the command line and the after-snapshot, the custom
+  profile, and the restart reasons that start the switch in maintenance mode), takes and deletes
+  snapshots of the switch's interfaces, VLANs and routes, and compares two. NXray never puts the
+  switch into or out of maintenance mode, which takes it off the network: that is done at the
+  switch. Taking and deleting a snapshot are commands outside configuration mode, so the broad
+  role gets two rules for them (rules 41 and 42): Update the port list on the Switch page for a
+  broad role written before. Tried on a switch with throwaway settings and snapshots, all
+  removed; the profiles are shown only, since a profile cannot be opened over NX-API.
 - **Set up LDAP sign-in on the AAA page (#95).** With `feature ldap` on, the **AAA** page also
   shows the LDAP servers (port, wait, bind account, TLS) and groups, and sets a server and its
   TLS, port, wait and bind account (the password is never shown back), the switch-wide wait,

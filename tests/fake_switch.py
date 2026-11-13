@@ -656,6 +656,16 @@ class FakeSwitch:
     # ``l2_lines``; ``nxsdk_apps`` are the NX-SDK application services the switch has.
     mgmt_lines: list[str] = field(default_factory=list)
     nxsdk_apps: set[str] = field(default_factory=set)
+    # Stage E7: the TWAMP server, flow analytics and maintenance mode settings as paths like
+    # ``mgmt_lines`` ("ip sla server twamp ; port 1000", "flow exporter e1 ; dscp 46",
+    # "system mode maintenance timeout 30"); RMON events and alarms by number; snapshots by
+    # name (time, description); the mode the switch is in.
+    mon_lines: list[str] = field(default_factory=list)
+    rmon_events: dict[int, dict[str, Any]] = field(default_factory=dict)
+    rmon_alarms: dict[int, dict[str, Any]] = field(default_factory=dict)
+    snapshots: dict[str, tuple[str, str]] = field(default_factory=dict)
+    maint_mode: str = "Normal"
+    mon_ran: list[str] = field(default_factory=list)
     ngoam_key: str = ""
     ngoam_ran: list[str] = field(default_factory=list)
     ngoam_counts: dict[str, int] = field(
@@ -1382,6 +1392,8 @@ class FakeSwitch:
                     return _error(ident, "% Invalid command at '^' marker.\n")
                 return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
         if reply := self._mgmt_ascii(cmd, ident):
+            return reply
+        if reply := self._mon_ascii(user, cmd, ident):
             return reply
         if cmd == "show feature-set":
             return {"jsonrpc": "2.0", "result": {"msg": self.feature_set_text()}, "id": ident}
@@ -3622,6 +3634,8 @@ class FakeSwitch:
             return _ok(ident, self.bodies[cmd]), context
         if mgmt_reply := self._mgmt(user, is_admin, cmd, ident, context):
             return mgmt_reply
+        if mon_reply := self._mon(user, is_admin, cmd, ident, context):
+            return mon_reply
         if stage_d_reply := self._stage_d(user, is_admin, cmd, ident, context):
             return stage_d_reply
         if extras_reply := self._vxlan_extras(user, is_admin, cmd, ident, context):
@@ -4710,6 +4724,418 @@ class FakeSwitch:
             if on is not None:
                 row["cfcFeatureCtrlOpStatus2"] = "enabled" if on else "disabled"
         return body
+
+    # ---- TWAMP, RMON, flow analytics and maintenance mode (stage E7) --------------------
+
+    _TWAMP_RANGES = {"port": (1, 65535), "timer inactivity": (1, 6000)}
+    _FLOW_HEADS = ("exporter", "record", "monitor", "profile", "filter", "event")
+    _FLOW_FIXED = {
+        "record": (
+            "match datalink mac source-address", "match datalink mac destination-address",
+            "match datalink ethertype", "match datalink vlan", "match ip source address",
+            "match ip destination address", "match ip protocol", "match ip tos",
+            "match transport source-port", "match transport destination-port",
+            "collect counter bytes", "collect timestamp sys-uptime first",
+            "collect timestamp sys-uptime last", "collect transport tcp flags",
+        ),
+        "event": ("group drop-events", "group latency-events"),
+    }  # fmt: skip
+    # What the switch KEEPS of a record: the rest is taken and dropped (cisco-25gb, 2026-11-13).
+    _FLOW_KEPT = (
+        "match ip source address", "match ip destination address", "match ip protocol",
+        "match ip tos", "match transport source-port", "match transport destination-port",
+        "collect counter bytes", "collect timestamp sys-uptime first",
+        "collect timestamp sys-uptime last",
+    )  # fmt: skip
+    _MAINT_RANGES = {"timeout": (5, 65535), "snapshot-delay": (0, 65535), "maint-delay": (0, 65535)}
+    _MAINT_REASONS = (
+        "HW_ERROR", "SVC_FAILURE", "KERN_FAILURE", "WDOG_TIMEOUT", "FATAL_ERROR",
+        "LC_FAILURE", "MANUAL_RELOAD", "MAINTENANCE",
+    )  # fmt: skip
+
+    def _keep(self, path: str, replace: str | None = None) -> None:
+        """Keep one line of ``mon_lines``; ``replace`` is the start of the lines it replaces."""
+        if replace is not None:
+            self.mon_lines[:] = [i for i in self.mon_lines if not i.startswith(replace)]
+        if path not in self.mon_lines:
+            self.mon_lines.append(path)
+
+    def twamp_config_text(self) -> str:
+        keep = [i for i in self.mon_lines if "twamp" in i.split(" ; ")[0]]
+        return "\n".join(["feature sla twamp-server", *_nested(keep)]) + "\n"
+
+    def flow_config_text(self) -> str:
+        keep = [i for i in self.mon_lines if i.startswith("flow ")]
+        parts = ["feature analytics", "", "flow timeout 10", *_nested(keep)]
+        return "\n" + "\n".join(parts) + "\n"
+
+    def rmon_events_text(self) -> str:
+        out = []
+        for number, e in sorted(self.rmon_events.items()):
+            cause = " and ".join(
+                p
+                for p in (
+                    "log" if e["log"] else "",
+                    f"trap to community {e['trap']}" if e["trap"] else "",
+                )
+                if p
+            )
+            out += [
+                f"Event {number} is active, owned by {e['owner']}".rstrip()
+                if e["owner"]
+                else f"Event {number} is active, owned by",
+                f"Description is {e['description']}" if e["description"] else "Description is",
+                f" Event firing causes {cause or 'nothing'}, last fired never",
+            ]
+        return "\n".join(out) + ("\n" if out else "")
+
+    def rmon_alarms_text(self, high: bool) -> str:
+        out = []
+        for number, a in sorted(self.rmon_alarms.items()):
+            if a["hc"] != high:
+                continue
+            head = "High Capacity Alarm" if high else "Alarm"
+            startup = {"1": "rising alarm", "2": "falling alarm"}.get(
+                a.get("startup", ""), "rising or falling alarm"
+            )
+            out += [
+                f"{head} {number} is active, owned by {a['owner']}".rstrip(),
+                f"Monitors {a['oid']} every {a['interval']} second(s)",
+                f" Taking {a['sample']} samples, last value was 0",
+                f"  Rising threshold is {a['rising']}, assigned to event {a['rising_event']}",
+                f"  Falling threshold is {a['falling']}, assigned to event {a['falling_event']}",
+                f" On startup enable {startup}",
+            ]
+        return "\n".join(out) + ("\n" if out else "")
+
+    def maint_value(self, word: str) -> str | None:
+        found = [i for i in self.mon_lines if i.startswith(f"system mode maintenance {word} ")]
+        return found[0].rsplit(" ", 1)[1] if found else None
+
+    def _mon_text(self, cmd: str) -> str | None:
+        """The text of a show command of this stage, or None for another command."""
+        if cmd == "show ip sla twamp session":
+            return "\nIP SLAs Responder TWAMP is: Disabled\n"
+        if cmd == "show ip sla twamp standards":
+            return (
+                "\nFeature                   Organization    Standard\n"
+                "TWAMP Server              IETF            RFC5357\n"
+                "TWAMP Reflector           IETF            RFC5357\n"
+            )
+        if cmd == "show running-config | section twamp":
+            return self.twamp_config_text()
+        if cmd == "show running-config analytics all":
+            return self.flow_config_text()
+        if cmd == "show rmon events":
+            return self.rmon_events_text()
+        if cmd == "show rmon alarms":
+            return self.rmon_alarms_text(False)
+        if cmd == "show rmon hcalarms":
+            return self.rmon_alarms_text(True)
+        if cmd == "show rmon info":
+            plain = sum(1 for a in self.rmon_alarms.values() if not a["hc"])
+            return (
+                "Maximum allowed 32 bit or 64 bit alarms : 512\n"
+                f"Number of 32 bit alarms configured : {plain}\n"
+                f"Number of 64 bit hcalarms configured : {len(self.rmon_alarms) - plain}\n"
+            )
+        if cmd == "show system mode":
+            return f"System Mode: {self.maint_mode}\n"
+        if cmd == "show maintenance timeout":
+            return f"Maintenance mode timeout value: {self.maint_value('timeout') or 0} minutes\n"
+        for word, label in (
+            ("maint-delay", "maintenance CLI release delay"),
+            ("snapshot-delay", "after_maintenance snapshot delay"),
+        ):
+            if cmd == f"show maintenance {word}":
+                value = self.maint_value(word)
+                if value is None:
+                    return f"{label} default value: 120 seconds\n"
+                return f"{label} value: {value} seconds\n"
+        if cmd == "show maintenance on-reload reset-reasons":
+            kept = [
+                r
+                for r in self._MAINT_REASONS
+                if f"system mode maintenance on-reload reset-reason {r}" in self.mon_lines
+            ]
+            if not kept:
+                return (
+                    "Reset reasons for on-reload maintenance mode:\n"
+                    + "-" * 44
+                    + "\n(not configured)\n\nbitmap = 0x0\n"
+                )
+            return (
+                "Reset reasons for on-reload maintenance mode:\n" + "-" * 44 + "\n"
+                + "\n".join(kept) + "\n\nbitmap = 0xc1\n"
+            )  # fmt: skip
+        if cmd == "show maintenance profile":
+            return "[Normal Mode]\n\n[Maintenance Mode]\n\n"
+        if cmd == "show snapshots":
+            head = (
+                "Snapshot Name           Time                           Description\n"
+                + "-" * 78
+                + "\n"
+            )
+            return head + "".join(f"{n:<23} {t:<30} {d}\n" for n, (t, d) in self.snapshots.items())
+        if match := re.fullmatch(r"show snapshots compare (\S+) (\S+) summary", cmd):
+            if not {match.group(1), match.group(2)} <= set(self.snapshots):
+                return "ERROR: Snapshot does not exist\n"
+            return (
+                "\n" + "=" * 80 + "\n"
+                f"Feature{match.group(1):>37}{match.group(2):>18}     changed \n" + "=" * 80 + "\n"
+                "basic summary\n"
+                "  # of interfaces                         56              56       \n"
+            )  # fmt: skip
+        return None
+
+    def _mon_ascii(self, user: str, cmd: str, ident: int) -> dict[str, Any] | None:
+        """The text shows of this stage, and the snapshot commands typed outside configuration
+        mode (a role needs a rule naming them), or None when ``cmd`` is none of them."""
+        invalid = _error(ident, "% Invalid command\n")
+        if match := re.fullmatch(r"snapshot (create|delete) (\S+)(?: (.+))?", cmd):
+            if not ("network-admin" in self.roles_of(user) or self._role_matches(user, cmd, None)):
+                return _error(ident, "% Permission denied for the role\n")
+            self.mon_ran.append(cmd)
+            name = match.group(2)
+            if match.group(1) == "delete":
+                if self.snapshots.pop(name, None) is None:
+                    return _error(ident, f"ERROR: Snapshot {name} does not exist\n")
+                return {
+                    "jsonrpc": "2.0",
+                    "result": {"msg": f"Snapshot '{name}' deleted\n"},
+                    "id": ident,
+                }
+            if not match.group(3):
+                return _error(ident, "% Incomplete command\n")
+            self.snapshots[name] = ("Fri Nov 13 20:48:12 2026", match.group(3))
+            return {
+                "jsonrpc": "2.0",
+                "result": {"msg": f"Snapshot '{name}' created\n"},
+                "id": ident,
+            }
+        if cmd == "show running-config | section twamp" and not self._feature_on("sla_twamp"):
+            return invalid
+        if cmd.startswith("show ip sla twamp") and not self._feature_on("sla_twamp"):
+            return invalid
+        if cmd == "show running-config analytics all" and not self._feature_on("analytics"):
+            return invalid
+        text = self._mon_text(cmd)
+        if text is None:
+            return None
+        if text.startswith("ERROR"):
+            return _error(ident, text)
+        return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
+
+    def _mon(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """The configuration lines of this stage, or None when ``cmd`` is none of them.
+        Ranges, refusals and what is kept are as probed on cisco-25gb (2026-11-13)."""
+        kind = context[0] if context else None
+        invalid = _error(ident, "% Invalid command\n")
+        denied = _error(ident, "% Permission denied for the role\n")
+        undo = cmd.startswith("no ")
+        bare = cmd.removeprefix("no ")
+
+        def allowed(path: str) -> bool:
+            return is_admin or self._role_matches(user, f"conf t ; {path}", None)
+
+        def range_error(low: int, high: int) -> dict[str, Any]:
+            return _error(ident, f"% Invalid number, range is ({low}:{high})\n")
+
+        if kind == "twamp-server":
+            if cmd == "exit":
+                return _ok(ident, None), None
+            match = re.fullmatch(r"(port|timer inactivity)(?: (\d+))?", bare)
+            if not match:
+                return invalid, context
+            path = f"{context[1]} ; {match.group(1)}"
+            if not allowed(path):
+                return denied, context
+            if not undo:
+                low, high = self._TWAMP_RANGES[match.group(1)]
+                if not match.group(2) or not low <= int(match.group(2)) <= high:
+                    return range_error(low, high), context
+            if undo:
+                self.mon_lines[:] = [i for i in self.mon_lines if not i.startswith(path)]
+            else:
+                self._keep(f"{path} {match.group(2)}", replace=path)
+            return _ok(ident, None), context
+        if kind == "flow":
+            return self._mon_flow(is_admin, cmd, ident, context, allowed)
+        if kind is not None:
+            return None
+        if bare in ("ip sla server twamp", "ip sla responder twamp"):
+            if not self._feature_on("sla_twamp"):
+                return invalid, context
+            if not allowed(cmd):
+                return denied, context
+            if undo:
+                self.mon_lines[:] = [i for i in self.mon_lines if not i.startswith(bare)]
+                return _ok(ident, None), context
+            self._keep(bare)
+            return _ok(ident, None), ("twamp-server", bare) if "server" in bare else context
+        if match := re.fullmatch(r"(no )?rmon (event|alarm|hcalarm) (\d+)(?: (.*))?", cmd):
+            return self._mon_rmon(allowed, match, ident, context)
+        if match := re.fullmatch(
+            r"flow (exporter|record|monitor|profile|filter|event) (\S+)|flow system config", bare
+        ):
+            if not self._feature_on("analytics"):
+                return invalid, context
+            if not allowed(cmd):
+                return denied, context
+            head = bare
+            if undo:
+                self.mon_lines[:] = [
+                    i for i in self.mon_lines if i != head and not i.startswith(head + " ; ")
+                ]
+                return _ok(ident, None), context
+            self._keep(head)
+            return _ok(ident, None), ("flow", head)
+        if bare.startswith("system mode maintenance "):
+            return self._mon_maintenance(allowed, bare, undo, ident, context)
+        return None
+
+    def _mon_flow(self, is_admin, cmd, ident, context, allowed):  # noqa: ANN001
+        invalid = _error(ident, "% Invalid command\n")
+        if cmd == "exit":
+            return _ok(ident, None), None
+        undo = cmd.startswith("no ")
+        bare = cmd.removeprefix("no ")
+        head = context[1]
+        what = head.split()[1] if head != "flow system config" else "system"
+        path = f"{head} ; {bare}"
+        if not allowed(f"{head} ; {cmd}"):
+            return _error(ident, "% Permission denied for the role\n"), context
+        fixed = self._FLOW_FIXED.get(what, ())
+        if bare in fixed:
+            if undo:
+                self.mon_lines[:] = [i for i in self.mon_lines if i != path]
+            elif what != "record" or bare in self._FLOW_KEPT:
+                self._keep(path)  # the rest is taken and not kept, as on the switch
+            return _ok(ident, None), context
+        keyed = {
+            "exporter": ("description", "destination", "source", "dscp", "transport udp"),
+            "record": ("description",),
+            "monitor": ("description", "record", "exporter", "exporter-bucket-id"),
+            "profile": ("collect interval", "source port"),
+            "filter": ("ipv4", "ipv6"),
+            "event": ("description",),
+            "system": ("exporter-id", "profile", "filter", "event"),
+        }[what]
+        key = next((k for k in keyed if bare == k or bare.startswith(k + " ")), None)
+        if key is None:
+            return invalid, context
+        value = bare.removeprefix(key).strip()
+        if undo:
+            if key == "exporter-id" and not value:
+                return _error(ident, "% Incomplete command\n"), context
+            self.mon_lines[:] = [i for i in self.mon_lines if not i.startswith(f"{head} ; {key}")]
+            return _ok(ident, None), context
+        if not value:
+            return _error(ident, "% Incomplete command\n"), context
+        limits = {"dscp": (0, 63), "transport udp": (1, 65535), "source port": (1, 65535),
+                  "exporter-id": (0, 4095)}  # fmt: skip
+        if key in limits:
+            low, high = limits[key]
+            if not value.isdigit() or not low <= int(value) <= high:
+                return _error(ident, f"% Invalid number, range is ({low}:{high})\n"), context
+        if key == "collect interval" and value not in ("100", "1000", "2000"):
+            return _error(ident, "% Invalid parameter detected\n"), context
+        self._keep(f"{head} ; {key} {value}", replace=f"{head} ; {key}")
+        return _ok(ident, None), context
+
+    def _mon_rmon(self, allowed, match, ident, context):  # noqa: ANN001
+        undo, kind, number = bool(match.group(1)), match.group(2), int(match.group(3))
+        rest = match.group(4) or ""
+        if not allowed(
+            ("no " if undo else "") + f"rmon {kind} {number}" + (f" {rest}" if rest else "")
+        ):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if not 1 <= number <= 65535:
+            return _error(ident, "% Invalid number, range is (1:65535)\n"), context
+        if undo:
+            (self.rmon_events if kind == "event" else self.rmon_alarms).pop(number, None)
+            return _ok(ident, None), context
+        words = rest.split()
+        if kind == "event":
+            old = self.rmon_events.get(number, {"description": "", "owner": ""})
+            new = {
+                "log": False,
+                "trap": "",
+                "description": old["description"],
+                "owner": old["owner"],
+            }
+            at = 0
+            while at < len(words):
+                word = words[at]
+                if word == "log":
+                    new["log"] = True
+                elif word in ("trap", "description", "owner") and at + 1 < len(words):
+                    new[word] = words[at + 1]
+                    at += 1
+                else:
+                    return _error(ident, "% Invalid command\n"), context
+                at += 1
+            self.rmon_events[number] = new
+            return _ok(ident, None), context
+        hc = kind == "hcalarm"
+        pattern = (
+            r"(?P<oid>[\d.]+) (?P<interval>\d+) (?P<sample>absolute|delta)"
+            + (r" startupalarm (?P<startup>[123])" if hc else "")
+            + r" rising-threshold (?P<rising>\d+)(?: (?P<rising_event>\d+))?"
+            r" falling-threshold (?P<falling>\d+)(?: (?P<falling_event>\d+))?"
+            r"(?: owner (?P<owner>\S+))?"
+        )
+        found = re.fullmatch(pattern, rest)
+        if not found:
+            return _error(ident, "% Invalid command\n"), context
+        alarm = {k: v or "" for k, v in found.groupdict().items()}
+        if not 1 <= int(alarm["interval"]) <= 700000:
+            return _error(ident, "% Invalid number, range is (1:700000)\n"), context
+        if int(alarm["falling"]) >= int(alarm["rising"]):
+            return _error(
+                ident, "Falling-threshold value should be lesser than rising threshold\n"
+            ), context
+        if alarm["oid"].endswith(".10.1"):  # ifIndex 1 is no port on the switch
+            return _error(ident, "No such entry / No more entries.\n"), context
+        alarm["rising_event"] = alarm["rising_event"] or "1"
+        alarm["falling_event"] = alarm["falling_event"] or "1"
+        self.rmon_alarms[number] = {**alarm, "hc": hc}
+        return _ok(ident, None), context
+
+    def _mon_maintenance(self, allowed, bare, undo, ident, context):  # noqa: ANN001
+        path = ("no " if undo else "") + bare
+        if not allowed(path):
+            return _error(ident, "% Permission denied for the role\n"), context
+        rest = bare.removeprefix("system mode maintenance ")
+        if rest == "always-use-custom-profile":
+            self.mon_lines[:] = [i for i in self.mon_lines if i != bare]
+            if not undo:
+                self.mon_lines.append(bare)
+            return _ok(ident, None), context
+        if match := re.fullmatch(r"on-reload reset-reason (\S+)", rest):
+            if match.group(1) not in self._MAINT_REASONS:
+                return _error(ident, "% Invalid command\n"), context
+            self.mon_lines[:] = [i for i in self.mon_lines if i != bare]
+            if not undo:
+                self.mon_lines.append(bare)
+            return _ok(ident, None), context
+        match = re.fullmatch(r"(timeout|snapshot-delay|maint-delay)(?: (\d+))?", rest)
+        if not match:
+            return _error(ident, "% Invalid command\n"), context
+        word, value = match.group(1), match.group(2)
+        if not value:
+            return _error(ident, "% Incomplete command\n"), context
+        low, high = self._MAINT_RANGES[word]
+        if not undo and not low <= int(value) <= high:
+            return _error(ident, f"% Invalid number, range is ({low}:{high})\n"), context
+        self.mon_lines[:] = [
+            i for i in self.mon_lines if not i.startswith(f"system mode maintenance {word} ")
+        ]
+        if not undo:
+            self.mon_lines.append(bare)
+        return _ok(ident, None), context
 
     # ---- gRPC, NETCONF, NX-SDK, Smart Licensing and LDAP (stage E6) ----------------------
 

@@ -1,0 +1,35 @@
+
+!Command: show running-config analytics all
+!Running configuration last done at: Fri Nov 13 20:47:09 2026
+!Time: Fri Nov 13 20:49:06 2026
+
+version 9.3(16) Bios:version 07.71 
+feature analytics
+
+flow filter nxf1
+  ipv4 nxprobeacl
+
+flow timeout 10
+flow exporter nxe1
+  destination 0.0.0.0
+  dscp 0
+flow record nxr1
+  description rec
+  match ip source address
+  match ip destination address
+  match ip protocol
+  match ip tos
+  match transport source-port
+  match transport destination-port
+  collect counter bytes
+  collect timestamp sys-uptime first
+  collect timestamp sys-uptime last
+flow monitor nxmon1
+  description mon
+flow profile nxp1
+  collect interval 100
+  source port 5000
+flow event nxev1
+  description x
+flow system config
+  exporter-id 0

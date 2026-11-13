@@ -77,6 +77,10 @@ prose columns; those are a reviewer's job.
 | Read AAA (sign-in and accounting methods, the RADIUS, TACACS+ and LDAP servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time, an LDAP server's TLS, port, wait and bind account, an LDAP group's search map and certificate DN match, an LDAP search map | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
 | Read the licence features, whether the switch is registered with Cisco and its identity, or reserve licences | `app/licensing.py` (`load_licensing_page`, `build_licensing_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_licensing` |
 | Read which of gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker and OpenFlow are on and what the switch says of them, or change gRPC's port, calls at once and certificate, NETCONF's sessions and idle time and an NX-SDK service | `app/programmability.py` (`load_programmability_page`, `build_programmability_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_programmability` |
+| Read the TWAMP server (its state, port and idle time, the responder line) or change it | `app/twamp.py` (`load_twamp_page`, `build_twamp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_twamp` |
+| Read RMON (events, alarms, high-capacity alarms) or make and delete them | `app/rmon.py` (`load_rmon_page`, `build_rmon_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_rmon` |
+| Read flow analytics (the exporters, records, monitors, profiles, filters and events, the system settings) or change them | `app/analytics.py` (`load_analytics_page`, `build_analytics_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_analytics` |
+| Read the switch's mode, how maintenance mode behaves, the profiles and the snapshots, change the settings, take, delete and compare snapshots (never enter maintenance mode) | `app/maintenance.py` (`load_maintenance_page`, `build_maintenance_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_maintenance` |
 | Read the SSH host key, key pairs, trustpoints and certificates, or change them as an NXray admin: a new SSH host key (SSH off and on around it), make or delete a key pair or trustpoint, a trustpoint's key pair, enrolment and revocation check, import a PKCS#12 file, delete its certificates, paste a CA certificate (over SSH) | `app/pki.py` (`load_pki_page`, `build_pki_change`, `check_ca_certificates`), on the same parts as the protocol pages; command from `NxapiClient.configure_pki`; the paste from `switch_ssh.authenticate_ca` |
 | Read the files on bootflash, or (stored admin login, NXray admin) copy one to or from the switch with SCP, or delete one (never the image in use) | `app/switch_files.py` (`load_files_page`, `check_delete`, `check_upload`, `upload_work`); `NxapiClient.list_files`, `NxapiClient.delete_file`; copies through `switch_ssh.Session` |
 | Read the running and boot images and the last install, or (stored admin login, NXray admin) check an image's checksum, run the compatibility check and install it | `app/switch_files.py` (`load_software_page`, `checksum_work`, `impact_work`, `ready_to_install`, `install_work`), as background jobs (`app/switch_jobs.py`) |
@@ -812,6 +816,19 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_programmability_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Programmability page, with a message | `programmability_page`, `switch_save` | v0.3.0 |
 | `programmability_page` | `(request, username) -> Response` | `GET /programmability`: the interfaces, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `programmability_change` | `(request, username, form) -> Response` | `POST /programmability/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_twamp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the TWAMP server page, with a message | `twamp_page`, `switch_save` | v0.3.0 |
+| `twamp_page` | `(request, username) -> Response` | `GET /twamp`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `twamp_change` | `(request, username, form) -> Response` | `POST /twamp/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_rmon_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the RMON page, with a message | `rmon_page`, `switch_save` | v0.3.0 |
+| `rmon_page` | `(request, username) -> Response` | `GET /rmon`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `rmon_change` | `(request, username, form) -> Response` | `POST /rmon/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_analytics_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Flow analytics page, with a message | `analytics_page`, `switch_save` | v0.3.0 |
+| `analytics_page` | `(request, username) -> Response` | `GET /analytics`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `analytics_change` | `(request, username, form) -> Response` | `POST /analytics/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_maintenance_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Maintenance mode page, with a message | `maintenance_page`, `switch_save` | v0.3.0 |
+| `maintenance_page` | `(request, username) -> Response` | `GET /maintenance`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `maintenance_change` | `(request, username, form) -> Response` | `POST /maintenance/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `maintenance_needs` | `(connection, scope, setting) -> str` | Refuses taking or deleting a snapshot while the broad role was written before it allowed them ("" when it may); comparing is a show command | the Maintenance mode `ProtocolSite` | v0.3.0 |
 | `render_tunnel_encryption_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN tunnel encryption page, with a message | `tunnel_encryption_page`, `switch_save` | v0.3.0 |
 | `tunnel_encryption_page` | `(request, username) -> Response` | `GET /tunnel-encryption`: the key chains, policies, peers, links and sessions, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `tunnel_encryption_change` | `(request, username, form) -> Response` | `POST /tunnel-encryption/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
@@ -1324,7 +1341,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), a tunnel encryption key ID in hexadecimal, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), a tunnel encryption key ID in hexadecimal, an SNMP object's dotted number, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1806,6 +1823,51 @@ pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by
 | `load_programmability_page` | `(client) -> ProgrammabilityPage` | `show feature`; for each feature that is on, the configuration text and its own show command as text | `routes/programmability` | v0.3.0 |
 | `check_programmability_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Programmability `ProtocolSite` | v0.3.0 |
 | `build_programmability_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_programmability`, `routes/programmability` | v0.3.0 |
+
+## `app/twamp.py` — the TWAMP server
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_twamp_config` | `(config) -> dict` | `ip sla server twamp` with its `port` and `timer inactivity` lines, and `ip sla responder twamp`, from the configuration text as setting values by scope | `parse_twamp` | v0.3.0 |
+| `parse_standards` | `(output) -> tuple[tuple[str, ...], ...]` | The rows of `show ip sla twamp standards`: feature, organization, standard | `parse_twamp` | v0.3.0 |
+| `parse_twamp` | `(config, session=None, standards=None) -> ProtocolView` | The page: the server and the responder, the state the switch prints and the standards table | `TWAMP.parse`, `load_twamp_page` | v0.3.0 |
+| `load_twamp_page` | `(client) -> TwampPage` | `show feature`; while the feature is on, the configuration section, the session state and the standards as text | `routes/twamp` | v0.3.0 |
+| `check_twamp_place` | `(page, ident) -> None` | Nothing to check: both scopes are the whole switch | the TWAMP `ProtocolSite` | v0.3.0 |
+| `build_twamp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_twamp`, `routes/twamp` | v0.3.0 |
+
+## `app/rmon.py` — RMON events and alarms
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_events` | `(output) -> list[RmonEvent]` | The events of `show rmon events`: number, log, trap community, description, owner, last fired | `parse_rmon` | v0.3.0 |
+| `parse_alarms` | `(output) -> list[RmonAlarm]` | The alarms of `show rmon alarms` or `show rmon hcalarms`: object, interval, samples, thresholds with their events, owner, start-up alarm | `parse_rmon` | v0.3.0 |
+| `parse_rmon` | `(events, alarms, hcalarms, info) -> ProtocolView` | The page: a place for each event, alarm and high-capacity alarm, and the alarm count table | `RMON.parse`, `load_rmon_page` | v0.3.0 |
+| `load_rmon_page` | `(client) -> RmonPage` | The four `show rmon` reads, as text | `routes/rmon` | v0.3.0 |
+| `check_rmon_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the RMON `ProtocolSite` | v0.3.0 |
+| `build_rmon_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; an alarm's falling threshold must be below its rising one | `NxapiClient.configure_rmon`, `routes/rmon` | v0.3.0 |
+
+## `app/analytics.py` — flow analytics objects
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_analytics_config` | `(config) -> dict` | The flow exporters, records, monitors, profiles, filters and events and `flow system config` from `show running-config analytics all`, with each one's setting values | `parse_analytics` | v0.3.0 |
+| `parse_analytics` | `(config) -> ProtocolView` | The page: a place for each object (none, with a note, while the configuration could not be read) | `ANALYTICS.parse`, `load_analytics_page` | v0.3.0 |
+| `load_analytics_page` | `(client) -> AnalyticsPage` | `show feature` and `show vrf`; while the feature is on, the configuration text | `routes/analytics` | v0.3.0 |
+| `check_analytics_place` | `(page, ident) -> None` | Nothing to check: every identity is a name the user makes | the Flow analytics `ProtocolSite` | v0.3.0 |
+| `build_analytics_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_analytics`, `routes/analytics` | v0.3.0 |
+
+## `app/maintenance.py` — maintenance mode settings and snapshots
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_mode` | `(output) -> str` | The mode in `show system mode` ("Normal"), or "" when not read | `parse_maintenance` | v0.3.0 |
+| `parse_reasons` | `(output) -> list[str]` | The reset reasons that start the switch in maintenance mode, from `show maintenance on-reload reset-reasons` | `parse_maintenance` | v0.3.0 |
+| `parse_profiles` | `(output) -> list[tuple[str, str]]` | The profiles of `show maintenance profile` with their lines | `parse_maintenance` | v0.3.0 |
+| `parse_snapshots` | `(output) -> list[tuple[str, str, str]]` | The rows of `show snapshots`: name, time, description | `parse_maintenance` | v0.3.0 |
+| `parse_maintenance` | `(mode, timeout, maint_delay, snapshot_delay, reasons, profiles, snapshots) -> ProtocolView` | The page: the mode and the settings set, a place for each snapshot, the profiles table and the note that NXray never enters maintenance mode | `MAINTENANCE.parse`, `load_maintenance_page` | v0.3.0 |
+| `load_maintenance_page` | `(client) -> MaintenancePage` | The seven reads, as text | `routes/maintenance` | v0.3.0 |
+| `check_maintenance_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Maintenance mode `ProtocolSite` | v0.3.0 |
+| `build_maintenance_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; taking or deleting a snapshot is marked as no configuration | `NxapiClient.configure_maintenance`, `routes/maintenance` | v0.3.0 |
 
 ## `app/pki.py` — SSH and certificates: the host key, key pairs, trustpoints, certificates
 

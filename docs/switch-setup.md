@@ -1387,6 +1387,27 @@ turned on and off again; `nxsdk service-name` is refused unless an application o
 installed, and OpenFlow's switch lines are refused until the TCAM has an OpenFlow region (a
 restart), so NXray only shows OpenFlow.
 
+**TWAMP server, RMON, Flow analytics and Maintenance mode.** These pages need no rule of
+their own for their settings, so they work with the broad role and with a stored admin login,
+and are off with the limited role. TWAMP reads `show feature`, `show ip sla twamp session`,
+`show ip sla twamp standards` and `show running-config | section twamp`, and types `ip sla
+server twamp` with `port <1-65535>` and `timer inactivity <1-6000>`, and `ip sla responder
+twamp`. RMON reads `show rmon events|alarms|hcalarms|info` as text and types `rmon event
+<1-65535> [log] [trap <community>] [description <word>] [owner <word>]`, `rmon alarm` and `rmon
+hcalarm` with their `no` forms; the switch keeps an event's description and owner when it is
+entered again. Flow analytics reads `show running-config analytics all` and types the `flow
+exporter|record|monitor|profile|filter|event <name>` objects and `flow system config` with
+their lines. Maintenance mode reads `show system mode`, `show maintenance timeout|maint-delay|
+snapshot-delay|profile`, `show maintenance on-reload reset-reasons` and `show snapshots`, and
+types `system mode maintenance timeout|snapshot-delay|maint-delay|always-use-custom-profile|
+on-reload reset-reason`, and, outside configuration mode (rules 41 and 42, below),
+`snapshot create <name> <description>` and `snapshot delete <name>`; `show snapshots compare <a>
+<b> summary` needs no rule. **NXray never types `system mode maintenance` to enter or leave
+maintenance mode.** All were tried on cisco-25gb with throwaway objects, put back afterwards
+(the restart reasons make the switch start in maintenance mode after that kind of restart, so
+they were removed at once). The Nexus 9200 takes the flow analytics lines but cannot put a
+monitor on a port.
+
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show
 errdisable detect`, `show errdisable recovery` and `show interface status err-disabled` (as
@@ -1707,7 +1728,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`, VXLAN OAM's `ping nve`, `traceroute nve`, `pathtrace nve`, `clear ngoam` and `ngoam loop-detection probe\|bringup`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`, VXLAN OAM's `ping nve`, `traceroute nve`, `pathtrace nve`, `clear ngoam` and `ngoam loop-detection probe\|bringup`, Maintenance mode's `snapshot create` and `snapshot delete`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1767,6 +1788,12 @@ typed outside configuration mode). A broad role written before lacks them, and t
 refuses ping, traceroute and pathtrace, the counters' Clear buttons and loop detection's
 probe and bring-up on the VXLAN OAM page: the Switch page says so on the **Update the port
 list** card, and pressing it writes the role again with them.
+
+Maintenance mode's snapshots came last (rules 41 and 42: `snapshot create *` and `snapshot
+delete *`, typed outside configuration mode; comparing two is a `show` command and needs no
+rule). A broad role written before lacks them, and the switch refuses taking and deleting a
+snapshot on the Maintenance mode page: the Switch page says so on the **Update the port list**
+card, and pressing it writes the role again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

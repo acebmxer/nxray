@@ -2174,6 +2174,95 @@ class NxapiClient:
         change = build_licensing_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_twamp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the TWAMP server page: the server's port and idle time, or the
+        responder line.
+
+        The lines are built from the page's description and the checked values
+        (``twamp.build_twamp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.twamp import build_twamp_change
+
+        change = build_twamp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_rmon(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the RMON page: an event, an alarm or a high-capacity alarm, made or
+        deleted.
+
+        The lines are built from the page's description and the checked values
+        (``rmon.build_rmon_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.rmon import build_rmon_change
+
+        change = build_rmon_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_analytics(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Flow analytics page: a flow exporter, record, monitor, profile,
+        filter or event, or the system settings.
+
+        The lines are built from the page's description and the checked values
+        (``analytics.build_analytics_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.analytics import build_analytics_change
+
+        change = build_analytics_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_maintenance(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> str | None:
+        """One change on the Maintenance mode page: a setting of how maintenance mode runs,
+        or a snapshot (taken, deleted or compared).
+
+        The lines are built from the page's description and the checked values
+        (``maintenance.build_maintenance_change``). A snapshot's commands are typed outside
+        configuration mode, and their printed answer is returned (taking one takes a few
+        seconds, ``maintenance.SNAPSHOT_WAIT``); a setting returns None. Nothing here puts
+        the switch into or out of maintenance mode.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.maintenance import EXEC_SCOPES, SNAPSHOT_WAIT, build_maintenance_change
+
+        change = build_maintenance_change(scope, setting, action, ident, values)
+        if scope not in EXEC_SCOPES:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+            return None
+        (line,) = change.lines
+        return self._exec_text(line, max(self._target.timeout, SNAPSHOT_WAIT))
+
     def configure_ptp(
         self,
         scope: str,

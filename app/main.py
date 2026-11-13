@@ -32,6 +32,7 @@ from app.routes import (
     aaa,
     activity,
     alerts,
+    analytics,
     auth,
     callhome,
     config_page,
@@ -52,6 +53,7 @@ from app.routes import (
     licensing,
     live,
     loopbacks,
+    maintenance,
     monitor,
     mpls,
     nat,
@@ -69,6 +71,7 @@ from app.routes import (
     protocols,
     ptp,
     qos,
+    rmon,
     routing,
     scheduler,
     security,
@@ -84,6 +87,7 @@ from app.routes import (
     trm,
     tunnel_encryption,
     tunnels,
+    twamp,
     udld,
     users,
     vlans,
@@ -279,6 +283,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(evb.router)
     app.include_router(programmability.router)
     app.include_router(licensing.router)
+    app.include_router(maintenance.router)
+    app.include_router(twamp.router)
+    app.include_router(rmon.router)
+    app.include_router(analytics.router)
     app.include_router(tunnel_encryption.router)
     app.include_router(ngoam.router)
     app.include_router(copp.router)

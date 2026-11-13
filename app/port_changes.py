@@ -619,6 +619,13 @@ NGOAM_RULES = (
     "rule 39 permit command ngoam loop-detection probe *",
     "rule 40 permit command ngoam loop-detection bringup *",
 )
+# A snapshot of the switch's state is taken and deleted outside configuration mode (rules 41
+# and 42, added in BROAD_MAINTENANCE_VERSION). The commands were typed on cisco-25gb as admin;
+# the rules were not tried (the fake switch stands in).
+SNAPSHOT_RULES = (
+    "rule 41 permit command snapshot create *",
+    "rule 42 permit command snapshot delete *",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -643,6 +650,7 @@ BROAD_RULES = (
     *SNOOPING_CLEAR_RULES,
     *VMTRACKER_REFRESH_RULES,
     *NGOAM_RULES,
+    *SNAPSHOT_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

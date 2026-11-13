@@ -309,6 +309,16 @@ default: *(built)*.
     gRPC, NETCONF and NX-SDK settings, and the state of RESTCONF, Container Tracker and
     OpenFlow. *(built; needs the broad role or a stored admin login; OpenFlow shown only: the
     Nexus 9200 needs a restart to carve its TCAM)*
+    **TWAMP server**: its state, port, idle time and responder line. *(built; needs the
+    broad role or a stored admin login; the lines tried on a switch)* **RMON**: events and
+    alarms, made and deleted. *(built; needs the broad role or a stored admin login; tried on
+    a switch with throwaway events and alarms)* **Flow analytics**: the exporters, records,
+    monitors, profiles, filters and events and the system settings. *(built; needs the broad
+    role or a stored admin login; tried on a switch, where the Nexus 9200 takes the lines but
+    cannot put a monitor on a port)* **Maintenance mode**: the switch's mode, how maintenance
+    mode behaves, the profiles, and snapshots to take, compare and delete. *(built; needs the
+    broad role or a stored admin login, and Update the port list for a broad role written
+    before; NXray never puts the switch into or out of maintenance mode)*
     **SSH and certificates**: the SSH host key and a new one, key pairs,
     trustpoints, a CA certificate pasted or a PKCS#12 file imported. *(built;
     needs the broad role or a stored admin login, and an NXray admin; a new SSH

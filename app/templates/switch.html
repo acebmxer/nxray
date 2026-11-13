@@ -470,6 +470,13 @@
     to write the role again with them.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_snapshots %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed taking and deleting a
+    snapshot, so the switch refuses them on the Maintenance mode page. Press Update the
+    port list to write the role again with them.
+  </p>
+  {% endif %}
   {% if connection.broad_role_without_loopbacks %}
   <p class="warning">
     NXray's broad role on the switch was written before it named the loopbacks,

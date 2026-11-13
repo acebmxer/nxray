@@ -138,6 +138,7 @@ KINDS = (
     "account",  # a user name another system signs NXray's switch in with: letters, digits
     # and . _ @ -, up to 64, such as administrator@vsphere.local (a VM Tracker connection)
     "hexkey",  # an even number of hexadecimal digits, 2 to 64: a tunnel encryption key's ID
+    "oid",  # an SNMP object's number, dotted: 1.3.6.1.2.1.2.2.1.10.436234240 (an RMON alarm)
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -808,6 +809,13 @@ def check_value(spec: Field, raw: str) -> str:
                 "a letter or digit, such as administrator@vsphere.local"
             )
         return value
+    if kind == "oid":
+        if not _OID.fullmatch(value) or len(value) > 127:
+            raise ValueError(
+                f"{spec.label} is an SNMP object's number of at least two parts joined by dots, "
+                "such as 1.3.6.1.2.1.2.2.1.10.436234240"
+            )
+        return value
     if kind == "hexkey":
         if not re.fullmatch(r"(?:[0-9a-fA-F]{2}){1,32}", value):
             raise ValueError(
@@ -859,6 +867,8 @@ _TELPATH = re.compile(r"^[\x21\x23-\x7e][\x21-\x7e]*$")
 _URLPATH = re.compile(r"^[A-Za-z0-9._~%/-]{1,128}$")
 # A user name for a server the switch signs in to (vCenter).
 _ACCOUNT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$")
+# An SNMP object's number: digits in two or more parts joined by dots, no leading dot.
+_OID = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
 
 # ---- templates -------------------------------------------------------------------
 

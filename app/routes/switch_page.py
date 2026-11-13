@@ -35,6 +35,7 @@ from app.port_changes import (
 )
 from app.role_upgrade import SETUP_LOCK
 from app.routes.aaa import render_aaa_page
+from app.routes.analytics import render_analytics_page
 from app.routes.callhome import render_callhome_page
 from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
@@ -50,6 +51,7 @@ from app.routes.ip_sla import render_ip_sla_page
 from app.routes.itd import render_itd_page
 from app.routes.licensing import render_licensing_page
 from app.routes.loopbacks import render_loopbacks_page
+from app.routes.maintenance import render_maintenance_page
 from app.routes.monitor import render_monitor_page
 from app.routes.mpls import render_mpls_page
 from app.routes.nat import render_nat_page
@@ -66,6 +68,7 @@ from app.routes.programmability import render_programmability_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
 from app.routes.ptp import render_ptp_page
 from app.routes.qos import render_qos_page
+from app.routes.rmon import render_rmon_page
 from app.routes.routing import render_routing_page
 from app.routes.scheduler import render_scheduler_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
@@ -77,6 +80,7 @@ from app.routes.traffic import render_traffic_page
 from app.routes.trm import render_trm_page
 from app.routes.tunnel_encryption import render_tunnel_encryption_page
 from app.routes.tunnels import render_tunnels_page
+from app.routes.twamp import render_twamp_page
 from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
 from app.routes.vmtracker import render_vmtracker_page
@@ -895,6 +899,8 @@ def switch_enable_changes(
             done += " The role now also allows syncing a VM Tracker connection now."
         if connection.broad_role_without_ngoam_tools and new_mode == ROLE_BROAD:
             done += " The role now also allows VXLAN OAM's ping, traceroute and pathtrace."
+        if connection.broad_role_without_snapshots and new_mode == ROLE_BROAD:
+            done += " The role now also allows taking and deleting a snapshot."
     else:
         parts = []
         if connection.role_version < 2:
@@ -1008,7 +1014,7 @@ def switch_save(
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
     ``mpls``, ``nat``, ``track``, ``epbr``, ``igmp-snooping``, ``nbm``, ``trm``, ``flexlink``,
     ``vmtracker``, ``evb``, ``tunnel-encryption``, ``ngoam``, ``programmability``,
-    ``licensing``,
+    ``licensing``, ``twamp``, ``rmon``, ``analytics``, ``maintenance``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1120,6 +1126,14 @@ def switch_save(
             return render_programmability_page(request, username, error=error, notice=notice)
         if back == "licensing":
             return render_licensing_page(request, username, error=error, notice=notice)
+        if back == "twamp":
+            return render_twamp_page(request, username, error=error, notice=notice)
+        if back == "rmon":
+            return render_rmon_page(request, username, error=error, notice=notice)
+        if back == "analytics":
+            return render_analytics_page(request, username, error=error, notice=notice)
+        if back == "maintenance":
+            return render_maintenance_page(request, username, error=error, notice=notice)
         if back == "tunnel-encryption":
             return render_tunnel_encryption_page(request, username, error=error, notice=notice)
         if back == "ngoam":

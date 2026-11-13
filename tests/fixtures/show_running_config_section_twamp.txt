@@ -1,0 +1,5 @@
+feature sla twamp-server
+ip sla responder twamp
+ip sla server twamp
+  port 65535
+  timer inactivity 6000
