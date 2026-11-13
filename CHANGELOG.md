@@ -73,16 +73,23 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   multicast or unicast transmission, PTP VLAN, message intervals and unicast masters and
   slaves. Each change shows its lines and asks first. It works with the broad role or a
   stored admin login. The lines and show output were tried on a switch.
-- **Manage static MPLS from the web interface (#78).** The new **MPLS** page (under
-  Configure) shows whether the MPLS feature set and static MPLS are on, the label range,
-  the interfaces with MPLS forwarding, the static bindings and the labels in use. It turns
-  MPLS on step by step (install the feature set, turn it on, turn on static MPLS), sets
-  the label range, turns MPLS forwarding on or off on an interface, and adds and deletes
-  bindings that swap a label, take it off, or have a backup path. Each change shows its
-  lines and asks first. It works with the broad role or a stored admin login. The switch
-  refuses static MPLS while VXLAN is on; the page says so. MPLS Layer 3 VPNs and LDP are
-  not offered: Cisco lists neither for this switch. Built from Cisco's guide and not yet
-  tried on a switch past the feature set.
+- **Manage MPLS from the web interface: static labels and Layer 3 VPNs (#78).** The new
+  **MPLS** page (under Configure) shows whether the MPLS feature set, static MPLS, segment
+  routing and Layer 3 VPNs are on, the label range, the interfaces with MPLS forwarding,
+  the static bindings, the segment routing block and prefix SIDs, each VPN VRF's route
+  distinguisher and route-targets, the labels in use, and whether the switch has the VPN
+  Fabric licence Cisco asks for. It turns MPLS on step by step (install the feature set,
+  turn it on, then static MPLS, or segment routing and Layer 3 VPNs), sets the label range,
+  turns MPLS forwarding on or off on an interface, adds and deletes bindings that swap a
+  label, take it off, or have a backup path, starts and removes segment routing, sets its
+  global block, adds and deletes prefix SIDs, and sets a VRF's route distinguisher and the
+  route-targets it imports and exports. The **BGP** page gains the VPN address families
+  (vpnv4 and vpnv6), labelled unicast and the VPN families for neighbors, and MPLS labels
+  for every IPv4 route. Each change shows its lines and asks first. It works with the broad
+  role or a stored admin login. The switch refuses static MPLS, segment routing and Layer 3
+  VPNs while VXLAN is on; the page says so. Layer 3 VPNs over LDP are not offered: Cisco
+  lists them only for other Nexus models, and this switch has no LDP. Built from Cisco's
+  guide and not yet tried on a switch past the feature set.
 - **Manage ITD from the web interface (#80).** The new **ITD** page (under Configure)
   lists the device groups with their nodes and health probe, the services with their
   state, virtual address and how they spread traffic, the nodes in service and, when

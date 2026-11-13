@@ -94,7 +94,8 @@ def _nve_field() -> Field:
     return _int("nve", "NVE interface", 1, NVE_MAX, hint="nve1: the switch has one")
 
 
-def _target_field(label: str = "Value") -> Field:
+def target_field(label: str = "Value") -> Field:
+    """A route distinguisher or route-target value; shared with the MPLS page's VPN VRFs."""
     return Field(
         "target",
         label,
@@ -105,7 +106,8 @@ def _target_field(label: str = "Value") -> Field:
     )
 
 
-def _check_target(values: dict[str, str]) -> None:
+def check_target(values: dict[str, str]) -> None:
+    """Refuse a ``target`` that is not auto, ASN:number or address:number."""
     value = values.get("target", "")
     if not _TARGET.fullmatch(value):
         raise ValueError("the value is auto, ASN:number (65000:10010) or address:number")
@@ -345,8 +347,8 @@ _EVPN = Scope(
             line="rd {target}",
             no_line="no rd {target}",
             group="Route distinguisher and route-targets",
-            fields=(_target_field(),),
-            check=_check_target,
+            fields=(target_field(),),
+            check=check_target,
             help="Marks this VNI's routes as its own. auto works it out.",
         ),
         Setting(
@@ -355,8 +357,8 @@ _EVPN = Scope(
             line="route-target import {target}",
             no_line="no route-target import {target}",
             group="Route distinguisher and route-targets",
-            fields=(_target_field(),),
-            check=_check_target,
+            fields=(target_field(),),
+            check=check_target,
             help="Routes carrying this target are taken into the VNI.",
         ),
         Setting(
@@ -365,8 +367,8 @@ _EVPN = Scope(
             line="route-target export {target}",
             no_line="no route-target export {target}",
             group="Route distinguisher and route-targets",
-            fields=(_target_field(),),
-            check=_check_target,
+            fields=(target_field(),),
+            check=check_target,
             help="Routes sent from this VNI carry this target.",
         ),
     ),
@@ -417,8 +419,8 @@ _VRF_AF = Scope(
             label="Route-target imported through EVPN",
             line="route-target import {target} evpn",
             no_line="no route-target import {target} evpn",
-            fields=(_target_field(),),
-            check=_check_target,
+            fields=(target_field(),),
+            check=check_target,
             help="Routes carrying this target are taken into the VRF.",
         ),
         Setting(
@@ -426,8 +428,8 @@ _VRF_AF = Scope(
             label="Route-target exported through EVPN",
             line="route-target export {target} evpn",
             no_line="no route-target export {target} evpn",
-            fields=(_target_field(),),
-            check=_check_target,
+            fields=(target_field(),),
+            check=check_target,
             help="Routes sent from the VRF carry this target.",
         ),
     ),

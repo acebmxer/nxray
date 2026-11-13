@@ -1,4 +1,5 @@
-"""The MPLS page (#78, static MPLS), end to end against the fake switch, and its parser."""
+"""The MPLS page (#78: static MPLS, and Layer 3 VPNs over segment routing), end to end
+against the fake switch, and its parser."""
 
 from __future__ import annotations
 
@@ -14,9 +15,14 @@ from app.config import Settings
 from app.mpls import (
     COMMANDS,
     CONFIG_COMMAND,
+    NO_LICENCE,
     PAGE_COMMANDS,
     SET_COMMAND,
+    MplsPage,
+    VpnVrf,
     build_mpls_change,
+    check_mpls_place,
+    licence_installed,
     parse_feature_set,
     parse_mpls,
     parse_mpls_config,
@@ -370,3 +376,239 @@ def test_save_config_comes_back_here(logged_in: TestClient, enabled: FakeSwitch)
     saved = logged_in.post("/switch/save", data={"csrf": _csrf(logged_in), "back": "mpls"})
     assert saved.status_code == 200
     assert "Install the MPLS feature set" in _text(saved.text) and enabled.saved
+
+
+# ---- Layer 3 VPNs over segment routing --------------------------------------------------
+
+# Shaped after Cisco's NX-OS 9.3 Label Switching Configuration Guide ("Configuring Segment
+# Routing", its show running-config segment-routing and the stitching example): never
+# recorded, as the switch refuses segment routing while VXLAN is on.
+SR_CONFIG = """
+version 9.3(16)
+install feature-set mpls
+feature-set mpls
+feature mpls segment-routing
+feature mpls l3vpn
+vrf context management
+  ip route 0.0.0.0/0 192.0.2.254
+vrf context Customer1
+  rd auto
+  address-family ipv4 unicast
+    route-target import 100:100
+    route-target export 100:100
+    route-target import 100:100 evpn
+    route-target export 100:100 evpn
+  address-family ipv6 unicast
+    route-target import 100:200
+vrf context lab
+interface Ethernet1/13
+  no switchport
+  mpls ip forwarding
+segment-routing
+  mpls
+    global-block 17000 24999
+    connected-prefix-sid-map
+      address-family ipv4
+        2.1.1.1/32 absolute 100100
+        1.1.1.1/32 index 10
+"""
+
+
+def test_the_segment_routing_and_vpn_configuration() -> None:
+    parsed = parse_mpls_config(SR_CONFIG)
+    assert parsed.segment_routing and parsed.global_block == "17000 24999"
+    assert parsed.prefix_sids == (
+        ("2.1.1.1/32", "absolute", "100100"),
+        ("1.1.1.1/32", "index", "10"),
+    )
+    assert parsed.interfaces == ("Ethernet1/13",)
+    # The EVPN route-targets are the VXLAN page's; management is never a VPN.
+    assert parsed.vrfs == (
+        VpnVrf(
+            "Customer1",
+            "auto",
+            (("ipv4", ("100:100",), ("100:100",)), ("ipv6", ("100:200",), ())),
+        ),
+        VpnVrf("lab"),
+    )
+    # NX-OS before 9.3(1) wrote "segment-routing mpls" on one line.
+    old = parse_mpls_config("segment-routing mpls\n  global-block 16000 20000\n")
+    assert old.segment_routing and old.global_block == "16000 20000"
+    assert not parse_mpls_config(CONFIG).segment_routing
+
+
+def test_the_segment_routing_page_view() -> None:
+    view = parse_mpls(None, SR_CONFIG, "enabled", False, sr_on=True, l3vpn_on=True, licence=False)
+    (switch,) = view.of("switch")
+    assert {"segment_routing", "l3vpn"} <= set(switch.values) and "static" not in switch.values
+    facts = dict(switch.facts)
+    assert facts["Segment routing"] == "on" and facts["VPN Fabric licence"] == "not installed"
+    (sr,) = view.of("sr")
+    assert sr.values == {"global_block": {"low": "17000", "high": "24999"}}
+    assert [i.ident for i in view.of("prefix_sid")] == [
+        {"prefix": "2.1.1.1/32", "kind": "absolute", "sid": "100100"},
+        {"prefix": "1.1.1.1/32", "kind": "index", "sid": "10"},
+    ]
+    customer, lab = view.of("vrf")
+    assert customer.values == {"rd": {"target": "auto"}} and lab.values == {}
+    v4, v6 = view.of("vrf_af")
+    assert v4.values == {"rt_import": {"target": "100:100"}, "rt_export": {"target": "100:100"}}
+    assert v6.values == {"rt_import": {"target": "100:200"}}
+    assert NO_LICENCE in view.notes
+    # With Layer 3 VPNs off the VRFs are not offered; with the licence there, no note.
+    quiet = parse_mpls(None, SR_CONFIG, "enabled", False, sr_on=True, licence=True)
+    assert quiet.of("vrf") == [] and NO_LICENCE not in quiet.notes
+
+
+def test_the_licence() -> None:
+    def usage(installed: str) -> dict:
+        row = {"feature_name": "VPN_FABRIC", "lic_installed": installed}
+        return {"TABLE_show_lic_usage": {"ROW_show_lic_usage": [row]}}
+
+    assert licence_installed(usage("No")) is False
+    assert licence_installed(usage("Yes")) is True
+    assert licence_installed({}) is None
+
+
+def test_the_segment_routing_and_vpn_lines() -> None:
+    def lines(scope: str, setting: str, action: str, ident=None, **values: str):
+        return build_mpls_change(scope, setting, action, ident or {}, values).lines
+
+    assert lines("switch", "segment_routing", "set") == ("feature mpls segment-routing",)
+    assert lines("switch", "l3vpn", "remove") == ("no feature mpls l3vpn",)
+    assert lines("sr", "", "create") == ("segment-routing", "mpls")
+    assert lines("sr", "", "delete") == ("no segment-routing",)
+    assert lines("sr", "global_block", "set", low="16000", high="471804") == (
+        "segment-routing",
+        "mpls",
+        "global-block 16000 471804",
+    )
+    sid = {"prefix": "192.0.2.1/32", "kind": "index", "sid": "10"}
+    enter = ("segment-routing", "mpls", "connected-prefix-sid-map", "address-family ipv4")
+    assert lines("prefix_sid", "", "create", sid) == (*enter, "192.0.2.1/32 index 10")
+    assert lines("prefix_sid", "", "delete", sid) == (*enter, "no 192.0.2.1/32 index 10")
+    tenant = {"vrf": "tenant"}
+    assert lines("vrf", "rd", "set", tenant, target="65000:1") == (
+        "vrf context tenant",
+        "rd 65000:1",
+    )
+    assert lines("vrf", "rd", "remove", tenant, target="65000:1")[-1] == "no rd 65000:1"
+    assert lines("vrf_af", "rt_export", "set", {**tenant, "af": "ipv6"}, target="65000:1") == (
+        "vrf context tenant",
+        "address-family ipv6 unicast",
+        "route-target export 65000:1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("scope", "setting", "ident", "values"),
+    [
+        ("sr", "global_block", {}, {"low": "15999", "high": "20000"}),
+        ("sr", "global_block", {}, {"low": "20000", "high": "20000"}),
+        ("prefix_sid", "", {"prefix": "192.0.2.1", "kind": "index", "sid": "1"}, {}),
+        ("prefix_sid", "", {"prefix": "2001:db8::1/128", "kind": "index", "sid": "1"}, {}),
+        ("prefix_sid", "", {"prefix": "192.0.2.1/32", "kind": "label", "sid": "1"}, {}),
+        ("vrf_af", "rt_import", {"vrf": "tenant", "af": "ipv4"}, {"target": "auto"}),
+        ("vrf_af", "rt_import", {"vrf": "tenant", "af": "ipv4"}, {"target": "x:y"}),
+        ("vrf", "rd", {"vrf": "default"}, {"target": "auto"}),
+    ],
+)  # fmt: skip
+def test_wrong_vpn_values_are_refused(
+    scope: str, setting: str, ident: dict[str, str], values: dict[str, str]
+) -> None:
+    action = "create" if scope == "prefix_sid" else "set"
+    with pytest.raises(ValueError):
+        build_mpls_change(scope, setting, action, ident, values)
+
+
+def test_places_are_refused_until_their_feature_is_on() -> None:
+    from app.mpls import MPLS
+    from app.protocols import ProtocolView
+
+    off = MplsPage(MPLS, ProtocolView(), ("Ethernet1/13",), vrfs=("tenant",))
+    sid = {"prefix": "192.0.2.1/32", "kind": "index", "sid": "10"}
+    for ident, wanted in (
+        ({"interface": "Ethernet1/13"}, "static MPLS and segment routing are off"),
+        (sid, "segment routing is off"),
+        ({"vrf": "tenant"}, "Layer 3 VPNs are off"),
+    ):
+        with pytest.raises(ValueError, match=wanted):
+            check_mpls_place(off, ident)
+    on = MplsPage(
+        MPLS, ProtocolView(), ("Ethernet1/13",), sr_on=True, l3vpn_on=True, vrfs=("tenant",)
+    )
+    check_mpls_place(on, {"interface": "Ethernet1/13"})
+    check_mpls_place(on, sid)
+    check_mpls_place(on, {"vrf": "tenant", "af": "ipv4"})
+    for ident, wanted in (
+        ({**sid, "sid": "471789"}, "an index is 0 to 471788"),
+        ({**sid, "kind": "absolute", "sid": "15999"}, "an absolute label is 16000"),
+        ({"vrf": "other"}, "no VRF other"),
+        ({"vrf": "default"}, "no VRF default"),
+    ):
+        with pytest.raises(ValueError, match=wanted):
+            check_mpls_place(on, ident)
+
+
+def test_layer3_vpn_over_segment_routing_end_to_end(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.vrfs = ["tenant"]
+    for setting in ("install", "feature_set", "segment_routing", "l3vpn"):
+        done = _change(logged_in, scope="switch", setting=setting, action="set")
+        assert done.status_code == 200, _text(done.text)
+    assert enabled.feature_state["segment-routing"] and enabled.feature_state["l3vpn"]
+    # Static MPLS and segment routing are never on together.
+    refused = _change(logged_in, scope="switch", setting="static", action="set")
+    assert refused.status_code == 400 and "cannot be enabled at the same time" in _text(
+        refused.text
+    )
+    steps = (
+        {"scope": "sr", "action": "create"},
+        {"scope": "sr", "setting": "global_block", "action": "set", "v_low": "16000",
+         "v_high": "30000"},
+        {"scope": "prefix_sid", "action": "create", "id_prefix": "192.0.2.1/32",
+         "id_kind": "index", "id_sid": "10"},
+        {"scope": "interface", "setting": "forwarding", "action": "set",
+         "id_interface": "Vlan250"},
+        {"scope": "vrf", "setting": "rd", "action": "set", "id_vrf": "tenant",
+         "v_target": "auto"},
+        {"scope": "vrf_af", "setting": "rt_import", "action": "set", "id_vrf": "tenant",
+         "id_af": "ipv4", "v_target": "65000:100"},
+    )  # fmt: skip
+    for step in steps:
+        done = _change(logged_in, **step)
+        assert done.status_code == 200, _text(done.text)
+    assert _config_requests(enabled)[-6:] == [
+        ["segment-routing", "mpls"],
+        ["segment-routing", "mpls", "global-block 16000 30000"],
+        [
+            "segment-routing",
+            "mpls",
+            "connected-prefix-sid-map",
+            "address-family ipv4",
+            "192.0.2.1/32 index 10",
+        ],
+        ["interface Vlan250", "mpls ip forwarding"],
+        ["vrf context tenant", "rd auto"],
+        ["vrf context tenant", "address-family ipv4 unicast", "route-target import 65000:100"],
+    ]
+    text = _text(done.text)
+    # Read back from the running configuration, with the licence the switch lacks.
+    assert "16000 to 30000" in text and "192.0.2.1/32: index 10" in text
+    assert "VRF tenant, IPv4 unicast" in text and "65000:100" in text
+    assert "VPN Fabric licence not installed" in text and NO_LICENCE in text
+    # Turning segment routing off takes its block and MPLS forwarding with it.
+    off = _change(logged_in, scope="switch", setting="segment_routing", action="remove")
+    assert off.status_code == 200, _text(off.text)
+    assert "192.0.2.1/32: index 10" not in _text(off.text)
+
+
+def test_segment_routing_is_refused_while_vxlan_is_on(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.mpls_set = "enabled"
+    enabled.feature_state["vnseg_vlan"] = True
+    refused = _change(logged_in, scope="switch", setting="segment_routing", action="set")
+    assert refused.status_code == 400 and "vn-segment-vlan-based" in _text(refused.text)
+    assert "segment routing and Layer 3 VPNs only while both are off" in _text(refused.text)

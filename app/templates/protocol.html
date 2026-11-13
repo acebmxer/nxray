@@ -178,7 +178,7 @@
   </div>
 
   {% if can_change %}
-  {% if scope.create %}
+  {% if scope.create and (scope.ident or not places) %}
   <form method="post" action="{{ site.url }}/change" class="stack form-narrow form-after">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="scope" value="{{ scope.key }}">

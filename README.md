@@ -34,7 +34,7 @@ delete port-channels with their LACP options, make VLAN interfaces with IPv4
 and IPv6 addresses, make loopbacks with their addresses, make GRE and IP-in-IP tunnels, make VRFs and move interfaces between them, add static routes, run OSPF,
 OSPFv3, BGP, EIGRP, RIP, IS-IS, HSRP, VRRP, PIM, MSDP and BFD with their
 route-maps, prefix-lists and key chains, send chosen traffic to its own next hop
-(policy-based routing), spread traffic over servers with ITD, set up static MPLS labels,
+(policy-based routing), spread traffic over servers with ITD, set up static MPLS labels and Layer 3 VPNs over segment routing,
 set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
@@ -182,8 +182,10 @@ default: *(built)*.
     with nodes and health probes, services that spread traffic over them, the
     counters. *(built; needs the broad role or a stored admin login)* **MPLS**:
     static labels (the feature set, label range, MPLS on interfaces, bindings that
-    swap or pop a label). *(built, not yet tried on a switch; needs the broad role
-    or a stored admin login)*
+    swap or pop a label) and Layer 3 VPNs over segment routing (the global block,
+    prefix SIDs, each VRF's route distinguisher and route-targets, with the VPN
+    address families on the BGP page). *(built, not yet tried on a switch; needs the
+    broad role or a stored admin login)*
 16. **Spanning tree.** *(built)* **vPC**: domain, peer keepalive, peer-link and
     vPC port-channels, with the pair's health. *(built)*
     **VXLAN and EVPN**: NVE interface, VNIs, EVPN route-targets, with the

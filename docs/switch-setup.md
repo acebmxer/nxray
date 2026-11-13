@@ -1156,8 +1156,21 @@ configuration`, `address-family ipv4|ipv6 unicast`, `local-label <label> prefix 
 with `next-hop auto-resolve out-label <n>`, `next-hop <address> out-label implicit-null`
 or `next-hop backup <interface> <address> out-label <n>`. Built from Cisco's NX-OS 9.3
 Label Switching Configuration Guide; on cisco-25gb only the feature-set lines were tried.
-MPLS Layer 3 VPNs and LDP are not offered: Cisco's guide lists L3VPN only for Nexus
-3600-R and 9500 -R line cards, and the 92160YC-X has no LDP.
+
+For Layer 3 VPNs over segment routing it types `feature mpls segment-routing` and `feature
+mpls l3vpn` (each with its `no` form; static MPLS and segment routing are never on
+together, and the switch refuses both while VXLAN is on), `segment-routing` then `mpls`
+(and `no segment-routing`), `global-block <first> <last>` inside it,
+`connected-prefix-sid-map`, `address-family ipv4` and `<prefix> index|absolute <n>` (and
+its `no` form), and in `vrf context <name>` the lines `rd <value>` and, inside
+`address-family ipv4|ipv6 unicast`, `route-target import|export <value>`. It also reads
+`show license usage`, since Cisco's guide asks for the VPN Fabric licence (cisco-25gb
+lists it as not installed). The BGP side is on the BGP page, inside `router bgp`, which
+the role already allows: `address-family vpnv4|vpnv6 unicast` with `allocate-label
+option-b`, `allocate-label all` in `address-family ipv4 unicast`, and a neighbor's
+`address-family ipv4 labeled-unicast|vpnv4 unicast|vpnv6 unicast`. None of these lines was
+tried on a switch. Layer 3 VPNs over LDP are not offered: Cisco's guide lists them only for
+Nexus 3600-R and 9500 -R line cards, and the 92160YC-X has no LDP.
 
 **Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
 broad role and with a stored admin login, and is off with the limited role. It reads `show

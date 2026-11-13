@@ -264,6 +264,7 @@ _PROTOCOL_MODES = (
     (re.compile(r"itd device-group \S+"), "itd"),
     (re.compile(r"itd (?!device-group |statistics )\S+"), "itd"),
     (re.compile(r"mpls static configuration"), "mpls_static"),
+    (re.compile(r"segment-routing"), "segment-routing"),
 )
 _PROTOCOL_GLOBAL = (
     # After the entries' mode: "route-map X pbr-statistics" and "no route-map X".
@@ -293,12 +294,13 @@ _PROTOCOL_INTERFACE = (
     (re.compile(r"ip igmp "), "pim"),
     (re.compile(r"bfd(?: |$)"), "bfd"),
     (re.compile(r"(?:ip|ipv6) policy route-map "), "pbr"),
-    (re.compile(r"mpls ip forwarding$"), "mpls_static"),
+    # Static MPLS or segment routing (see _feature_on).
+    (re.compile(r"mpls ip forwarding$"), "mpls"),
 )
 # Lines inside a protocol's mode that open a deeper mode.
 _PROTOCOL_SUBMODES = re.compile(
     r"(?:vrf \S+|address-family .+|neighbor \S+(?: remote-as \S+)?|key \d+|template .+"
-    r"|node ip \S+|local-label \d+ prefix \S+)"
+    r"|node ip \S+|local-label \d+ prefix \S+|mpls|connected-prefix-sid-map)"
 )
 # Interface lines that open a group's mode (HSRP, VRRP, VRRPv3).
 _GROUP_MODES = re.compile(r"(?:hsrp \d+(?: ipv6)?|vrrp \d+|vrrpv3 \d+ address-family ipv[46])")
@@ -513,6 +515,8 @@ class FakeSwitch:
     vxlan_lines: list[str] = field(default_factory=list)
     # The MPLS feature set: "uninstalled" (as on cisco-25gb), "installed" or "enabled".
     mpls_set: str = "uninstalled"
+    # show license usage: whether VPN_FABRIC is installed (not on cisco-25gb).
+    vpn_fabric: bool = False
     # ITD services whose counters are on (``itd statistics <service>``).
     itd_counting: set[str] = field(default_factory=set)
     # PTP lines and telemetry parts (see the module notes).
@@ -649,6 +653,8 @@ class FakeSwitch:
         return False
 
     def _feature_on(self, name: str | None) -> bool:
+        if name == "mpls":  # what MPLS on an interface needs: either way of handing out labels
+            return self._feature_on("mpls_static") or self._feature_on("segment-routing")
         return name is None or self.feature_state.get(name, False)
 
     def _record(self, path: str, kept: list[str] | None = None) -> None:
@@ -1127,6 +1133,7 @@ class FakeSwitch:
             and context
             and (
                 re.fullmatch(r"vni \d+", bare)
+                or re.fullmatch(r"rd \S+", bare)
                 or re.fullmatch(r"address-family ipv[46] unicast", cmd)
             )
         ):
@@ -1307,7 +1314,7 @@ class FakeSwitch:
         out += self.ptp_config()
         out += self.telemetry_config()
         out += _nested(
-            [p for p in self.protocol_lines if p.startswith(("itd ", "mpls "))]
+            [p for p in self.protocol_lines if p.startswith(("itd ", "mpls ", "segment-routing"))]
             + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
         )
         return "\n".join(out) + "\n" + self.vxlan_config()
@@ -1475,16 +1482,20 @@ class FakeSwitch:
     def _mpls_set(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
     ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
-        """``install feature-set mpls``, ``feature-set mpls``, ``feature mpls static`` and
-        their ``no`` forms, or None. As on cisco-25gb, static MPLS is refused while
-        vn-segment-vlan-based is on; the order follows Cisco's guide."""
-        if cmd not in (
+        """``install feature-set mpls``, ``feature-set mpls``, ``feature mpls static``,
+        ``feature mpls segment-routing``, ``feature mpls l3vpn`` and their ``no`` forms, or
+        None. As on cisco-25gb, the MPLS features are refused while vn-segment-vlan-based is
+        on; the order and static MPLS and segment routing not being on together follow
+        Cisco's guide (its wording of that refusal is not known)."""
+        features = {
+            "feature mpls static": "mpls_static",
+            "feature mpls segment-routing": "segment-routing",
+            "feature mpls l3vpn": "l3vpn",
+        }
+        if cmd.removeprefix("no ") not in (
             "install feature-set mpls",
-            "no install feature-set mpls",
             "feature-set mpls",
-            "no feature-set mpls",
-            "feature mpls static",
-            "no feature mpls static",
+            *features,
         ):
             return None
         if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
@@ -1503,22 +1514,34 @@ class FakeSwitch:
             else:
                 self.mpls_set = "enabled"
         elif cmd == "no feature-set mpls":
-            if self._feature_on("mpls_static"):
+            if any(self._feature_on(name) for name in features.values()):
                 refused = "Disable the mpls features first\n"
             elif self.mpls_set == "enabled":
                 self.mpls_set = "installed"
-        elif cmd == "feature mpls static":
+        elif not cmd.startswith("no "):
+            name = features[cmd]
+            other = {"mpls_static": "segment-routing", "segment-routing": "mpls_static"}.get(name)
             if self.mpls_set != "enabled":
                 refused = "% Invalid command at '^' marker.\n"
             elif self._feature_on("vnseg_vlan"):
                 refused = "Please disable the vnseg_vlan / vn-segment-vlan-based feature first\n"
+            elif other and self._feature_on(other):
+                refused = "Static MPLS and segment routing cannot be enabled at the same time\n"
             else:
-                self.feature_state["mpls_static"] = True
+                self.feature_state[name] = True
         else:
-            self.feature_state["mpls_static"] = False
-            self.protocol_lines[:] = [
-                p for p in self.protocol_lines if not p.startswith("mpls ") and "mpls ip" not in p
-            ]
+            name = features[cmd[3:]]
+            self.feature_state[name] = False
+            if name == "mpls_static":
+                self.protocol_lines[:] = [
+                    p for p in self.protocol_lines if not p.startswith("mpls ")
+                ]
+            elif name == "segment-routing":
+                self.protocol_lines[:] = [
+                    p for p in self.protocol_lines if not p.startswith("segment-routing")
+                ]
+            if not self._feature_on("mpls"):
+                self.protocol_lines[:] = [p for p in self.protocol_lines if "mpls ip" not in p]
         if refused:
             return _error(ident, refused), context
         return _ok(ident, None), context
@@ -2557,6 +2580,29 @@ class FakeSwitch:
     def vrf_of(self, name: str) -> str:
         return self.port_state.get(name, {}).get("vrf", "default")
 
+    def licence_usage(self) -> dict[str, Any]:
+        """``show license usage``, with the rows and keys cisco-25gb gave (2026-11-12)."""
+
+        def row(name: str, installed: bool) -> dict[str, str]:
+            return {
+                "feature_name": name,
+                "lic_installed": "Yes" if installed else "No",
+                "count": "  -",
+                "status": "Unused",
+                "expiry_date": "never" if installed else "",
+                "comments": "-",
+            }
+
+        return {
+            "TABLE_show_lic_usage": {
+                "ROW_show_lic_usage": [
+                    row("N9K_LIC_1G", False),
+                    row("VPN_FABRIC", self.vpn_fabric),
+                    row("LAN_ENTERPRISE_SERVICES_PKG", True),
+                ]
+            }
+        }
+
     def vrf_table(self) -> dict[str, Any]:
         """``show vrf``, shaped as recorded on cisco-25gb."""
         names = ["default", "management", *self.vrfs]
@@ -3134,6 +3180,8 @@ class FakeSwitch:
             return _ok(ident, self.storm_control(name))
         if cmd == "show vrf":
             return _ok(ident, self.vrf_table())
+        if cmd == "show license usage":
+            return _ok(ident, self.licence_usage())
         if cmd == "show vrf interface":
             return _ok(ident, self.vrf_interfaces())
         if cmd == "show ip static-route vrf all":

@@ -81,7 +81,7 @@ prose columns; those are a reviewer's job.
 | Run slow switch work after the page has answered, one job of each kind per switch | `app/switch_jobs.py` (`Jobs.start`, `Jobs.get`) |
 | Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
 | Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
-| Read static MPLS (the feature set, label range, interfaces with MPLS, bindings, labels in use) or change it: install and turn on MPLS and static MPLS, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
+| Read MPLS (the feature set, label range, interfaces with MPLS, bindings, segment routing and prefix SIDs, VPN VRFs, labels in use, the VPN Fabric licence) or change it: install and turn on MPLS, static MPLS, segment routing and Layer 3 VPNs, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop, the global block, a prefix SID, a VRF's route distinguisher and route-targets | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -1295,7 +1295,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_bgp` | `(bodies: list[dict]) -> ProtocolView` | The BGP page from `show bgp process`, `show bgp all summary vrf all`, `show bgp vrf all all neighbors`, `show bgp sessions vrf all` and `show bgp ipv6 unicast vrf all`: process, VRF parts, address families, neighbors and their address families with the settings the output tells; neighbor, session and IPv6 BGP tables | `BGP.parse` | v0.1.0 |
+| `parse_bgp` | `(bodies: list[dict]) -> ProtocolView` | The BGP page from `show bgp process`, `show bgp all summary vrf all`, `show bgp vrf all all neighbors`, `show bgp sessions vrf all` and `show bgp ipv6 unicast vrf all`: process, VRF parts, address families, VPN address families (vpnv4, vpnv6), neighbors and their address families (labelled unicast and VPN included) with the settings the output tells; neighbor, session and IPv6 BGP tables | `BGP.parse` | v0.1.0 |
 
 ## `app/protocols_igp.py` — EIGRP, RIP and IS-IS pages
 
@@ -1535,15 +1535,16 @@ would take them out silently.
 | `check_itd_place` | `(page, ident) -> None` | Nothing: a new device group, node or service name makes one | the ITD `ProtocolSite` | v0.2.1 |
 | `build_itd_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the ITD page | `NxapiClient.configure_itd`, `routes/itd` | v0.2.1 |
 
-## `app/mpls.py` — static MPLS: the feature set, label range, interfaces and bindings
+## `app/mpls.py` — MPLS: the feature set, label range, interfaces, bindings, segment routing and Layer 3 VPNs
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `parse_feature_set` | `(output) -> str` | The MPLS feature set's state in `show feature-set` (enabled, disabled, installed, uninstalled), or "" | `load_mpls_page` | v0.2.1 |
-| `parse_mpls_config` | `(config) -> MplsConfig` | The label range, the interfaces with `mpls ip forwarding` and the static bindings (both the nested and the one-line form) in `show running-config` | `parse_mpls` | v0.2.1 |
-| `parse_mpls` | `(switching, config, feature_set, static_on) -> ProtocolView` | The page: the switch-wide lines, interfaces and bindings as places, the labels in use as a table | `MPLS.parse`, `load_mpls_page` | v0.2.1 |
-| `load_mpls_page` | `(client) -> MplsPage` | One request for the features and layer 3 interfaces, the feature set as text; while static MPLS is on, `show mpls switching` and the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
-| `check_mpls_place` | `(page, ident) -> None` | Refuses interface and binding changes while static MPLS is off, and an interface the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
+| `parse_mpls_config` | `(config) -> MplsConfig` | The label range, the interfaces with `mpls ip forwarding`, the static bindings (both the nested and the one-line form), the segment routing block (also the pre-9.3(1) `segment-routing mpls` line) with its global block and prefix SIDs, and each VRF's route distinguisher and non-EVPN route-targets in `show running-config` | `parse_mpls` | v0.2.1 |
+| `licence_installed` | `(body) -> bool \| None` | Whether `show license usage` lists the VPN Fabric licence as installed; None when it is not listed | `load_mpls_page` | v0.2.1 |
+| `parse_mpls` | `(switching, config, feature_set, static_on, *, sr_on=False, l3vpn_on=False, licence=None) -> ProtocolView` | The page: the switch-wide lines, interfaces, bindings, segment routing, prefix SIDs and (with Layer 3 VPNs on) VPN VRFs and their route-targets as places, the labels in use as a table, a note when the licence is missing | `MPLS.parse`, `load_mpls_page` | v0.2.1 |
+| `load_mpls_page` | `(client) -> MplsPage` | One request for the features, layer 3 interfaces, VRFs and licences, the feature set as text; while static MPLS or segment routing is on, `show mpls switching`; while either or Layer 3 VPNs are on, the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
+| `check_mpls_place` | `(page, ident) -> None` | Refuses bindings while static MPLS is off, interfaces while static MPLS and segment routing are off, prefix SIDs while segment routing is off (and an index or absolute label out of range), VPN VRFs while Layer 3 VPNs are off, and an interface or VRF the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
 | `build_mpls_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the MPLS page | `NxapiClient.configure_mpls`, `routes/mpls` | v0.2.1 |
 
 ## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
@@ -1620,6 +1621,8 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 | `parse_vxlan` | `(bodies, config=None) -> ProtocolView` | The page from `show nve interface`, `show nve peers`, `show nve vni` and the configuration (None when the role may not read it): the NVE interface, VLAN to VNI lines, member VNIs, EVPN blocks and VRF lines as places, the peers and VNIs as tables | `VXLAN.parse`, `load_vxlan_page` | v0.2.1 |
 | `load_vxlan_page` | `(client) -> VxlanPage` | One request for the features, VLANs and VRFs, then the `show nve` commands and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vxlan` | v0.2.1 |
 | `build_vxlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VXLAN page | `NxapiClient.configure_vxlan`, `routes/vxlan` | v0.2.1 |
+| `target_field` | `(label="Value") -> Field` | A route distinguisher or route-target value field | the VXLAN EVPN and VRF settings, `mpls` VPN VRFs | v0.2.1 |
+| `check_target` | `(values) -> None` | Refuses a `target` that is not auto, ASN:number or address:number | the VXLAN EVPN and VRF settings, `mpls` VPN VRFs | v0.2.1 |
 
 ## `app/switch_admin.py` — Switch admin: name, clock and NTP, DNS, logging, SNMP, banner, and the log
 
