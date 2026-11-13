@@ -83,6 +83,27 @@ class Port:
         return sum(self.counters.get(name, 0) for name in ERROR_COUNTERS)
 
     @property
+    def error_kinds(self) -> list[tuple[str, int]]:
+        """What ``errors`` is made of, as (kind, count) for each kind that is not zero.
+
+        The switch's input errors already include CRC errors, runts and giants, so those
+        are named first and only what is left is "Other input errors": the counts add up
+        to ``errors``.
+        """
+        count = self.counters.get
+        crc, runts, giants = count("eth_crc", 0), count("eth_runts", 0), count("eth_giants", 0)
+        kinds = [
+            ("CRC errors", crc),
+            ("Runts", runts),
+            ("Giants", giants),
+            ("Other input errors", max(count("eth_inerr", 0) - crc - runts - giants, 0)),
+            ("Input discards", count("eth_indiscard", 0)),
+            ("Output errors", count("eth_outerr", 0)),
+            ("Output discards", count("eth_outdiscard", 0)),
+        ]
+        return [(kind, number) for kind, number in kinds if number]
+
+    @property
     def state_label(self) -> str:
         if self.up:
             return "Up"
@@ -113,6 +134,9 @@ COUNTER_LABELS = {
 
 # Summed into Port.errors. CRC errors are already part of input errors.
 ERROR_COUNTERS = ("eth_inerr", "eth_outerr", "eth_indiscard", "eth_outdiscard")
+
+# The counters ``Port.error_kinds`` names, as written on the Counters card of a port's page.
+ERROR_KEYS = frozenset({*ERROR_COUNTERS, "eth_crc", "eth_runts", "eth_giants"})
 
 
 def parse_transceivers(body: dict[str, Any]) -> dict[str, Transceiver]:

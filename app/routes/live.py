@@ -31,7 +31,7 @@ from app.live import (
 from app.neighbors import NeighborView, filter_macs, try_load_neighbors
 from app.nxapi import SwitchTarget
 from app.port_labels import get_labels
-from app.ports import COUNTER_LABELS, load_ports
+from app.ports import COUNTER_LABELS, ERROR_KEYS, load_ports
 from app.routes.neighbors import QUERY_MAX
 from app.routes.ports import FILTERS, ports_link, ports_summary
 from app.switch import health_problems
@@ -229,6 +229,7 @@ def live_port(
                 "port": port,
                 "stored_label": stored_label,
                 "counter_labels": COUNTER_LABELS,
+                "error_keys": ERROR_KEYS,
                 "neighbors": neighbors,
                 "devices": devices,
                 "port_traffic": device_traffic([port], neighbors) if neighbors else {},

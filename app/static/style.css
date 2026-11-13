@@ -884,6 +884,9 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bar-in { fill: var(--sp-25g); }
 .bar-out { fill: var(--sp-10g); }
 .errs { color: var(--crit); font-weight: 600; }
+.err-kinds { display: block; font-family: var(--font); font-size: 10.5px; color: var(--text-3); font-weight: 400; }
+.err-kind-line { display: block; white-space: nowrap; }
+.kv dt.err-kind { padding-left: 10px; }
 
 .bulk-bar {
   position: sticky;

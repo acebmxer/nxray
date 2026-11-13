@@ -97,6 +97,34 @@ def test_descriptions_are_escaped(logged_in: TestClient, switch: FakeSwitch) -> 
     assert "<storage>" not in html
 
 
+def test_the_kind_of_error_is_shown_beside_the_total(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    """The list says "41 CRC errors" and "32 Output errors" (the number once, a kind
+    that is alone not repeated with it), the side panel lists each kind with its count, and a
+    port's own page picks the non-zero error counters out (#99)."""
+    interfaces = load_fixture("show_interface")
+    for row in interfaces["TABLE_interface"]["ROW_interface"]:
+        if row["interface"] == "Ethernet1/3":
+            row.update({"state": "up", "eth_inerr": "41", "eth_crc": "41"})
+        if row["interface"] == "Ethernet1/4":
+            row.update({"state": "up", "eth_outerr": "32"})
+    switch.bodies["show interface"] = interfaces
+    html = logged_in.get("/ports").text
+    rows = {
+        name: _text(re.search(rf"<tr[^>]*>(?:(?!</tr>).)*{name}\b.*?</tr>", html, re.S).group(0))
+        for name in ("Ethernet1/3", "Ethernet1/4")
+    }
+    third, fourth = rows["Ethernet1/3"], rows["Ethernet1/4"]
+    assert "41 CRC errors" in third and "CRC errors 41" not in third
+    assert "32 Output errors" in fourth and "Output errors 32" not in fourth
+    panel = _text(logged_in.get("/ports?port=Ethernet1/3").text)
+    assert "Errors 41 CRC errors 41" in panel
+    page = logged_in.get("/ports/detail", params={"name": "Ethernet1/4"}).text
+    assert re.search(r'Output errors</td><td class="num"><span class="errs">32</span>', page)
+    assert re.search(r'Runts</td><td class="num">0</td>', page)
+
+
 def test_port_detail(logged_in: TestClient, switch: FakeSwitch) -> None:
     _one_port_up(switch)
     page = logged_in.get("/ports/detail", params={"name": "Ethernet1/3"})

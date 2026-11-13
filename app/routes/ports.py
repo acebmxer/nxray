@@ -71,7 +71,7 @@ from app.port_settings import (
     try_load_port_settings,
 )
 from app.port_settings import settings_form as make_settings_form
-from app.ports import COUNTER_LABELS, Port, load_ports
+from app.ports import COUNTER_LABELS, ERROR_KEYS, Port, load_ports
 from app.preferences import ui_preferences
 from app.security import csrf_token
 from app.switch_choice import selected_switch_id
@@ -530,6 +530,7 @@ def _render_port(
             "ports": ports,
             "name": name,
             "counter_labels": COUNTER_LABELS,
+            "error_keys": ERROR_KEYS,
             "csrf_token": csrf_token(request),
             "error": error,
             "notice": notice,

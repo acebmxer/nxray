@@ -482,6 +482,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Ports page names the kind of error, not just the total (#99).** The Errors column and a
+  port's side panel showed one number (41, 32) and the kinds were only on the port's own page,
+  among sixteen counters. Each now says what the number is made of ("CRC errors 41", "Output
+  errors 32", also runts, giants, other input errors and discards), and on the port's own page
+  the error counters that are not zero are picked out in red.
 - **Restart the switch no longer stops at "Permission denied for the role" (#96).** When the
   switch refuses to let NXray's own account restart it (NX-OS lets only the network-admin
   role do that), the page now asks for the switch admin login and restarts with it over SSH,
