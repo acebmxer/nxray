@@ -941,9 +941,11 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
    440px wide, plus a gap), so the front panel and the table keep one size and
    place whether it is open or shut, and the room stays empty while it is shut.
    Where the screen is too narrow for that, the panel is laid over the page
-   instead and nothing moves. "main" matches the page rule (main.wrap), which
+   instead and nothing moves. The table needs about 1100px beside the menu, so
+   the room is kept from 1840px: below that the table would be squeezed and
+   scroll sideways (#100). "main" matches the page rule (main.wrap), which
    would otherwise win and take the room away (#91). */
-@media (min-width: 1700px) {
+@media (min-width: 1840px) {
   main.wrap-ports { padding-right: 476px; }
 }
 /* A browser without :has() shows the form as a card under the table. */

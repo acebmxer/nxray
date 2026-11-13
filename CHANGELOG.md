@@ -482,6 +482,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **The Ports table no longer scrolls sideways in a window 1700 to 1800 pixels wide (#100).**
+  The room kept free for the side panel left the table too narrow there, so it was squeezed
+  and had a scroll bar. The room is now kept from 1840 pixels; in a narrower window the panel
+  opens over the right of the page, as it already did below 1700.
 - **The Ports page names the kind of error, not just the total (#99).** The Errors column and a
   port's side panel showed one number (41, 32) and the kinds were only on the port's own page,
   among sixteen counters. Each now says what the number is made of ("CRC errors 41", "Output
