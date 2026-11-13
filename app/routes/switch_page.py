@@ -40,6 +40,7 @@ from app.routes.config_page import render_config_page
 from app.routes.copp import render_copp_page
 from app.routes.dot1x import render_dot1x_page
 from app.routes.eem import render_eem_page
+from app.routes.epbr import render_epbr_page
 from app.routes.errdisable import render_errdisable_page
 from app.routes.features import render_features_page
 from app.routes.ip_sla import render_ip_sla_page
@@ -876,6 +877,8 @@ def switch_enable_changes(
             done += " The role now also allows ITD's counters."
         if connection.broad_role_without_nat_clear and new_mode == ROLE_BROAD:
             done += " The role now also allows clearing NAT's translations and counters."
+        if connection.broad_role_without_epbr_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing ePBR's counters."
     else:
         parts = []
         if connection.role_version < 2:
@@ -987,7 +990,7 @@ def switch_save(
     ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
-    ``mpls``, ``nat``, ``track``,
+    ``mpls``, ``nat``, ``track``, ``epbr``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1077,6 +1080,8 @@ def switch_save(
             return render_itd_page(request, username, error=error, notice=notice)
         if back == "mpls":
             return render_mpls_page(request, username, error=error, notice=notice)
+        if back == "epbr":
+            return render_epbr_page(request, username, error=error, notice=notice)
         if back == "nat":
             return render_nat_page(request, username, error=error, notice=notice)
         if back == "track":

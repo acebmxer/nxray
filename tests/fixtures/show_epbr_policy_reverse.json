@@ -1,0 +1,60 @@
+{
+ "TABLE_pmap": {
+  "ROW_pmap": {
+   "pname": "web-chain",
+   "intf_name": "Vlan251",
+   "TABLE_pmap_match": {
+    "ROW_pmap_match": {
+     "match_type": 1,
+     "match_stmt": "web",
+     "TABLE_pmap_s_chain": {
+      "ROW_pmap_s_chain": [
+       {
+        "seq": 30,
+        "sname": "firewall",
+        "action": 0,
+        "TABLE_pmap_s_chain_entry": {
+         "ROW_pmap_s_chain_entry": [
+          {
+           "ip_type": "IP",
+           "svc_ep": "198.51.100.20",
+           "track_id": 250,
+           "probe_state": "DOWN"
+          },
+          {
+           "ip_type": "IP",
+           "svc_ep": "198.51.100.23",
+           "track_id": 2,
+           "probe_state": "DOWN"
+          }
+         ]
+        }
+       },
+       {
+        "seq": 10,
+        "sname": "firewall",
+        "action": 0,
+        "TABLE_pmap_s_chain_entry": {
+         "ROW_pmap_s_chain_entry": [
+          {
+           "ip_type": "IP",
+           "svc_ep": "198.51.100.20",
+           "track_id": 250,
+           "probe_state": "DOWN"
+          },
+          {
+           "ip_type": "IP",
+           "svc_ep": "198.51.100.23",
+           "track_id": 2,
+           "probe_state": "DOWN"
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}

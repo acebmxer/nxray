@@ -39,6 +39,7 @@ from app.routes import (
     dashboard,
     dot1x,
     eem,
+    epbr,
     errdisable,
     features,
     health,
@@ -256,6 +257,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(switch_files.router)
     app.include_router(pbr.router)
     app.include_router(itd.router)
+    app.include_router(epbr.router)
     app.include_router(mpls.router)
     app.include_router(nat.router)
     app.include_router(track.router)

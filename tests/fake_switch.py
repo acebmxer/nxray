@@ -81,6 +81,21 @@ cannot hold itself, an object a list uses cannot be deleted, ``vrf member`` is f
 objects only, and ``delay up``/``delay down`` add up. ``show track`` is built from them,
 every object down unless ``track_up`` names it.
 
+ePBR lives in ``epbr_services`` (name -> {"lines", "probe", "endpoints"}, an end-point by
+(family, address) -> {"interface", "probe", "reverse"}), ``epbr_policies`` (name ->
+{"statistics", "matches"}, a match by (family, ACL) -> {"load_balance", "steps"}, a step by
+number -> (service, fail action)) and ``epbr_applied`` (interface -> its ``epbr ... policy``
+lines), only while ``feature epbr`` is on. As on cisco-25gb: a service an applied policy
+uses, and an applied policy, refuse every line typed as usual and are changed inside ``epbr
+session`` ... ``commit`` (``abort`` undoes), which refuses objects not in use and a service's
+probe, service interface and VRF and a policy's ``statistics``; a session left open by a
+refused line shows as ``epbr session`` in ``show running-config``; one probe per place, a
+new one replacing it; IPv4 and IPv6 end-points, and matches, cannot mix; an end-point typed
+without its interface loses it; ``load-balance`` buckets are a power of 2 from 2 to 256;
+an interface takes one policy per family. ``clear epbr statistics policy <name>`` is typed
+outside configuration mode and kept in ``epbr_cleared``; the ``show epbr`` commands answer
+from ``bodies``.
+
 AAA lives in ``aaa_lines`` (the top-level lines as typed, "radius-server host 192.0.2.11 key
 0 k") and ``aaa_groups`` (("radius", "g") -> the lines inside); TACACS+ lines are refused
 while ``feature_state["tacacs"]`` is off, and only network-admin may type any of them (the
@@ -131,6 +146,7 @@ checkpoints. Their shapes follow Cisco's guides, never recorded on cisco-25gb.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import ipaddress
 import json
@@ -546,6 +562,13 @@ class FakeSwitch:
     nat_cleared: list[str] = field(default_factory=list)
     tracks: dict[int, list[str]] = field(default_factory=dict)
     track_up: set[int] = field(default_factory=set)
+    # ePBR (see the module notes).
+    epbr_services: dict[str, dict[str, Any]] = field(default_factory=dict)
+    epbr_policies: dict[str, dict[str, Any]] = field(default_factory=dict)
+    epbr_applied: dict[str, list[str]] = field(default_factory=dict)
+    epbr_session_open: bool = False
+    epbr_cleared: list[str] = field(default_factory=list)
+    _epbr_saved: Any = None
     # AAA, key pairs, trustpoints, the SSH key and bootflash (see the module notes).
     aaa_lines: list[str] = field(default_factory=list)
     aaa_groups: dict[tuple[str, str], list[str]] = field(default_factory=dict)
@@ -1337,6 +1360,7 @@ class FakeSwitch:
         out += self.telemetry_config()
         out += self.nat_config()
         out += self.track_config()
+        out += self.epbr_config()
         out += _nested(
             [p for p in self.protocol_lines if p.startswith(("itd ", "mpls ", "segment-routing"))]
             + [p for p in self.protocol_lines if p.endswith(" ; mpls ip forwarding")]
@@ -1862,6 +1886,352 @@ class FakeSwitch:
         out = ["feature nat", *self.nat_lines]
         for interface, sides in self.nat_sides.items():
             out += [f"interface {interface}", *(f"  ip nat {side}" for side in sorted(sides))]
+        return out
+
+    # ---- ePBR ------------------------------------------------------------------------
+
+    _EPBR_IN_USE = (
+        "Error: Service entry is associated with one or more policy entries. Please "
+        "dissociate and try again. \n.\n"
+    )
+    _EPBR_APPLIED = (
+        "Error: Policy entry is associated with an interface,please dissociate and try again. \n.\n"
+    )
+    _EPBR_PROBE = re.compile(
+        r"probe (icmp|tcp \d+|udp \d+(?: control enable)?|http get \S+|dns host \S+|track \d+)"
+        r"((?: (?:frequency|timeout|retry-down-count|retry-up-count|source-interface) \S+)*)"
+    )
+
+    def epbr_services_in_use(self) -> set[str]:
+        """The services a policy applied to an interface names."""
+        applied = {line.split()[3] for lines in self.epbr_applied.values() for line in lines}
+        return {
+            step[0]
+            for name in applied
+            if name in self.epbr_policies
+            for match in self.epbr_policies[name]["matches"].values()
+            for step in match["steps"].values()
+        }
+
+    def _epbr_applied_policies(self) -> set[str]:
+        return {line.split()[3] for lines in self.epbr_applied.values() for line in lines}
+
+    def _epbr_probe(self, ident: int, line: str, place: dict[str, Any], track: bool) -> Any:
+        """Set or remove a ``probe`` line of a service, end-point or reverse end-point."""
+        if line.startswith("no "):
+            words = line.split()
+            if len(words) < 3 or (words[2] in ("tcp", "udp", "track") and len(words) < 4):
+                return _error(ident, "% Incomplete command\n")
+            place["probe"] = ""
+            return _ok(ident, None)
+        if re.match(r"probe (?:tcp|udp) port ", line):
+            return _error(ident, "% Invalid number\n")
+        match = self._EPBR_PROBE.fullmatch(line)
+        if not match or (match.group(1).startswith("track") and not track):
+            return _error(ident, "% Invalid command\n")
+        options = dict(zip(match.group(2).split()[::2], match.group(2).split()[1::2], strict=True))
+        for key in ("retry-down-count", "retry-up-count"):
+            if key in options and not 1 <= int(options[key]) <= 5:
+                return _error(ident, "% Invalid number, range is (1:5)\n")
+        if match.group(1).startswith("http") and int(options.get("frequency", "60")) < 60:
+            return _error(
+                ident, "Error: Frequency is less than minimum supported value for the protocol\n"
+            )
+        if match.group(1).startswith("track") and int(line.split()[2]) not in self.tracks:
+            return _error(ident, "ERROR:Track object does not exist\n")
+        place["probe"] = line
+        return _ok(ident, None)
+
+    def _epbr(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """An ePBR line, its session's ``commit`` or ``abort``, an interface's ``epbr ...
+        policy`` line, or ``clear epbr statistics ...``; None when ``cmd`` is not one."""
+        kind = context[0] if context else ""
+        session = kind == "epbr-session" or kind.startswith("s-epbr")
+        base = kind.removeprefix("s-")
+        line = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        denied = _error(ident, "% Permission denied for the role\n")
+        invalid = _error(ident, "% Invalid command\n")
+        if cmd.startswith("clear epbr"):
+            if not self._feature_on("epbr"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            if not re.fullmatch(r"clear epbr statistics policy \S+", cmd):
+                return invalid, context
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return denied, context
+            self.epbr_cleared.append(cmd)
+            return _ok(ident, None), context
+        if kind == "interface" and line.startswith("epbr "):
+            interface = context[1] if context else ""
+            if not self._feature_on("epbr"):
+                return _error(ident, "% Invalid command at '^' marker.\n"), context
+            path = f"conf t ; interface {interface} ; {cmd}"
+            if not (is_admin or self._role_matches(user, path, interface)):
+                return denied, context
+            match = re.fullmatch(r"epbr (ip|ipv6) policy (\S+)( reverse)?", line)
+            if not match:
+                return _error(ident, "% Incomplete command\n"), context
+            if interface.lower().startswith("loopback"):
+                return _error(
+                    ident, "Error:Invalid interface to for EPBR policy associations.\n"
+                ), context
+            lines = self.epbr_applied.setdefault(interface, [])
+            if undo:
+                if line in lines:
+                    lines.remove(line)
+                if not lines:
+                    self.epbr_applied.pop(interface)
+                return _ok(ident, None), context
+            other = next(
+                (
+                    kept.split()[3]
+                    for kept in lines
+                    if kept.split()[1] == match.group(1) and kept.split()[3] != match.group(2)
+                ),
+                None,
+            )
+            if other is not None:
+                return _error(
+                    ident,
+                    f"Error: please remove current policy {other} before applying a new one\n",
+                ), context
+            if line not in lines:
+                lines.append(line)
+            return _ok(ident, None), context
+        epbr_context = kind in ("", "epbr-session") or base.startswith("epbr-")
+        if not epbr_context or not (
+            cmd == "epbr session"
+            or line.startswith("epbr ")
+            or base.startswith("epbr-")
+            or (session and cmd in ("commit", "abort"))
+        ):
+            return None
+        if not self._feature_on("epbr"):
+            return _error(ident, "% Invalid command at '^' marker.\n"), context
+        if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+            return denied, context
+        if cmd == "epbr session":
+            self._epbr_saved = copy.deepcopy((self.epbr_services, self.epbr_policies))
+            self.epbr_session_open = True
+            return _ok(ident, None), ("epbr-session", "")
+        if session and cmd in ("commit", "abort"):
+            if cmd == "abort" and self._epbr_saved is not None:
+                self.epbr_services, self.epbr_policies = self._epbr_saved
+            self._epbr_saved, self.epbr_session_open = None, False
+            return _ok(ident, None), None
+        prefix = "s-" if session else ""
+        if top := re.fullmatch(r"epbr (service|policy) (\S+)", line):
+            what, name = top.groups()
+            store = self.epbr_services if what == "service" else self.epbr_policies
+            if undo:
+                if session:
+                    return invalid, context
+                if what == "service" and any(
+                    step[0] == name
+                    for policy in self.epbr_policies.values()
+                    for match in policy["matches"].values()
+                    for step in match["steps"].values()
+                ):
+                    return _error(ident, self._EPBR_IN_USE), context
+                if what == "policy" and name in self._epbr_applied_policies():
+                    return _error(
+                        ident,
+                        "PolicyMap is associated with an interface,please dissociate and try "
+                        "again. \n.\n",
+                    ), context
+                store.pop(name, None)
+                return _ok(ident, None), None
+            if session:
+                if what == "service" and name not in self.epbr_services_in_use():
+                    return _error(
+                        ident,
+                        "Error: Services need to be actively in use to be modified using EPBR "
+                        "sessions.\n",
+                    ), context
+                if what == "policy" and name not in self._epbr_applied_policies():
+                    return _error(
+                        ident,
+                        "Error: EPBR policies need to be active on interfaces to be modified "
+                        "inside sessions.\n",
+                    ), context
+            elif what == "service":
+                store.setdefault(name, {"lines": [], "probe": "", "endpoints": {}})
+            else:
+                store.setdefault(name, {"statistics": False, "matches": {}})
+            return _ok(ident, None), (f"{prefix}epbr-{what}", name)
+        name, *rest = (context[1] if context else "").split("\t")
+        if base in ("epbr-service", "epbr-ep", "epbr-rev"):
+            service = self.epbr_services[name]
+            if not session and name in self.epbr_services_in_use():
+                return _error(ident, self._EPBR_IN_USE), context
+            endpoint = (
+                service["endpoints"].get((rest[0], rest[1])) if base != "epbr-service" else None
+            )
+            if line.startswith("probe ") or line == "probe":
+                if base == "epbr-service" and session:
+                    return invalid, context
+                place = service if endpoint is None else endpoint
+                if base == "epbr-rev" and endpoint is not None:
+                    place = endpoint["reverse"]
+                return self._epbr_probe(ident, cmd, place, base != "epbr-service"), context
+            if base == "epbr-service":
+                if found := re.fullmatch(
+                    r"service-end-point (ip|ipv6) (\S+)(?: interface (\S+))?", line
+                ):
+                    family, address, port = found.groups()
+                    if undo:
+                        service["endpoints"].pop((family, address), None)
+                        return _ok(ident, None), context
+                    if port and port.lower().startswith("loopback"):
+                        return _error(ident, "Invalid interface format\n"), context
+                    others = {f for f, _ in service["endpoints"]}
+                    if others and family not in others:
+                        mine, theirs = ("IPv6", "IPv4") if family == "ipv6" else ("IPv4", "IPv6")
+                        return _error(
+                            ident,
+                            f"Error: {mine} endpoints cannot be added to an {theirs} EPBR "
+                            "service.\n",
+                        ), context
+                    kept = service["endpoints"].setdefault(
+                        (family, address), {"interface": "", "probe": "", "reverse": None}
+                    )
+                    kept["interface"] = port or ""
+                    return _ok(ident, None), (f"{prefix}epbr-ep", f"{name}\t{family}\t{address}")
+                if re.fullmatch(r"(?:service-interface|vrf)(?: \S+)?", line):
+                    if session:
+                        return invalid, context
+                    if len(line.split()) < 2:
+                        return _error(ident, "% Incomplete command\n"), context
+                    word = line.split()[0]
+                    service["lines"] = [x for x in service["lines"] if x.split()[0] != word]
+                    if not undo:
+                        service["lines"].append(line)
+                    return _ok(ident, None), context
+                return invalid, context
+            if endpoint is None:
+                return invalid, context
+            if found := re.fullmatch(r"reverse (ip|ipv6) (\S+) interface (\S+)", line):
+                if undo:
+                    endpoint["reverse"] = None
+                    return _ok(ident, None), context
+                family, address, port = found.groups()
+                if endpoint["reverse"] is None or endpoint["reverse"]["address"] != address:
+                    endpoint["reverse"] = {"family": family, "address": address, "probe": ""}
+                endpoint["reverse"]["interface"] = port
+                return _ok(ident, None), (f"{prefix}epbr-rev", context[1] if context else "")
+            return invalid, context
+        if base in ("epbr-policy", "epbr-match"):
+            policy = self.epbr_policies[name]
+            if not session and name in self._epbr_applied_policies():
+                return _error(ident, self._EPBR_APPLIED), context
+            if base == "epbr-policy":
+                if line == "statistics":
+                    if session:
+                        return invalid, context
+                    policy["statistics"] = not undo
+                    return _ok(ident, None), context
+                if found := re.fullmatch(r"match (ip|ipv6) address (\S+)", line):
+                    family, acl = found.groups()
+                    if undo:
+                        policy["matches"].pop((family, acl), None)
+                        return _ok(ident, None), context
+                    others = {f for f, _ in policy["matches"]}
+                    if others and family not in others:
+                        mine, theirs = ("IPv6", "IPv4") if family == "ipv6" else ("IPv4", "IPv6")
+                        return _error(
+                            ident,
+                            f"Error: Configuration of an {mine} match entry for a policy "
+                            f"containing {theirs} match entries is not supported.\n",
+                        ), context
+                    policy["matches"].setdefault((family, acl), {"load_balance": "", "steps": {}})
+                    return _ok(ident, None), (f"{prefix}epbr-match", f"{name}\t{family}\t{acl}")
+                return invalid, context
+            match = policy["matches"][(rest[0], rest[1])]
+            if line.startswith("load-balance"):
+                found = re.fullmatch(
+                    r"load-balance(?: buckets (\d+))?(?: method (src-ip|dst-ip))?", line
+                )
+                if not found or line == "load-balance":
+                    return _error(ident, "% Incomplete command\n"), context
+                if undo:
+                    match["load_balance"] = ""
+                    return _ok(ident, None), context
+                if found.group(1):
+                    buckets = int(found.group(1))
+                    if not 2 <= buckets <= 256:
+                        return _error(ident, "% Invalid number, range is (2:256)\n"), context
+                    if buckets & (buckets - 1):
+                        return _error(
+                            ident, "Error: Bucket number should be powers of 2.\n"
+                        ), context
+                match["load_balance"] = line
+                return _ok(ident, None), context
+            if undo and re.fullmatch(r"\d+(?: .*)?", line):
+                match["steps"].pop(int(line.split()[0]), None)
+                return _ok(ident, None), context
+            if found := re.fullmatch(
+                r"(\d+) set service (\S+)(?: fail-action (bypass|drop|forward))?", line
+            ):
+                number, service_name, fail = found.groups()
+                wanted = self.epbr_services.get(service_name)
+                if (
+                    rest[0] == "ipv6"
+                    and wanted is not None
+                    and any(f == "ip" for f, _ in wanted["endpoints"])
+                ):
+                    return _error(
+                        ident,
+                        "Error: Configuration of a match sequence with an IPv4 service for an "
+                        "IPv6 match entry is not supported.\n",
+                    ), context
+                match["steps"][int(number)] = (service_name, fail or "")
+                return _ok(ident, None), context
+            return invalid, context
+        return None
+
+    def epbr_config(self) -> list[str]:
+        """The ePBR lines of ``show running-config``, indented as cisco-25gb prints them."""
+        if not self._feature_on("epbr"):
+            return []
+        out = ["feature epbr"]
+        for interface, lines in self.epbr_applied.items():
+            out += [f"interface {interface}", *(f"  {line} " for line in lines)]
+        for name, service in self.epbr_services.items():
+            out.append(f"epbr service {name}")
+            out += [f"  {line}" for line in service["lines"]]
+            if service["probe"]:
+                out.append(f"   {service['probe']} ")
+            for (family, address), endpoint in service["endpoints"].items():
+                port = f" interface {endpoint['interface']}" if endpoint["interface"] else ""
+                out.append(f"  service-end-point {family} {address}{port}")
+                if endpoint["probe"]:
+                    out.append(f"     {endpoint['probe']} ")
+                reverse = endpoint["reverse"]
+                if reverse is not None:
+                    out.append(
+                        f"    reverse {reverse['family']} {reverse['address']} interface "
+                        f"{reverse['interface']}"
+                    )
+                    if reverse["probe"]:
+                        out.append(f"       {reverse['probe']} ")
+        for name, policy in self.epbr_policies.items():
+            out.append(f"epbr policy {name}")
+            if policy["statistics"]:
+                out.append("  statistics")
+            for (family, acl), match in policy["matches"].items():
+                out.append(f"  match {family} address {acl}")
+                if match["load_balance"]:
+                    out.append(f"    {match['load_balance']} ")
+                for number in sorted(match["steps"]):
+                    service_name, fail = match["steps"][number]
+                    out.append(
+                        f"    {number} set service {service_name}"
+                        + (f" fail-action {fail}" if fail else "")
+                    )
+        if self.epbr_session_open:
+            out.append("epbr session")
         return out
 
     _TRACK_KINDS = (
@@ -2400,6 +2770,8 @@ class FakeSwitch:
             return nat_reply
         if track_reply := self._track(user, is_admin, cmd, ident, context):
             return track_reply
+        if epbr_reply := self._epbr(user, is_admin, cmd, ident, context):
+            return epbr_reply
         if protocol_reply := self._protocol(user, is_admin, cmd, ident, context):
             return protocol_reply
         if stp_reply := self._spanning_tree(user, is_admin, cmd, ident, context):
@@ -3440,6 +3812,19 @@ class FakeSwitch:
         return body
 
     def _show(self, cmd: str, ident: int) -> dict[str, Any]:
+        if cmd.startswith("show epbr "):
+            # As on cisco-25gb: "% Invalid command" while epbr is off; a policy's
+            # statistics are refused until it counts.
+            if not self._feature_on("epbr"):
+                return _error(ident, "% Invalid command\n")
+            if match := re.fullmatch(r"show epbr statistics policy (\S+)(?: reverse)?", cmd):
+                policy = self.epbr_policies.get(match.group(1))
+                if policy is None or not policy["statistics"]:
+                    return _error(
+                        ident,
+                        "ERROR: Cannot get pbr statistics data, please enable EPBR statistics\n",
+                    )
+            return _ok(ident, self.bodies.get(cmd))
         if cmd.startswith("show ip nat"):
             # As on cisco-25gb: "% Invalid command" while nat is off.
             if not self._feature_on("nat"):

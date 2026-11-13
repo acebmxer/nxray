@@ -131,6 +131,8 @@ KINDS = (
     # with a double quote: sys/intf or eq(ethpmPhysIf.operSt,"down")
     "ifname",  # any interface the switch has, by name, only to read its state: a front
     # port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
+    "urlpath",  # the page an HTTP health probe asks for: index.html or /status/health;
+    # letters, digits and . _ ~ % / -, up to 128 characters
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -779,6 +781,13 @@ def check_value(spec: Field, raw: str) -> str:
                 f"{spec.label} is up to {longest} characters without spaces, such as sys/intf"
             )
         return value
+    if kind == "urlpath":
+        if not _URLPATH.fullmatch(value):
+            raise ValueError(
+                f"{spec.label} is a page such as index.html or /status: up to 128 letters, "
+                "digits and . _ ~ % / -"
+            )
+        return value
     if kind == "schedstart":
         return _sched_start(value, spec.label)
     if kind == "schedrepeat":
@@ -824,6 +833,8 @@ _FORBIDDEN = re.compile(r"[;?\r\n]")
 # A telemetry path or condition: printable ASCII without spaces; a double quote first
 # would make the switch read it as a quoted string.
 _TELPATH = re.compile(r"^[\x21\x23-\x7e][\x21-\x7e]*$")
+# A web page an HTTP probe fetches, as the switch takes it after ``http get``.
+_URLPATH = re.compile(r"^[A-Za-z0-9._~%/-]{1,128}$")
 
 # ---- templates -------------------------------------------------------------------
 

@@ -33,6 +33,7 @@ configuration.
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import re
 import threading
@@ -1903,6 +1904,38 @@ class NxapiClient:
 
         change = build_nat_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_epbr(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Enhanced policy-based routing page: a service and its probe,
+        an end-point or reverse end-point, a policy, a match and its spreading, a step of a
+        chain, an interface's policy, or clearing a policy's counters.
+
+        The lines are built from the page's description and the checked values
+        (``epbr.build_epbr_change``), as for the Monitor sessions page. When they go inside
+        an ePBR session and the switch refuses one, the session it left open is closed with
+        ``abort``, so the next change starts clean.
+        """
+        # Imported here: the ePBR description uses this module's checks.
+        from app.epbr import ABORT_LINE, SESSION_LINE, build_epbr_change
+
+        change = build_epbr_change(scope, setting, action, ident, values)
+        try:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+        except NxapiCommandError:
+            if change.lines[:1] == (SESSION_LINE,):
+                with contextlib.suppress(NxapiError):
+                    abort = [SESSION_LINE, ABORT_LINE]
+                    self._send(abort, abort, self._target.timeout, allow_text=True)
+            raise
 
     def configure_track(
         self,

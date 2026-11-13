@@ -587,6 +587,11 @@ NAT_CLEAR_RULES = (
     "rule 28 permit command clear ip nat translation *",
     "rule 29 permit command clear ip nat statistics",
 )
+# ePBR's counters are cleared outside configuration mode as well (rule 30, added in
+# BROAD_EPBR_VERSION); its ``epbr session`` is a configuration command, which "conf t ; *"
+# covers. The line was tried on cisco-25gb as admin; the rule was not (the fake switch
+# stands in).
+EPBR_CLEAR_RULES = ("rule 30 permit command clear epbr statistics *",)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -607,6 +612,7 @@ BROAD_RULES = (
     *EEM_DENY_RULES,
     *ITD_STATISTICS_RULES,
     *NAT_CLEAR_RULES,
+    *EPBR_CLEAR_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

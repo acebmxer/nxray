@@ -11,6 +11,21 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Steer traffic through firewalls and other appliances with enhanced policy-based routing
+  (#95).** The new **Enhanced policy routing** page (under Configure) shows the ePBR
+  services with their end-points, reverse end-points and health probes, the policies with
+  their matches and service chains, which interfaces apply them (forward and reverse), the
+  state of every end-point's probe, and each counting policy's packets per bucket. It makes
+  and deletes services, end-points (with a reverse address for the traffic coming back),
+  policies, matches for an IPv4 or IPv6 ACL and the steps of a chain (with what to do when
+  a service is down), sets probes (ping, TCP, UDP, a web page, DNS or a tracked object), a
+  service's interface and VRF, how traffic is spread over the end-points, turns counting on,
+  applies a policy to an interface and clears the counters. A service or policy already in
+  use is changed in an ePBR session that NXray commits, as the switch asks; what the switch
+  will not change then is refused with the reason. Each change shows its lines and asks
+  first. It works with the broad role or a stored admin login; clearing the counters needs a
+  broad role written by this version, so the Switch page asks for Update the port list.
+  Tried on a switch with throwaway services and policies.
 - **Set up NAT from the web interface (#95).** The new **NAT** page (under Configure) shows
   the inside and outside interfaces, the static and dynamic translations, the address pools,
   the timeouts and limits, every translation in use with its packets and time left, the

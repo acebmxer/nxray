@@ -1089,7 +1089,7 @@ with throwaway entries.
 **With the admin login stored.** The pages that need the broad role or a stored admin
 login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
 SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD,
-MPLS, NAT, Tracked objects, PTP and Telemetry) send their changes with the stored admin
+Enhanced policy routing, MPLS, NAT, Tracked objects, PTP and Telemetry) send their changes with the stored admin
 login when the switch is in that mode: NXray's own account then has only the limited
 role's rules, which have none for them. They still read the switch with NXray's account.
 
@@ -1194,6 +1194,31 @@ is 0, with throwaway translations and pools: every line above was taken except `
 inside` and `ip nat outside` on an interface ("Nat tcam not carved") and the SYN and FIN/RST
 timeouts, which need the `tcp-nat` region. The clear rules were not tried (the fake switch
 stands in).
+
+**Enhanced policy-based routing.** The **Enhanced policy routing** page (under Configure)
+works with the broad role and with a stored admin login, and is off with the limited role.
+It needs `feature epbr` (Features page; `feature pbr` is not needed). It reads `show
+feature`, `show interface brief`, `show vrf`, `show vrf interface`, `show epbr policy`,
+`show running-config` (as text), and for each applied policy `show epbr policy <name>
+reverse` and `show epbr statistics policy <name> [reverse]`. It types `epbr service <name>`
+and inside it `probe icmp|tcp <port>|udp <port> [control enable]|http get <page>|dns host
+<name>` with `frequency`, `timeout`, `retry-down-count`, `retry-up-count` and
+`source-interface`, `service-interface <interface>`, `vrf <vrf>`, `service-end-point
+ip|ipv6 <address> [interface <interface>]` and inside that `reverse ip|ipv6 <address>
+interface <interface>` and a probe (or `probe track <object>`); `epbr policy <name>` and
+inside it `statistics`, `match ip|ipv6 address <acl>` and inside that `load-balance [buckets
+<n>] [method src-ip|dst-ip]` and `<n> set service <service> [fail-action
+bypass|drop|forward]`; `epbr ip|ipv6 policy <name> [reverse]` on a VLAN interface, routed
+port or routed port-channel; each with its `no` form. A service an applied policy uses, and
+an applied policy, are changed inside `epbr session` ... `commit` (a configuration command,
+which `conf t ; *` covers); if the switch refuses a line there, NXray sends `epbr session`
+and `abort` so no session is left open. It clears with `clear epbr statistics policy
+<name>`, typed outside configuration mode: the broad role allows it with rule 30. Tried on
+cisco-25gb (N9K-C92160YC-X, NX-OS 9.3(16)) with throwaway services, policies and VLAN
+interfaces: every line above was taken, a policy applied on a VLAN interface (the HTTP probe's `no` form and the DNS probe's were
+not tried); the clear rule was not tried (the fake switch stands in). ePBR makes IP SLA
+entries (from 20001), tracked objects and `epbr_` route-maps and ACLs of its own for its
+probes; the IP SLA and Tracked objects pages show its entries and objects too.
 
 **Tracked objects.** The **Tracked objects** page (under Configure) needs no rule of its
 own and no feature, so it works with the broad role and with a stored admin login, and is
@@ -1521,7 +1546,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1561,6 +1586,11 @@ translation *` and `clear ip nat statistics`, typed outside configuration mode).
 role written before lacks them, and the switch refuses the NAT page's Clear buttons: the
 Switch page says so on the **Update the port list** card, and pressing it writes the role
 again with them.
+
+Clearing ePBR's counters came after that (rule 30: `clear epbr statistics *`, typed outside
+configuration mode). A broad role written before lacks it, and the switch refuses **Clear
+the counters** on the Enhanced policy routing page: the Switch page says so on the **Update
+the port list** card, and pressing it writes the role again with it.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

@@ -441,6 +441,13 @@
     page. Press Update the port list to write the role again with them.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_epbr_clear %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed clearing ePBR's
+    counters, so the switch refuses Clear the counters on the Enhanced policy routing
+    page. Press Update the port list to write the role again with it.
+  </p>
+  {% endif %}
   {% if connection.broad_role_without_loopbacks %}
   <p class="warning">
     NXray's broad role on the switch was written before it named the loopbacks,
