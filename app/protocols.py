@@ -58,8 +58,8 @@ from app.switch_setup import scrub_secrets
 # chains: a letter or digit first, then letters, digits, ".", "_" or "-".
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 # Secrets (passwords, keys): printable ASCII without spaces, ";" or "?",
-# which NX-API refuses or splits on.
-_SECRET = re.compile(r"^[\x21-\x7e]{1,63}$")
+# which NX-API refuses or splits on; at most the field's maximum (63 when not given).
+_SECRET = re.compile(r"^[\x21-\x7e]+$")
 # An IS-IS NET: area (1-13 bytes), system ID (6 bytes), selector 00, in
 # groups of four hex digits: 49.0001.1920.0000.2001.00.
 _ISIS_NET = re.compile(r"^[0-9a-fA-F]{2}(?:\.[0-9a-fA-F]{4}){1,6}(?:\.[0-9a-fA-F]{4}){3}\.00$")
@@ -137,6 +137,7 @@ KINDS = (
     # host policy's host or sender
     "account",  # a user name another system signs NXray's switch in with: letters, digits
     # and . _ @ -, up to 64, such as administrator@vsphere.local (a VM Tracker connection)
+    "hexkey",  # an even number of hexadecimal digits, 2 to 64: a tunnel encryption key's ID
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -807,6 +808,12 @@ def check_value(spec: Field, raw: str) -> str:
                 "a letter or digit, such as administrator@vsphere.local"
             )
         return value
+    if kind == "hexkey":
+        if not re.fullmatch(r"(?:[0-9a-fA-F]{2}){1,32}", value):
+            raise ValueError(
+                f"{spec.label} is an even number of hexadecimal digits, 2 to 64, such as 2006"
+            )
+        return value.lower()
     if kind == "ipv4any":
         if value.lower() in ("any", "0.0.0.0"):
             return "0.0.0.0"
@@ -901,7 +908,8 @@ class Setting:
     typed at the top level and carry the place in them (``spanning-tree vlan
     {vlan} priority {priority}``); the scope checks it has them. ``config``
     false marks a command that changes no configuration (``clock set``): it
-    leaves nothing to save.
+    leaves nothing to save. ``button``, when given, names the form's set button
+    instead of Set (Run, for a VXLAN OAM tool).
     """
 
     key: str
@@ -917,6 +925,7 @@ class Setting:
     check: Callable[[dict[str, str]], None] | None = None
     ident: tuple[str, ...] = ()
     config: bool = True
+    button: str = ""
 
     def __post_init__(self) -> None:
         names = {f.name for f in self.fields} | set(self.ident)

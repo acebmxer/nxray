@@ -123,6 +123,24 @@ and kept in ``l2_ran``. ``show vmtracker status``, ``show evb`` and ``show inter
 backup`` are built from the lines; ``texts`` answers ``show vmtracker info detail`` and
 ``show evb hosts|vsi``.
 
+VXLAN tunnel encryption and VXLAN OAM live in ``te_lines`` and ``ngoam_lines``, as paths
+("tunnel-encryption policy p1 ; window-size 134217728", "ngoam profile 5 ; flow forward ; ip
+destination 192.0.2.1"); a line setting a value again replaces the one before, a ``no`` form
+removes the line and what is under it. As on cisco-25gb: ``feature tunnel-encryption`` is
+refused unless ``tunnel_encryption_supported``, and the ``tunnel-encryption`` lines need the
+feature; tunnel encryption key chains do not, and live in ``te_chains`` (chain -> key -> its
+lines; a key's string is kept apart in ``te_key_strings``, never shown); a key ID is an even
+number of hexadecimal digits, a key's string 32 or 64 of them by its algorithm, and a second
+one is refused until ``no key-octet-string``. The NGOAM lines need ``feature ngoam``; a
+profile's ``description`` cannot be removed; IPv4 and IPv6 addresses cannot share a flow; loop
+detection is refused unless ``loop_detection_supported``; the authentication key is kept apart
+(``ngoam_key``). ``ping|traceroute|pathtrace nve ...`` (sent as text), ``clear ngoam ...
+statistics summary`` and ``ngoam loop-detection probe|bringup ...`` are typed outside
+configuration mode and kept in ``ngoam_ran``; a tool answers ``texts`` or the text
+cisco-25gb printed with no NVE interface, and refuses a profile that does not exist. ``show
+ngoam ... statistics summary`` count the tools; ``show key chain``, ``show ngoam acl status``
+and ``show tunnel-encryption session|policy|info global`` answer as text.
+
 AAA lives in ``aaa_lines`` (the top-level lines as typed, "radius-server host 192.0.2.11 key
 0 k") and ``aaa_groups`` (("radius", "g") -> the lines inside); TACACS+ lines are refused
 while ``feature_state["tacacs"]`` is off, and only network-admin may type any of them (the
@@ -627,6 +645,18 @@ class FakeSwitch:
     l2_ran: list[str] = field(default_factory=list)
     vmtracker_keys: dict[str, str] = field(default_factory=dict)
     flexlink_supported: bool = False
+    # VXLAN tunnel encryption and VXLAN OAM (see the module notes).
+    tunnel_encryption_supported: bool = False
+    loop_detection_supported: bool = False
+    te_lines: list[str] = field(default_factory=list)
+    te_chains: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    te_key_strings: dict[tuple[str, str], str] = field(default_factory=dict)
+    ngoam_lines: list[str] = field(default_factory=list)
+    ngoam_key: str = ""
+    ngoam_ran: list[str] = field(default_factory=list)
+    ngoam_counts: dict[str, int] = field(
+        default_factory=lambda: {"ping": 0, "traceroute": 0, "pathtrace": 0}
+    )
     # AAA, key pairs, trustpoints, the SSH key and bootflash (see the module notes).
     aaa_lines: list[str] = field(default_factory=list)
     aaa_groups: dict[tuple[str, str], list[str]] = field(default_factory=dict)
@@ -1336,6 +1366,8 @@ class FakeSwitch:
         the rule for it, and ``show logging last <n>``, which any account may."""
         if any(cmd.startswith(prefix) for prefix in self.reject):
             return _error(ident, f"% Rejected by the fake switch: {cmd}\n")
+        if extras := self._vxlan_extras_text(user, cmd, ident):
+            return extras
         if cmd == "show sflow":
             if not self._feature_on("sflow"):
                 return _error(ident, "% Invalid command at '^' marker.\n")
@@ -1432,6 +1464,8 @@ class FakeSwitch:
         out += self.epbr_config()
         out += _nested(self.mcast_lines)
         out += _nested(self.l2_lines)
+        out += self.te_config()
+        out += _nested(self.ngoam_lines)
         out += _nested(
             [
                 p
@@ -2670,6 +2704,352 @@ class FakeSwitch:
             return _ok(ident, None), context
         return invalid, context
 
+    # ---- VXLAN tunnel encryption and VXLAN OAM ---------------------------------------------
+
+    # What a line sets, for lines that replace the one before (the rest of the line is its
+    # value): "hop 9" replaces "hop 5".
+    _EXTRAS_ONE_VALUE = re.compile(
+        r"(?:tunnel-encryption source-interface|ngoam xconnect hb-interval|description|hop"
+        r"|sport|payload pad|dot1q|interface|ip destination|ip source|ipv6 destination"
+        r"|ipv6 source|mac-address destination|mac-address source|port destination"
+        r"|port source|protocol|cipher-suite|window-size|sak-rekey-time|keychain|pki policy"
+        r"|periodic-probe-interval|port-recovery-interval)(?= )"
+    )
+
+    @staticmethod
+    def _extras_keep(lines: list[str], path: str) -> None:
+        place, _, last = path.rpartition(" ; ")
+        if key := FakeSwitch._EXTRAS_ONE_VALUE.match(last):
+            start = (f"{place} ; " if place else "") + key.group(0) + " "
+            lines[:] = [
+                x for x in lines if not (x.startswith(start) and " ; " not in x[len(start) :])
+            ]
+        if path not in lines:
+            lines.append(path)
+
+    @staticmethod
+    def _extras_drop(lines: list[str], path: str) -> None:
+        """A bare ``no`` form: the line it names, whatever its value, and what is under it."""
+        lines[:] = [
+            x
+            for x in lines
+            if x != path and not x.startswith(path + " ") and not x.startswith(path + " ; ")
+        ]
+
+    _TOOL = re.compile(r"(ping|traceroute|pathtrace) nve (?:ip|mac) .+")
+
+    def _vxlan_extras_text(self, user: str, cmd: str, ident: int) -> dict[str, Any] | None:
+        """A VXLAN OAM tool or a tunnel encryption / NGOAM show command sent as text; None
+        when ``cmd`` is not one."""
+        is_admin = "network-admin" in self.roles_of(user)
+        if match := self._TOOL.fullmatch(cmd):
+            if not self._feature_on("ngoam"):
+                return _error(ident, "% Invalid command\n")
+            if not (is_admin or self._role_matches(user, cmd, None)):
+                return _error(ident, "% Permission denied for the role\n")
+            if found := re.search(r" profile (\d+)", cmd):
+                if f"ngoam profile {found.group(1)}" not in self.ngoam_lines:
+                    return _error(ident, f"ERROR: Failed to find profile id {found.group(1)}\n")
+            if " verify-host" in cmd and " payload " not in cmd:
+                return _error(ident, "ERROR: Payload info mandatory to verify host\n")
+            tool = match.group(1)
+            self.ngoam_ran.append(cmd)
+            self.ngoam_counts[tool] += 1
+            answer = self.texts.get(cmd)
+            if answer is None:
+                answer = FIXTURES.joinpath(f"ngoam_{tool}_nve.txt").read_text()
+            return {"jsonrpc": "2.0", "result": {"msg": answer}, "id": ident}
+        if cmd == "show key chain":
+            return {"jsonrpc": "2.0", "result": {"msg": self.key_chain_text()}, "id": ident}
+        if cmd == "show ngoam acl status":
+            if not self._feature_on("ngoam"):
+                return _error(ident, "% Invalid command\n")
+            text = "ACL installed on following BDs:\n1, \n"
+            return {"jsonrpc": "2.0", "result": {"msg": text}, "id": ident}
+        if cmd.startswith("show tunnel-encryption "):
+            if not self._feature_on("tun_enc_mgr"):
+                return _error(ident, "% Invalid command\n")
+            return {"jsonrpc": "2.0", "result": {"msg": self.texts.get(cmd, "")}, "id": ident}
+        return None
+
+    def key_chain_text(self) -> str:
+        """``show key chain`` as text: the tunnel encryption key chains, as cisco-25gb
+        printed them (the key's string shown encrypted, here as a made-up mark)."""
+        out = []
+        for chain, keys in self.te_chains.items():
+            out.append(f"Key-Chain {chain} tunnel-encryption")
+            for key, lines in keys.items():
+                string = self.te_key_strings.get((chain, key))
+                out.append(f'  Key {key} -- text 7 "0755{len(string)}"' if string
+                           else f'  Key {key} -- text ""')  # fmt: skip
+                for line in lines:
+                    if line.startswith("cryptographic-algorithm "):
+                        out.append(f"    {line}")
+                lifetime = next((x for x in lines if x.startswith("send-lifetime ")), "")
+                shown = "(always valid)" if not lifetime else f"({lifetime[14:]})-(always valid)"
+                out.append(f"    send lifetime {shown} [active]")
+        return "\n".join(out) + ("\n" if out else "")
+
+    def te_config(self) -> list[str]:
+        """The tunnel encryption key chains and lines, as ``show running-config`` prints them."""
+        out = []
+        for chain, keys in self.te_chains.items():
+            out.append(f"key chain {chain} tunnel-encryption")
+            for key, lines in keys.items():
+                out.append(f"  key {key}")
+                if (chain, key) in self.te_key_strings:
+                    algorithm = next(
+                        (x.split()[-1] for x in lines if x.startswith("cryptographic-algorithm")),
+                        "",
+                    )
+                    out.append(f"    key-octet-string 7 0755 cryptographic-algorithm {algorithm}")
+                out += [f"    {x}" for x in lines if x.startswith("send-lifetime ")]
+        out += _nested(self.te_lines)
+        return out
+
+    def ngoam_counters(self, tool: str) -> dict[str, Any]:
+        """``show ngoam loopback|traceroute|pathtrace statistics summary``, as cisco-25gb
+        answers it, with every tool run counted as sent and not sent (no NVE interface)."""
+        word = {"ping": "loopback"}.get(tool, tool)
+        body = json.loads(
+            FIXTURES.joinpath(f"show_ngoam_{word}_statistics_summary.json").read_text()
+        )
+        table = next(iter(body.values()))
+        row = next(iter(table.values()))
+        row["tx"], row["unsent"] = 0, self.ngoam_counts[tool]
+        return body
+
+    def _vxlan_extras(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """A VXLAN tunnel encryption or VXLAN OAM line, an NGOAM clear or loop detection run,
+        or an NGOAM counters show; None when ``cmd`` is not one (see the module notes)."""
+        kind = context[0] if context else None
+        bare = cmd.removeprefix("no ")
+        undo = cmd.startswith("no ")
+        invalid = _error(ident, "% Invalid command\n")
+        denied = _error(ident, "% Permission denied for the role\n")
+
+        def allowed(path: str, interface: str | None = None) -> bool:
+            return is_admin or self._role_matches(user, f"conf t ; {path}", interface)
+
+        def ok(new: tuple[str, str] | None = context) -> tuple[dict[str, Any], Any]:
+            return _ok(ident, None), new
+
+        if kind is None:
+            if match := re.fullmatch(
+                r"show ngoam (loopback|traceroute|pathtrace) statistics summary", cmd
+            ):
+                if not self._feature_on("ngoam"):
+                    return invalid, context
+                tool = {"loopback": "ping"}.get(match.group(1), match.group(1))
+                return _ok(ident, self.ngoam_counters(tool)), context
+            if cmd.startswith("show "):
+                return None
+            if match := re.fullmatch(
+                r"clear ngoam (loopback|traceroute|pathtrace) statistics summary", cmd
+            ):
+                if not self._feature_on("ngoam"):
+                    return invalid, context
+                if not (is_admin or self._role_matches(user, cmd, None)):
+                    return denied, context
+                self.ngoam_counts[{"loopback": "ping"}.get(match.group(1), match.group(1))] = 0
+                self.ngoam_ran.append(cmd)
+                return ok()
+            if re.fullmatch(r"ngoam loop-detection (?:probe|bringup) vlan \d+ port \S+", cmd):
+                if not self._feature_on("ngoam"):
+                    return invalid, context
+                if not (is_admin or self._role_matches(user, cmd, None)):
+                    return denied, context
+                if not self.loop_detection_supported:
+                    return _error(ident, "Loop detection not supported on this hardware\n"), context
+                self.ngoam_ran.append(cmd)
+                return ok()
+            if match := re.fullmatch(r"key chain (\S+) tunnel-encryption", bare):
+                if not allowed(cmd):
+                    return denied, context
+                if undo:
+                    self.te_chains.pop(match.group(1), None)
+                    self.te_key_strings = {
+                        k: v for k, v in self.te_key_strings.items() if k[0] != match.group(1)
+                    }
+                    return ok()
+                self.te_chains.setdefault(match.group(1), {})
+                return ok(("te-chain", match.group(1)))
+            if bare.startswith("tunnel-encryption "):
+                if not self._feature_on("tun_enc_mgr"):
+                    return invalid, context
+                if not allowed(cmd):
+                    return denied, context
+                if undo:
+                    self._extras_drop(self.te_lines, bare)
+                    return ok()
+                self._extras_keep(self.te_lines, cmd)
+                if re.fullmatch(r"tunnel-encryption (?:policy|peer-ip) \S+", cmd):
+                    return ok(("te-mode", cmd))
+                return ok()
+            if bare.startswith("ngoam "):
+                if not self._feature_on("ngoam"):
+                    return invalid, context
+                if not allowed(cmd):
+                    return denied, context
+                if bare == "ngoam loop-detection" and not self.loop_detection_supported:
+                    return _error(ident, "Loop detection not supported on this hardware\n"), context
+                if bare.startswith("ngoam authentication-key"):
+                    self.ngoam_key = "" if undo else cmd.split()[-1]
+                    return ok()
+                if match := re.fullmatch(r"ngoam xconnect hb-interval(?: (\d+))?", bare):
+                    if not undo and not (match.group(1) and 150 <= int(match.group(1)) <= 5000):
+                        return _error(ident, "% Invalid number, range is (150:5000)\n"), context
+                if match := re.fullmatch(r"ngoam profile (\d+)", bare):
+                    if not 1 <= int(match.group(1)) <= 1023:
+                        return _error(ident, "% Invalid number, range is (1:1023)\n"), context
+                if undo:
+                    self._extras_drop(self.ngoam_lines, bare)
+                    return ok()
+                self._extras_keep(self.ngoam_lines, cmd)
+                if bare.startswith("ngoam profile ") or bare == "ngoam loop-detection":
+                    return ok(("ngoam-mode", cmd))
+                return ok()
+            return None
+        if kind == "interface" and context and bare == "tunnel-encryption":
+            if not self._feature_on("tun_enc_mgr"):
+                return invalid, context
+            place = f"interface {context[1]}"
+            if not allowed(f"{place} ; {cmd}", context[1]):
+                return denied, context
+            if undo:
+                self._extras_drop(self.te_lines, f"{place} ; tunnel-encryption")
+            else:
+                self._extras_keep(self.te_lines, f"{place} ; tunnel-encryption")
+            return ok()
+        if kind not in ("te-chain", "te-key", "te-mode", "ngoam-mode", "ngoam-flow") or not context:
+            return None
+        if kind == "te-chain":
+            chain = context[1]
+            if not allowed(f"key chain {chain} tunnel-encryption ; {cmd}"):
+                return denied, context
+            match = re.fullmatch(r"key (\S+)", bare)
+            if not match:
+                return invalid, context
+            key = match.group(1)
+            if not re.fullmatch(r"[0-9a-fA-F]+", key):
+                return _error(
+                    ident, "invalid string format - tunnel encryption expects Hex Key Id\n"
+                ), context
+            if len(key) % 2:
+                return _error(
+                    ident,
+                    "invalid string format - Tunnel Encryption expects even number of characters\n",
+                ), context
+            if len(key) > 64:
+                return _error(ident, "% String exceeded max length of (64)\n"), context
+            if undo:
+                self.te_chains[chain].pop(key, None)
+                self.te_key_strings.pop((chain, key), None)
+                return ok()
+            self.te_chains[chain].setdefault(key, [])
+            return ok(("te-key", f"{chain} {key}"))
+        if kind == "te-key":
+            chain, key = context[1].split()
+            lines = self.te_chains[chain][key]
+            if not allowed(f"key chain {chain} tunnel-encryption ; key {key} ; {cmd}"):
+                return denied, context
+            if match := re.fullmatch(
+                r"key-octet-string (?:0 )?(\S+) cryptographic-algorithm"
+                r" (AES_128_CMAC|AES_256_CMAC)",
+                cmd,
+            ):
+                if (chain, key) in self.te_key_strings:
+                    return _error(ident, "Overwriting key-octet-string is not allowed\n"), context
+                octets, algorithm = match.groups()
+                if len(octets) not in (32, 64):
+                    return _error(
+                        ident, "invalid key: Key length should be either 16 or 32 octets\n"
+                    ), context
+                if len(octets) != {"AES_128_CMAC": 32, "AES_256_CMAC": 64}[algorithm]:
+                    return _error(
+                        ident, "invalid combination of key and message authentication code\n"
+                    ), context
+                self.te_key_strings[(chain, key)] = octets
+                lines[:] = [x for x in lines if not x.startswith("cryptographic-algorithm")]
+                lines.append(f"cryptographic-algorithm {algorithm}")
+                return ok()
+            if cmd == "no key-octet-string":
+                self.te_key_strings.pop((chain, key), None)
+                lines[:] = [x for x in lines if not x.startswith("cryptographic-algorithm")]
+                return ok()
+            if cmd == "no send-lifetime":
+                lines[:] = [x for x in lines if not x.startswith("send-lifetime")]
+                return ok()
+            if match := re.fullmatch(
+                r"send-lifetime (?:local )?\S+ \S+ \d+ \d+ (?:duration (\d+)|infinite|.+)", cmd
+            ):
+                if match.group(1) and not 1800 <= int(match.group(1)) <= 2147483646:
+                    return _error(ident, "% Invalid number, range is (1800:2147483646)\n"), context
+                lines[:] = [x for x in lines if not x.startswith("send-lifetime")]
+                lines.append(cmd)
+                return ok()
+            return invalid, context
+        parent = context[1]
+        if kind == "ngoam-flow":
+            place = parent
+            if not allowed(f"{place} ; {cmd}"):
+                return denied, context
+            if not re.fullmatch(
+                r"(?:ip|ipv6) (?:destination|source)(?: \S+)?"
+                r"|mac-address (?:destination|source)(?: \S+)?"
+                r"|port (?:destination|source)(?: \d+)?|protocol(?: \d+)?"
+                r"|dot1q(?: \d+(?: cos [0-7])?)?",
+                bare,
+            ):
+                return invalid, context
+            family = bare.split()[0]
+            other = {"ip": "ipv6 ", "ipv6": "ip "}.get(family)
+            if (
+                not undo
+                and other
+                and any(x.startswith(f"{place} ; {other}") for x in self.ngoam_lines)
+            ):
+                return _error(
+                    ident, "Cannot configure v6 and v4 address in the same flow\n"
+                ), context
+            if undo:
+                self._extras_drop(self.ngoam_lines, f"{place} ; {bare}")
+            else:
+                self._extras_keep(self.ngoam_lines, f"{place} ; {cmd}")
+            return ok()
+        lines = self.te_lines if kind == "te-mode" else self.ngoam_lines
+        if not allowed(f"{parent} ; {cmd}"):
+            return denied, context
+        if kind == "ngoam-mode" and (match := re.fullmatch(r"flow (forward|reverse)", bare)):
+            path = f"{parent} ; flow {match.group(1)}"
+            if undo:
+                self._extras_drop(lines, path)
+                return ok()
+            self._extras_keep(lines, path)
+            return ok(("ngoam-flow", path))
+        if kind == "ngoam-mode" and bare.startswith("description"):
+            if undo:
+                return ok()  # as on cisco-25gb: answered, and the description stays
+        if (
+            kind == "ngoam-mode"
+            and bare.startswith("interface ")
+            and not re.fullmatch(r"interface Ethernet\d+/\d+", bare)
+        ):
+            return invalid, context
+        if (
+            kind == "ngoam-mode"
+            and re.fullmatch(r"oam-channel \d+", bare)
+            and bare != "oam-channel 2"
+        ):
+            return _error(ident, "% Invalid number, range is (2:2)\n"), context
+        if undo:
+            self._extras_drop(lines, f"{parent} ; {bare}")
+        else:
+            self._extras_keep(lines, f"{parent} ; {cmd}")
+        return ok()
+
     def backup_text(self) -> str:
         """``show interface switchport backup``, laid out as in Cisco's guide."""
         out = [
@@ -3235,6 +3615,8 @@ class FakeSwitch:
             return _ok(ident, self.bodies[cmd]), context
         if stage_d_reply := self._stage_d(user, is_admin, cmd, ident, context):
             return stage_d_reply
+        if extras_reply := self._vxlan_extras(user, is_admin, cmd, ident, context):
+            return extras_reply
         if cmd.startswith("show "):
             return self._show(cmd, ident), context
         if automation_reply := self._automation(user, is_admin, cmd, ident, context):
@@ -3542,6 +3924,20 @@ class FakeSwitch:
                 return _error(
                     ident, "Feature flexlink is not supported on this platform\n"
                 ), context
+            if (
+                name == "tun_enc_mgr"
+                and not match.group(1)
+                and not (self.tunnel_encryption_supported)
+            ):
+                # As on cisco-25gb (N9K-C92160YC-X).
+                return _error(
+                    ident, "ERROR: Tunnel-encryption cannot be enabled on this system\n"
+                ), context
+            if name == "tun_enc_mgr" and match.group(1):
+                self.te_lines.clear()
+            if name == "ngoam" and match.group(1):
+                self.ngoam_lines.clear()
+                self.ngoam_key = ""
             if name == "tunnel" and not match.group(1) and self._feature_on("nve"):
                 # As on cisco-25gb.
                 return _error(

@@ -54,6 +54,7 @@ from app.routes.mpls import render_mpls_page
 from app.routes.nat import render_nat_page
 from app.routes.nbm import render_nbm_page
 from app.routes.neighbors import render_neighbors_page
+from app.routes.ngoam import render_ngoam_page
 from app.routes.pbr import render_pbr_page
 from app.routes.pfc import render_pfc_page
 from app.routes.pki import render_pki_page
@@ -72,6 +73,7 @@ from app.routes.telemetry import render_telemetry_page
 from app.routes.track import render_track_page
 from app.routes.traffic import render_traffic_page
 from app.routes.trm import render_trm_page
+from app.routes.tunnel_encryption import render_tunnel_encryption_page
 from app.routes.tunnels import render_tunnels_page
 from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
@@ -889,6 +891,8 @@ def switch_enable_changes(
             done += " The role now also allows clearing IGMP snooping's groups and counters."
         if connection.broad_role_without_vmtracker_refresh and new_mode == ROLE_BROAD:
             done += " The role now also allows syncing a VM Tracker connection now."
+        if connection.broad_role_without_ngoam_tools and new_mode == ROLE_BROAD:
+            done += " The role now also allows VXLAN OAM's ping, traceroute and pathtrace."
     else:
         parts = []
         if connection.role_version < 2:
@@ -1001,7 +1005,7 @@ def switch_save(
     ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
     ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
     ``mpls``, ``nat``, ``track``, ``epbr``, ``igmp-snooping``, ``nbm``, ``trm``, ``flexlink``,
-    ``vmtracker``, ``evb``,
+    ``vmtracker``, ``evb``, ``tunnel-encryption``, ``ngoam``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
     shown there. From the Ports page,
     ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
@@ -1109,6 +1113,10 @@ def switch_save(
             return render_vmtracker_page(request, username, error=error, notice=notice)
         if back == "evb":
             return render_evb_page(request, username, error=error, notice=notice)
+        if back == "tunnel-encryption":
+            return render_tunnel_encryption_page(request, username, error=error, notice=notice)
+        if back == "ngoam":
+            return render_ngoam_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

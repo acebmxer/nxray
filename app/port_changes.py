@@ -607,6 +607,18 @@ SNOOPING_CLEAR_RULES = (
 # admin, with no vCenter to sync from ("ERROR: failure"); the rule was not tried (the fake
 # switch stands in).
 VMTRACKER_REFRESH_RULES = ("rule 34 permit command vmtracker connection *",)
+# VXLAN OAM's tools (``ping nve``, ``traceroute nve``, ``pathtrace nve``), its counters' clears
+# and loop detection's probe and bring-up are typed outside configuration mode (rules 35 to
+# 40, added in BROAD_NGOAM_VERSION). The tools and clears were typed on cisco-25gb as admin;
+# loop detection is refused there; the rules were not tried (the fake switch stands in).
+NGOAM_RULES = (
+    "rule 35 permit command ping nve *",
+    "rule 36 permit command traceroute nve *",
+    "rule 37 permit command pathtrace nve *",
+    "rule 38 permit command clear ngoam *",
+    "rule 39 permit command ngoam loop-detection probe *",
+    "rule 40 permit command ngoam loop-detection bringup *",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -630,6 +642,7 @@ BROAD_RULES = (
     *EPBR_CLEAR_RULES,
     *SNOOPING_CLEAR_RULES,
     *VMTRACKER_REFRESH_RULES,
+    *NGOAM_RULES,
 )
 
 # vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it

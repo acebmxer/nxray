@@ -1,0 +1,14 @@
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+'D' - Destination Unreachable, 'X' - unknown return code,
+'m' - malformed request(parameter problem),
+'c' - Corrupted Data/Test, '#' - Duplicate response,
+'v' - Other - Use verbose to see the result
+
+Sender handle: 220
+Q Reason: Failed to get vni data from nve, vni = 5000
+Q Reason: Failed to get vni data from nve, vni = 5000
+Q Reason: Failed to get vni data from nve, vni = 5000
+
+Sent 3, Received 0, Success rate is 0 percent Round-trip min/avg/max = 0/0/0 ms
+Total time elapsed 43 ms

@@ -1,0 +1,4 @@
+Tunnel-Encryption  Peer Policy  Keychain  RxStatus        TxStatus
+-----------------  -----------  --------  -----------     --------------
+33.1.33.33         p1           kc1       Secure (AN: 0)  Secure (AN: 2)
+44.1.44.44         p1           kc1       Secure (AN: 0)  Secure (AN: 0)

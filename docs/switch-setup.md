@@ -1324,6 +1324,44 @@ there): every configuration line above but `connect` was taken; the switch refus
 `no remote` form, so an address is changed, never removed. `connect`, syncing with a real
 vCenter, the VM list and the refresh rule were not tried.
 
+**VXLAN tunnel encryption.** The **VXLAN tunnel encryption** page (under Configure) works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature tunnel-encryption` (Features page). It reads `show feature`, `show version`,
+`show interface brief` and `show vrf interface`, and while the feature is on, as text, `show
+running-config`, `show key chain`, `show tunnel-encryption session`, `show tunnel-encryption
+policy` and `show tunnel-encryption info global`. It types `key chain <name>
+tunnel-encryption`, inside it `key <hex id>`, and inside that `key-octet-string <hex>
+cryptographic-algorithm AES_128_CMAC|AES_256_CMAC` (never shown back) and `send-lifetime`;
+`tunnel-encryption source-interface loopback<n>`, `tunnel-encryption must-secure-policy` and
+`tunnel-encryption icv`; `tunnel-encryption policy <name>` with `cipher-suite`,
+`window-size` and `sak-rekey-time`; `tunnel-encryption peer-ip <address>` with `keychain
+<chain> policy <policy>` or `pki policy <policy>`; and `tunnel-encryption` on a routed port
+or port-channel; each with its `no` form. Cisco's 9.3 guide lists tunnel encryption for the
+Nexus 9300-FX2 only: cisco-25gb (N9K-C92160YC-X) refused `feature tunnel-encryption`
+("Tunnel-encryption cannot be enabled on this system"), and the page says so on any other
+model. The key chain lines were tried there (they need no feature); the rest was not tried
+on a switch.
+
+**VXLAN OAM.** The **VXLAN OAM** page (under Configure) works with the broad role and with a
+stored admin login, and is off with the limited role. It needs `feature ngoam` (Features
+page) and VXLAN. It reads `show feature`, `show version` and `show interface brief`, while
+the feature is on `show ngoam loopback|traceroute|pathtrace statistics summary`, and as text
+`show ngoam acl status` and `show running-config`. It types `ngoam install acl`, `ngoam
+authentication-key <key>` (never shown back), `ngoam xconnect hb-interval <150-5000>`,
+`ngoam profile <1-1023>` with `description`, `hop`, `sport`, `oam-channel 2`, `payload pad`,
+`dot1q` and `interface`, a profile's `flow forward|reverse` with its addresses, ports,
+protocol and VLAN, and `ngoam loop-detection` with `disable vlan`, `periodic-probe-interval`
+and `port-recovery-interval`, each with its `no` form. Outside configuration mode it runs
+`ping nve ...`, `traceroute nve ...` and `pathtrace nve ...` (sent as text, whose printed
+answer the page shows), `clear ngoam loopback|traceroute|pathtrace statistics summary` and
+`ngoam loop-detection probe|bringup vlan <vlan> port <port>`: the broad role allows them
+with rules 35 to 40. Tried on cisco-25gb with a throwaway profile: the feature, every profile
+and flow line, the switch-wide lines but `ngoam install acl`, the clears and every tool
+form were taken; the switch had no VXLAN tunnel, so no OAM answer was seen. `ngoam install
+acl` was not tried (it writes into the switch's hardware access lists), and loop detection
+is refused there ("Loop detection not supported on this hardware"), which the page says.
+The rules were not tried.
+
 **Edge Virtual Bridging.** The **Edge Virtual Bridging** page (under Configure) works with
 the broad role and with a stored admin login, and is off with the limited role. It needs
 `feature evb` (Features page). It reads `show feature`, `show evb`, and as text `show evb
@@ -1648,7 +1686,7 @@ page needs, and a role leaving the broad mode has that line taken out again.
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`, VXLAN OAM's `ping nve`, `traceroute nve`, `pathtrace nve`, `clear ngoam` and `ngoam loop-detection probe\|bringup`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
 | **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
@@ -1701,6 +1739,13 @@ outside configuration mode). A broad role written before lacks them, and the swi
 the Clear buttons on the IGMP snooping page and **Sync now** on the VM Tracker page: the
 Switch page says so on the **Update the port list** card, and pressing it writes the role
 again with them.
+
+VXLAN OAM's tools came next (rules 35 to 40: `ping nve *`, `traceroute nve *`, `pathtrace nve
+*`, `clear ngoam *`, `ngoam loop-detection probe *` and `ngoam loop-detection bringup *`, all
+typed outside configuration mode). A broad role written before lacks them, and the switch
+refuses ping, traceroute and pathtrace, the counters' Clear buttons and loop detection's
+probe and bring-up on the VXLAN OAM page: the Switch page says so on the **Update the port
+list** card, and pressing it writes the role again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port

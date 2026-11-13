@@ -92,6 +92,8 @@ prose columns; those are a reviewer's job.
 | Read Flex Links (the pairs, their state and preemption; on a Nexus 9200 the page says the switch does not do them) or change them: make or delete a pair, its preemption mode and delay, multicast fast convergence | `app/flexlink.py` (`load_flexlink_page`, `build_flexlink_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_flexlink` |
 | Read VM Tracker (the vCenter connections and their state, the VMs on each port, the ports it is off on) or change it: fabric auto-configuration, a connection's address, login (the password never shown back), connect, extension key, timers, automatic VLANs and the VLANs allowed, VM Tracker on a port, syncing a connection now | `app/vmtracker.py` (`load_vmtracker_page`, `build_vmtracker_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vmtracker` |
 | Read Edge Virtual Bridging (the VDP role, address, timers and counters, the hosts and VSIs servers announced) or change it: the VDP address, the answer wait and keep-alive, batch answers | `app/evb.py` (`load_evb_page`, `build_evb_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_evb` |
+| Read VXLAN tunnel encryption (the key chains and keys, the switch-wide settings, policies, peers, encrypted links, the sessions; on a switch other than a Nexus 9300-FX2 the page says it does not do it) or change it: a key chain, a key's string (never shown back), algorithm and send lifetime, the source loopback, encrypted traffic only, the integrity check, a policy's cipher, replay window and rekey time, a peer's key chain and policy or certificates, encryption on a link | `app/tunnel_encryption.py` (`load_tunnel_encryption_page`, `build_tunnel_encryption_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnel_encryption` |
+| Run VXLAN OAM's ping, traceroute and pathtrace (to an address in a VNI or VRF, a host found by its traffic, or a MAC address, with their options) and show what the switch printed; read NGOAM (the profiles and flows, the switch-wide settings, loop detection, the tools' counters) or change it: the OAM access list, the authentication key (never shown back), the cross connect heartbeat, a profile's and flow's lines, loop detection and its probe and bring-up, clearing the counters | `app/ngoam.py` (`load_ngoam_page`, `build_ngoam_change`, `tool_wait`), on the same parts as the protocol pages (`app/protocols.py`); command (and a tool's printed answer) from `NxapiClient.configure_ngoam` |
 | Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
 | Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
 | Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
@@ -309,6 +311,11 @@ ports: back to how they came out of the box) and `reset_port_channel(number)`
 (the same for a port-channel's own settings; its members keep their
 channel-group membership)
 and `save_config()`; each builds its commands from checked values.
+`configure_tunnel_encryption(...)` and `configure_ngoam(...)` (the VXLAN tunnel
+encryption and VXLAN OAM pages, from `tunnel_encryption.build_tunnel_encryption_change`
+and `ngoam.build_ngoam_change`; for a ping, traceroute or pathtrace `configure_ngoam`
+sends the one command as text and returns what the switch printed, waiting as long as
+`ngoam.tool_wait` says).
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
 logging last <n>`, `show hardware access-list tcam region`, `show ip dhcp
@@ -658,8 +665,8 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_protocol_page` | `(request, username, key, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows one protocol's page with a message; `form` keeps what was typed (never secrets) | `protocol_page`, `protocol_change`, `switch_save` | v0.1.0 |
 | `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
 | `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
-| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
-| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends (with the stored admin login, for a site marked `stored_login` on a switch in the stored mode) and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
+| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None, output=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message, and `output`, what the switch printed for the command just run, as printed; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
+| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends (with the stored admin login, for a site marked `stored_login` on a switch in the stored mode) and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save; what the site's `send` returns (a VXLAN OAM tool's answer) is shown on the page | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
 | `check_vpc_place` | `(page, ident) -> None` | Refuses a port-channel the switch lacks (naming it would make one) and a second vPC domain | the vPC `ProtocolSite` | v0.2.1 |
 | `render_vpc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the vPC page, with a message | `vpc_page`, `switch_save` | v0.2.1 |
@@ -772,6 +779,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `epbr_needs` | `(connection, scope, setting) -> str` | Refuses clearing the counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_epbr_clear`) | the Enhanced policy-based routing `ProtocolSite` | v0.3.0 |
 | `snooping_needs` | `(connection, scope, setting) -> str` | Refuses clearing a VLAN's groups or counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_snooping_clear`) | the IGMP snooping `ProtocolSite` | v0.3.0 |
 | `vmtracker_needs` | `(connection, scope, setting) -> str` | Refuses syncing a connection now while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_vmtracker_refresh`) | the VM Tracker `ProtocolSite` | v0.3.0 |
+| `ngoam_needs` | `(connection, scope, setting) -> str` | Refuses a tool, a counters' clear or loop detection's probe and bring-up while the broad role was written before it allowed them (`SwitchConnection.broad_role_without_ngoam_tools`) | the VXLAN OAM `ProtocolSite` | v0.3.0 |
 | `render_epbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Enhanced policy-based routing page, with a message | `epbr_page`, `switch_save` | v0.3.0 |
 | `epbr_page` | `(request, username) -> Response` | `GET /epbr`: the ePBR services, policies, where they apply, the chains' state and the counters, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `epbr_change` | `(request, username, form) -> Response` | `POST /epbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
@@ -796,6 +804,12 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_evb_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Edge Virtual Bridging page, with a message | `evb_page`, `switch_save` | v0.3.0 |
 | `evb_page` | `(request, username) -> Response` | `GET /evb`: EVB's settings, hosts and VSIs, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `evb_change` | `(request, username, form) -> Response` | `POST /evb/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_tunnel_encryption_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN tunnel encryption page, with a message | `tunnel_encryption_page`, `switch_save` | v0.3.0 |
+| `tunnel_encryption_page` | `(request, username) -> Response` | `GET /tunnel-encryption`: the key chains, policies, peers, links and sessions, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `tunnel_encryption_change` | `(request, username, form) -> Response` | `POST /tunnel-encryption/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_ngoam_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN OAM page, with a message | `ngoam_page`, `switch_save` | v0.3.0 |
+| `ngoam_page` | `(request, username) -> Response` | `GET /ngoam`: the tools' forms, profiles, settings and counters, read live; every role looks, operators and admins change and run the tools | router | v0.3.0 |
+| `ngoam_change` | `(request, username, form) -> Response` | `POST /ngoam/change`: one change or tool run, after a confirm page; a tool's printed answer is shown on the page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
 | `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
 | `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
@@ -1302,7 +1316,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), a tunnel encryption key ID in hexadecimal, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
@@ -1703,6 +1717,35 @@ pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by
 | `load_evb_page` | `(client) -> EvbPage` | `show feature`; while evb is on, `show evb`, its hosts and VSIs as text and the configuration text | `routes/evb` | v0.3.0 |
 | `check_evb_place` | `(page, ident) -> None` | Nothing to check: the page's one scope is the whole switch | the Edge Virtual Bridging `ProtocolSite` | v0.3.0 |
 | `build_evb_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_evb`, `routes/evb` | v0.3.0 |
+
+## `app/tunnel_encryption.py` — VXLAN tunnel encryption (CloudSec) between multi-site border gateways
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_key_chains` | `(output) -> tuple[list[str], list[Key]]` | The tunnel encryption key chains and their keys (ID, algorithm, whether a string is set, send lifetime) in `show key chain` text; never the key's string; other key chains are skipped | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_sessions` | `(output) -> list[tuple[str, ...]]` | `show tunnel-encryption session` as text: peer, policy, key chain, receive and send state; a wrapped row joined first | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_policies` | `(output) -> list[tuple[str, str, str, str]]` | `show tunnel-encryption policy` as text: policy, cipher, replay window, rekey time | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_info` | `(output) -> dict[str, str]` | `show tunnel-encryption info global`: each `name: value` line | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_tunnel_encryption_config` | `(config) -> TunnelEncryptionConfig` | The tunnel encryption lines of `show running-config`: the switch-wide ones, policies, peers and the interfaces that encrypt | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_tunnel_encryption` | `(config, keys_text=None, sessions=None, policies_text=None, info=None) -> ProtocolView` | The page: the whole switch with its mode and settings, a place per key chain, key, policy, peer and link, and the session, policy and key tables | `TUNNEL_ENCRYPTION.parse`, `load_tunnel_encryption_page` | v0.3.0 |
+| `model_note` | `(version) -> str` | The plain refusal for a switch other than a Nexus 9300-FX2 (from `show version`); "" for a 9300-FX2 or an unknown model | `load_tunnel_encryption_page` | v0.3.0 |
+| `load_tunnel_encryption_page` | `(client) -> TunnelEncryptionPage` | One request for the features, model and routed interfaces; while the feature is on, the configuration, key chains, sessions, policies and global state as text | `routes/tunnel_encryption` | v0.3.0 |
+| `check_tunnel_encryption_place` | `(page, ident) -> None` | Refuses a VLAN interface and an interface the switch lacks as a routed port or port-channel (unless it already encrypts) | the VXLAN tunnel encryption `ProtocolSite` | v0.3.0 |
+| `build_tunnel_encryption_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_tunnel_encryption`, `routes/tunnel_encryption` | v0.3.0 |
+
+## `app/ngoam.py` — VXLAN OAM: ping, traceroute and pathtrace, profiles, loop detection
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_ngoam_config` | `(config) -> NgoamConfig` | The NGOAM lines of `show running-config`: the OAM access list, whether an authentication key is set (never the key), the cross connect heartbeat, each profile's and flow's settings, loop detection | `parse_ngoam` | v0.3.0 |
+| `parse_counters` | `(bodies) -> tuple[tuple[str, ...], ...]` | The three `show ngoam ... statistics summary` bodies: per tool, sent, answers, timed out, not sent, asked by others, answered others, last cleared | `parse_ngoam` | v0.3.0 |
+| `parse_acl_status` | `(output) -> str` | `show ngoam acl status`: the VLANs (bridge domains) the OAM access list is on | `parse_ngoam` | v0.3.0 |
+| `parse_ngoam` | `(config, counters=None, acl=None, loop_refused=False) -> ProtocolView` | The page: a place per tool, the whole switch, each profile and flow, loop detection when on, the counters, and the counters table | `NGOAM.parse`, `load_ngoam_page` | v0.3.0 |
+| `loop_refused` | `(version) -> bool` | True for a Nexus 9200 (from `show version`), which refuses loop detection | `load_ngoam_page` | v0.3.0 |
+| `load_ngoam_page` | `(client) -> NgoamPage` | One request for the features, model and ports; while ngoam is on, one for the counters, and the ACL status and configuration as text | `routes/ngoam` | v0.3.0 |
+| `check_ngoam_place` | `(page, ident) -> None` | Nothing to refuse before the lines are built: the switch names a VRF, port or profile it lacks | the VXLAN OAM `ProtocolSite` | v0.3.0 |
+| `tool_wait` | `(line) -> float` | How long a tool's line may take: its count, interval, timeout and max-ttl (the switch's defaults where not given), plus room to answer | `NxapiClient.configure_ngoam` | v0.3.0 |
+| `build_ngoam_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a tool, clear or loop detection run is described as run, not set | `NxapiClient.configure_ngoam`, `routes/ngoam` | v0.3.0 |
 
 ## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
 

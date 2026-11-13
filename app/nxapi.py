@@ -850,15 +850,7 @@ class NxapiClient:
         return self._shared(("text", cleaned), True, lambda: self._read_text(cleaned))
 
     def _read_text(self, cleaned: str) -> str:
-        payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
-        entry = payload[0] if isinstance(payload, list) and payload else payload
-        if not isinstance(entry, dict):
-            raise NxapiProtocolError(f"no answer for {cleaned!r}")
-        if "error" in entry:
-            raise NxapiCommandError(f"{cleaned!r}: {error_message(entry['error'])}")
-        result = entry.get("result")
-        message = result.get("msg") if isinstance(result, dict) else None
-        return message if isinstance(message, str) else ""
+        return self._exec_text(cleaned, self._target.timeout)
 
     def create_user(self, name: str, password: str, role: str) -> None:
         """Create a local switch account. Needs an admin login.
@@ -2079,6 +2071,70 @@ class NxapiClient:
 
         change = build_evb_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_tunnel_encryption(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VXLAN tunnel encryption page: a switch-wide line, a key chain or
+        key (its string masked in the labels), a policy, a peer, or a link.
+
+        The lines are built from the page's description and the checked values
+        (``tunnel_encryption.build_tunnel_encryption_change``), as for the Monitor sessions
+        page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.tunnel_encryption import build_tunnel_encryption_change
+
+        change = build_tunnel_encryption_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_ngoam(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> str | None:
+        """One change on the VXLAN OAM page: a switch-wide line, a profile or flow line, loop
+        detection, a counters' clear, or one of the tools.
+
+        The lines are built from the page's description and the checked values
+        (``ngoam.build_ngoam_change``), as for the Monitor sessions page. A tool (ping,
+        traceroute or pathtrace nve) is one command typed outside configuration mode, whose
+        printed answer is returned; it may take as long as its count and timeouts add up to
+        (``ngoam.tool_wait``). Anything else returns None.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.ngoam import TOOLS, build_ngoam_change, tool_wait
+
+        change = build_ngoam_change(scope, setting, action, ident, values)
+        if scope not in TOOLS:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+            return None
+        (line,) = change.lines
+        wait = max(self._target.timeout, tool_wait(line))
+        return self._exec_text(line, wait)
+
+    def _exec_text(self, command: str, timeout: float) -> str:
+        """One command typed outside configuration mode, built and checked by the caller,
+        whose printed text is the answer (``cli_ascii``, as for ``show_text``)."""
+        payload = self._post(build_payload([command], "cli_ascii"), timeout)
+        entry = payload[0] if isinstance(payload, list) and payload else payload
+        if not isinstance(entry, dict):
+            raise NxapiProtocolError(f"no answer for {command!r}")
+        if "error" in entry:
+            raise NxapiCommandError(f"{command!r}: {error_message(entry['error'])}")
+        result = entry.get("result")
+        message = result.get("msg") if isinstance(result, dict) else None
+        return message if isinstance(message, str) else ""
 
     def configure_ptp(
         self,

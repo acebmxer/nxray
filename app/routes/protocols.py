@@ -165,7 +165,9 @@ class ProtocolSite:
     update what NXray stores); ``links`` are related pages shown under the title;
     ``needs``, when given, gets the connection, scope and setting of a change and
     returns why NXray's role may not make it yet ("" when it may), for pages whose
-    newer parts need a newer role than the page itself."""
+    newer parts need a newer role than the page itself. ``send`` returns what the switch
+    printed for a command whose answer is the point (a VXLAN OAM ping), shown on the page
+    afterwards, or None."""
 
     url: str
     back_url: str
@@ -178,7 +180,7 @@ class ProtocolSite:
     load: Callable[[NxapiClient], Any]
     check_place: Callable[[Any, dict[str, str]], None]
     build: Callable[[str, str, str, dict[str, str], dict[str, str]], ProtocolChange]
-    send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], None]
+    send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], str | None]
     after: Callable[[Request, ProtocolChange], None] | None = None
     links: tuple[tuple[str, str], ...] = ()  # (url, label) of related pages, under the title
     needs: Callable[[SwitchConnection, str, str], str] | None = None
@@ -236,9 +238,11 @@ def render_site_page(
     error: str | None = None,
     notice: str | None = None,
     form: dict[str, str] | None = None,
+    output: str | None = None,
 ) -> Response:
     """Read the switch fresh and show a page built from ``app/protocols.py``, with a
-    message. ``form`` keeps what was typed into the form that was refused."""
+    message. ``form`` keeps what was typed into the form that was refused; ``output`` is
+    what the switch printed for the command just run."""
     connection, target, problem = stored_switch(request)
     status = page = None
     if target is not None:
@@ -267,6 +271,7 @@ def render_site_page(
             "csrf_token": csrf_token(request),
             "can_change": can_change,
             "feature_command": feature_command,
+            "output": output,
         },
         status_code=400 if error else 200,
     )
@@ -419,7 +424,7 @@ def site_change(
         sender = dataclasses.replace(target, username=login[0], password=login[1])
     try:
         with NxapiClient(sender, transport=request.app.state.nxapi_transport) as client:
-            site.send(client, change, ident, values)
+            output = site.send(client, change, ident, values)
     except NxapiError as exc:
         refused = change_refused(exc, target)
         refused = scrub_secrets(refused, *_secrets(proto, change.scope, change.setting, values))
@@ -433,7 +438,7 @@ def site_change(
     log.info("%s on %s by %s", change.describe, connection.host, username)
     note_activity(request, username, proto.name, change.describe, connection.host)
     done = f"Done: {change.describe}" + (f" {NOT_SAVED}" if change.config else "")
-    return render_site_page(request, username, proto, site, notice=done)
+    return render_site_page(request, username, proto, site, notice=done, output=output)
 
 
 @router.post("/routing/protocols/{key}/change", response_class=HTMLResponse)

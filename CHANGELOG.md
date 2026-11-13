@@ -11,6 +11,29 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Ping, traceroute and pathtrace across the VXLAN fabric (#95).** The new **VXLAN OAM**
+  page (under Configure) runs VXLAN OAM's ping, traceroute and pathtrace from the switch, to
+  an address in a VNI or a VRF, to a host found by its traffic, or to a MAC address, with the
+  source port, source address, count, size, interval, timeout, hops, outgoing port, each
+  hop's counters and full answers, and shows what the switch printed. It also makes and
+  changes OAM profiles and their flows, sets the OAM access list, the authentication key
+  (never shown back) and the cross connect heartbeat, turns loop detection on and runs its
+  probe and bring-up, shows and clears the tools' counters. Each change and each run shows
+  its lines and asks first. It needs the ngoam feature and works with the broad role or a
+  stored admin login; a broad role written before needs Update the port list on the Switch
+  page to run the tools. Tried on a switch without a VXLAN tunnel, so no OAM message was
+  answered; loop detection is refused by a Nexus 9200, and the page says so; the OAM access
+  list was not tried.
+- **Encrypt VXLAN traffic between sites (#95).** The new **VXLAN tunnel encryption** page
+  (under Configure) sets up CloudSec between the border gateways of a multi-site VXLAN
+  fabric: key chains and keys (the key never shown back, its algorithm and send lifetime),
+  the source loopback, encrypted traffic only, the integrity check, policies (cipher, replay
+  window, rekey time), peers with their key chain and policy or certificates, and the links
+  that encrypt, with the sessions, policies and keys in tables. Each change shows its lines
+  and asks first. It needs the tunnel-encryption feature and works with the broad role or a
+  stored admin login. Cisco supports it on the Nexus 9300-FX2 only; other switches refuse
+  the feature, and the page says so plainly. The key chain lines were tried on a switch; the
+  rest follows Cisco's guide and was not tried.
 - **See the VMs servers announce over Edge Virtual Bridging (#95).** The new **Edge Virtual
   Bridging** page (under Configure) shows the switch's VDP role, address, timers and
   counters, and the hosts and virtual station interfaces the servers' virtual switches

@@ -56,6 +56,7 @@ from app.routes import (
     nat,
     nbm,
     neighbors,
+    ngoam,
     pbr,
     pfc,
     pki,
@@ -79,6 +80,7 @@ from app.routes import (
     track,
     traffic,
     trm,
+    tunnel_encryption,
     tunnels,
     udld,
     users,
@@ -273,6 +275,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(flexlink.router)
     app.include_router(vmtracker.router)
     app.include_router(evb.router)
+    app.include_router(tunnel_encryption.router)
+    app.include_router(ngoam.router)
     app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)

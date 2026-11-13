@@ -35,9 +35,10 @@ ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 # allowed ITD's counters (ITD_STATISTICS_RULES); 1004 allowed clearing NAT's translations and
 # counters (NAT_CLEAR_RULES); 1005 allowed clearing ePBR's counters (EPBR_CLEAR_RULES); 1006
 # allowed clearing IGMP snooping's groups and counters (SNOOPING_CLEAR_RULES) and syncing a VM
-# Tracker connection (VMTRACKER_REFRESH_RULES). A broad role below it is written again by
-# Update the port list on the Switch page.
-BROAD_ROLE_VERSION = 1006
+# Tracker connection (VMTRACKER_REFRESH_RULES); 1007 allowed VXLAN OAM's tools, counters' clears
+# and loop detection's probe and bring-up (NGOAM_RULES). A broad role below it is written again
+# by Update the port list on the Switch page.
+BROAD_ROLE_VERSION = 1007
 # The broad role version that first denied EEM applets: one below it lets the account get
 # past the other denies, which every page warns about.
 BROAD_EEM_DENY_VERSION = 1001
@@ -53,6 +54,8 @@ BROAD_EPBR_VERSION = 1005
 BROAD_SNOOPING_CLEAR_VERSION = 1006
 # The broad role version that first allowed syncing a VM Tracker connection now.
 BROAD_VMTRACKER_VERSION = 1006
+# The broad role version that first allowed VXLAN OAM's ping, traceroute and pathtrace.
+BROAD_NGOAM_VERSION = 1007
 
 
 @dataclass(frozen=True)
@@ -171,6 +174,18 @@ class SwitchConnection:
             self.changes_enabled
             and self.role_mode == ROLE_BROAD
             and self.role_version < BROAD_VMTRACKER_VERSION
+        )
+
+    @property
+    def broad_role_without_ngoam_tools(self) -> bool:
+        """True when the account has a broad role written before it allowed VXLAN OAM's
+        ping, traceroute and pathtrace, counters' clears and loop detection's probe and
+        bring-up (``BROAD_NGOAM_VERSION``): Update the port list on the Switch page adds
+        them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_NGOAM_VERSION
         )
 
     @property
@@ -339,6 +354,13 @@ class SwitchConnection:
         """True when NXray may change Flex Links, VM Tracker and Edge Virtual Bridging: the
         same as for monitor sessions (the broad role or the stored admin login; the limited
         role has no rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def vxlan_extra_changes_enabled(self) -> bool:
+        """True when NXray may change VXLAN tunnel encryption and VXLAN OAM and run its tools:
+        the same as for monitor sessions (the broad role or the stored admin login; the
+        limited role has no rules for them)."""
         return self.monitor_changes_enabled
 
     @property
@@ -805,6 +827,7 @@ __all__ = [
     "BROAD_ITD_VERSION",
     "BROAD_LOOPBACK_VERSION",
     "BROAD_NAT_VERSION",
+    "BROAD_NGOAM_VERSION",
     "BROAD_ROLE_VERSION",
     "BROAD_SNOOPING_CLEAR_VERSION",
     "BROAD_VMTRACKER_VERSION",

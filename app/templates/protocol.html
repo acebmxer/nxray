@@ -39,7 +39,7 @@
   {% for v in page.vrfs %}<option value="{{ v }}" {% if (value or "default") == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
 </select>
 {% elif f.kind == "secret" %}
-<input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="63">
+<input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="{{ f.maximum or 63 }}">
 {% else %}
 <input id="{{ uid }}" name="{{ name }}" type="text" spellcheck="false" value="{{ value or '' }}" placeholder="{{ f.placeholder }}">
 {% endif %}
@@ -67,7 +67,7 @@
     {% endif %}
     {% for f in s.fields %}{{ field_input(f, "v_" ~ f.name, current.get(f.name, ""), uidbase ~ "-" ~ s.key ~ "-" ~ f.name) }}{% endfor %}
     <div class="button-row">
-      {% if s.settable %}<button type="submit" name="action" value="set" class="btn btn-quiet">Set</button>{% endif %}
+      {% if s.settable %}<button type="submit" name="action" value="set" class="btn btn-quiet">{{ s.button or "Set" }}</button>{% endif %}
       {% if s.removable %}<button type="submit" name="action" value="remove" class="btn btn-quiet">Remove</button>{% endif %}
     </div>
   </form>
@@ -102,6 +102,12 @@
 {% else %}
 {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
 {% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+{% if output %}
+<section class="card" id="answer">
+  <h2 class="card-title">What the switch printed</h2>
+  <pre class="mono tool-output">{{ output }}</pre>
+</section>
+{% endif %}
 {% if connection.unsaved_changes and role in ("admin", "operator") %}
 <div class="warning warning-row">
   <span>NXray changed the switch since its configuration was last saved.</span>

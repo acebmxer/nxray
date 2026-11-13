@@ -627,11 +627,13 @@ _LOCAL = Field(
 )
 
 
-def _lifetimes(word: str, label: str, what: str) -> tuple[Setting, ...]:
+def _lifetimes(word: str, label: str, what: str, duration_min: int = 1) -> tuple[Setting, ...]:
     """The three ways to set a key's accept or send lifetime, and one way to remove it.
 
     The three share one line on the switch, so they are only set from here;
     ``{word}_lifetime`` removes whichever is there without asking for its times.
+    ``duration_min`` is the shortest duration the key chain takes (a tunnel
+    encryption key chain's is 1800 seconds; app/tunnel_encryption.py uses this too).
     """
     start = f"{word}-lifetime[ {{local}}] {_at('start')}"
     group = f"{label} lifetime"
@@ -661,7 +663,7 @@ def _lifetimes(word: str, label: str, what: str) -> tuple[Setting, ...]:
             (
                 _LOCAL,
                 *_moment("start", "From"),
-                Field("duration", "For seconds", "int", 1, _DURATION_MAX),
+                Field("duration", "For seconds", "int", duration_min, _DURATION_MAX),
             ),
             removable=False,
             help=f"The key is {what} for this many seconds from the start",

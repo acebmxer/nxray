@@ -1,0 +1,5 @@
+Tunnel-Encryption Policy      Cipher            Window     SAK Rekey time
+----------------------------  ----------------  ---------  --------------
+cloudsec                      GCM-AES-XPN-256   134217728  1800
+p1                            GCM-AES-XPN-256   1073741823
+system-default-tunenc-policy  GCM-AES-XPN-256   268435456

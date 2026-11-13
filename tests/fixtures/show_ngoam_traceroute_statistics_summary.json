@@ -1,0 +1,15 @@
+{
+  "TABLE_summary": {
+    "ROW_summary": {
+      "last-clear-summary-stats": "Fri Nov 13 12:11:01.478 UTC",
+      "tx": 0,
+      "rx": 0,
+      "timeout": 0,
+      "unsent": 20,
+      "resp-tx": 0,
+      "resp-rx": 0,
+      "resp-unsent": 0,
+      "resp-dup": 0
+    }
+  }
+}

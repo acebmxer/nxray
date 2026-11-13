@@ -462,6 +462,14 @@
     the port list to write the role again with it.
   </p>
   {% endif %}
+  {% if connection.broad_role_without_ngoam_tools %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed VXLAN OAM's ping,
+    traceroute and pathtrace, so the switch refuses them, the counters' Clear buttons and
+    loop detection's probe and bring-up on the VXLAN OAM page. Press Update the port list
+    to write the role again with them.
+  </p>
+  {% endif %}
   {% if connection.broad_role_without_loopbacks %}
   <p class="warning">
     NXray's broad role on the switch was written before it named the loopbacks,

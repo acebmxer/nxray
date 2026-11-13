@@ -1,0 +1,20 @@
+feature ngoam
+
+ngoam profile 250
+  description nxprobe test profile
+  hop 255
+  oam-channel 2
+  ingress Ethernet1/54
+  dot1q 250 Ethernet1/54
+  interface 
+  sport 1024, 2048
+  flow forward
+    dot1q 250 
+    ip destination 192.0.2.1
+    mac-address source 0200.0000.0002
+    mac-address destination 0200.0000.0001
+    port source 65535
+    port destination 80
+    protocol 17
+
+

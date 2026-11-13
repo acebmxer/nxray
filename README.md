@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-3947%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-3984%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -41,7 +41,8 @@ media multicast with non-blocking multicast,
 set up spanning tree (mode, VLAN
 priorities, the MST region, edge ports, BPDU guard and filter, root and loop
 guard), set up vPC (domain, peer keepalive, peer-link, vPC port-channels) and VXLAN
-with EVPN (NVE interface, VNIs, route-targets) and route multicast across it, set up IGMP
+with EVPN (NVE interface, VNIs, route-targets), route multicast across it, encrypt it
+between sites (on the Nexus 9300-FX2) and ping, traceroute and pathtrace across it, set up IGMP
 snooping per VLAN (queriers, router ports, static groups) and clear what it learned, pair a
 port with a backup that takes over at once (Flex Links, on the Nexus 9300 models that do
 them), follow VMware VMs to their ports from vCenter with VM Tracker, see the VMs servers
@@ -224,6 +225,21 @@ default: *(built)*.
     neighbors). *(built; needs the broad role or a stored admin login; the feature and the
     switch-wide, VRF and NVE lines tried on a switch, the route-target, layer 3 VNI and BGP
     lines not, since they need BGP and EVPN running)*
+    **VXLAN tunnel encryption (CloudSec)**: key chains and keys, the source loopback,
+    encrypted traffic only, the integrity check, policies, peers with their key chain and
+    policy or certificates, the links that encrypt, with the sessions. *(built from Cisco's
+    guide; needs the broad role or a stored admin login; the N9K-C92160YC-X does not do it:
+    it refuses the feature, and the page says so; Cisco lists it for the Nexus 9300-FX2
+    only; the key chain lines tried on a switch, the rest not tried live)*
+    **VXLAN OAM (NGOAM)**: ping, traceroute and pathtrace across the fabric (to an address
+    in a VNI or VRF, a host found by its traffic, or a MAC address) with the switch's
+    answer shown, OAM profiles and flows, the OAM access list, authentication key, cross
+    connect heartbeat, loop detection and its probe and bring-up, the tools' counters.
+    *(built; needs the broad role or a stored admin login, and Update the port list for a
+    broad role written before; the feature, profiles, flows and every tool form tried on a
+    switch with no VXLAN tunnel, so no OAM answer was seen; the OAM access list not tried
+    live, since it writes into the switch's hardware access lists; loop detection refused
+    by the N9K-C92160YC-X, and the page says so)*
     **IGMP snooping**: switch-wide and per VLAN, the querier and its timers, fast leave,
     explicit tracking, report suppression and flooding, router ports, static groups, report
     filters, with the groups hosts joined and each VLAN's counters, and clearing a VLAN's

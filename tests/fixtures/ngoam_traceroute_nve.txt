@@ -1,0 +1,10 @@
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+'D' - Destination Unreachable, 'X' - unknown return code,
+'m' - malformed request(parameter problem),
+'c' - Corrupted Data/Test, '#' - Duplicate response,
+'v' - Other - Use verbose to see the result
+
+
+Sender handle: 222
+Q Route not found

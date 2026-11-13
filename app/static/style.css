@@ -737,6 +737,20 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .diff-removed { color: var(--crit); background: var(--crit-soft); }
 .diff-gap { color: var(--text-3); }
 
+/* What the switch printed for a command run from a page (VXLAN OAM ping, traceroute,
+   pathtrace): its own columns, so kept as printed. */
+.tool-output {
+  line-height: 1.45;
+  overflow-x: auto;
+  max-height: 32rem;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-sunk);
+  white-space: pre;
+}
+
 /* ---- front panel (app/face.py draws the SVG; colours live here) ---- */
 
 .face { width: 100%; height: auto; display: block; }
