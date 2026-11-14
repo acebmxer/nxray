@@ -9,6 +9,8 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
 ### Added
 
 - **Change switch-wide settings (#102).** The new **Switch-wide settings** page (under
