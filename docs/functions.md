@@ -1850,8 +1850,9 @@ pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_system_config` | `(config) -> dict` | The page's lines (logging source, DNS and HTTP source, TCP, XML server, ACL log level) from `show running-config` text, as setting values; indented lines are left alone | `parse_system_settings` | v0.3.0 |
-| `parse_system_settings` | `(config) -> ProtocolView` | The page from the configuration text (None: not read, with a note) | `SYSTEM_SETTINGS.parse`, `load_system_settings_page` | v0.3.0 |
+| `parse_system_config` | `(config) -> dict` | The page's lines (logging source, DNS and HTTP source, TCP, XML server, ACL log level and the other switch-wide lines) from `show running-config` text, as setting values; indented lines are left alone | `parse_system_settings` | v0.3.0 |
+| `parse_time_ranges` | `(config) -> list[tuple[str, list[str], dict[str, str]]]` | Each `time-range NAME` of the configuration with its entries and its first repeating entry as setting values | `parse_system_settings` | v0.3.0 |
+| `parse_system_settings` | `(config) -> ProtocolView` | The page from the configuration text (None: not read, with a note): the settings and each time range | `SYSTEM_SETTINGS.parse`, `load_system_settings_page` | v0.3.0 |
 | `load_system_settings_page` | `(client) -> SystemSettingsPage` | `show running-config` as text | `routes/system_settings` | v0.3.0 |
 | `check_system_settings_place` | `(page, ident) -> None` | Nothing to check: the one scope is the whole switch | the page's `ProtocolSite` | v0.3.0 |
 | `build_system_settings_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_system_settings`, `routes/system_settings` | v0.3.0 |

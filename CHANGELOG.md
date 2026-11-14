@@ -14,9 +14,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 - **Change switch-wide settings (#102).** The new **Switch-wide settings** page (under
   Configure) sets the logging source interface, the DNS and HTTP source interfaces, TCP path MTU
   discovery, maximum segment size and connection wait, the XML server's session limit and schema
-  validation, and the ACL log level, and shows each one set. Every line was tried on a switch and
-  put back; `ip icmp-errors source-interface` is listed by the switch but refused, so it is not
-  there. Needs the broad role or a stored admin login.
+  validation, the ACL log level, the CPU rate limit (log only), onboard failure logging, SNMP
+  long interface descriptions and time ranges (made, filled and deleted), and shows each one set.
+  It also takes the settings that change forwarding or need a restart (`system default
+  switchport`, `system routing max-mode`, `system urpf disable`, `mac-learn disable`,
+  `switching-mode`, the `hardware` lines, `ip load-sharing`, `fips mode enable` and others),
+  each with a warning; those were built from the switch's own command list and not tried on the
+  production switch. `ip icmp-errors source-interface` is listed by the switch but refused, so
+  it is not there. Needs the broad role or a stored admin login.
 - **Finish the Features page (#101).** Privilege levels, segment routing traffic engineering, NTP and image
   signature checking now have Turn on / Turn off (turning on an MPLS feature installs and
   turns on the MPLS feature set first). The switch does not report NTP or signature checking in

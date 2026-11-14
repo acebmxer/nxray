@@ -19,8 +19,23 @@ nothing saved:
 - ``xml server max-session N``, ``xml server validate all`` and ``acllog match-log-level N``
   are taken; ``no xml server max-session`` and ``no acllog match-log-level`` are a syntax
   error without the value, so they send it back.
+- ``rate-limit cpu direction input pps 1000 action log`` is taken and stored; its ``no`` form
+  must repeat the whole line (``no rate-limit cpu direction input`` is a syntax error).
+- ``time-range NAME`` is made by being entered; ``periodic weekdays 08:00 to 17:00`` and
+  ``absolute start 08:00 1 January 2027 end 17:00 31 December 2027`` are stored as numbered
+  entries (10, 20); ``no time-range NAME`` deletes it. ``snmp ifmib ifalias long`` is taken.
 - ``ip icmp-errors source-interface`` is listed by ``show cli list`` but refused ("Syntax
   error"), so it is not here.
+
+Not tried on a switch, built from the lines ``show cli list`` gives (the switch is in
+production, so nothing that changes forwarding, queues or needs a restart was tried):
+``system default switchport[ shutdown]``, ``system routing max-mode``, ``system urpf disable``,
+``system vlan long-name``, ``mac-learn disable``, ``router-guard``, ``l2protocol tunnel cos``,
+``as-format asdot``, ``ip load-sharing``, ``switching-mode``, the ``hardware`` lines,
+``hw-module logging onboard``, ``congestion-control random-detect forward-nonecn``,
+``link-level-flow-control watch-dog-interval``, ``sockets local-port-range``,
+``ttag-marker-interval`` and ``fips mode enable``. Each carries a warning where it can cut
+traffic or needs a restart.
 """
 
 from __future__ import annotations
@@ -129,10 +144,276 @@ _SYSTEM = Scope(
             help="The syslog level of the messages ACL entries with log write. Remove needs the "
             "same level.",
         ),
+        Setting(
+            "ifalias_long",
+            "Long interface descriptions in SNMP",
+            "snmp ifmib ifalias long",
+            group="SNMP",
+            help="Set lets ifAlias carry the whole description, not the first 64 characters.",
+        ),
+        Setting(
+            "cpu_rate_limit",
+            "CPU rate limit (log only)",
+            "rate-limit cpu direction {direction} pps {pps} action log",
+            (
+                Field("direction", "Direction", "choice", choices=("input", "output", "both")),
+                Field("pps", "Packets per second", "int", 0, 100000),
+            ),
+            no_line="no rate-limit cpu direction {direction} pps {pps} action log",
+            group="CPU and logging",
+            help="Logs when traffic to or from the CPU passes this rate. Remove needs the same "
+            "direction and rate.",
+        ),
+        Setting(
+            "onboard_logging",
+            "Onboard failure logging",
+            "hw-module logging onboard[ {kind}]",
+            (
+                Field(
+                    "kind",
+                    "Kind",
+                    "choice",
+                    choices=(
+                        "counter-stats",
+                        "cpuhog",
+                        "environmental-history",
+                        "error-stats",
+                        "interrupt-stats",
+                        "obfl-logs",
+                    ),
+                    optional=True,
+                    hint="Empty: all of them",
+                ),
+            ),
+            no_line="no hw-module logging onboard[ {kind}]",
+            group="CPU and logging",
+            help="What the switch writes to its onboard failure log.",
+        ),
+        Setting(
+            "sockets_range",
+            "Local port range for sockets",
+            "sockets local-port-range {low} {high}",
+            (
+                Field("low", "Lowest port", "int", 15001, 58000),
+                Field("high", "Highest port", "int", 22001, 65535),
+            ),
+            no_line="no sockets local-port-range",
+            group="CPU and logging",
+            help="The range the switch's own connections use.",
+        ),
+        Setting(
+            "ttag_interval",
+            "Timing tag marker interval",
+            "ttag-marker-interval {seconds}",
+            (Field("seconds", "Seconds", "int", 1, 4),),
+            no_line="no ttag-marker-interval",
+            group="CPU and logging",
+        ),
+        Setting(
+            "as_format",
+            "BGP AS numbers as asdot",
+            "as-format asdot",
+            group="Routing",
+            help="Set shows 4-byte AS numbers as 1.10, not 65546.",
+        ),
+        Setting(
+            "load_sharing",
+            "ECMP load sharing",
+            "ip load-sharing address source-destination port source-destination[ rotate {rotate}]",
+            (Field("rotate", "Rotate", "int", 1, 63, optional=True, hint="Hash rotation"),),
+            no_line="no ip load-sharing address source-destination port source-destination",
+            group="Routing",
+            warning="Changing how traffic is spread over equal-cost paths can move flows "
+            "to other paths.",
+        ),
+        Setting(
+            "urpf_disable",
+            "Unicast RPF off",
+            "system urpf disable",
+            group="Routing",
+            warning="Turns unicast reverse-path checking off for the whole switch.",
+        ),
+        Setting(
+            "routing_mode",
+            "Routing table mode",
+            "system routing max-mode {mode}",
+            (Field("mode", "Mode", "choice", choices=("l3", "host", "l2", "l2-l3")),),
+            no_line="no system routing max-mode {mode}",
+            group="Routing",
+            warning="The switch must be restarted before this takes effect, and the routing "
+            "table is carved up differently.",
+        ),
+        Setting(
+            "default_switchport",
+            "Ports are layer 2 by default",
+            "system default switchport",
+            group="Defaults for ports",
+            warning="Every port without its own switchport or no switchport line changes "
+            "mode, which can cut traffic. Remove makes ports layer 3 by default.",
+        ),
+        Setting(
+            "default_switchport_shutdown",
+            "Layer 2 ports start shut down",
+            "system default switchport shutdown",
+            group="Defaults for ports",
+            warning="Every layer 2 port without its own shutdown line goes down.",
+        ),
+        Setting(
+            "vlan_long_name",
+            "Long VLAN names",
+            "system vlan long-name",
+            group="Defaults for ports",
+            help="Set lets VLAN names be up to 128 characters.",
+        ),
+        Setting(
+            "mac_learn_off",
+            "MAC learning off",
+            "mac-learn disable",
+            group="Layer 2",
+            warning="The switch stops learning MAC addresses, so it floods traffic.",
+        ),
+        Setting(
+            "router_guard4",
+            "Router guard (IPv4 multicast)",
+            "router-guard ip multicast switchports",
+            group="Layer 2",
+        ),
+        Setting(
+            "router_guard6",
+            "Router guard (IPv6 multicast)",
+            "router-guard ipv6 multicast switchports",
+            group="Layer 2",
+        ),
+        Setting(
+            "l2pt_cos",
+            "Layer 2 tunnel CoS",
+            "l2protocol tunnel cos {cos}",
+            (Field("cos", "CoS", "int", 0, 7),),
+            no_line="no l2protocol tunnel cos",
+            group="Layer 2",
+        ),
+        Setting(
+            "switching_mode",
+            "Switching mode",
+            "switching-mode {mode}",
+            (
+                Field(
+                    "mode",
+                    "Mode",
+                    "choice",
+                    choices=("store-forward", "fast-to-slow-speed-cut-through"),
+                ),
+            ),
+            no_line="no switching-mode {mode}",
+            group="Hardware and queues",
+            warning="Changes how the switch forwards frames between ports of different speeds.",
+        ),
+        Setting(
+            "afd_profile",
+            "AFD queue profile",
+            "hardware qos afd profile {profile}",
+            (Field("profile", "Profile", "choice", choices=("mesh", "burst", "ultra-burst")),),
+            no_line="no hardware qos afd profile",
+            group="Hardware and queues",
+            warning="Changes how the switch sets its queue thresholds.",
+        ),
+        Setting(
+            "buffer_poll",
+            "Buffer statistics interval",
+            "hardware profile buffer info poll-interval timer {milliseconds}",
+            (Field("milliseconds", "Milliseconds", "int", 500, 60000),),
+            no_line="no hardware profile buffer info poll-interval timer",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "buffer_threshold",
+            "Buffer threshold per port",
+            "hardware profile buffer info port-threshold threshold {percent}",
+            (Field("percent", "Percent", "int", 1, 95),),
+            no_line="no hardware profile buffer info port-threshold threshold",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "ejector",
+            "Hardware ejector",
+            "hardware ejector enable",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "tx_span",
+            "Global transmit SPAN for multicast",
+            "hardware multicast global-tx-span",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "forward_nonecn",
+            "Forward non-ECN traffic with WRED",
+            "congestion-control random-detect forward-nonecn",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "llfc_watchdog",
+            "Link-level flow control watchdog",
+            "link-level-flow-control watch-dog-interval {state}",
+            (Field("state", "State", "choice", choices=("on", "off")),),
+            no_line="no link-level-flow-control watch-dog-interval {state}",
+            group="Hardware and queues",
+        ),
+        Setting(
+            "fips",
+            "FIPS mode",
+            "fips mode enable",
+            group="Security",
+            warning="The switch must be restarted to enter FIPS mode, and some algorithms "
+            "stop working.",
+        ),
     ),
 )
 
-SCOPES = (_SYSTEM,)
+_TIME_RANGE = Scope(
+    key="time_range",
+    label="Time range",
+    ident=(Field("name", "Name", "name"),),
+    enter=("time-range {name}",),
+    create=True,
+    create_label="Make a time range",
+    delete=("no time-range {name}",),
+    delete_warning="ACL entries that use the time range stop matching it.",
+    help="A time range an ACL entry can name. Remove takes one entry out.",
+    settings=(
+        Setting(
+            "periodic",
+            "Repeating entry",
+            "periodic {days} {start} to {end}",
+            (
+                Field(
+                    "days",
+                    "Days",
+                    "choice",
+                    choices=(
+                        "daily",
+                        "weekdays",
+                        "weekend",
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                    ),
+                ),
+                Field("start", "From", "hhmm"),
+                Field("end", "To", "hhmm"),
+            ),
+            no_line="no periodic {days} {start} to {end}",
+            group="Entries",
+            help="Remove needs the same days and times.",
+        ),
+    ),
+)
+
+SCOPES = (_SYSTEM, _TIME_RANGE)
 
 # (setting key, the line as show running-config prints it, the field names in order)
 _LINES = (
@@ -145,6 +426,48 @@ _LINES = (
     ("xml_sessions", r"xml server max-session (\d+)", ("sessions",)),
     ("xml_validate", r"xml server validate all", ()),
     ("acllog_level", r"acllog match-log-level (\d+)", ("level",)),
+    ("ifalias_long", r"snmp ifmib ifalias long", ()),
+    (
+        "cpu_rate_limit",
+        r"rate-limit cpu direction (input|output|both) pps (\d+) action log",
+        ("direction", "pps"),
+    ),
+    ("sockets_range", r"sockets local-port-range (\d+) (\d+)", ("low", "high")),
+    ("ttag_interval", r"ttag-marker-interval (\d+)", ("seconds",)),
+    ("as_format", r"as-format asdot", ()),
+    (
+        "load_sharing",
+        r"ip load-sharing address source-destination port source-destination"
+        r"(?: rotate (\d+))?",
+        ("rotate",),
+    ),
+    ("urpf_disable", r"system urpf disable", ()),
+    ("routing_mode", r"system routing max-mode (\S+)", ("mode",)),
+    ("default_switchport", r"system default switchport", ()),
+    ("default_switchport_shutdown", r"system default switchport shutdown", ()),
+    ("vlan_long_name", r"system vlan long-name", ()),
+    ("mac_learn_off", r"mac-learn disable", ()),
+    ("router_guard4", r"router-guard ip multicast switchports", ()),
+    ("router_guard6", r"router-guard ipv6 multicast switchports", ()),
+    ("l2pt_cos", r"l2protocol tunnel cos (\d+)", ("cos",)),
+    ("switching_mode", r"switching-mode (\S+)", ("mode",)),
+    ("afd_profile", r"hardware qos afd profile (\S+)", ("profile",)),
+    (
+        "buffer_poll",
+        r"hardware profile buffer info poll-interval timer (\d+)",
+        ("milliseconds",),
+    ),
+    (
+        "buffer_threshold",
+        r"hardware profile buffer info port-threshold threshold (\d+)",
+        ("percent",),
+    ),
+    ("ejector", r"hardware ejector enable", ()),
+    ("tx_span", r"hardware multicast global-tx-span", ()),
+    ("forward_nonecn", r"congestion-control random-detect forward-nonecn", ()),
+    ("llfc_watchdog", r"link-level-flow-control watch-dog-interval (on|off)", ("state",)),
+    ("fips", r"fips mode enable", ()),
+    ("onboard_logging", r"hw-module logging onboard(?: (\S+))?", ("kind",)),
 )
 
 
@@ -157,8 +480,34 @@ def parse_system_config(config: str) -> dict[str, dict[str, str]]:
         line = raw.strip()
         for key, pattern, names in _LINES:
             if match := re.fullmatch(pattern, line):
-                values[key] = dict(zip(names, match.groups(), strict=True))
+                found = zip(names, match.groups(), strict=True)
+                values[key] = {name: value for name, value in found if value}
     return values
+
+
+def parse_time_ranges(config: str) -> list[tuple[str, list[str], dict[str, str]]]:
+    """Each ``time-range NAME`` of the configuration: its name, its entries as written
+    ("periodic weekdays 08:00:00 to 17:00:00") and the first repeating entry as setting
+    values."""
+    found: list[tuple[str, list[str], dict[str, str]]] = []
+    for raw in config.splitlines():
+        line = raw.strip()
+        if not raw[:1].isspace():
+            if match := re.fullmatch(r"time-range (\S+)", line):
+                found.append((match.group(1), [], {}))
+            else:
+                found.append(("", [], {}))  # something else: closes the block
+            continue
+        if not found or not found[-1][0]:
+            continue
+        entry = re.sub(r"^\d+ ", "", line)
+        found[-1][1].append(entry)
+        match = re.fullmatch(
+            r"periodic (\S+) (\d\d:\d\d)(?::\d\d)? to (\d\d:\d\d)(?::\d\d)?", entry
+        )
+        if match and not found[-1][2]:
+            found[-1][2].update(zip(("days", "start", "end"), match.groups(), strict=True))
+    return [item for item in found if item[0]]
 
 
 def parse_system_settings(config: str | None) -> ProtocolView:
@@ -172,7 +521,17 @@ def parse_system_settings(config: str | None) -> ProtocolView:
             "are not shown.",
         )
     instance = Instance("system", {}, "Switch-wide settings", (), values)
-    return ProtocolView((instance,), (), notes)
+    ranges = tuple(
+        Instance(
+            "time_range",
+            {"name": name},
+            f"Time range {name}",
+            (("Entries", "; ".join(entries) or "none"),),
+            {"periodic": periodic} if periodic else {},
+        )
+        for name, entries, periodic in parse_time_ranges(config or "")
+    )
+    return ProtocolView((instance, *ranges), (), notes)
 
 
 SYSTEM_SETTINGS = Protocol(

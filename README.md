@@ -310,8 +310,10 @@ default: *(built)*.
     OpenFlow. *(built; needs the broad role or a stored admin login; OpenFlow shown only: the
     Nexus 9200 needs a restart to carve its TCAM)*
     **Switch-wide settings**: the logging source interface, DNS and HTTP source interfaces,
-    TCP settings, XML server limits and the ACL log level. *(built; needs the broad role or a
-    stored admin login; every line tried on a switch)* **TWAMP server**: its state, port, idle time and responder line. *(built; needs the
+    TCP settings, XML server limits, the ACL log level, CPU rate limit, time ranges and the
+    hardware, queue and routing-mode settings. *(built; needs the broad role or a stored admin
+    login; the safe lines tried on a switch, the ones that change forwarding or need a restart
+    built from the switch's command list)* **TWAMP server**: its state, port, idle time and responder line. *(built; needs the
     broad role or a stored admin login; the lines tried on a switch)* **RMON**: events and
     alarms, made and deleted. *(built; needs the broad role or a stored admin login; tried on
     a switch with throwaway events and alarms)* **Flow analytics**: the exporters, records,

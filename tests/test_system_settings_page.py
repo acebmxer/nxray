@@ -156,3 +156,127 @@ def test_save_config_comes_back_here(
     saved = logged_in.post("/switch/save", data=data)
     assert saved.status_code == 200 and "Switch-wide settings" in text(saved.text)
     assert switch.saved
+
+
+def _scoped(setting, scope="system", action="set", ident=None, **values):
+    return list(build_system_settings_change(scope, setting, action, ident or {}, values).lines)
+
+
+def test_the_other_lines() -> None:
+    assert _scoped("ifalias_long") == ["snmp ifmib ifalias long"]
+    assert _scoped("cpu_rate_limit", direction="input", pps="1000") == [
+        "rate-limit cpu direction input pps 1000 action log"
+    ]
+    assert _scoped("cpu_rate_limit", action="remove", direction="input", pps="1000") == [
+        "no rate-limit cpu direction input pps 1000 action log"
+    ]
+    assert _scoped("onboard_logging") == ["hw-module logging onboard"]
+    assert _scoped("onboard_logging", kind="cpuhog") == ["hw-module logging onboard cpuhog"]
+    assert _scoped("load_sharing", rotate="5") == [
+        "ip load-sharing address source-destination port source-destination rotate 5"
+    ]
+    assert _scoped("routing_mode", mode="host") == ["system routing max-mode host"]
+    assert _scoped("default_switchport") == ["system default switchport"]
+    assert _scoped("switching_mode", mode="store-forward") == ["switching-mode store-forward"]
+    assert _scoped("afd_profile", profile="burst") == ["hardware qos afd profile burst"]
+    assert _scoped("llfc_watchdog", state="on") == ["link-level-flow-control watch-dog-interval on"]
+    assert _scoped("sockets_range", low="15001", high="22001") == [
+        "sockets local-port-range 15001 22001"
+    ]
+    assert _scoped("fips") == ["fips mode enable"]
+    assert _scoped("periodic", "time_range", ident={"name": "work"}, days="weekdays",
+                   start="08:00", end="17:00") == [
+        "time-range work",
+        "periodic weekdays 08:00 to 17:00",
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("setting", "values"),
+    [
+        ("cpu_rate_limit", {"direction": "sideways", "pps": "1"}),
+        ("cpu_rate_limit", {"direction": "input", "pps": "100001"}),
+        ("routing_mode", {"mode": "l3 ; reload"}),
+        ("switching_mode", {"mode": "cut-through"}),
+        ("l2pt_cos", {"cos": "8"}),
+        ("buffer_threshold", {"percent": "96"}),
+        ("sockets_range", {"low": "15000", "high": "22001"}),
+    ],  # fmt: skip
+)
+def test_the_other_ranges_and_choices(setting: str, values: dict[str, str]) -> None:
+    with pytest.raises(ValueError):
+        build_system_settings_change("system", setting, "set", {}, values)
+
+
+def test_time_ranges_are_read() -> None:
+    config = (
+        "hostname x\ntime-range work\n  10 periodic weekdays 08:00:00 to 17:00:00\n"
+        "  20 absolute start 08:00:00 1 January 2027 end 17:00:00 31 December 2027\n"
+        "time-range empty\nrate-limit cpu direction input pps 1000 action log\n"
+    )
+    view = parse_system_settings(config)
+    titles = [i.title for i in view.instances]
+    assert titles == ["Switch-wide settings", "Time range work", "Time range empty"]
+    work = view.instances[1]
+    assert work.ident == {"name": "work"}
+    assert work.values == {"periodic": {"days": "weekdays", "start": "08:00", "end": "17:00"}}
+    assert dict(work.facts)["Entries"].startswith("periodic weekdays")
+    assert dict(view.instances[2].facts)["Entries"] == "none"
+    assert view.instances[0].values["cpu_rate_limit"] == {"direction": "input", "pps": "1000"}
+
+
+def test_the_other_settings_are_sent_and_read_back(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    enable(logged_in, settings, switch, "broad")
+    rate = _change(
+        logged_in, setting="cpu_rate_limit", action="set", v_direction="input", v_pps="1000"
+    )
+    assert rate.status_code == 200, text(rate.text)
+    assert "rate-limit cpu direction input pps 1000 action log" in switch.sys_lines
+    other = _change(
+        logged_in, setting="cpu_rate_limit", action="set", v_direction="output", v_pps="5"
+    )
+    assert other.status_code == 200 and len(switch.sys_lines) == 2
+    gone = _change(
+        logged_in, setting="cpu_rate_limit", action="remove", v_direction="input", v_pps="1000"
+    )
+    assert gone.status_code == 200 and switch.sys_lines == [
+        "rate-limit cpu direction output pps 5 action log"
+    ]
+    plain = _change(logged_in, setting="default_switchport", action="set")
+    assert plain.status_code == 200 and "system default switchport" in switch.sys_lines
+    shut = _change(logged_in, setting="default_switchport_shutdown", action="set")
+    assert shut.status_code == 200
+    off = _change(logged_in, setting="default_switchport_shutdown", action="remove")
+    assert off.status_code == 200 and "system default switchport" in switch.sys_lines
+    warned = _change(logged_in, confirm=False, setting="routing_mode", action="set", v_mode="host")
+    assert (
+        "restarted" in text(warned.text) and "system routing max-mode host" not in switch.sys_lines
+    )
+
+
+def test_a_time_range_is_made_filled_and_deleted(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    enable(logged_in, settings, switch, "broad")
+    fields = {"scope": "time_range", "id_name": "work"}
+    made = logged_in.post(
+        "/system-settings/change",
+        data={
+            "csrf": csrf(logged_in), "confirm": "yes", "setting": "periodic", "action": "set",
+            "v_days": "weekdays", "v_start": "08:00", "v_end": "17:00", **fields,
+        },
+    )  # fmt: skip
+    assert made.status_code == 200, text(made.text)
+    assert switch.time_ranges == {"work": ["periodic weekdays 08:00:00 to 17:00:00"]}
+    page = logged_in.get("/system-settings")
+    assert "Time range work" in text(page.text)
+    removed = logged_in.post(
+        "/system-settings/change",
+        data={
+            "csrf": csrf(logged_in), "confirm": "yes", "setting": "periodic", "action": "remove",
+            "v_days": "weekdays", "v_start": "08:00", "v_end": "17:00", **fields,
+        },
+    )  # fmt: skip
+    assert removed.status_code == 200 and switch.time_ranges == {"work": []}

@@ -662,6 +662,7 @@ class FakeSwitch:
     # The Switch-wide settings page (logging source, TCP, DNS, HTTP, XML server, ACL log level):
     # the lines as show running-config prints them, at the top level.
     sys_lines: list[str] = field(default_factory=list)
+    time_ranges: dict[str, list[str]] = field(default_factory=dict)
     nxsdk_apps: set[str] = field(default_factory=set)
     # Stage E7: the TWAMP server, flow analytics and maintenance mode settings as paths like
     # ``mgmt_lines`` ("ip sla server twamp ; port 1000", "flow exporter e1 ; dscp 46",
@@ -1491,6 +1492,8 @@ class FakeSwitch:
         out += _nested(self.l2_lines)
         out += _nested(self.mgmt_lines)
         out += self.sys_lines
+        for name, entries in self.time_ranges.items():
+            out += [f"time-range {name}", *(f"  {10 * (n + 1)} {e}" for n, e in enumerate(entries))]
         out += self.te_config()
         out += _nested(self.ngoam_lines)
         out += _nested(
@@ -1666,8 +1669,10 @@ class FakeSwitch:
         lines.append(cmd)
         return _ok(ident, None), context
 
-    # The Switch-wide settings lines, as tried on cisco-25gb: what a line sets (its key), and
-    # whether its ``no`` form takes the value back.
+    # The Switch-wide settings lines, as tried on cisco-25gb or built from ``show cli list``:
+    # the pattern of a line, what replaces it when set again (a prefix; None: only the same
+    # line), and whether its ``no`` form takes the value back (``no ip dns source-interface``
+    # alone is a syntax error).
     _SYS_SETTINGS = (
         (r"logging source-interface \S+", "logging source-interface", False),
         (r"ip dns source-interface \S+", "ip dns source-interface", True),
@@ -1678,28 +1683,103 @@ class FakeSwitch:
         (r"xml server max-session \d+", "xml server max-session", True),
         (r"xml server validate all", "xml server validate all", False),
         (r"acllog match-log-level \d+", "acllog match-log-level", True),
+        (r"snmp ifmib ifalias long", "snmp ifmib ifalias long", False),
+        (r"rate-limit cpu direction (?:input|output|both) pps \d+ action log", None, True),
+        (r"hw-module logging onboard(?: \S+)?", None, False),
+        (r"sockets local-port-range \d+ \d+", "sockets local-port-range", False),
+        (r"ttag-marker-interval \d+", "ttag-marker-interval", False),
+        (r"as-format asdot", "as-format asdot", False),
+        (
+            r"ip load-sharing address source-destination port source-destination(?: rotate \d+)?",
+            "ip load-sharing address source-destination port source-destination",
+            False,
+        ),
+        (r"system urpf disable", "system urpf disable", False),
+        (r"system routing max-mode \S+", "system routing max-mode", False),
+        (r"system default switchport", None, False),
+        (r"system default switchport shutdown", None, False),
+        (r"system vlan long-name", "system vlan long-name", False),
+        (r"mac-learn disable", "mac-learn disable", False),
+        (r"router-guard ip multicast switchports", None, False),
+        (r"router-guard ipv6 multicast switchports", None, False),
+        (r"l2protocol tunnel cos \d+", "l2protocol tunnel cos", False),
+        (r"switching-mode \S+", "switching-mode", False),
+        (r"hardware qos afd profile \S+", "hardware qos afd profile", False),
+        (
+            r"hardware profile buffer info poll-interval timer \d+",
+            "hardware profile buffer info poll-interval timer",
+            False,
+        ),
+        (
+            r"hardware profile buffer info port-threshold threshold \d+",
+            "hardware profile buffer info port-threshold threshold",
+            False,
+        ),
+        (r"hardware ejector enable", "hardware ejector enable", False),
+        (r"hardware multicast global-tx-span", "hardware multicast global-tx-span", False),
+        (
+            r"congestion-control random-detect forward-nonecn",
+            "congestion-control random-detect forward-nonecn",
+            False,
+        ),
+        (
+            r"link-level-flow-control watch-dog-interval (?:on|off)",
+            "link-level-flow-control watch-dog-interval",
+            False,
+        ),
+        (r"fips mode enable", "fips mode enable", False),
     )
+
+    def _time_range(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """``time-range NAME`` and its ``periodic`` lines, as probed on cisco-25gb: entering it
+        makes it, entries are numbered 10, 20 ... and written with seconds, ``no time-range``
+        deletes it."""
+        if context and context[0] == "time-range":
+            if cmd == "exit":
+                return _ok(ident, None), None
+            match = re.fullmatch(r"(no )?periodic (\S+) (\d\d:\d\d) to (\d\d:\d\d)", cmd)
+            if not match:
+                return None
+            entry = f"periodic {match.group(2)} {match.group(3)}:00 to {match.group(4)}:00"
+            entries = self.time_ranges[context[1]]
+            entries[:] = [e for e in entries if e != entry]
+            if not match.group(1):
+                entries.append(entry)
+            return _ok(ident, None), context
+        match = re.fullmatch(r"(no )?time-range ([A-Za-z0-9._-]+)", cmd)
+        if not match:
+            return None
+        if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+            return _error(ident, "% Permission denied for the role\n"), context
+        if match.group(1):
+            self.time_ranges.pop(match.group(2), None)
+            return _ok(ident, None), context
+        self.time_ranges.setdefault(match.group(2), [])
+        return _ok(ident, None), ("time-range", match.group(2))
 
     def _sys_setting(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
     ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
-        """The Switch-wide settings lines and their ``no`` forms, or None."""
+        """The Switch-wide settings lines and their ``no`` forms, and time ranges, or None."""
+        if range_reply := self._time_range(user, is_admin, cmd, ident, context):
+            return range_reply
+        if context is not None:
+            return None
         negated = cmd.startswith("no ")
         bare = cmd.removeprefix("no ")
         for pattern, key, needs_value in self._SYS_SETTINGS:
-            if negated and not needs_value and bare == key:
-                found = True
-            elif re.fullmatch(pattern, bare):
-                found = True
-            else:
-                found = False
-            if not found:
+            whole = key is not None and bare == key
+            if not (re.fullmatch(pattern, bare) or (negated and whole)):
                 continue
             if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
                 return _error(ident, "% Permission denied for the role\n"), context
-            if negated and needs_value and bare == key:
+            if negated and needs_value and whole:
                 return _error(ident, "Syntax error while parsing\n"), context
-            self.sys_lines[:] = [i for i in self.sys_lines if not i.startswith(key)]
+            self.sys_lines[:] = [
+                i for i in self.sys_lines if i != bare and not (key and i.startswith(key))
+            ]
             if not negated:
                 self.sys_lines.append(bare)
             return _ok(ident, None), context

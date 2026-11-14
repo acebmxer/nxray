@@ -1391,7 +1391,9 @@ restart), so NXray only shows OpenFlow.
 and with a stored admin login, and is off with the limited role. It reads `show running-config`
 as text and types `logging source-interface`, `ip dns source-interface`, `ip http
 source-interface`, `ip tcp path-mtu-discovery|mss|synwait-time`, `xml server
-max-session|validate all` and `acllog match-log-level`, each with its `no` form.
+max-session|validate all`, `acllog match-log-level`, `rate-limit cpu`, `time-range`, `system
+default|routing|urpf|vlan`, `switching-mode`, `hardware ...`, `ip load-sharing` and other
+switch-wide lines, each with its `no` form.
 
 **TWAMP server, RMON, Flow analytics and Maintenance mode.** These pages need no rule of
 their own for their settings, so they work with the broad role and with a stored admin login,
