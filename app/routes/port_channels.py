@@ -12,8 +12,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import (
-    current_role,
     login_required,
+    may_change,
     note_activity,
     operator_required,
     require_csrf,
@@ -72,11 +72,7 @@ def _read(
 
 
 def _can_change(request: Request, connection: SwitchConnection | None) -> bool:
-    return (
-        connection is not None
-        and connection.channel_changes_enabled
-        and current_role(request) in ("admin", "operator")
-    )
+    return connection is not None and connection.channel_changes_enabled and may_change(request)
 
 
 def _render(

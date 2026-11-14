@@ -1,0 +1,48 @@
+{
+  "vpc-domain-id": "10",
+  "vpc-peer-status": "peer-ok",
+  "vpc-peer-status-reason": "(peer adjacency formed ok)",
+  "vpc-peer-keepalive-status": "peer-alive",
+  "vpc-peer-consistency": "consistent",
+  "vpc-per-vlan-peer-consistency": "consistent",
+  "vpc-peer-consistency-status": "SUCCESS",
+  "vpc-type-2-consistency": "consistent",
+  "vpc-type-2-consistency-status": "SUCCESS",
+  "vpc-role": "primary",
+  "num-of-vpcs": "2",
+  "peer-gateway": "Disabled",
+  "dual-active-excluded-vlans": "-",
+  "vpc-graceful-consistency-check-status": "enabled",
+  "vpc-auto-recovery-status": "Disabled",
+  "vpc-delay-restore-status": "Timer is off.(timeout = 30s)",
+  "vpc-delay-restore-svi-status": "Timer is off.(timeout = 10s)",
+  "operational-l3-peer": "Disabled",
+  "TABLE_peerlink": {
+    "ROW_peerlink": {
+      "peer-link-id": "1",
+      "peerlink-ifindex": "Po1",
+      "peer-link-port-state": "1",
+      "peer-up-vlan-bitset": "1,10,20"
+    }
+  },
+  "TABLE_vpc": {
+    "ROW_vpc": [
+      {
+        "vpc-id": "43",
+        "vpc-ifindex": "Po43",
+        "vpc-port-state": "1",
+        "vpc-consistency": "consistent",
+        "vpc-consistency-status": "SUCCESS",
+        "up-vlan-bitset": "10"
+      },
+      {
+        "vpc-id": "44",
+        "vpc-ifindex": "Po44",
+        "vpc-port-state": "0",
+        "vpc-consistency": "inconsistent",
+        "vpc-consistency-status": "failed",
+        "up-vlan-bitset": "-"
+      }
+    ]
+  }
+}

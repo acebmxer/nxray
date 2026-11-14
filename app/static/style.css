@@ -47,7 +47,7 @@
   --sp-1g: #8fa39a;
   --sp-10g: #2f7fd1;
   --sp-25g: #14a38b;
-  --sp-40g: #d9932b;
+  --sp-40g: #d64f9a;
   --sp-100g: #8a5cd6;
   --st-up: #2fae63;
   --st-down: #59616a;
@@ -169,15 +169,28 @@ code {
 .nav { flex: 1; padding: 4px 8px 12px; }
 .nav-group { margin-top: 12px; }
 .nav-heading {
-  display: block;
-  padding: 0 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 10px 4px;
+  border: 0;
+  border-radius: var(--r);
+  background: transparent;
+  font: inherit;
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+  text-align: left;
   color: var(--text-3);
   white-space: nowrap;
+  cursor: pointer;
 }
+.nav-heading:hover { color: var(--text); }
+.nav-heading .icon { width: 12px; height: 12px; }
+.nav-group-shut .nav-heading .icon { transform: rotate(-90deg); }
+.nav-group-shut .nav-items { display: none; }
 
 .navlink {
   display: flex;
@@ -230,6 +243,8 @@ code {
 
 .shell-narrow .nav-heading, .shell-narrow .nav-words, .shell-narrow .brand-name,
 .shell-narrow .version { display: none; }
+/* The narrow menu has no headings to unfold a group with: every group shows. */
+.shell-narrow .nav-group-shut .nav-items { display: block; }
 .shell-narrow .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .shell-narrow .nav-group:first-child { border-top: 0; }
 .shell-narrow .navlink { justify-content: center; padding: 0; }
@@ -287,7 +302,7 @@ code {
 
 /* ---- page layout ---- */
 
-.wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }
+main.wrap { flex: 1; width: 100%; padding: 18px 20px 48px; }
 .wrap-alone { display: flex; flex-direction: column; justify-content: center; }
 .wrap-centred { max-width: 400px; margin: 0 auto; align-items: stretch; }
 
@@ -302,8 +317,8 @@ code {
    tall one, and stack on a narrow one. Anything that is not a plain card
    (title, messages, notes, rows of cards) and every card that needs the width
    (the front panel, a list of ports or VLANs, a table of over 20 rows, a code block, a table with too
-   many columns for the column, a long run of places, an empty-state message)
-   takes the whole row. The columns are about 500px wide from 1300px, 700px from
+   many columns for the column, a long run of places, an empty-state message,
+   a page's only card when it holds a table) takes the whole row. The columns are about 500px wide from 1300px, 700px from
    1700px and 700px as three from 2350px, so the table limit is 5, 7 and 8
    columns. */
 main.wrap:not(.wrap-alone) > * { margin-top: 0; margin-bottom: 14px; }
@@ -311,7 +326,7 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 @media (min-width: 1300px) {
   main.wrap:not(.wrap-alone) { column-count: 2; column-gap: 14px; }
   main.wrap:not(.wrap-alone) > * { column-span: all; }
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(5), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
@@ -319,16 +334,16 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 }
 /* A table in a column wraps its cells instead of running past the card. */
 @media (min-width: 1300px) and (max-width: 1699px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(5))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(5))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 1700px) and (max-width: 2349px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(7))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(7))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 2350px) {
-  main.wrap:not(.wrap-alone) > .card:not(:has(th:nth-child(8))) .table :is(th, td) { white-space: normal; }
+  main.wrap:not(.wrap-alone) > .card:not(:has(.table:not(.table-capped *) th:nth-child(8))) .table :is(th, td):not(.one-line) { white-space: normal; }
 }
 @media (min-width: 1700px) {
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(7), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
@@ -336,10 +351,17 @@ main.wrap:not(.wrap-alone) > .breadcrumb { margin-bottom: 4px; }
 }
 @media (min-width: 2350px) {
   main.wrap:not(.wrap-alone) { column-count: 3; }
-  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, tbody tr:nth-child(21), th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
+  main.wrap:not(.wrap-alone) > .card:not(.empty-state, :has(.faceplate, pre, .table:not(.table-capped *) tbody tr:nth-child(21), .table:not(.table-capped *) th:nth-child(8), .protocol-place ~ .protocol-place ~ .protocol-place)) {
     column-span: none;
     break-inside: avoid;
     overflow-x: auto;
+  }
+}
+/* A page whose only card is a table (Control-plane policing) gives it the whole
+   width instead of one column beside an empty one. */
+@media (min-width: 1300px) {
+  main.wrap:not(.wrap-alone) > .card.card:has(.table):not(.card ~ .card):not(:has(~ .card)) {
+    column-span: all;
   }
 }
 
@@ -534,6 +556,10 @@ a.btn { text-decoration: none; }
   color: var(--text-3);
   white-space: nowrap;
 }
+/* A long table on a page that asks for it: a fixed height, scrolling inside its
+   card with the column names kept in view, so the page does not grow with it. */
+.table-capped { max-height: 440px; overflow: auto; }
+.table-capped .table th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
 .table td { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
 .table tbody tr:hover td { background: var(--row-hover); }
@@ -549,11 +575,16 @@ a.btn { text-decoration: none; }
 .table-features th:nth-child(3) { width: 4.5rem; }
 .table-features th:nth-child(4) { width: 14rem; }
 .table-features td:nth-child(4) { white-space: normal; }
+/* A link from another page (/features#feature-lldp) scrolls to that row and picks it out. */
+.table-features tbody tr { scroll-margin-top: calc(var(--strip-h) + 16px); }
+.table-features tbody tr:target td { background: var(--row-sel); }
+.table-features tbody tr:target td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .table-users .row-form input[type="password"] { width: 9rem; height: 26px; }
 .table-users select { height: 26px; }
 .table-users .badge + .inline { margin-left: 6px; }
 .table-devices td { vertical-align: top; white-space: nowrap; }
 .table-devices td.wrap { white-space: normal; }
+.table td.one-line { white-space: nowrap; }
 .devices-part + .devices-part { margin-top: 16px; }
 .devices-part h3 { font-size: 12px; margin: 0 0 6px; }
 .reason { color: var(--text-3); font-size: 12px; margin-left: 6px; }
@@ -706,6 +737,20 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .diff-removed { color: var(--crit); background: var(--crit-soft); }
 .diff-gap { color: var(--text-3); }
 
+/* What the switch printed for a command run from a page (VXLAN OAM ping, traceroute,
+   pathtrace): its own columns, so kept as printed. */
+.tool-output {
+  line-height: 1.45;
+  overflow-x: auto;
+  max-height: 32rem;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--bg-sunk);
+  white-space: pre;
+}
+
 /* ---- front panel (app/face.py draws the SVG; colours live here) ---- */
 
 .face { width: 100%; height: auto; display: block; }
@@ -839,6 +884,9 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
 .bar-in { fill: var(--sp-25g); }
 .bar-out { fill: var(--sp-10g); }
 .errs { color: var(--crit); font-weight: 600; }
+.err-kinds { display: block; font-family: var(--font); font-size: 10.5px; color: var(--text-3); font-weight: 400; }
+.err-kind-line { display: block; white-space: nowrap; }
+.kv dt.err-kind { padding-left: 10px; }
 
 .bulk-bar {
   position: sticky;
@@ -893,9 +941,12 @@ a.tag:hover { text-decoration: none; border-color: var(--text-3); }
    440px wide, plus a gap), so the front panel and the table keep one size and
    place whether it is open or shut, and the room stays empty while it is shut.
    Where the screen is too narrow for that, the panel is laid over the page
-   instead and nothing moves. */
-@media (min-width: 1700px) {
-  .wrap-ports { padding-right: 476px; }
+   instead and nothing moves. The table needs about 1100px beside the menu, so
+   the room is kept from 1840px: below that the table would be squeezed and
+   scroll sideways (#100). "main" matches the page rule (main.wrap), which
+   would otherwise win and take the room away (#91). */
+@media (min-width: 1840px) {
+  main.wrap-ports { padding-right: 476px; }
 }
 /* A browser without :has() shows the form as a card under the table. */
 @supports not selector(:has(*)) {

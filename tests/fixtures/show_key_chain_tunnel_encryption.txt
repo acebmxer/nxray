@@ -1,0 +1,13 @@
+Key-Chain ospf-keys
+  Key 1 -- text 7 "070c285f4d06"
+    accept lifetime (always valid) [active]
+    send lifetime (always valid) [active]
+Key-Chain nxprobe-te tunnel-encryption
+  Key 2006 -- text 7 "075f79696a58405441412e2a577f0f077d6461003652302552040a0b76015a504e370c79"
+    cryptographic-algorithm AES_256_CMAC
+    send lifetime local (00:00:00 May 06 2026)-(always valid) [active]
+  Key abcd12 -- text 7 "075f79696a58405441412e2a577f0f077d646100"
+    cryptographic-algorithm AES_128_CMAC
+    send lifetime (always valid) [active]
+  Key 1111 -- text ""
+    send lifetime (always valid) [active]

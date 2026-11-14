@@ -1,0 +1,22 @@
+{#- The SSH and certificates page's CA certificate paste (app/routes/pki.py), drawn under
+    the trustpoints. -#}
+<section class="card" id="ca-paste">
+  <h2 class="card-title">Give a trustpoint its CA certificate</h2>
+  <p class="lead">Paste the certificate authority's certificate (and any intermediates) in PEM form. NXray shows what it read and asks first; the switch accepts it only when it shows the same fingerprints.</p>
+  {% if can_change and page.trustpoints %}
+  <form method="post" action="/pki/authenticate" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="ca-trustpoint">Trustpoint</label>
+    <select id="ca-trustpoint" name="trustpoint">
+      {% for t in page.trustpoints %}<option value="{{ t }}" {% if form.get("pem_trustpoint") == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+    <label for="ca-pem">CA certificate</label>
+    <textarea id="ca-pem" name="pem" rows="10" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+    <div class="button-row"><button type="submit" class="btn btn-quiet">Check the certificate</button></div>
+  </form>
+  {% elif can_change %}
+  <p class="dim">Make a trustpoint first.</p>
+  {% else %}
+  <p class="dim">An NXray admin does this once SSH and certificate changes are on.</p>
+  {% endif %}
+</section>

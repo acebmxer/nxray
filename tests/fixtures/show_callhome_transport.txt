@@ -1,0 +1,13 @@
+http vrf:management
+
+from email addr:noc@example.net
+reply to email addr:noc@example.net
+
+smtp server:192.0.2.10
+smtp server port:25
+smtp server vrf:management
+smtp server priority:60
+
+http proxy server:192.0.2.11
+http proxy server port:8080
+http proxy status:Disabled

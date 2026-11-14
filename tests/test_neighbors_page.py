@@ -68,6 +68,7 @@ def test_neighbors_page_shows_the_three_tables(logged_in: TestClient, switch: Fa
     text = _text(page.text)
     assert "CDP is on and LLDP is off on the switch." in text
     assert "LLDP is off on the switch, so only devices that speak CDP" in text
+    assert 'href="/features#feature-lldp"' in page.text
     # The CDP neighbor on a front port links to that port; mgmt0 has no page.
     assert '<a href="/ports/detail?name=Ethernet1/47">Ethernet1/47</a>' in page.text
     assert "CDP nexus-lab mgmt0 N9K-C92160YC-X 192.0.2.10" in text

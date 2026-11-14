@@ -1,0 +1,23 @@
+{
+  "clock-id": "00:00:5e:ff:fe:00:53:01",
+  "domain-id": 5,
+  "num-ports": 1,
+  "priority1": 100,
+  "priority2": 255,
+  "class": 248,
+  "accuracy": 254,
+  "scaled-log-variance": 65535,
+  "offset-from-master": "0",
+  "mean-path-delay-to-master": 0,
+  "steps-removed": 0,
+  "device-type": "bc",
+  "encap": "l3",
+  "slave-clock-oper": "Unknown",
+  "master-clock-oper": "Two-step",
+  "src-ip": "192.0.2.1",
+  "slave-only": "disabled",
+  "correction-threshold": 100000,
+  "mean-path-delay-threshold": 1000000000,
+  "local-clock-time": "Thu Nov 12 14:13:51 2026",
+  "clock-state": "Free-Run"
+}

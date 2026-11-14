@@ -1,0 +1,4 @@
+Snapshot Name           Time                           Description
+------------------------------------------------------------------------------
+nxprobe1                Fri Nov 13 20:48:12 2026       first probe snapshot
+nxprobe2                Fri Nov 13 20:49:30 2026       second

@@ -1,0 +1,9 @@
+{
+  "TABLE_pvlan_primary": {
+    "ROW_pvlan_primary": [
+      {"vlan-key": "", "primary": 250, "secondary": 251, "pvlan-type": "isolated", "ports": 436234240},
+      {"vlan-key": "", "primary": 250, "secondary": 252, "pvlan-type": "community"},
+      {"vlan-key": "", "primary": 260, "pvlan-type": "primary"}
+    ]
+  }
+}

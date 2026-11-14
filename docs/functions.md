@@ -28,6 +28,7 @@ prose columns; those are a reviewer's job.
 | Limit a route to a role | `app/dependencies.py`, `operator_required` / `admin_required` |
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
+| Reuse a switch answer read a few seconds ago, or stop doing so | `app/page_reads.py` (`PageReads`, `lifetime`); the middleware is `dependencies.reuse_page_reads`, the setting `NXRAY_PAGE_READ_SECONDS` |
 | Two-factor sign-in codes, backup codes, the setup QR code | `app/totp.py`; per account in `app/users.py` |
 | Built-in HTTPS: the certificate and nginx's config | `app/tls.py`; started by `docker/entrypoint.sh` |
 | Require a login on a route | `app/dependencies.py`, `login_required` |
@@ -51,12 +52,61 @@ prose columns; those are a reviewer's job.
 | Draw the front panel, or colour a port by state, speed, VLAN, port-channel, traffic or errors | `app/face.py`, `draw_face` |
 | Refresh figures on a page by themselves, or share one switch reading between browsers | `app/live.py`, `LiveCache.get`; the answers are in `app/routes/live.py`; `app/static/live.js` is the browser side ([Live figures](live.md)) |
 | Know a browser's theme (system, light, dark) or menu width | `app/preferences.py`, `ui_preferences` (a template global) |
+| Fold the menu's groups shut and open, and remember which are shut in the browser | `app/static/nav.js` (the headings and `nav-group-here` are in `base.html`) |
 | Read CDP and LLDP neighbors, the MAC address table, ARP, or what is plugged into a port | `app/neighbors.py`, `load_neighbors` and `NeighborView.for_port` |
 | Write a MAC address, or name the maker it belongs to | `app/oui.py`, `format_mac` and `mac_maker` |
 | Turn CDP or LLDP on or off on a port, set the MAC aging time, add or remove a static MAC address, clear learned ones | `app/neighbor_changes.py` (`plan_port_discovery`, `plan_mac_aging`, `plan_static_mac`, `plan_static_removal`, `plan_clear`); commands from `NxapiClient.set_port_discovery`, `set_mac_aging`, `add_static_mac`, `remove_static_mac`, `clear_learned_macs` |
 | Read port-channels and LACP, or make, change and delete them | `app/port_channels.py` (`load_channels`; `plan_create`, `plan_add`, `plan_remove`, `plan_delete`, `plan_channel_settings`, `plan_port_lacp`, `plan_system_priority`); commands from `NxapiClient.join_port_channel`, `leave_port_channel`, `delete_port_channel`, `configure_port_channel`, `set_port_lacp`, `set_lacp_system_priority` |
 | Read VLAN interfaces and routed ports with their IPv4 and IPv6 addresses, or make, change and delete them | `app/routing.py` (`load_routing`; `plan_create_vlan_interface`, `plan_vlan_interface_settings`, `plan_delete_vlan_interface`, `plan_add_address`, `plan_remove_address`); commands from `NxapiClient.configure_vlan_interface`, `delete_vlan_interface`, `set_interface_addresses` |
 | Read a routing protocol (OSPF, BGP, HSRP, ...) or change one of its settings | `app/routing_protocols.py` (`load_protocol_page`, `build_protocol_change`); each protocol is data in `app/protocols_*.py` on `app/protocols.py`; command from `NxapiClient.configure_protocol` |
+| Read vPC (domain, peer-link, vPCs) or change it: the domain and its settings, a port-channel's peer-link and vPC number | `app/vpc.py` (`load_vpc_page`, `build_vpc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vpc` |
+| Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
+| Read priority flow control (each port's mode and pause counters) or change it: a port's PFC mode and watchdog, the switch-wide watchdog and override | `app/pfc.py` (`load_pfc_page`, `build_pfc_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pfc` |
+| Read private VLANs (primary, isolated and community VLANs, the ports and VLAN interfaces in them) or change them: a VLAN's type and secondary VLANs, a port's private VLAN mode, host association, mapping and trunk lines, a VLAN interface's mapping | `app/private_vlans.py` (`load_private_vlan_page`, `build_private_vlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_private_vlans` |
+| Read UDLD (the switch-wide mode and message interval, each port's state and neighbours) or change it: a port's UDLD state and aggressive mode, the switch-wide message interval and aggressive mode | `app/udld.py` (`load_udld_page`, `build_udld_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_udld` |
+| Read VTP (the status, the ports taking part, the message counters) or change it: the VTP mode, domain, version and password, VTP on a port | `app/vtp.py` (`load_vtp_page`, `build_vtp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vtp` |
+| Read 802.1X (the switch-wide state, the ports set up for it, the devices signed in) or change it: the RADIUS server groups and switch-wide lines, a port's port control, host mode, MAC authentication bypass, timers and retries | `app/dot1x.py` (`load_dot1x_page`, `build_dot1x_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_dot1x` |
+| Read IP SLA (the entries, their latest results, schedules and reactions) or change it: what an entry measures and its timing, packet, label and history settings, its schedule, its reactions and reaction trigger | `app/ip_sla.py` (`load_ip_sla_page`, `build_ip_sla_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ip_sla` |
+| Read errdisable (the causes the switch detects and recovers from, the recovery interval, the ports err-disabled now) or change it: recovery for a cause, the interval, detection for a cause | `app/errdisable.py` (`load_errdisable_page`, `build_errdisable_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_errdisable` |
+| Read Call Home (on or off, the contact details, the transport, the destination profiles) or change it: the contact lines, the mail server, proxy and VRF, a profile's format, addresses, level and alert groups, Call Home on or off, a test message | `app/callhome.py` (`load_callhome_page`, `build_callhome_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_callhome` |
+| Read the scheduler (jobs, schedules, the log) or change it: make a job from the command menu, a schedule's jobs and time, the log size | `app/scheduler.py` (`load_scheduler_page`, `build_scheduler_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_scheduler` |
+| Read EEM (applets, environment variables, system policies, recent events) or change it, with the stored admin login: an applet's description, event and actions (commands from the menu), an environment variable | `app/eem.py` (`load_eem_page`, `build_eem_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_eem` |
+| Read the loopbacks (state, description, VRF, addresses) or change them: make or delete one, its description, main and extra IPv4 addresses, IPv6 addresses, VRF, on or off | `app/loopbacks.py` (`load_loopback_page`, `build_loopback_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_loopbacks` |
+| Read the tunnel interfaces (state, mode, source, destination, VRFs, address) or change them, with the stored admin login: make or delete one, its mode, source, destination, transport VRF, TTL, IPv4 address, description, MTU, VRF, path MTU discovery, on or off | `app/tunnels.py` (`load_tunnel_page`, `build_tunnel_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnels` |
+| Read PTP (the clock's state, the grandmaster, each PTP port's state and counters) or change it: the clock's source address, domain, priorities, limits and notifications; on a port PTP on or off, transmission, role, VLAN, message intervals, unicast source, masters and slaves | `app/ptp.py` (`load_ptp_page`, `build_ptp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_ptp` |
+| Read telemetry (destination profile, destination groups with their collectors' state, sensor groups, subscriptions, data collected) or change it: the profile's settings, make or delete a group or subscription, collectors, paths and show-command paths, a subscription's groups and interval | `app/telemetry.py` (`load_telemetry_page`, `build_telemetry_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_telemetry` |
+| Read AAA (sign-in and accounting methods, the RADIUS, TACACS+ and LDAP servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time, an LDAP server's TLS, port, wait and bind account, an LDAP group's search map and certificate DN match, an LDAP search map | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
+| Read the licence features, whether the switch is registered with Cisco and its identity, or reserve licences | `app/licensing.py` (`load_licensing_page`, `build_licensing_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_licensing` |
+| Read which of gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker and OpenFlow are on and what the switch says of them, or change gRPC's port, calls at once and certificate, NETCONF's sessions and idle time and an NX-SDK service | `app/programmability.py` (`load_programmability_page`, `build_programmability_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_programmability` |
+| Read or change the switch-wide settings (logging source, TCP, DNS, HTTP, XML server, ACL log level) | `app/system_settings.py` (`load_system_settings_page`, `build_system_settings_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_system_settings` |
+| Read the TWAMP server (its state, port and idle time, the responder line) or change it | `app/twamp.py` (`load_twamp_page`, `build_twamp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_twamp` |
+| Read RMON (events, alarms, high-capacity alarms) or make and delete them | `app/rmon.py` (`load_rmon_page`, `build_rmon_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_rmon` |
+| Read flow analytics (the exporters, records, monitors, profiles, filters and events, the system settings) or change them | `app/analytics.py` (`load_analytics_page`, `build_analytics_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_analytics` |
+| Read the switch's mode, how maintenance mode behaves, the profiles and the snapshots, change the settings, take, delete and compare snapshots (never enter maintenance mode) | `app/maintenance.py` (`load_maintenance_page`, `build_maintenance_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_maintenance` |
+| Read the SSH host key, key pairs, trustpoints and certificates, or change them as an NXray admin: a new SSH host key (SSH off and on around it), make or delete a key pair or trustpoint, a trustpoint's key pair, enrolment and revocation check, import a PKCS#12 file, delete its certificates, paste a CA certificate (over SSH) | `app/pki.py` (`load_pki_page`, `build_pki_change`, `check_ca_certificates`), on the same parts as the protocol pages; command from `NxapiClient.configure_pki`; the paste from `switch_ssh.authenticate_ca` |
+| Read the files on bootflash, or (stored admin login, NXray admin) copy one to or from the switch with SCP, or delete one (never the image in use) | `app/switch_files.py` (`load_files_page`, `check_delete`, `check_upload`, `upload_work`); `NxapiClient.list_files`, `NxapiClient.delete_file`; copies through `switch_ssh.Session` |
+| Read the running and boot images and the last install, or (stored admin login, NXray admin) check an image's checksum, run the compatibility check and install it | `app/switch_files.py` (`load_software_page`, `checksum_work`, `impact_work`, `ready_to_install`, `install_work`), as background jobs (`app/switch_jobs.py`) |
+| Collect `show tech-support` (stored admin login, NXray admin), keep it gzipped and download it | `app/switch_files.py` (`tech_work`, `tech_file`), as a background job (`app/switch_jobs.py`) |
+| Run slow switch work after the page has answered, one job of each kind per switch | `app/switch_jobs.py` (`Jobs.start`, `Jobs.get`) |
+| Read policy-based routing (route-maps, where they are applied, their counters) or change it: a route-map entry's ACL match, next hops or drop, a route-map's counters or deletion, an interface's IPv4 or IPv6 policy | `app/pbr.py` (`load_pbr_page`, `build_pbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_pbr` |
+| Read ITD (device groups, nodes, services, counters) or change it: a device group's probe, a node's weight, standby or hot standby, a service's device group, ingress, virtual address, spreading and state, a service's counters | `app/itd.py` (`load_itd_page`, `build_itd_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_itd` |
+| Read MPLS (the feature set, label range, interfaces with MPLS, bindings, segment routing and prefix SIDs, VPN VRFs, labels in use, the VPN Fabric licence) or change it: install and turn on MPLS, static MPLS, segment routing and Layer 3 VPNs, the label range, MPLS forwarding on an interface, a binding's swap, pop or backup next hop, the global block, a prefix SID, a VRF's route distinguisher and route-targets | `app/mpls.py` (`load_mpls_page`, `build_mpls_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_mpls` |
+| Read NAT (the inside and outside interfaces, static and dynamic translations, pools, timeouts and limits, the translations, the pools in use, the counters, whether the switch has TCAM space for NAT) or change it: an interface's side, a static translation (an address or one TCP or UDP port, in a VRF, with a route), an address pool, a dynamic translation to a pool or to an interface's address, a timeout or limit, clearing the translations or counters | `app/nat.py` (`load_nat_page`, `build_nat_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_nat` |
+| Read enhanced policy-based routing (the services with their end-points, reverse end-points and probes, the policies with their matches and service chains, where they are applied, each end-point's probe state, the counters) or change it: a service's probe, service interface and VRF, an end-point and its reverse end-point and probes, a policy's counting, a match and its spreading, a step of a chain, an interface's IPv4 or IPv6 policy (forward or reverse), clearing a policy's counters; a service or policy in use goes through an ePBR session | `app/epbr.py` (`load_epbr_page`, `build_epbr_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_epbr` |
+| Read the tracked objects (each one's state, changes and the lists using it) or change them: make or delete an object that follows an interface, a route or an IP SLA entry, or a list of others, and set its wait, VRF, list members or thresholds | `app/track.py` (`load_track_page`, `build_track_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_track` |
+| Read IGMP snooping (switch-wide and per VLAN, the queriers, router ports, static groups, report filters, the groups hosts joined, each VLAN's counters) or change it: snooping on or off, report suppression, the general query proxy, group timeouts, event history and snooping in VXLAN VLANs for the whole switch; a VLAN's querier and its timers, version, fast leave, explicit tracking, report flooding, router ports, static groups and report filters; clearing a VLAN's learned groups, counters or tracked IGMPv3 hosts | `app/igmp_snooping.py` (`load_snooping_page`, `build_snooping_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_igmp_snooping` |
+| Read non-blocking multicast (the defaults, flow policies, host policies, flows, defined flows, interface bandwidth, whether VXLAN or the TCAM rule it out) or change it: the mode and default flow settings (per NBM VRF too), flow policies and their groups, sender and receiver entries and defaults, flow definitions, external links | `app/nbm.py` (`load_nbm_page`, `build_nbm_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_nbm` |
+| Read multicast over VXLAN (tenant routed multicast: the switch-wide lines, the layer 3 VNIs' groups, the VRFs' MVPN settings, BGP's overlay families) or change it | `app/trm.py` (`load_trm_page`, `build_trm_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_trm`; the neighbors' `ipv4 mvpn` and `l2vpn evpn` families are on the BGP page (`app/protocols_bgp.py`) |
+| Read Flex Links (the pairs, their state and preemption; on a Nexus 9200 the page says the switch does not do them) or change them: make or delete a pair, its preemption mode and delay, multicast fast convergence | `app/flexlink.py` (`load_flexlink_page`, `build_flexlink_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_flexlink` |
+| Read VM Tracker (the vCenter connections and their state, the VMs on each port, the ports it is off on) or change it: fabric auto-configuration, a connection's address, login (the password never shown back), connect, extension key, timers, automatic VLANs and the VLANs allowed, VM Tracker on a port, syncing a connection now | `app/vmtracker.py` (`load_vmtracker_page`, `build_vmtracker_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vmtracker` |
+| Read Edge Virtual Bridging (the VDP role, address, timers and counters, the hosts and VSIs servers announced) or change it: the VDP address, the answer wait and keep-alive, batch answers | `app/evb.py` (`load_evb_page`, `build_evb_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_evb` |
+| Read VXLAN tunnel encryption (the key chains and keys, the switch-wide settings, policies, peers, encrypted links, the sessions; on a switch other than a Nexus 9300-FX2 the page says it does not do it) or change it: a key chain, a key's string (never shown back), algorithm and send lifetime, the source loopback, encrypted traffic only, the integrity check, a policy's cipher, replay window and rekey time, a peer's key chain and policy or certificates, encryption on a link | `app/tunnel_encryption.py` (`load_tunnel_encryption_page`, `build_tunnel_encryption_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_tunnel_encryption` |
+| Run VXLAN OAM's ping, traceroute and pathtrace (to an address in a VNI or VRF, a host found by its traffic, or a MAC address, with their options) and show what the switch printed; read NGOAM (the profiles and flows, the switch-wide settings, loop detection, the tools' counters) or change it: the OAM access list, the authentication key (never shown back), the cross connect heartbeat, a profile's and flow's lines, loop detection and its probe and bring-up, clearing the counters | `app/ngoam.py` (`load_ngoam_page`, `build_ngoam_change`, `tool_wait`), on the same parts as the protocol pages (`app/protocols.py`); command (and a tool's printed answer) from `NxapiClient.configure_ngoam` |
+| Turn a command a scheduler job or an EEM applet runs into its lines, from the fixed menu (never typed) | `app/command_menu.py` (`menu_lines`) |
+| Read control-plane policing (the CoPP policy, its classes, rate limits and counters) | `app/copp.py` (`load_copp_page`), on the same parts as the protocol pages (`app/protocols.py`), with no scopes |
+| Read monitor sessions (SPAN and ERSPAN source) or change them: a local or ERSPAN session's sources, destination, tunnel settings and state, a destination port, the ERSPAN source address | `app/monitor.py` (`load_monitor_page`, `build_monitor_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_monitor` |
+| Read QoS (class-maps, policy-maps of the three types, what is applied to each port and the system, the queue counters) or change it: a class-map's matches, a policy-map and its classes, a port's incoming policy, the queuing and network-qos policies and what is applied to the system | `app/qos.py` (`load_qos_page`, `build_qos_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_qos` |
+| Read VXLAN and EVPN (NVE interface, peers, VNIs) or change it: the NVE interface and its member VNIs, a VLAN's VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets | `app/vxlan.py` (`load_vxlan_page`, `build_vxlan_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_vxlan` |
 | Read spanning tree (trees, ports, the MST region) or change it for the whole switch, a VLAN, the MST region or a port | `app/spanning_tree.py` (`load_spanning_tree_page`, `build_stp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_spanning_tree` |
 | Read or change the switch's hostname, banner, clock and NTP, DNS, logging or SNMP settings, or read its log | `app/switch_admin.py` (`load_switch_admin_page`, `build_admin_change`, `load_switch_log`, `parse_log`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_switch_admin` |
 | Read, make, change or apply IPv4, IPv6 and MAC ACLs, object groups and VLAN access maps, or size the TCAM regions | `app/acls.py` (`load_acls_page`, `build_acl_change`, `parse_acl_config`), on the same parts as the protocol pages; command from `NxapiClient.configure_acl` |
@@ -83,6 +133,7 @@ prose columns; those are a reviewer's job.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `env_bool` | `(name: str, default: bool = False) -> bool` | A true/false environment setting (true/yes/on/1, false/no/off/0); raises `ConfigError` for any other word | `load_settings`, `healthcheck.https_enabled` | v0.1.0 |
 | `load_settings` | `() -> Settings` | Reads and validates the environment; raises `ConfigError` with the fix | `main.create_app` | v0.1.0 |
 
 `Settings` is a frozen dataclass; `ConfigError` means the app must not start.
@@ -91,11 +142,12 @@ prose columns; those are a reviewer's job.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `connect` | `(db_path: Path) -> Connection` | Opens a connection with WAL and foreign keys on | `db.open_db` | v0.1.0 |
+| `connect` | `(db_path: Path) -> Connection` | Opens a connection with WAL and foreign keys on; creates a new file mode 600 | `db.open_db` | v0.1.0 |
 | `current_version` | `(conn) -> int` | The applied schema version, 0 for a new file | `db.migrate` | v0.1.0 |
 | `init_db` | `(db_path: Path) -> int` | Creates or upgrades the database, returns its version | `main.lifespan` | v0.1.0 |
 | `migrate` | `(conn) -> int` | Applies pending migrations in order | `db.init_db` | v0.1.0 |
 | `open_db` | `(db_path: Path) -> Iterator[Connection]` | Context manager: one connection per unit of work, always closed | routes, `security.current_user`, `main.lifespan` | v0.1.0 |
+| `restrict_files` | `(db_path: Path) -> None` | Sets the database and its `-wal`/`-shm` files to mode 600 (owner only); skips a file it does not own | `db.init_db` | v0.3.0 |
 
 Migrations are append-only. Editing an applied one leaves existing databases
 behind.
@@ -140,8 +192,12 @@ really invalidates rather than merely asking the browser to forget.
 | `admin_required` | `(request) -> str` | FastAPI dependency for the Switch, Users, Config and Activity pages; raises `Forbidden` for other roles | `routes/switch_page`, `routes/users`, `routes/config_page`, `routes/activity` | v0.1.0 |
 | `current_account` | `(request) -> User \| None` | The signed-in account, looked up once per request | the role guards, `current_role`, `routes/users` | v0.1.0 |
 | `current_role` | `(request) -> str \| None` | The signed-in account's role; a template global so pages hide buttons the role can't use | templates, `main.create_app` | v0.1.0 |
+| `may_change` | `(request) -> bool` | True when the signed-in account may change the switch (`User.can_change`: operator or admin); a page adds its own `*_changes_enabled` flag | `routes/routing`, `routes/protocols`, `routes/port_channels`, `routes/neighbors`, `routes/live`, `routes/traffic` | v0.2.1 |
+| `request_target` | `(request) -> str` | The request's path plus query string, kept in `?next=` across sign-in | `dependencies.login_required`, `dependencies.live_login_required` | v0.2.1 |
 | `login_required` | `(request) -> str` | FastAPI dependency; sends anonymous callers to `/login` | every protected route | v0.1.0 |
 | `share_switch_reads` | `(request, call_next) -> Response` | HTTP middleware: a whole-page refresh (`X-Requested-With: nxray-live` on a page `refreshes_whole_page` names) reads the switch through the live cache, so many open pages cost one read per interval; any other request reads the switch itself | `main.create_app` | v0.2.0 |
+| `reuse_page_reads` | `(request, call_next) -> Response` | HTTP middleware: a page a person opens reads the switch through the recent answers (`page_reads.PageReads`), so moving between pages does not ask for the same things again; a request that is not a GET, and a browser reload, forget them all; pages refreshing themselves are left alone | `main.create_app` | v0.3.0 |
+| `reload_asked` | `(request) -> bool` | True when the browser reloaded the page (`Cache-Control: max-age=0` or `no-cache`) | `dependencies.reuse_page_reads` | v0.3.0 |
 | `live_login_required` | `(request) -> str` | Like `login_required` for self-refreshing figures: does not slide the session | `routes/live` | v0.2.0 |
 | `note_activity` | `(request, username, area, what, switch="") -> None` | Records one change in the activity log after it worked (`activity.record_activity`), and sends it as an alert when the Alerts page asks for changes (`alerts.notify_change`) | every route that changes something | v0.1.0 |
 | `operator_required` | `(request) -> str` | FastAPI dependency for forms that change the switch (port, VLAN, Save config); operator or admin | `routes/ports`, `routes/vlans`, `switch_save` | v0.1.0 |
@@ -151,6 +207,7 @@ really invalidates rather than merely asking the browser to forget.
 | `stored_switch` | `(request) -> tuple[SwitchConnection \| None, SwitchTarget \| None, str \| None]` | The switch this request is for (`switch_choice.selected_switch_id`), its decrypted login, or why it can't be used (key changed, waiting after a role change) | dashboard, ports routes, Save config | v0.1.0 |
 | `switch_picker` | `(request) -> tuple[list[SwitchConnection], int \| None]` | Every switch and the one this page is for; a template global for the top bar's picker | `base.html` | v0.1.0 |
 | `role_behind` | `(request) -> list[tuple[SwitchConnection, str]]` | Switches whose NXray role lacks rules this version can use, with the missing kinds of change in words; admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.0 |
+| `broad_behind` | `(request) -> list[SwitchConnection]` | Switches whose broad role was written before its EEM denies (`SwitchConnection.broad_role_behind`); admins only, empty on the Switch page; a template global for the banner | `base.html` | v0.2.1 |
 | `require_csrf` | `(request, token: str) -> None` | Raises `CsrfFailed` (a 403 page) unless the form carries the session's token | every state-changing POST | v0.1.0 |
 | `safe_next` | `(target: str) -> str` | A `?next=` destination on this site only, else `/` | `routes/auth` | v0.1.0 |
 
@@ -264,6 +321,11 @@ ports: back to how they came out of the box) and `reset_port_channel(number)`
 (the same for a port-channel's own settings; its members keep their
 channel-group membership)
 and `save_config()`; each builds its commands from checked values.
+`configure_tunnel_encryption(...)` and `configure_ngoam(...)` (the VXLAN tunnel
+encryption and VXLAN OAM pages, from `tunnel_encryption.build_tunnel_encryption_change`
+and `ngoam.build_ngoam_change`; for a ping, traceroute or pathtrace `configure_ngoam`
+sends the one command as text and returns what the switch printed, waiting as long as
+`ngoam.tool_wait` says).
 `show_text(command)` runs one show command whose answer NX-API gives only as
 printed text (`show running-config spanning-tree`, `show running-config`, `show
 logging last <n>`, `show hardware access-list tcam region`, `show ip dhcp
@@ -283,9 +345,23 @@ self-signed certificate is accepted on purpose.
 | `parse_environment` | `(body) -> Environment` | Temperatures, fans, power supplies from `show environment` | `switch.load_dashboard` | v0.1.0 |
 | `parse_port_summary` | `(body) -> PortSummary` | Ethernet port counts from `show interface brief` | `switch.load_dashboard` | v0.1.0 |
 | `parse_resources` | `(body) -> Resources` | CPU and memory use from `show system resources` | `switch.load_dashboard` | v0.1.0 |
-| `parse_version` | `(body) -> SystemInfo` | Hostname, model, NX-OS version, uptime from `show version` | `switch.load_dashboard` | v0.1.0 |
+| `parse_version` | `(body) -> SystemInfo` | Hostname, model, NX-OS version, uptime from `show version` | `switch_setup`, `switch_repair` | v0.1.0 |
+| `parse_identity` | `(hostname, inventory, module, uptime, reset) -> SystemInfo` | The same hostname, model, NX-OS version, uptime and last restart reason, from five quick commands instead of the 1.5 second `show version` | `switch.load_dashboard` | v0.3.0 |
+| `uptime_words` | `(days, hours, minutes) -> str` | "3 days, 2 hours, 5 minutes" from an uptime's numbers | `switch.parse_version`, `switch.parse_identity` | v0.3.0 |
+| `chassis_row` | `(inventory) -> dict` | The chassis row of `show inventory`: the one named "Chassis", else the first | `switch.chassis_description`, `switch.chassis_model` | v0.3.0 |
+| `chassis_description` | `(inventory) -> str` | The chassis as the inventory words it ("Nexus9000 C92160YC-X chassis"); "" when it names none | `switch.parse_identity` | v0.3.0 |
+| `chassis_model` | `(inventory) -> str` | The chassis description and product id together, what the pages that depend on the model look for a model name in | `ngoam.loop_refused`, `flexlink.model_note`, `tunnel_encryption.model_note` | v0.3.0 |
+| `module_version` | `(module) -> str` | The NX-OS version the active module runs, from `show module` | `switch.parse_identity` | v0.3.0 |
+| `last_reset_reason` | `(reset) -> str` | The newest restart reason, from `show system reset-reason` | `switch.parse_identity` | v0.3.0 |
 | `rows` | `(body, table: str, row: str) -> list[dict]` | An NX-OS table's rows as a list, one row or many | every parser | v0.1.0 |
 | `section` | `(body, key: str) -> dict` | A nested object of an NX-OS body, or `{}` | `switch.parse_environment` | v0.1.0 |
+| `text` | `(value) -> str` | A value from NX-OS JSON as stripped text; `""` for missing or null | every parser | v0.2.1 |
+| `int_or` | `(value, default=0) -> int` | A whole number from text such as `"10"`; `default` if it is not one (a sign is fine) | `vlans`, `ports` | v0.2.1 |
+| `digits_int` | `(value) -> int \| None` | A whole number from text made only of digits; None for anything else, a sign included | `routing` | v0.2.1 |
+| `duration_text` | `(value) -> str` | An ISO 8601 duration (`P7DT11H59M45S`) as `7d 11h 59m 45s`: zero parts left out, seconds may be fractional, anything else unchanged | `protocols_ospf`, `protocols_multicast` | v0.2.1 |
+| `is_true` | `(value) -> bool` | True only for the word `true`, in any case | `protocols_igp`, `protocols_ospf` | v0.2.1 |
+| `is_enabled` | `(value) -> bool` | True for `true`, `yes` or `enabled`, in any case | `protocols_bgp` | v0.2.1 |
+| `row_vrf` | `(row, *keys) -> str` | The VRF a row names, from the first of `keys` that holds text; `default` if none | `protocols_bgp`, `protocols_multicast` | v0.2.1 |
 | `to_int` | `(value) -> int \| None` | A number from NX-OS text such as `"650 W"` | every parser | v0.1.0 |
 
 NX-OS JSON holds a one-row table as an object and only a several-row table as
@@ -330,7 +406,7 @@ none reads or changes "the" switch by default.
 | `set_address` | `(conn, switch_id, *, host, port, switch_hostname) -> None` | Stores a new switch address NXray's account already signed in at | `routes/switch_page.switch_address` | v0.1.0 |
 | `set_switch_identity` | `(conn, connection, system: SystemInfo) -> None` | Stores the model and NX-OS version the switch just reported (for the strip at the top of every page); writes only when they changed | `routes/dashboard`, `routes/switch_page` (test, address) | v0.1.0 |
 | `set_switch_hostname` | `(conn, switch_id, switch_hostname) -> None` | Stores the switch's new name after NXray renamed it on the Switch admin page | `routes/switch_admin` (the site's `after`) | v0.1.0 |
-| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None, role_mode=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces (None keeps it), and the role mode (None keeps it; a broad role is stored with `BROAD_ROLE_VERSION`), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
+| `set_changes_enabled` | `(conn, switch_id, *, pause_seconds, role_version, vlan_interfaces=None, role_mode=None, nve=None) -> None` | Records that port changes are on with that role version, and whether its port list names the VLAN interfaces and the NVE interface (None keeps each), and the role mode (None keeps it; a broad role is stored with `BROAD_ROLE_VERSION`), and pauses switch calls; never shortens a running pause | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `set_changes_off` | `(conn, switch_id) -> None` | Records that port changes are off (role version 0) | `routes/switch_page.switch_repair` | v0.1.0 |
 | `set_admin_login` | `(conn, switch_id, *, admin_user, admin_password, ssh_port, secret_key) -> None` | Keeps the switch admin login, encrypted, for the stored-login role mode | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `delete_admin_login` | `(conn, switch_id) -> None` | Forgets the stored admin login; a switch in the stored-login mode goes back to the limited mode | `routes/switch_page.switch_forget_admin_login`, `switch_enable_changes` | v0.1.0 |
@@ -347,7 +423,9 @@ changes are on and how long NXray still waits before calling the switch;
 `channel_changes_enabled`, `layer3_changes_enabled`, `vrf_changes_enabled` and
 `route_changes_enabled` the later rule sets (3, 4, 5, 6, 7, 8 and 9). `vlan_interface_changes_enabled` also needs
 `role_vlan_interfaces`: the role's port list names the VLAN interfaces, which
-the switch takes only while interface-vlan is on.
+the switch takes only while interface-vlan is on. `vxlan_changes_enabled` needs role
+version 20 and `role_nve`: the port list names the NVE interface, which the switch is
+expected to take only while the nve feature is on.
 
 ## `app/switch_choice.py` — which switch a browser is looking at
 
@@ -380,7 +458,7 @@ the switch takes only while interface-vlan is on.
 | `read_switch` | `(target, reader, transport=None) -> tuple[ConnectionStatus, T \| None]` | Runs `reader(client)` with NXray's account; result or the failure message | `load_dashboard_status`, `routes/ports` | v0.1.0 |
 | `generate_password` | `() -> str` | 32 random letters and digits that pass NX-OS's strength check | `switch_setup.run_setup`, `switch_repair.run_repair` | v0.1.0 |
 | `run_setup` | `(*, host, port, admin_user, admin_password, account_name, store, transport=None) -> SetupResult` | Creates the account, checks it signs in, stores it, saves the config; undoes the account if a later step fails | `routes/switch_page.switch_setup` | v0.1.0 |
-| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin` | v0.2.0 |
+| `scrub_secrets` | `(text, *secrets_to_hide) -> str` | The text with every secret given replaced by `***`, for a page or a log | `run_setup`, `connection_error`, `switch_accounts.run_as_admin`, `switch_repair`, `port_changes`, `protocols`, `routes/protocols`, `routes/config_page` | v0.2.0 |
 | `verify_account` | `(host, port, name, password, transport) -> None` | Signs in with a login NXray just set, retrying briefly; raises the `NxapiError` if it never works | `run_setup`, `switch_repair.run_repair` | v0.1.0 |
 
 `SetupError` carries the message the page shows. The admin login lives only
@@ -398,7 +476,7 @@ None (port changes were off); `pause_seconds` is non-zero only when an
 existing account had to be given the role again. The admin login lives
 only inside `run_repair`.
 
-## `app/switch_ssh.py` — SSH, for lines NX-API refuses
+## `app/switch_ssh.py` — SSH, for lines NX-API refuses, long commands and file copies
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
@@ -407,22 +485,25 @@ only inside `run_repair`.
 | `reload_switch` | `(*, host, port, username, password, timeout, opener=None) -> None` | Types `terminal dont-ask` and `reload`; the session dropping means the switch is restarting, a prompt coming back raises SshCommandError | `routes/config_page.config_reload` | v0.1.0 |
 | `run_commands` | `(*, host, port, username, password, lines, timeout, opener=None) -> list[str]` | Types fixed commands outside configuration mode and returns their output | `port_changes.enable_port_changes` (saving over SSH) | v0.1.0 |
 | `run_config` | `(*, host, port, username, password, lines, timeout, opener=None, then=()) -> list[str]` | Types checked lines between `configure terminal` and `end`, stopping at the first refusal, then the fixed `then` commands in the same session, returning their output | `port_changes.enable_port_changes` | v0.1.0 |
+| `open_paramiko_session` | `(host, port, username, password, timeout) -> ParamikoSession` | Signs in like `open_paramiko_shell` for one long command (`stream`) or one SCP copy (`download`, `upload`) at a time | the switch file pages (the default session opener) | v0.2.1 |
+| `authenticate_ca` | `(*, host, port, username, password, trustpoint, pem_lines, fingerprints, timeout, opener=None) -> None` | Types `crypto ca authenticate`, the PEM lines and `END OF INPUT`, then yes only when every fingerprint the switch shows is one of `fingerprints` (else no) | `routes/pki.pki_authenticate` | v0.2.1 |
 
 Errors are `SshUnreachable`, `SshAuthError` and `SshCommandError`, all
 subclasses of `SshError`. The switch's host key is accepted unchecked, as its
 NX-API certificate is. Tests pass a pretend opener through
-`app.state.ssh_opener`.
+`app.state.ssh_opener`, and a pretend session opener through
+`app.state.ssh_session_opener`.
 
 ## `app/port_changes.py` — turning on port changes
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `account_roles` | `(user_account_body, account_name) -> set[str]` | The roles `show user-account` lists for one account | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
-| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, mode="limited", previous_mode=None, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH in the role `mode` (limited, broad or stored; `previous_mode` is the one it has now), gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
+| `enable_port_changes` | `(*, host, nxapi_port, ssh_port, admin_user, admin_password, account_name, role_version=0, vlan_interfaces_listed=False, nve_listed=False, mode="limited", previous_mode=None, transport=None, ssh_opener=None) -> EnableResult` | Creates the `nxray-ports` role over SSH in the role `mode` (limited, broad or stored; `previous_mode` is the one it has now), gives it to NXray's account, checks it took, saves the config; reads `show feature` and names the VLAN interfaces only while interface-vlan is on and the NVE interface only while nve is on; when the port list gains a line (`role_version` below 7, or the VLAN interfaces or the NVE interface for the first time) the check and save go over SSH, which does not depend on NX-API answering | `routes/switch_page.switch_enable_changes`, `switch_setup` | v0.1.0 |
 | `front_ports` | `(interface_brief_body) -> list[str]` | Every front-panel Ethernet port name | `enable_port_changes` | v0.1.0 |
 | `pause_seconds` | `(nxapi_body) -> int` | NX-API's idle timeout plus a minute: how long NXray waits for the switch to apply the role | `enable_port_changes`, `switch_repair.run_repair` | v0.1.0 |
 | `missing_changes` | `(role_version: int) -> str` | The kinds of change a role of that version lacks, in words (`neighbor and port-channel changes`); `""` when none | `routes/switch_page` (button names, notices) | v0.1.0 |
-| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off) | `enable_port_changes` | v0.1.0 |
+| `role_lines` | `(ports, account_name, vlan_interfaces=True, mode="limited", previous_mode=None, nve=False) -> list[str]` | The configuration lines for the role and for giving it to the account, from checked values; a changed mode first removes every rule of the old one (`no rule N`); the VLAN interfaces' port-list line only with `vlan_interfaces` (the switch refuses it while interface-vlan is off), the NVE interface's only with `nve`; the broad role's port list also names every loopback (`LOOPBACK_PERMIT`), and a role leaving the broad mode has that line taken out | `enable_port_changes` | v0.1.0 |
 | `rules_for_mode` | `(mode) -> tuple[str, ...]` | The role's command rules in a mode: the broad set, or the listed rules (shared by the limited and stored-login modes); `ValueError` for an unknown mode | `role_lines` | v0.1.0 |
 | `check_role_mode` | `(mode) -> str` | `mode` when it is a role mode, else `ValueError` | `rules_for_mode` | v0.1.0 |
 
@@ -456,6 +537,7 @@ the switch applies them at once and there is no wait.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
+| `feature_anchor` | `(name: str) -> str` | The id of a feature's row on the Features page (`feature-lldp`), so a page that says a feature is off links straight to it | templates (`protocol.html`, `routing.html`, `port_channels.html`, `_devices.html`, `ports.html`, `_port_forms.html`, `features.html`) | v0.3.0 |
 | `feature_states` | `(body) -> dict[str, bool]` | Every feature name in `show feature` and whether any instance of it is on | `parse_features` | v0.1.0 |
 | `lacp_channels` | `(channel_body) -> list[str]` | Port-channels running LACP, with their ports, from `show port-channel summary` | `parse_features` | v0.1.0 |
 | `load_features` | `(client) -> FeatureView` | The Features page, from one request of `FEATURE_COMMANDS_TO_READ` | `routes/features` | v0.1.0 |
@@ -600,9 +682,184 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_protocol_page` | `(request, username, key, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows one protocol's page with a message; `form` keeps what was typed (never secrets) | `protocol_page`, `protocol_change`, `switch_save` | v0.1.0 |
 | `protocol_page` | `(key, request, username) -> Response` | `GET /routing/protocols/<key>`: one protocol read live; every role looks, operators and admins change | router | v0.1.0 |
 | `protocol_change` | `(key, request, username, form) -> Response` | `POST /routing/protocols/<key>/change`: checks the role version, feature, interface and VRF, asks to confirm showing the lines, then sends them; switch errors have secrets masked | router | v0.1.0 |
-| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
-| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
+| `render_site_page` | `(request, username, proto, site, *, error=None, notice=None, form=None, output=None) -> Response` | Reads the switch and shows a page built from `app/protocols.py` (a protocol page, Spanning tree or Switch admin) with a message, and `output`, what the switch printed for the command just run, as printed; the `ProtocolSite` says where it lives and how it reads, checks and sends | `render_protocol_page`, `render_spanning_tree_page`, `render_switch_admin_page`, `site_change` | v0.1.0 |
+| `site_change` | `(request, username, form, proto, site) -> Response` | One change on such a page: CSRF, role version, feature, the place's identity values, confirm page with the lines, then sends (with the stored admin login, for a site marked `stored_login` on a switch in the stored mode) and runs the site's `after`; switch errors have secrets masked; a change that is no configuration (`clock set`) asks for no save; what the site's `send` returns (a VXLAN OAM tool's answer) is shown on the page | `protocol_change`, `spanning_tree_change`, `switch_admin_change` | v0.1.0 |
 | `render_spanning_tree_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Spanning tree page with a message | `spanning_tree_page`, `switch_save` | v0.1.0 |
+| `check_vpc_place` | `(page, ident) -> None` | Refuses a port-channel the switch lacks (naming it would make one) and a second vPC domain | the vPC `ProtocolSite` | v0.2.1 |
+| `render_vpc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the vPC page, with a message | `vpc_page`, `switch_save` | v0.2.1 |
+| `vpc_page` | `(request, username) -> Response` | `GET /vpc`: the domain, peer-link and vPCs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `vpc_change` | `(request, username, form) -> Response` | `POST /vpc/change`: one change, after a confirm page | router | v0.2.1 |
+| `check_vxlan_place` | `(page, ident) -> None` | Refuses a VLAN or VRF the switch lacks (naming it would make one) | the VXLAN `ProtocolSite` | v0.2.1 |
+| `render_vxlan_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN page, with a message | `vxlan_page`, `switch_save` | v0.2.1 |
+| `vxlan_page` | `(request, username) -> Response` | `GET /vxlan`: the NVE interface, peers and VNIs, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `check_pfc_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Priority flow control `ProtocolSite` | v0.2.1 |
+| `render_pfc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Priority flow control page, with a message | `pfc_page`, `switch_save` | v0.2.1 |
+| `pfc_page` | `(request, username) -> Response` | `GET /pfc`: each port's PFC mode and pause counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pfc_change` | `(request, username, form) -> Response` | `POST /pfc/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_pfc_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Priority flow control `ProtocolSite` | v0.2.1 |
+| `render_pfc_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Priority flow control page, with a message | `pfc_page`, `switch_save` | v0.2.1 |
+| `pfc_page` | `(request, username) -> Response` | `GET /pfc`: each port's PFC mode and pause counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pfc_change` | `(request, username, form) -> Response` | `POST /pfc/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_private_vlan_place` | `(page, ident) -> None` | Refuses a VLAN or VLAN interface the switch lacks (naming it would make one) and a port it lacks | the Private VLANs `ProtocolSite` | v0.2.1 |
+| `render_private_vlans_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Private VLANs page, with a message | `private_vlans_page`, `switch_save` | v0.2.1 |
+| `private_vlans_page` | `(request, username) -> Response` | `GET /private-vlans`: the private VLANs, ports and VLAN interface mappings, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `private_vlans_change` | `(request, username, form) -> Response` | `POST /private-vlans/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_udld_place` | `(page, ident) -> None` | Refuses a port that is not a front port of the switch (UDLD is not set on a port-channel) | the UDLD `ProtocolSite` | v0.2.1 |
+| `render_udld_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the UDLD page, with a message | `udld_page`, `switch_save` | v0.2.1 |
+| `udld_page` | `(request, username) -> Response` | `GET /udld`: each port's UDLD state and neighbours, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `udld_change` | `(request, username, form) -> Response` | `POST /udld/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_vtp_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port or port-channel of the switch | the VTP `ProtocolSite` | v0.2.1 |
+| `render_vtp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VTP page, with a message | `vtp_page`, `switch_save` | v0.2.1 |
+| `vtp_page` | `(request, username) -> Response` | `GET /vtp`: the VTP status, ports and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `vtp_change` | `(request, username, form) -> Response` | `POST /vtp/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_dot1x_place` | `(page, ident) -> None` | Refuses a port that is not a switched front port (802.1X is not for port-channels or routed ports) | the 802.1X `ProtocolSite` | v0.2.1 |
+| `render_dot1x_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the 802.1X page, with a message | `dot1x_page`, `switch_save` | v0.2.1 |
+| `dot1x_page` | `(request, username) -> Response` | `GET /dot1x`: the ports set up for 802.1X and the devices signed in, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `dot1x_change` | `(request, username, form) -> Response` | `POST /dot1x/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_ip_sla_place` | `(page, ident) -> None` | Refuses a schedule or reaction for an entry the switch does not have | the IP SLA `ProtocolSite` | v0.2.1 |
+| `render_ip_sla_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the IP SLA page, with a message | `ip_sla_page`, `switch_save` | v0.2.1 |
+| `ip_sla_page` | `(request, username) -> Response` | `GET /ip-sla`: the IP SLA entries with their results, schedules and reactions, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `ip_sla_change` | `(request, username, form) -> Response` | `POST /ip-sla/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_errdisable_place` | `(page, ident) -> None` | Nothing: the page's only place is the switch | the Errdisable `ProtocolSite` | v0.2.1 |
+| `render_errdisable_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Errdisable page, with a message | `errdisable_page`, `switch_save` | v0.2.1 |
+| `errdisable_page` | `(request, username) -> Response` | `GET /errdisable`: the detection and recovery tables and the err-disabled ports, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `errdisable_change` | `(request, username, form) -> Response` | `POST /errdisable/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_callhome_place` | `(page, ident) -> None` | Nothing: a new profile name makes a new profile | the Call Home `ProtocolSite` | v0.2.1 |
+| `render_callhome_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Call Home page, with a message | `callhome_page`, `switch_save` | v0.2.1 |
+| `callhome_page` | `(request, username) -> Response` | `GET /callhome`: Call Home's state, contact details, transport and destination profiles, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `callhome_change` | `(request, username, form) -> Response` | `POST /callhome/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_scheduler_place` | `(page, ident) -> None` | Nothing: a new job or schedule name makes a new one | the Scheduler `ProtocolSite` | v0.2.1 |
+| `render_scheduler_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Scheduler page, with a message | `scheduler_page`, `switch_save` | v0.2.1 |
+| `scheduler_page` | `(request, username) -> Response` | `GET /scheduler`: the jobs, schedules and log, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `scheduler_change` | `(request, username, form) -> Response` | `POST /scheduler/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_eem_place` | `(page, ident) -> None` | Refuses a system policy the switch does not have | the EEM `ProtocolSite` | v0.2.1 |
+| `render_eem_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the EEM page, with a message | `eem_page`, `switch_save` | v0.2.1 |
+| `eem_page` | `(request, username) -> Response` | `GET /eem`: the applets, variables, system policies and recent events, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `eem_change` | `(request, username, form) -> Response` | `POST /eem/change`: one change, after a confirm page; needs the stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_loopback_place` | `(page, ident) -> None` | Nothing: naming a loopback the switch lacks makes it, as the switch does | the Loopbacks `ProtocolSite` | v0.2.1 |
+| `loopback_needs` | `(connection, scope, setting) -> str` | Refuses changes while the broad role was written before its port list named the loopbacks (`SwitchConnection.broad_role_without_loopbacks`) | the Loopbacks `ProtocolSite` | v0.2.1 |
+| `render_loopbacks_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Loopbacks page, with a message | `loopbacks_page`, `switch_save` | v0.2.1 |
+| `loopbacks_page` | `(request, username) -> Response` | `GET /loopbacks`: every loopback with its state, VRF and addresses, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `loopbacks_change` | `(request, username, form) -> Response` | `POST /loopbacks/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_tunnel_place` | `(page, ident) -> None` | Nothing: naming a tunnel the switch lacks makes it, as the switch does | the Tunnels `ProtocolSite` | v0.2.1 |
+| `render_tunnels_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tunnels page, with a message | `tunnels_page`, `switch_save` | v0.2.1 |
+| `tunnels_page` | `(request, username) -> Response` | `GET /tunnels`: every tunnel with its state, mode, ends and address, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `tunnels_change` | `(request, username, form) -> Response` | `POST /tunnels/change`: one change, after a confirm page; needs the stored admin login (sent with that login) | router | v0.2.1 |
+| `check_ptp_place` | `(page, ident) -> None` | Refuses a port that is not one of the switch's front ports | the PTP `ProtocolSite` | v0.2.1 |
+| `render_ptp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the PTP page, with a message | `ptp_page`, `switch_save` | v0.2.1 |
+| `ptp_page` | `(request, username) -> Response` | `GET /ptp`: the PTP clock and the ports that run PTP, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `ptp_change` | `(request, username, form) -> Response` | `POST /ptp/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `check_telemetry_place` | `(page, ident) -> None` | Nothing: naming a group the switch lacks makes it, as the switch does | the Telemetry `ProtocolSite` | v0.2.1 |
+| `render_telemetry_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Telemetry page, with a message | `telemetry_page`, `switch_save` | v0.2.1 |
+| `telemetry_page` | `(request, username) -> Response` | `GET /telemetry`: the telemetry groups and collectors, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `telemetry_change` | `(request, username, form) -> Response` | `POST /telemetry/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `admin_login` | `(request, connection) -> tuple[str, str, int] \| None` | The stored switch admin login (username, password, SSH port), or None when none is stored or it cannot be decrypted | `site_change`, `routes/pki`, `routes/switch_files` | v0.2.1 |
+| `reading_target` | `(request, connection, target) -> SwitchTarget \| None` | The login a page reads with: the stored admin login in the stored mode, else NXray's own account (for pages some of whose reads network-operator is refused) | `render_site_page`, `site_change` (sites marked `stored_read`), `routes/switch_files` | v0.2.1 |
+| `check_aaa_place` | `(page, ident) -> None` | Nothing: a group or server named here is made by the change | the AAA `ProtocolSite` | v0.2.1 |
+| `render_aaa_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the AAA page, with a message | `aaa_page`, `switch_save` | v0.2.1 |
+| `aaa_page` | `(request, username) -> Response` | `GET /aaa`: sign-in and accounting, the RADIUS and TACACS+ servers and groups, read live; every role looks, NXray admins change | router | v0.2.1 |
+| `aaa_change` | `(request, username, form) -> Response` | `POST /aaa/change`: one change, after a confirm page; NXray admins only, with the stored admin login | router | v0.2.1 |
+| `check_pki_place` | `(page, ident) -> None` | Nothing: a key pair or trustpoint named here is made by the change | the SSH and certificates `ProtocolSite` | v0.2.1 |
+| `render_pki_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the SSH and certificates page, with a message | `pki_page`, `pki_authenticate`, `switch_save` | v0.2.1 |
+| `pki_page` | `(request, username) -> Response` | `GET /pki`: the SSH host key, key pairs, trustpoints and certificates, read live; every role looks, NXray admins change | router | v0.2.1 |
+| `pki_change` | `(request, username, form) -> Response` | `POST /pki/change`: one change, after a confirm page; NXray admins only, with the broad role or a stored admin login | router | v0.2.1 |
+| `pki_authenticate` | `(request, username, form) -> Response` | `POST /pki/authenticate`: reads the pasted CA certificates, shows them, and on confirm types them to the switch over SSH, accepting only the same fingerprints | router | v0.2.1 |
+| `render_files_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Files page, with a message | the Files routes | v0.2.1 |
+| `files_page` | `(request, username) -> Response` | `GET /files`: the files on bootflash and the space left; every role looks | router | v0.2.1 |
+| `files_delete` | `(request, username, csrf, name, confirm) -> Response` | `POST /files/delete`: deletes one file after a confirm page (never the image in use); NXray admins, with the stored admin login | router | v0.2.1 |
+| `files_upload` | `(request, username, csrf, upload) -> Response` | `POST /files/upload`: keeps the uploaded file in the data folder and copies it to bootflash with SCP as a job; refuses an existing name or too little room | router | v0.2.1 |
+| `files_download` | `(request, username, name) -> Response` | `GET /files/download`: copies one file off bootflash with SCP straight to the browser | router | v0.2.1 |
+| `render_software_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Software page, with the jobs and whether an image may be installed | the Software routes | v0.2.1 |
+| `software_page` | `(request, username) -> Response` | `GET /software`: the running and boot images, the images on bootflash, the last install; every role looks | router | v0.2.1 |
+| `software_checksum` | `(request, username, csrf, image, checksum) -> Response` | `POST /software/checksum`: has the switch work out an image's checksum and compare it, as a job | router | v0.2.1 |
+| `software_check` | `(request, username, csrf, image) -> Response` | `POST /software/check`: runs `show install all impact` for an image, as a job | router | v0.2.1 |
+| `software_install` | `(request, username, csrf, image, hostname, confirm) -> Response` | `POST /software/install`: once the image's checksum and check passed, asks with the switch's name typed, then installs as a job | router | v0.2.1 |
+| `render_tech_page` | `(request, username, *, error=None, notice=None) -> Response` | Shows the Tech support page with the last collected file and the job | the Tech support routes | v0.2.1 |
+| `tech_page` | `(request, username) -> Response` | `GET /tech-support`: the last collected tech-support; every role looks | router | v0.2.1 |
+| `tech_collect` | `(request, username, csrf) -> Response` | `POST /tech-support/collect`: runs `show tech-support` as a job | router | v0.2.1 |
+| `tech_download` | `(request, username) -> Response` | `GET /tech-support/download`: the last one, gzipped | router | v0.2.1 |
+| `tech_delete` | `(request, username, csrf) -> Response` | `POST /tech-support/delete`: removes it from NXray | router | v0.2.1 |
+| `render_pbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Policy-based routing page, with a message | `pbr_page`, `switch_save` | v0.2.1 |
+| `pbr_page` | `(request, username) -> Response` | `GET /pbr`: the route-maps, applied policies and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `pbr_change` | `(request, username, form) -> Response` | `POST /pbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `itd_needs` | `(connection, scope, setting) -> str` | Refuses the counters while the broad role was written before it allowed them (`SwitchConnection.broad_role_without_itd_statistics`) | the ITD `ProtocolSite` | v0.2.1 |
+| `render_itd_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the ITD page, with a message | `itd_page`, `switch_save` | v0.2.1 |
+| `itd_page` | `(request, username) -> Response` | `GET /itd`: the device groups, services and counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `itd_change` | `(request, username, form) -> Response` | `POST /itd/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `render_mpls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the MPLS page, with a message | `mpls_page`, `switch_save` | v0.2.1 |
+| `mpls_page` | `(request, username) -> Response` | `GET /mpls`: whether MPLS is on, the label range, interfaces and bindings, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `mpls_change` | `(request, username, form) -> Response` | `POST /mpls/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.2.1 |
+| `nat_needs` | `(connection, scope, setting) -> str` | Refuses clearing while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_nat_clear`) | the NAT `ProtocolSite` | v0.3.0 |
+| `render_nat_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the NAT page, with a message | `nat_page`, `switch_save` | v0.3.0 |
+| `nat_page` | `(request, username) -> Response` | `GET /nat`: the NAT setup, translations and counters and the TCAM space, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `nat_change` | `(request, username, form) -> Response` | `POST /nat/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `epbr_needs` | `(connection, scope, setting) -> str` | Refuses clearing the counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_epbr_clear`) | the Enhanced policy-based routing `ProtocolSite` | v0.3.0 |
+| `snooping_needs` | `(connection, scope, setting) -> str` | Refuses clearing a VLAN's groups or counters while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_snooping_clear`) | the IGMP snooping `ProtocolSite` | v0.3.0 |
+| `vmtracker_needs` | `(connection, scope, setting) -> str` | Refuses syncing a connection now while the broad role was written before it allowed it (`SwitchConnection.broad_role_without_vmtracker_refresh`) | the VM Tracker `ProtocolSite` | v0.3.0 |
+| `ngoam_needs` | `(connection, scope, setting) -> str` | Refuses a tool, a counters' clear or loop detection's probe and bring-up while the broad role was written before it allowed them (`SwitchConnection.broad_role_without_ngoam_tools`) | the VXLAN OAM `ProtocolSite` | v0.3.0 |
+| `render_epbr_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Enhanced policy-based routing page, with a message | `epbr_page`, `switch_save` | v0.3.0 |
+| `epbr_page` | `(request, username) -> Response` | `GET /epbr`: the ePBR services, policies, where they apply, the chains' state and the counters, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `epbr_change` | `(request, username, form) -> Response` | `POST /epbr/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_track_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Tracked objects page, with a message | `track_page`, `switch_save` | v0.3.0 |
+| `track_page` | `(request, username) -> Response` | `GET /track`: the tracked objects with their state, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `track_change` | `(request, username, form) -> Response` | `POST /track/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_snooping_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the IGMP snooping page, with a message | `snooping_page`, `switch_save` | v0.3.0 |
+| `snooping_page` | `(request, username) -> Response` | `GET /igmp-snooping`: snooping's settings, queriers, router ports and groups, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `snooping_change` | `(request, username, form) -> Response` | `POST /igmp-snooping/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_nbm_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Non-blocking multicast page, with a message | `nbm_page`, `switch_save` | v0.3.0 |
+| `nbm_page` | `(request, username) -> Response` | `GET /nbm`: NBM's settings, policies, flows and bandwidth, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `nbm_change` | `(request, username, form) -> Response` | `POST /nbm/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_trm_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Multicast over VXLAN page, with a message | `trm_page`, `switch_save` | v0.3.0 |
+| `trm_page` | `(request, username) -> Response` | `GET /trm`: the TRM settings and layer 3 VNIs, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `trm_change` | `(request, username, form) -> Response` | `POST /trm/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_flexlink_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Flex Links page, with a message | `flexlink_page`, `switch_save` | v0.3.0 |
+| `flexlink_page` | `(request, username) -> Response` | `GET /flexlink`: the Flex Link pairs and their state, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `flexlink_change` | `(request, username, form) -> Response` | `POST /flexlink/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_vmtracker_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VM Tracker page, with a message | `vmtracker_page`, `switch_save` | v0.3.0 |
+| `vmtracker_page` | `(request, username) -> Response` | `GET /vmtracker`: the vCenter connections and the VMs on each port, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `vmtracker_change` | `(request, username, form) -> Response` | `POST /vmtracker/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_evb_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Edge Virtual Bridging page, with a message | `evb_page`, `switch_save` | v0.3.0 |
+| `evb_page` | `(request, username) -> Response` | `GET /evb`: EVB's settings, hosts and VSIs, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `evb_change` | `(request, username, form) -> Response` | `POST /evb/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_licensing_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Smart Licensing page, with a message | `licensing_page`, `switch_save` | v0.3.0 |
+| `licensing_page` | `(request, username) -> Response` | `GET /licensing`: the licences and the registration, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `licensing_change` | `(request, username, form) -> Response` | `POST /licensing/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_programmability_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Programmability page, with a message | `programmability_page`, `switch_save` | v0.3.0 |
+| `programmability_page` | `(request, username) -> Response` | `GET /programmability`: the interfaces, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `programmability_change` | `(request, username, form) -> Response` | `POST /programmability/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_system_settings_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Switch-wide settings page, with a message | `system_settings_page`, `switch_save` | v0.3.0 |
+| `system_settings_page` | `(request, username) -> Response` | `GET /system-settings`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `system_settings_change` | `(request, username, form) -> Response` | `POST /system-settings/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_twamp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the TWAMP server page, with a message | `twamp_page`, `switch_save` | v0.3.0 |
+| `twamp_page` | `(request, username) -> Response` | `GET /twamp`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `twamp_change` | `(request, username, form) -> Response` | `POST /twamp/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_rmon_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the RMON page, with a message | `rmon_page`, `switch_save` | v0.3.0 |
+| `rmon_page` | `(request, username) -> Response` | `GET /rmon`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `rmon_change` | `(request, username, form) -> Response` | `POST /rmon/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_analytics_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Flow analytics page, with a message | `analytics_page`, `switch_save` | v0.3.0 |
+| `analytics_page` | `(request, username) -> Response` | `GET /analytics`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `analytics_change` | `(request, username, form) -> Response` | `POST /analytics/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_maintenance_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Maintenance mode page, with a message | `maintenance_page`, `switch_save` | v0.3.0 |
+| `maintenance_page` | `(request, username) -> Response` | `GET /maintenance`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `maintenance_change` | `(request, username, form) -> Response` | `POST /maintenance/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `maintenance_needs` | `(connection, scope, setting) -> str` | Refuses taking or deleting a snapshot while the broad role was written before it allowed them ("" when it may); comparing is a show command | the Maintenance mode `ProtocolSite` | v0.3.0 |
+| `render_tunnel_encryption_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN tunnel encryption page, with a message | `tunnel_encryption_page`, `switch_save` | v0.3.0 |
+| `tunnel_encryption_page` | `(request, username) -> Response` | `GET /tunnel-encryption`: the key chains, policies, peers, links and sessions, read live; every role looks, operators and admins change | router | v0.3.0 |
+| `tunnel_encryption_change` | `(request, username, form) -> Response` | `POST /tunnel-encryption/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_ngoam_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the VXLAN OAM page, with a message | `ngoam_page`, `switch_save` | v0.3.0 |
+| `ngoam_page` | `(request, username) -> Response` | `GET /ngoam`: the tools' forms, profiles, settings and counters, read live; every role looks, operators and admins change and run the tools | router | v0.3.0 |
+| `ngoam_change` | `(request, username, form) -> Response` | `POST /ngoam/change`: one change or tool run, after a confirm page; a tool's printed answer is shown on the page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_copp_page` | `(request, username, *, error=None, notice=None) -> Response` | Reads the switch fresh and shows the Control-plane policing page, with a message | `copp_page`, `switch_save` | v0.2.1 |
+| `copp_page` | `(request, username) -> Response` | `GET /copp`: the control-plane policy and its counters, read live; every role looks, nobody changes | router | v0.2.1 |
+| `check_monitor_place` | `(page, ident) -> None` | Refuses a port the switch lacks | the Monitor sessions `ProtocolSite` | v0.2.1 |
+| `render_monitor_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Monitor sessions page, with a message | `monitor_page`, `switch_save` | v0.2.1 |
+| `monitor_page` | `(request, username) -> Response` | `GET /monitor`: the SPAN and ERSPAN sessions, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `monitor_change` | `(request, username, form) -> Response` | `POST /monitor/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `check_qos_place` | `(page, ident) -> None` | Refuses a port the switch lacks, a class-map it lacks, and a name the switch keeps for its own defaults | the QoS `ProtocolSite` | v0.2.1 |
+| `render_qos_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the QoS page, with a message | `qos_page`, `switch_save` | v0.2.1 |
+| `qos_page` | `(request, username) -> Response` | `GET /qos`: the class-maps, policy-maps, what is applied and the queue counters, read live; every role looks, operators and admins change | router | v0.2.1 |
+| `qos_change` | `(request, username, form) -> Response` | `POST /qos/change`: one change, after a confirm page; needs the broad role or a stored admin login | router | v0.2.1 |
+| `vxlan_change` | `(request, username, form) -> Response` | `POST /vxlan/change`: one change, after a confirm page; needs role version 20 and the NVE interface in the role's port list | router | v0.2.1 |
 | `spanning_tree_page` | `(request, username) -> Response` | `GET /spanning-tree`: the trees, the ports in them and every setting, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `spanning_tree_change` | `(request, username, form) -> Response` | `POST /spanning-tree/change`: one change, after a confirm page showing the lines (role version 11) | router | v0.1.0 |
 | `render_switch_admin_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the Switch admin page with a message | `switch_admin_page`, `switch_save` | v0.1.0 |
@@ -715,7 +972,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `https_enabled` | `() -> bool` | `NXRAY_ENABLE_HTTPS` read as the app reads it | `healthcheck.main` | v0.1.0 |
+| `https_enabled` | `() -> bool` | `NXRAY_ENABLE_HTTPS` read by `config.env_bool`, so a value the app refuses is also refused here | `healthcheck.main` | v0.1.0 |
 | `main` | `() -> int` | 0 when `/healthz` answers, over HTTPS through nginx when that is on | Dockerfile `HEALTHCHECK` | v0.1.0 |
 
 ## `app/totp.py` — two-factor codes
@@ -865,6 +1122,14 @@ list shown in the top bar. Held in `app.state.live_cache`.
 | `shared_readings` | `(request, switch_id, target, ports_floor=None) -> (LiveAnswer, NeighborView \| None)` | The newest port reading and neighbour/MAC reading through the cache, shared by every live page; `ports_floor` slows the port read for pages that need it less often | `live_ports`, `live_port`, `live_neighbors` | v0.2.0 |
 | `no_cache` | `(response) -> Response` | Marks a response not to be stored by the browser | `live_dashboard` | v0.2.0 |
 
+## `app/page_reads.py` — recent switch answers for the pages a person opens
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `lifetime` | `(command: str, seconds: int) -> int` | How many seconds the answer to a show command is kept: `seconds` for the listed whole-switch and per-port reads, longer for `show version`, 0 for everything else (counters, running figures, state a page is opened to look at) | `page_reads.PageReads` | v0.3.0 |
+
+`PageReads` keeps the answers per switch, account and command; `reader(seconds)` is the function `nxapi.page_reads` holds for one page being opened, asking the switch only for the commands it has no recent answer to and handing each page its own copy. `clear()` forgets everything (a form sent, a browser reload). Held in `app.state.page_reads`; the lifetime is `NXRAY_PAGE_READ_SECONDS`.
+
 ## `app/history.py` — history
 
 | Function | Signature | Does | Used by | Since |
@@ -910,11 +1175,12 @@ from the device's side (it *sends* what comes in on the port).
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `agent_addresses` | `(connections) -> dict[str, int]` | Which agent address is which switch, from (id, host, stored agent): the stored agent, else the host when it is an IP address | `load_agents` | v0.2.0 |
+| `sender_addresses` | `(connections) -> dict[str, int]` | Every address a switch's sFlow datagrams may be sent from: its stored agent and its NX-API host, when they are IP addresses | `load_agents` | v0.3.0 |
 | `decode_datagram` | `(data: bytes) -> Datagram` | One sFlow version 5 datagram's flow samples (formats 1 and 3: raw header, Ethernet frame and extended switch records), bounds-checked; raises `SflowError` | `SflowCollector.receive` | v0.2.0 |
 | `device_label` | `(item) -> str` | A device item in words (`Other devices` for the left-over) | the Traffic page | v0.2.0 |
 | `item_series` | `(conn, switch_id, kind, items, *, start, end, bucket) -> dict` | Each item's traffic in bits per second per bucket, 0 for quiet buckets between its first and last | `sflow_charts`, `vlan_cards` | v0.2.0 |
 | `latest_minute` | `(conn, switch_id) -> float \| None` | When a switch's newest stored minute began | `routes/traffic` | v0.2.0 |
-| `load_agents` | `(db_path) -> dict[str, int]` | `agent_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
+| `load_agents` | `(db_path) -> tuple[dict[str, int], dict[str, int]]` | `agent_addresses` and `sender_addresses` for every stored switch | `run_collector`, `routes/traffic` | v0.2.0 |
 | `minute_rows` | `(switch_id, minute, totals) -> list[SflowRow]` | One minute's rows: every VLAN, the busiest `MAX_DEVICES_PER_MINUTE` devices each way, the rest as `other` | `SflowCollector.drain` | v0.2.0 |
 | `parse_frame_header` | `(header: bytes) -> dict` | MAC addresses, 802.1Q VLAN and IPv4 or IPv6 addresses from the first bytes of an Ethernet frame | `decode_datagram` | v0.2.0 |
 | `purge_sflow` | `(conn, now, keep_days) -> int` | Deletes rows older than `NXRAY_SFLOW_KEEP_DAYS` | `run_collector` | v0.2.0 |
@@ -1097,15 +1363,15 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
+| `check_value` | `(spec: Field, raw: str) -> str` | One field's value as the switch should get it (address, network, area, AS number, name, secret, interface, VRF, server name or address, domain, VRF to reach a server in, time of day, web address, IP SLA life and start time, an interface's IPv4 or IPv6 address with its prefix length, any interface by name to read its state, the page an HTTP probe fetches, an IPv4 address or any (0.0.0.0), a tunnel encryption key ID in hexadecimal, an SNMP object's dotted number, ...), "" for an empty optional field; ValueError naming the field otherwise | `build_change` | v0.1.0 |
 | `render` | `(template: str, values: dict[str, str]) -> str` | Fills a setting's line: `{name}` blanks, `[...]` parts dropped when a value inside is empty | `build_change` | v0.1.0 |
 | `blanks` | `(template: str) -> set[str]` | The field names a template uses | `Setting`, `Scope` checks | v0.1.0 |
 | `build_change` | `(protocol, scope_key, setting_key, action, ident, values) -> ProtocolChange` | The checked lines for one change (set, remove, create, delete), secrets masked in the labels, with a plain-words description | `routing_protocols.build_protocol_change` | v0.1.0 |
-| `text` | `(value: Any) -> str` | A value from switch output as stripped text | `protocols_*` parsers | v0.1.0 |
 | `route_age` | `(value: str) -> str` | An age as the switch writes it (`P1DT13H30M23S`) in short words (`1d 13h 30m`) | `routing_protocols.parse_routes`, `protocols_bgp` | v0.1.0 |
 | `table_rows` | `(body, table: str, row: str) -> list[dict]` | The rows of an NX-OS table, one row or many, also when the table is a list; deliberately not a change to `switch.rows` | `protocols_*` parsers, `routing_protocols.parse_routes` | v0.1.0 |
 | `vrf_field` | `(optional=True) -> Field` | The VRF identity field protocol scopes share | `protocols_*` | v0.1.0 |
 | `interface_field` | `() -> Field` | The interface identity field of interface scopes | `protocols_*` | v0.1.0 |
+| `channel_field` | `() -> Field` | The port-channel identity field of the vPC page's port-channel scope (field kind `channel`: a port-channel number, written `port-channel20` or `po20`) | `vpc` | v0.2.1 |
 | `port_field` | `() -> Field` | The port identity field of spanning-tree port scopes: a switched front port or port-channel (field kind `port`) | `spanning_tree` | v0.1.0 |
 | `source_field` | `(name="source", label="Source interface") -> Field` | A field for an interface whose address a protocol uses, loopbacks included (BGP update source, PIM register source, MSDP connect source) | `protocols_bgp`, `protocols_multicast` | v0.1.0 |
 
@@ -1119,6 +1385,7 @@ would take them out silently.
 | `parse_routes` | `(body) -> list[Route]` | Every route of `show ip route vrf all` or `show ipv6 route vrf all`, with its source, next hops, distance, metric and age | `load_overview` | v0.1.0 |
 | `load_overview` | `(client) -> ProtocolsOverview` | Which protocols' features are on, and the route table; one request | `routes/protocols` | v0.1.0 |
 | `load_protocol_page` | `(client, proto) -> ProtocolPage` | The features, layer 3 interfaces and VRFs in one request, then the protocol's own show commands when it is on | `routes/protocols` | v0.1.0 |
+| `layer3_interfaces` | `(brief, members) -> tuple[str, ...]` | The VLAN interfaces up to Vlan254 and the routed front ports and port-channels in `show interface brief`, none in the management VRF | `load_protocol_page`, `load_pbr_page`, `load_itd_page`, `load_epbr_page`, `load_mpls_page`, `load_nat_page`, `nbm.load_nbm_page` | v0.2.1 |
 
 ## `app/protocols_ospf.py` — OSPF and OSPFv3 pages
 
@@ -1131,7 +1398,7 @@ would take them out silently.
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `parse_bgp` | `(bodies: list[dict]) -> ProtocolView` | The BGP page from `show bgp process`, `show bgp all summary vrf all`, `show bgp vrf all all neighbors`, `show bgp sessions vrf all` and `show bgp ipv6 unicast vrf all`: process, VRF parts, address families, neighbors and their address families with the settings the output tells; neighbor, session and IPv6 BGP tables | `BGP.parse` | v0.1.0 |
+| `parse_bgp` | `(bodies: list[dict]) -> ProtocolView` | The BGP page from `show bgp process`, `show bgp all summary vrf all`, `show bgp vrf all all neighbors`, `show bgp sessions vrf all` and `show bgp ipv6 unicast vrf all`: process, VRF parts, address families, VPN address families (vpnv4, vpnv6), neighbors and their address families (labelled unicast and VPN included) with the settings the output tells; neighbor, session and IPv6 BGP tables | `BGP.parse` | v0.1.0 |
 
 ## `app/protocols_igp.py` — EIGRP, RIP and IS-IS pages
 
@@ -1178,6 +1445,514 @@ would take them out silently.
 | `load_spanning_tree_page` | `(client) -> SpanningTreePage` | One request for the reads, then the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/spanning_tree` | v0.1.0 |
 | `build_stp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Spanning tree page | `NxapiClient.configure_spanning_tree`, `routes/spanning_tree` | v0.1.0 |
 
+## `app/vpc.py` — vPC: the domain, the peer-link, the vPCs, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vpc_config` | `(config: str) -> VpcConfig` | `show running-config vpc` text sorted by where each line applies: the domain number, the lines inside `vpc domain`, and each port-channel's `vpc` lines | `load_vpc_page` | v0.2.1 |
+| `domain_values` | `(lines) -> dict[str, dict[str, str]]` | The vPC domain's settings the configured lines show, by setting key, as field values (peer keepalive, priorities, delay restore, auto-recovery) | `VpcConfig.values`, `parse_vpc` | v0.2.1 |
+| `channel_name` | `(value: str) -> str` | `Po43` (how `show vpc` writes a port-channel) as `port-channel43`; other names unchanged | `parse_vpc` | v0.2.1 |
+| `parse_vpc` | `(bodies, config=None) -> ProtocolView` | The page from `show vpc` and the configuration (None when the role may not read it): the domain with its facts, the peer-link and the vPCs, as tables and port-channel places | `VPC.parse`, `load_vpc_page` | v0.2.1 |
+| `load_vpc_page` | `(client) -> VpcPage` | One request for the features, port-channels and VRFs, then `show vpc` and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vpc` | v0.2.1 |
+| `build_vpc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the vPC page | `NxapiClient.configure_vpc`, `routes/vpc` | v0.2.1 |
+
+## `app/monitor.py` — Monitor sessions: SPAN and ERSPAN source sessions, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_origin` | `(config: str) -> str` | The ERSPAN source address in `show running-config monitor` text ('' for none) | `load_monitor_page` | v0.2.1 |
+| `parse_monitor` | `(bodies, origin="") -> ProtocolView` | The page from `show monitor session all` and the ERSPAN source address: a place per local or ERSPAN source session, the address, and a table of every session | `MONITOR.parse`, `load_monitor_page` | v0.2.1 |
+| `load_monitor_page` | `(client) -> MonitorPage` | One request for the ports and features, one for the sessions (no session is a note, not a table), one for the configuration text | `routes/monitor` | v0.2.1 |
+| `build_monitor_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Monitor sessions page | `NxapiClient.configure_monitor`, `routes/monitor` | v0.2.1 |
+| `all_port_names` | `(brief) -> tuple[str, ...]` | Every front port and port-channel in `show interface brief`, routed ports too | `load_monitor_page`, `load_qos_page`, `track.track_interfaces`, `igmp_snooping.load_snooping_page` | v0.2.1 |
+
+## `app/qos.py` — QoS: class-maps, policy-maps (qos, network-qos, queuing), where they are applied, the counters, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `is_built_in` | `(name: str) -> bool` | True for a class-map or policy-map the switch has by itself (`c-out-8q-q3`, `default-8q-out-policy`) | `parse_applied`, `routes/qos` | v0.2.1 |
+| `parse_applied` | `(brief) -> dict` | What is applied to each port from `show policy-map interface brief`, leaving out the switch's own policies | `parse_qos` | v0.2.1 |
+| `parse_system` | `(system) -> list` | The policies applied to the whole switch from `show policy-map system`, as (kind, name) | `parse_qos` | v0.2.1 |
+| `parse_counters` | `(body) -> list` | The output queues that sent or dropped packets from `show queuing interface`, unicast and multicast added | `parse_qos` | v0.2.1 |
+| `parse_qos` | `(bodies, counters=None) -> ProtocolView` | The page from the answers: a place per class-map, policy-map, class, port with a policy and the system, and the tables of what is applied, the switch's own policies and the counters | `QOS.parse`, `load_qos_page` | v0.2.1 |
+| `load_qos_page` | `(client) -> QosPage` | One request for the ports and the network-qos, queuing and applied policies, then one each for the qos class-maps, qos policy-maps and counters (nothing made is an empty answer, not a warning) | `routes/qos` | v0.2.1 |
+| `build_qos_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the QoS page | `NxapiClient.configure_qos`, `routes/qos` | v0.2.1 |
+
+## `app/copp.py` — Control-plane policing: the CoPP policy, its classes and counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_copp` | `(bodies) -> ProtocolView` | The page from `show policy-map interface control-plane`: a note naming the policy (and Cisco's profile), and a table of its classes with their matches, CoS, rate limit, burst, bytes passed and dropped and 5-minute rates, every module added up | `COPP.parse`, `load_copp_page` | v0.2.1 |
+| `load_copp_page` | `(client) -> CoppPage` | One request for the control-plane policy and its counters | `routes/copp` | v0.2.1 |
+
+## `app/pfc.py` — Priority flow control: a port's PFC mode and watchdog, the pause counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pfc` | `(bodies) -> ProtocolView` | The page from `show interface priority-flow-control detail`: a table of every port's mode, state and pause counts, a table of pause counts per priority, and a place for each port not on auto | `PFC.parse`, `load_pfc_page` | v0.2.1 |
+| `load_pfc_page` | `(client) -> PfcPage` | One request for the ports and one for the PFC state and counters | `routes/pfc` | v0.2.1 |
+| `build_pfc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Priority flow control page | `NxapiClient.configure_pfc`, `routes/pfc` | v0.2.1 |
+
+## `app/pfc.py` — Priority flow control: a port's PFC mode and watchdog, the pause counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pfc` | `(bodies) -> ProtocolView` | The page from `show interface priority-flow-control detail`: a table of every port's mode, state and pause counts, a table of pause counts per priority, and a place for each port not on auto | `PFC.parse`, `load_pfc_page` | v0.2.1 |
+| `load_pfc_page` | `(client) -> PfcPage` | One request for the ports and one for the PFC state and counters | `routes/pfc` | v0.2.1 |
+| `build_pfc_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Priority flow control page | `NxapiClient.configure_pfc`, `routes/pfc` | v0.2.1 |
+
+## `app/private_vlans.py` — Private VLANs: primary, isolated and community VLANs, their ports and VLAN interfaces
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pvlan_ports` | `(body) -> list[PvlanPort]` | The ports with any private VLAN setting in `show interface switchport`: mode, host association, mapping, trunk pairs, plain and native VLANs on a private VLAN trunk | `parse_private_vlans` | v0.2.1 |
+| `parse_private_vlans` | `(bodies, mapping=None) -> ProtocolView` | The page from `show vlan private-vlan type`, `show vlan private-vlan`, `show interface switchport` and `show interface private-vlan mapping`: a place per private VLAN, port and mapped VLAN interface, and the tables of the pairs with their ports and of the ports in private VLAN modes | `PRIVATE_VLANS.parse`, `load_private_vlan_page` | v0.2.1 |
+| `load_private_vlan_page` | `(client) -> PrivateVlanPage` | One request for the features, VLANs and ports; while private-vlan is on, one for the private VLANs and ports' settings and one for the VLAN interface mappings | `routes/private_vlans` | v0.2.1 |
+| `build_private_vlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Private VLANs page | `NxapiClient.configure_private_vlans`, `routes/private_vlans` | v0.2.1 |
+
+## `app/udld.py` — UDLD: the switch-wide mode and message interval, each port's state and neighbours
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_udld_global` | `(text_out) -> dict[str, str]` | `show udld global` as `{"mode": ..., "interval": ...}`; a line worded differently is left out | `parse_udld` | v0.2.1 |
+| `parse_udld_ports` | `(text_out) -> list[UdldPort]` | The ports in `show udld`: one block per port with its `label: value` lines and one `Entry` per neighbour | `parse_udld` | v0.2.1 |
+| `parse_udld` | `(global_text, ports_text) -> ProtocolView` | The page: the switch-wide place, the tables of ports and neighbours, and a place per port not on its default | `load_udld_page` | v0.2.1 |
+| `load_udld_page` | `(client) -> UdldPage` | One request for the feature and the ports; while udld is on, one for the switch-wide state and one for every port's (text) | `routes/udld` | v0.2.1 |
+| `build_udld_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the UDLD page | `NxapiClient.configure_udld`, `routes/udld` | v0.2.1 |
+
+## `app/vtp.py` — VTP: the mode, domain, version and password, the ports taking part
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_pairs` | `(text_out) -> list[tuple[str, str]]` | Every `label : value` line of a show command's text, in order; headings and a time of day's colons are not taken for one | `parse_vtp` | v0.2.1 |
+| `parse_vtp_ports` | `(text_out) -> list[tuple[str, str]]` | The ports in `show vtp interface` with Enabled or Disabled, short names (`Eth1/7`, `Po3`) written out | `parse_vtp` | v0.2.1 |
+| `parse_vtp` | `(status_text, interface_text="", counters_text="") -> ProtocolView` | The page: the switch's VTP place (mode, domain, version), the status lines as printed, the ports and the counters | `load_vtp_page` | v0.2.1 |
+| `load_vtp_page` | `(client) -> VtpPage` | One request for the feature and the ports; while vtp is on, one each for the status, the ports and the counters (text); never reads the password | `routes/vtp` | v0.2.1 |
+| `build_vtp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VTP page | `NxapiClient.configure_vtp`, `routes/vtp` | v0.2.1 |
+
+## `app/dot1x.py` — 802.1X: the switch-wide state, the ports set up for it, the devices signed in
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_dot1x_global` | `(*texts) -> dict[str, str]` | The switch-wide lines of `show dot1x` (and the top of `show dot1x all`): system auth control, protocol version, MAC move | `parse_dot1x` | v0.2.1 |
+| `parse_dot1x_ports` | `(text_out) -> list[Dot1xPort]` | The ports in `show dot1x all details` with their `Label = Value` settings and the devices in the authenticator client list; a port's supplicant block is left out | `parse_dot1x` | v0.2.1 |
+| `parse_dot1x` | `(global_text, details_text) -> ProtocolView` | The page: the switch-wide place, a place and row per port with 802.1X, and the table of signed-in devices | `load_dot1x_page` | v0.2.1 |
+| `load_dot1x_page` | `(client) -> Dot1xPage` | One request for the feature and the ports; while dot1x is on, one for the switch-wide state and one for the ports and devices (text) | `routes/dot1x` | v0.2.1 |
+| `build_dot1x_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the 802.1X page | `NxapiClient.configure_dot1x`, `routes/dot1x` | v0.2.1 |
+
+## `app/ip_sla.py` — IP SLA: the entries that measure from the switch, their results, schedules and reactions
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_sla_config` | `(config) -> dict[int, SlaConfig]` | The entries in `show running-config sla sender` text, by number: the measuring line, the other lines, the schedule, the reactions and triggers | `parse_ip_sla` | v0.2.1 |
+| `entry_values` | `(config) -> dict[str, dict[str, str]]` | An entry's settings as field values (what it measures, timing, packets, labels, history), for the "set" marks | `parse_ip_sla` | v0.2.1 |
+| `schedule_values` | `(schedule) -> dict[str, str]` | What follows `ip sla schedule <n>` as field values: life, start, ageout, recurring | `parse_ip_sla` | v0.2.1 |
+| `parse_ip_sla` | `(bodies, config=None) -> ProtocolView` | The page from `show ip sla configuration`, `show ip sla statistics details` and the configuration text: a place per entry, schedule and set of reactions, and the table of entries with their latest results | `IP_SLA.parse`, `load_ip_sla_page` | v0.2.1 |
+| `load_ip_sla_page` | `(client) -> IpSlaPage` | One request for the features and VRFs; while sla sender is on, one for the entries and results and the configuration text | `routes/ip_sla` | v0.2.1 |
+| `build_ip_sla_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the IP SLA page | `NxapiClient.configure_ip_sla`, `routes/ip_sla` | v0.2.1 |
+
+## `app/errdisable.py` — errdisable: detection, recovery and the err-disabled ports
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `recovery_interval` | `(body) -> str` | The recovery interval in seconds from `show errdisable recovery` (the row that carries `time_interval`); "" when none does | `parse_errdisable` | v0.2.1 |
+| `parse_err_disabled` | `(text_out) -> list[tuple[str, str, str]]` | The ports in `show interface status err-disabled`: port, description and reason, split at the status word | `parse_errdisable` | v0.2.1 |
+| `parse_errdisable` | `(bodies, ports_text="") -> ProtocolView` | The page: the switch's place (interval, causes it recovers from), the err-disabled ports, and every cause with detection and recovery on or off | `load_errdisable_page` | v0.2.1 |
+| `load_errdisable_page` | `(client) -> ErrdisablePage` | One request for the detection and recovery tables; one for the err-disabled ports' text | `routes/errdisable` | v0.2.1 |
+| `build_errdisable_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Errdisable page | `NxapiClient.configure_errdisable`, `routes/errdisable` | v0.2.1 |
+
+## `app/callhome.py` — Smart Call Home: contact details, transport, destination profiles
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_label_lines` | `(text_out) -> list[tuple[str, str]]` | Every `label:value` line of a Call Home show command, in order | `parse_callhome` | v0.2.1 |
+| `parse_profiles` | `(text_out) -> list[Profile]` | Every profile in `show callhome destination-profile` with its values and its email, web and alert-group lists | `parse_callhome` | v0.2.1 |
+| `config_lines` | `(config) -> list[str]` | The lines inside `callhome` in `show running-config callhome`, stripped | `parse_callhome` | v0.2.1 |
+| `parse_callhome` | `(status, profiles_text, transport, config="") -> ProtocolView` | The page: Call Home's place (on or off, contact details), the transport, a place per destination profile, the mail servers | `load_callhome_page` | v0.2.1 |
+| `load_callhome_page` | `(client) -> CallhomePage` | One request for the VRFs; then the four Call Home texts | `routes/callhome` | v0.2.1 |
+| `build_callhome_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Call Home page | `NxapiClient.configure_callhome`, `routes/callhome` | v0.2.1 |
+
+## `app/command_menu.py` — the commands a scheduler job or an EEM applet may run
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `menu_lines` | `(entry, port="", file="", show="") -> list[str]` | The command lines of one menu entry, from checked values; ValueError for a value it lacks or an entry not on the menu | `build_scheduler_change`, `build_eem_change` | v0.2.1 |
+| `port_and_channel_names` | `(brief) -> list[str]` | Every front port and port-channel in `show interface brief`, switched or routed | `load_scheduler_page`, `load_eem_page` | v0.2.1 |
+
+## `app/scheduler.py` — the scheduler: jobs, schedules and their log
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_jobs` | `(config) -> dict[str, list[str]]` | Each job's lines in `show scheduler config` | `parse_scheduler` | v0.2.1 |
+| `parse_scheduler` | `(bodies) -> ProtocolView` | The page from `show scheduler config`, `schedule` and `logfile`: the log size, a place per job and schedule (time, last run, each job's result), the log table | `SCHEDULER.parse`, `load_scheduler_page` | v0.2.1 |
+| `load_scheduler_page` | `(client) -> SchedulerPage` | One request for the feature and the ports; while scheduler is on, one for the configuration, schedules and log | `routes/scheduler` | v0.2.1 |
+| `build_scheduler_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Scheduler page; making a job turns the picked menu entries into its lines, all in one request | `NxapiClient.configure_scheduler`, `routes/scheduler` | v0.2.1 |
+
+## `app/eem.py` — EEM: applets, environment variables, system policies, recent events
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_eem_config` | `(config) -> tuple[list[Applet], list[tuple[str, str]]]` | The applets (with their lines) and environment variables in `show running-config eem` | `parse_eem` | v0.2.1 |
+| `parse_history` | `(history) -> list[tuple[str, ...]]` | The rows of `show event manager history events`, newest first, the last 10 | `parse_eem` | v0.2.1 |
+| `parse_eem` | `(bodies, config) -> ProtocolView` | The page: a place per applet and variable, the recent events and the system policies | `load_eem_page` | v0.2.1 |
+| `load_eem_page` | `(client) -> EemPage` | One request for the ports, system policies and event history; the configuration as text | `routes/eem` | v0.2.1 |
+| `build_eem_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the EEM page; a picked command becomes its `action ... cli` lines (labels n.1, n.2... for one of several lines) | `NxapiClient.configure_eem`, `routes/eem` | v0.2.1 |
+
+## `app/loopbacks.py` — loopback interfaces: state, description, VRF and addresses
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_loopbacks` | `(bodies) -> list[Loopback]` | Every loopback in number order from `show interface brief`, `show ip interface vrf all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`: on or off, description, VRF, IPv4 (main first) and IPv6 addresses | `parse_loopback_view`, `load_nat_page`, `track.track_interfaces` (from the brief alone, for the names) | v0.2.1 |
+| `parse_loopback_view` | `(bodies) -> ProtocolView` | The page: one place per loopback with its facts and current values | `LOOPBACKS.parse`, `load_loopback_page` | v0.2.1 |
+| `load_loopback_page` | `(client) -> LoopbackPage` | One request for every read; the VRFs a loopback can move into (never default or management) | `routes/loopbacks` | v0.2.1 |
+| `build_loopback_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Loopbacks page | `NxapiClient.configure_loopbacks`, `routes/loopbacks` | v0.2.1 |
+
+## `app/tunnels.py` — tunnel interfaces: GRE and IP-in-IP, their ends, mode and address
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_tunnel_config` | `(config) -> dict[int, list[str]]` | Each `interface TunnelN` block of `show running-config` with its lines | `parse_tunnels` | v0.2.1 |
+| `parse_tunnels` | `(brief, config) -> list[Tunnel]` | Every tunnel in number order from the configuration text and `show interface brief`: state, mode, source, destination, transport VRF, VRF, address, MTU, TTL, path MTU discovery | `parse_tunnel_view` | v0.2.1 |
+| `parse_tunnel_view` | `(brief, config) -> ProtocolView` | The page: one place per tunnel with its facts and current values (a source address or a source interface), and a note at the switch's 16 tunnels | `load_tunnel_page` | v0.2.1 |
+| `load_tunnel_page` | `(client) -> TunnelPage` | One request for the features and VRFs; while tunnel is on, the brief and the configuration text (a role that may not read the text gives the tunnels without their settings); says VXLAN must go first when it is on | `routes/tunnels` | v0.2.1 |
+| `build_tunnel_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Tunnels page | `NxapiClient.configure_tunnels`, `routes/tunnels` | v0.2.1 |
+
+## `app/pbr.py` — policy-based routing: route-maps that set the next hop, and where they apply
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_policies` | `(ip_body, ipv6_body) -> list[Policy]` | The route-maps applied to interfaces from `show ip policy` and `show ipv6 policy`, IPv4 first | `parse_pbr`, `load_pbr_page` | v0.2.1 |
+| `parse_statistics` | `(body) -> list[tuple[str, str, str, str]]` | `show route-map <name> pbr-statistics`: the packets per entry, then those the routing table routed | `parse_pbr` | v0.2.1 |
+| `parse_pbr` | `(bodies, statistics=None) -> ProtocolView` | The page: each route-map and entry (its ACL match, next hops with their options, drop), each interface's policies, the applied policies and counters as tables | `PBR.parse`, `load_pbr_page` | v0.2.1 |
+| `load_pbr_page` | `(client) -> PbrPage` | One request for the features and layer 3 interfaces; while pbr is on, the route-maps and policies, then each applied route-map's counters | `routes/pbr` | v0.2.1 |
+| `check_pbr_place` | `(page, ident) -> None` | Refuses an interface that is not a VLAN interface, routed port or routed port-channel on the switch | the Policy-based routing `ProtocolSite` | v0.2.1 |
+| `build_pbr_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Policy-based routing page | `NxapiClient.configure_pbr`, `routes/pbr` | v0.2.1 |
+
+## `app/itd.py` — ITD: device groups, nodes, services and their counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_itd_config` | `(config) -> ItdConfig` | The `itd device-group` blocks (with their nodes) and `itd` service blocks of `show running-config` | `parse_itd` | v0.2.1 |
+| `parse_itd` | `(body, config, statistics=None) -> ProtocolView` | The page from `show itd`, the configuration text and each service's statistics: groups, nodes, services and counters as places, the nodes in service and the bucket counters as tables | `ITD.parse`, `load_itd_page` | v0.2.1 |
+| `load_itd_page` | `(client) -> ItdPage` | One request for the features and layer 3 interfaces; while pbr and itd are on, `show itd`, the configuration text and each service's counters | `routes/itd` | v0.2.1 |
+| `check_itd_place` | `(page, ident) -> None` | Nothing: a new device group, node or service name makes one | the ITD `ProtocolSite` | v0.2.1 |
+| `build_itd_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the ITD page | `NxapiClient.configure_itd`, `routes/itd` | v0.2.1 |
+
+## `app/mpls.py` — MPLS: the feature set, label range, interfaces, bindings, segment routing and Layer 3 VPNs
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_feature_set` | `(output) -> str` | The MPLS feature set's state in `show feature-set` (enabled, disabled, installed, uninstalled), or "" | `load_mpls_page` | v0.2.1 |
+| `parse_mpls_config` | `(config) -> MplsConfig` | The label range, the interfaces with `mpls ip forwarding`, the static bindings (both the nested and the one-line form), the segment routing block (also the pre-9.3(1) `segment-routing mpls` line) with its global block and prefix SIDs, and each VRF's route distinguisher and non-EVPN route-targets in `show running-config` | `parse_mpls` | v0.2.1 |
+| `licence_installed` | `(body) -> bool \| None` | Whether `show license usage` lists the VPN Fabric licence as installed; None when it is not listed | `load_mpls_page` | v0.2.1 |
+| `parse_mpls` | `(switching, config, feature_set, static_on, *, sr_on=False, l3vpn_on=False, licence=None) -> ProtocolView` | The page: the switch-wide lines, interfaces, bindings, segment routing, prefix SIDs and (with Layer 3 VPNs on) VPN VRFs and their route-targets as places, the labels in use as a table, a note when the licence is missing | `MPLS.parse`, `load_mpls_page` | v0.2.1 |
+| `load_mpls_page` | `(client) -> MplsPage` | One request for the features, layer 3 interfaces, VRFs and licences, the feature set as text; while static MPLS or segment routing is on, `show mpls switching`; while either or Layer 3 VPNs are on, the configuration text; says VXLAN must go first when it is on | `routes/mpls` | v0.2.1 |
+| `check_mpls_place` | `(page, ident) -> None` | Refuses bindings while static MPLS is off, interfaces while static MPLS and segment routing are off, prefix SIDs while segment routing is off (and an index or absolute label out of range), VPN VRFs while Layer 3 VPNs are off, and an interface or VRF the switch lacks | the MPLS `ProtocolSite` | v0.2.1 |
+| `build_mpls_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the MPLS page | `NxapiClient.configure_mpls`, `routes/mpls` | v0.2.1 |
+
+## `app/nat.py` — NAT: inside and outside interfaces, translations, pools, timeouts, counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_nat_config` | `(config) -> NatConfig` | The `ip nat` lines of `show running-config` (statics with their ports, VRF and options, pools with a length or netmask, dynamic translations to a pool or an interface, timeouts and limits) and each interface's side | `parse_nat` | v0.3.0 |
+| `nat_regions` | `(tcam_text) -> list[tuple[str, str, str]]` | The `nat`, `tcp-nat` and `mcast-nat` regions of `show hardware access-list tcam region`, read with the ACLs page's `parse_tcam_regions` | `load_nat_page` | v0.3.0 |
+| `parse_translations` | `(body) -> list[tuple[str, ...]]` | `show ip nat translations verbose`: protocol, the four addresses (with ports), VRF, packets each way and the time left (never, for a static) | `parse_nat` | v0.3.0 |
+| `parse_statistics` | `(statistics, maxima) -> list[tuple[str, str]]` | `show ip nat statistics` and `show ip nat max` as (what, value) rows in plain words | `parse_nat` | v0.3.0 |
+| `parse_lists_in_use` | `(statistics) -> list[tuple[str, ...]]` | The dynamic translations `show ip nat statistics` lists, with each pool's size, addresses in use and misses | `parse_nat` | v0.3.0 |
+| `parse_nat` | `(bodies, config, regions=None) -> ProtocolView` | The page: interfaces, statics, pools, dynamic translations, the timeouts and limits and clearing as places (only the state when the configuration could not be read), and the TCAM, translations, lists in use and counters tables | `NAT.parse`, `load_nat_page` | v0.3.0 |
+| `load_nat_page` | `(client) -> NatPage` | One request for the feature, layer 3 interfaces, loopbacks and VRFs, the TCAM regions as text (a plain warning when the nat region is 0); while nat is on, the translations, counters and maxima and the configuration text | `routes/nat` | v0.3.0 |
+| `check_nat_place` | `(page, ident) -> None` | Refuses an interface or VRF the switch does not have (the switch takes a static in an unknown VRF silently) | the NAT `ProtocolSite` | v0.3.0 |
+| `build_nat_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the NAT page; when a translation or pool is made, refuses ports without TCP or UDP, a VRF option without a VRF, an option on the side that does not take it, and a pool whose last address comes first | `NxapiClient.configure_nat`, `routes/nat` | v0.3.0 |
+
+## `app/epbr.py` — enhanced policy-based routing: services, policies, chains and counters
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_epbr_config` | `(config) -> EpbrConfig` | The `epbr service` blocks (lines, probe, end-points with their probe and reverse end-point), `epbr policy` blocks (counting, matches with their spreading and steps) and the interfaces' `epbr ip\|ipv6 policy` lines of `show running-config`, read by keyword since the switch indents probes unevenly; which services and policies are in use | `parse_epbr`, `load_epbr_page` | v0.3.0 |
+| `probe_values` | `(line) -> dict[str, dict[str, str]]` | A `probe ...` line (icmp, tcp, udp, http, dns, track, with their options) as its setting's field values | `parse_epbr` | v0.3.0 |
+| `parse_chains` | `(body, direction) -> list[tuple[str, ...]]` | `show epbr policy [<name>] [reverse]`: one row per end-point of each step, with its tracked object and probe state | `parse_epbr` | v0.3.0 |
+| `parse_counters` | `(body, direction, steps=None) -> list[tuple[str, ...]]` | `show epbr statistics policy <name> [reverse]`: the packets per bucket and service, a service used twice told apart by its step number | `parse_epbr` | v0.3.0 |
+| `parse_epbr` | `(body, config, reverse_bodies=None, counters=None) -> ProtocolView` | The page: services, end-points, reverse end-points, policies, matches, steps, interfaces and counting policies as places (only the policies when the configuration could not be read), and the applied, chain and counter tables | `EPBR.parse`, `load_epbr_page` | v0.3.0 |
+| `load_epbr_page` | `(client) -> EpbrPage` | One request for the feature, layer 3 interfaces and VRFs; while epbr is on, `show epbr policy`, the configuration text, and per applied policy its reverse chain and counters | `routes/epbr` | v0.3.0 |
+| `check_epbr_place` | `(page, ident) -> None` | Refuses an interface the switch does not have, and marks in `ident` whether the service or policy is in use (`SERVICE_IN_USE`, `POLICY_APPLIED`) | the Enhanced policy-based routing `ProtocolSite` | v0.3.0 |
+| `build_epbr_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; an end-point's family from its address; a change to a service in use or an applied policy wrapped in `epbr session` ... `commit`, and what a session does not take refused with the reason | `NxapiClient.configure_epbr`, `routes/epbr` | v0.3.0 |
+
+`NxapiClient.configure_epbr` sends the lines and, when a session line is refused, closes the
+session the switch left open with `epbr session` + `abort`.
+
+## `app/track.py` — tracked objects: interfaces, routes, IP SLA entries and lists
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_track_state` | `(body) -> list[TrackState]` | `show track`: each object's kind, what it follows, state, changes, VRF, the lists using it, a list's members and thresholds, in number order | `parse_track` | v0.3.0 |
+| `parse_track_config` | `(config) -> list[TrackConfig]` | The `track` blocks of `show running-config`: each object's kind and identity (an IP SLA object with no word follows `state`) and its lines | `parse_track` | v0.3.0 |
+| `parse_track` | `(body, config) -> ProtocolView` | The page: one place per object with its state, wait, VRF, members and thresholds (none when the configuration could not be read), and the state table | `TRACK.parse`, `load_track_page` | v0.3.0 |
+| `track_interfaces` | `(brief) -> tuple[str, ...]` | Every interface an object can follow: front ports and port-channels, VLAN interfaces, loopbacks | `load_track_page` | v0.3.0 |
+| `load_track_page` | `(client) -> TrackPage` | One request for the interfaces and VRFs, one for `show track`, one for the configuration text | `routes/track` | v0.3.0 |
+| `check_track_place` | `(page, ident) -> None` | Refuses an interface the switch does not have, unless an object already follows it (objects outlive their interface) | the Tracked objects `ProtocolSite` | v0.3.0 |
+| `build_track_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a route object's network must be of its family | `NxapiClient.configure_track`, `routes/track` | v0.3.0 |
+
+`TRACK_MAX` (512, checked on the switch) and `TRACK_HINT` are shared with the HSRP and VRRP
+pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by number.
+
+## `app/igmp_snooping.py` — IGMP snooping: switch-wide, per VLAN, queriers, router ports and groups
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_snooping_config` | `(config) -> list[VlanConfig]` | The `vlan configuration <n>` blocks of `show running-config`: each VLAN's snooping lines as setting values (the default-on ones read from their `no` forms) and its router ports, static groups, report flooding ports and report filters | `parse_snooping` | v0.3.0 |
+| `parse_mrouter` | `(output) -> list[tuple[str, ...]]` | `show ip igmp snooping mrouter` as text: VLAN, port, how it was learned, up for, expires | `parse_snooping` | v0.3.0 |
+| `parse_snooping_counters` | `(body) -> list[tuple[str, ...]]` | Each VLAN's counters from `show ip igmp snooping statistics`: reports, queries and leaves received, reports forwarded, invalid packets, since when | `parse_snooping` | v0.3.0 |
+| `parse_snooping` | `(bodies, config, mrouter=None) -> ProtocolView` | The page: the whole switch, each VLAN (with its current values), its places and its Clear buttons, and the VLAN, group, querier, router port and counter tables | `IGMP_SNOOPING.parse`, `load_snooping_page` | v0.3.0 |
+| `load_snooping_page` | `(client) -> SnoopingPage` | One request for the ports and snooping's state, groups, queriers and counters; the router ports and the configuration as text | `routes/igmp_snooping` | v0.3.0 |
+| `check_snooping_place` | `(page, ident) -> None` | Refuses a VLAN or port the switch does not have (it takes them silently), unless a line on the page already names the port | the IGMP snooping `ProtocolSite` | v0.3.0 |
+| `build_snooping_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_igmp_snooping`, `routes/igmp_snooping` | v0.3.0 |
+
+## `app/nbm.py` — non-blocking multicast: flow and host policies, flows and bandwidth
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_nbm_config` | `(config) -> dict[str, NbmConfig]` | The NBM lines of `show running-config`, per VRF (the top level and each `nbm vrf` block): its own lines, flow policies and their groups, host policy entries, flow definitions | `parse_nbm` | v0.3.0 |
+| `parse_nbm` | `(bodies, config) -> ProtocolView` | The page: the settings per VRF, policies, groups, entries, definitions and external links as places, and the defaults, policies, host policies, flows, defined flows and interface bandwidth tables | `NBM.parse`, `load_nbm_page` | v0.3.0 |
+| `load_nbm_page` | `(client) -> NbmPage` | One request for the feature, interfaces and VRFs, the TCAM regions as text (whether VXLAN is on or the `ing-nbm` region is empty); while nbm is on, its state and the configuration text | `routes/nbm` | v0.3.0 |
+| `check_nbm_place` | `(page, ident) -> None` | Refuses a VRF the switch does not have (`nbm vrf` would make it) and an interface that is not a routed front port | the Non-blocking multicast `ProtocolSite` | v0.3.0 |
+| `build_nbm_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a flow policy's name is letters and digits only | `NxapiClient.configure_nbm`, `routes/nbm` | v0.3.0 |
+
+## `app/trm.py` — multicast over VXLAN EVPN (tenant routed multicast)
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_trm_config` | `(config, ngmvpn_on=True) -> TrmConfig` | The TRM lines of `show running-config`: the switch-wide ones, the NVE interface's multicast source and layer 3 VNIs with their groups, the VRFs' VNI, flow spreading and MVPN route-targets, the BGP process's AS and overlay families | `parse_trm`, `load_trm_page` | v0.3.0 |
+| `parse_trm` | `(config, ngmvpn_on=True) -> ProtocolView` | The page: its places and the layer 3 VNI table | `TRM.parse`, `load_trm_page` | v0.3.0 |
+| `load_trm_page` | `(client) -> TrmPage` | One request for the features and VRFs; while ngmvpn is on, the configuration text | `routes/trm` | v0.3.0 |
+| `check_trm_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, an NVE interface or layer 3 VNI the VXLAN page has not made, and an AS other than the BGP process's | the Multicast over VXLAN `ProtocolSite` | v0.3.0 |
+| `build_trm_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; advertise-pip goes in the l2vpn evpn family only | `NxapiClient.configure_trm`, `routes/trm` | v0.3.0 |
+
+## `app/flexlink.py` — Flex Links: pairs of an active and a backup port
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_flexlink_config` | `(config) -> list[Pair]` | The ports with `switchport backup interface` lines in `show running-config`, and the preemption and multicast options in them | `parse_flexlink` | v0.3.0 |
+| `parse_backup_state` | `(output) -> list[tuple[str, str, str]]` | `show interface switchport backup` as text: active port, backup port, state (Eth and Po names written out) | `parse_flexlink` | v0.3.0 |
+| `parse_flexlink` | `(config, state) -> ProtocolView` | The page: a place per pair with its state and settings, and the pairs table | `FLEXLINK.parse`, `load_flexlink_page` | v0.3.0 |
+| `model_note` | `(version) -> str` | The plain refusal for a Nexus 9200 (from `show version`), which does not do Flex Links; "" for any other model | `load_flexlink_page` | v0.3.0 |
+| `load_flexlink_page` | `(client) -> FlexlinkPage` | One request for the features, model and ports; while Flex Links are on, the pairs' state and the configuration as text | `routes/flexlink` | v0.3.0 |
+| `check_flexlink_place` | `(page, ident) -> None` | Refuses a port the switch lacks as a layer 2 port (unless a pair names it) and a port backing itself up | the Flex Links `ProtocolSite` | v0.3.0 |
+| `build_flexlink_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a setting's line carries the backup port, so the pair's own line is not typed again before it | `NxapiClient.configure_flexlink`, `routes/flexlink` | v0.3.0 |
+
+## `app/vmtracker.py` — VM Tracker: vCenter connections and the VMs on each port
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vmtracker_config` | `(config) -> VmtrackerConfig` | The VM Tracker lines of `show running-config`: fabric auto-configuration, each connection's settings (which have a password, never the password) and the ports with `no vmtracker enable` | `parse_vmtracker` | v0.3.0 |
+| `parse_status` | `(body) -> dict[str, tuple[str, str]]` | `show vmtracker status`: each connection's vCenter address and state | `parse_vmtracker` | v0.3.0 |
+| `parse_vm_info` | `(output) -> list[tuple[str, ...]]` | `show vmtracker info detail` as text: port, host, host NIC, VM, state, port group, VLANs | `parse_vmtracker` | v0.3.0 |
+| `parse_vmtracker` | `(config, status=None, info=None) -> ProtocolView` | The page: the whole switch, a place per connection with its state and settings, the ports it is off on, Sync now per connection, and the connection and VM tables | `VMTRACKER.parse`, `load_vmtracker_page` | v0.3.0 |
+| `load_vmtracker_page` | `(client) -> VmtrackerPage` | One request for the feature and ports; while vmtracker is on, the status, the VMs as text and the configuration text | `routes/vmtracker` | v0.3.0 |
+| `check_vmtracker_place` | `(page, ident) -> None` | Refuses a port the switch lacks (unless listed) and a fifth vCenter connection | the VM Tracker `ProtocolSite` | v0.3.0 |
+| `build_vmtracker_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_vmtracker`, `routes/vmtracker` | v0.3.0 |
+
+## `app/evb.py` — Edge Virtual Bridging: VDP, its hosts and VSIs
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `wait_time` | `(exponent) -> str` | An EVB timer exponent in words: 25 -> "25 (about 335 seconds)" | `parse_evb` | v0.3.0 |
+| `parse_rows` | `(output, first, width) -> list[tuple[str, ...]]` | The rows of an EVB table printed as text, under the heading starting with `first` | `parse_hosts`, `parse_vsis` | v0.3.0 |
+| `parse_hosts` | `(output) -> list[tuple[str, ...]]` | `show evb hosts` as text: host, VNI, VLAN, bridge domain, MAC, IP address, port | `parse_evb` | v0.3.0 |
+| `parse_vsis` | `(output) -> list[tuple[str, ...]]` | `show evb vsi` as text: manager, VSI, port, profile, M-state, E-state, wait/keep-alive | `parse_evb` | v0.3.0 |
+| `parse_evb_config` | `(config) -> dict[str, dict[str, str]]` | The switch-wide `evb` lines of `show running-config`, as setting values | `parse_evb` | v0.3.0 |
+| `parse_evb` | `(state, hosts=None, vsis=None, config=None) -> ProtocolView` | The page: the whole switch with its role, address, timers and counters, and the host and VSI tables | `EVB.parse`, `load_evb_page` | v0.3.0 |
+| `load_evb_page` | `(client) -> EvbPage` | `show feature`; while evb is on, `show evb`, its hosts and VSIs as text and the configuration text | `routes/evb` | v0.3.0 |
+| `check_evb_place` | `(page, ident) -> None` | Nothing to check: the page's one scope is the whole switch | the Edge Virtual Bridging `ProtocolSite` | v0.3.0 |
+| `build_evb_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_evb`, `routes/evb` | v0.3.0 |
+
+## `app/tunnel_encryption.py` — VXLAN tunnel encryption (CloudSec) between multi-site border gateways
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_key_chains` | `(output) -> tuple[list[str], list[Key]]` | The tunnel encryption key chains and their keys (ID, algorithm, whether a string is set, send lifetime) in `show key chain` text; never the key's string; other key chains are skipped | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_sessions` | `(output) -> list[tuple[str, ...]]` | `show tunnel-encryption session` as text: peer, policy, key chain, receive and send state; a wrapped row joined first | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_policies` | `(output) -> list[tuple[str, str, str, str]]` | `show tunnel-encryption policy` as text: policy, cipher, replay window, rekey time | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_info` | `(output) -> dict[str, str]` | `show tunnel-encryption info global`: each `name: value` line | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_tunnel_encryption_config` | `(config) -> TunnelEncryptionConfig` | The tunnel encryption lines of `show running-config`: the switch-wide ones, policies, peers and the interfaces that encrypt | `parse_tunnel_encryption` | v0.3.0 |
+| `parse_tunnel_encryption` | `(config, keys_text=None, sessions=None, policies_text=None, info=None) -> ProtocolView` | The page: the whole switch with its mode and settings, a place per key chain, key, policy, peer and link, and the session, policy and key tables | `TUNNEL_ENCRYPTION.parse`, `load_tunnel_encryption_page` | v0.3.0 |
+| `model_note` | `(version) -> str` | The plain refusal for a switch other than a Nexus 9300-FX2 (from `show version`); "" for a 9300-FX2 or an unknown model | `load_tunnel_encryption_page` | v0.3.0 |
+| `load_tunnel_encryption_page` | `(client) -> TunnelEncryptionPage` | One request for the features, model and routed interfaces; while the feature is on, the configuration, key chains, sessions, policies and global state as text | `routes/tunnel_encryption` | v0.3.0 |
+| `check_tunnel_encryption_place` | `(page, ident) -> None` | Refuses a VLAN interface and an interface the switch lacks as a routed port or port-channel (unless it already encrypts) | the VXLAN tunnel encryption `ProtocolSite` | v0.3.0 |
+| `build_tunnel_encryption_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_tunnel_encryption`, `routes/tunnel_encryption` | v0.3.0 |
+
+## `app/ngoam.py` — VXLAN OAM: ping, traceroute and pathtrace, profiles, loop detection
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_ngoam_config` | `(config) -> NgoamConfig` | The NGOAM lines of `show running-config`: the OAM access list, whether an authentication key is set (never the key), the cross connect heartbeat, each profile's and flow's settings, loop detection | `parse_ngoam` | v0.3.0 |
+| `parse_counters` | `(bodies) -> tuple[tuple[str, ...], ...]` | The three `show ngoam ... statistics summary` bodies: per tool, sent, answers, timed out, not sent, asked by others, answered others, last cleared | `parse_ngoam` | v0.3.0 |
+| `parse_acl_status` | `(output) -> str` | `show ngoam acl status`: the VLANs (bridge domains) the OAM access list is on | `parse_ngoam` | v0.3.0 |
+| `parse_ngoam` | `(config, counters=None, acl=None, loop_refused=False) -> ProtocolView` | The page: a place per tool, the whole switch, each profile and flow, loop detection when on, the counters, and the counters table | `NGOAM.parse`, `load_ngoam_page` | v0.3.0 |
+| `loop_refused` | `(version) -> bool` | True for a Nexus 9200 (from `show version`), which refuses loop detection | `load_ngoam_page` | v0.3.0 |
+| `load_ngoam_page` | `(client) -> NgoamPage` | One request for the features, model and ports; while ngoam is on, one for the counters, and the ACL status and configuration as text | `routes/ngoam` | v0.3.0 |
+| `check_ngoam_place` | `(page, ident) -> None` | Nothing to refuse before the lines are built: the switch names a VRF, port or profile it lacks | the VXLAN OAM `ProtocolSite` | v0.3.0 |
+| `tool_wait` | `(line) -> float` | How long a tool's line may take: its count, interval, timeout and max-ttl (the switch's defaults where not given), plus room to answer | `NxapiClient.configure_ngoam` | v0.3.0 |
+| `build_ngoam_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; a tool, clear or loop detection run is described as run, not set | `NxapiClient.configure_ngoam`, `routes/ngoam` | v0.3.0 |
+
+## `app/ptp.py` — PTP: the switch's clock and the ports that run PTP
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_ptp_config` | `(config) -> PtpConfig` | The `ptp` lines at the top of `show running-config`, and each `interface` block's `ptp` lines | `parse_ptp_view` | v0.2.1 |
+| `parse_ptp_view` | `(clock, parent, prop, brief, counters, config) -> ProtocolView` | The page: the clock with its state and current settings, one place per PTP port with its settings, and a table of each port's state and message counters | `load_ptp_page` | v0.2.1 |
+| `load_ptp_page` | `(client) -> PtpPage` | One request for the feature, ports and VRFs; while ptp is on, one for the clock and ports and the configuration text (a role that may not read the text gives empty forms) | `routes/ptp` | v0.2.1 |
+| `build_ptp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the PTP page | `NxapiClient.configure_ptp`, `routes/ptp` | v0.2.1 |
+
+## `app/telemetry.py` — streaming telemetry: destination groups, sensor groups, subscriptions
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_telemetry_config` | `(config) -> TelemetryConfig` | The `telemetry` block of `show running-config`: the destination profile's lines and each group's and subscription's, by number | `parse_telemetry_view` | v0.2.1 |
+| `parse_telemetry_view` | `(transport, sensor_groups, collectors, config) -> ProtocolView` | The page: the profile, a place per destination group, sensor group and subscription with their current values, and tables of the collectors with their state, the running sensor groups and the data collected (the collectors from the transport list alone when the text is missing) | `load_telemetry_page` | v0.2.1 |
+| `load_telemetry_page` | `(client) -> TelemetryPage` | One request for the feature and VRFs; while telemetry is on, one for the collectors, sensor groups and data collectors, and the configuration text | `routes/telemetry` | v0.2.1 |
+| `build_telemetry_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Telemetry page | `NxapiClient.configure_telemetry`, `routes/telemetry` | v0.2.1 |
+
+## `app/aaa.py` — AAA: sign-in and accounting methods, RADIUS and TACACS+ servers and groups
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_aaa` | `(bodies, radius_groups, tacacs, ldap=None) -> ProtocolView` | The page from the AAA, RADIUS and VRF reads and the TACACS+ reads (None while TACACS+ is off): the methods, the switch-wide settings, a place per server group (not the built-in radius group), tables of the servers and groups | `load_aaa_page` | v0.2.1 |
+| `parse_ldap_servers` | `(output) -> tuple[dict, list[dict]]` | `show ldap-server` as text: the switch-wide timeout, port and skip time, and each server's address, port, wait, bind DN and TLS | `_ldap_view` | v0.3.0 |
+| `parse_ldap_groups` | `(output) -> list[dict]` | `show ldap-server groups` as text: each group's name, VRF, servers, search map and whether certificate DN match and group validation are on | `_ldap_view` | v0.3.0 |
+| `parse_ldap_config` | `(config) -> tuple[list[str], dict[str, str]]` | `show running-config \| section ldap` as text: the search maps and each group's skip time | `_ldap_view` | v0.3.0 |
+| `load_aaa_page` | `(client) -> AaaPage` | One request for the AAA, RADIUS and VRF reads; one for TACACS+, which the switch refuses while it is off | `routes/aaa` | v0.2.1 |
+| `build_aaa_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the AAA page; refuses the switch's own radius group | `NxapiClient.configure_aaa`, `routes/aaa` | v0.2.1 |
+
+## `app/licensing.py` — Smart Licensing: the licences and the registration
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_summary` | `(output) -> tuple[tuple[str, str], ...]` | `show license summary` as text: whether Smart Licensing is on, the registration, export control and licence authorization | `parse_licensing` | v0.3.0 |
+| `parse_udi` | `(output) -> str` | The model and serial number after `UDI:` in `show license udi` | `parse_licensing` | v0.3.0 |
+| `parse_usage` | `(output) -> tuple[tuple[str, ...], ...]` | The rows of `show license usage`: feature, installed, count, status, expiry and comments | `parse_licensing` | v0.3.0 |
+| `parse_licensing` | `(on, usage, summary=None, udi=None, config=None) -> ProtocolView` | The page: the usage table, and while it is on the registration facts and the reservation setting | `SMART_LICENSING.parse`, `load_licensing_page` | v0.3.0 |
+| `load_licensing_page` | `(client) -> LicensingPage` | `show feature` and `show license usage`; while it is on, the summary, the UDI and the licence lines of the configuration | `routes/licensing` | v0.3.0 |
+| `check_licensing_place` | `(page, ident) -> None` | Nothing to check: the page's one scope is the whole switch | the Smart Licensing `ProtocolSite` | v0.3.0 |
+| `build_licensing_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_licensing`, `routes/licensing` | v0.3.0 |
+
+## `app/programmability.py` — gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker, OpenFlow
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_facts` | `(output) -> tuple[tuple[str, str], ...]` | The `Name : value` lines of a command's text as (name, value) pairs | `parse_programmability` | v0.3.0 |
+| `parse_programmability_config` | `(config) -> dict` | The top-level `grpc`, `netconf` and `nxsdk` lines of `show running-config` as setting values by scope | `parse_programmability` | v0.3.0 |
+| `parse_programmability` | `(states, config=None, grpc=None, nxsdk=None, openflow=None) -> ProtocolView` | The page: a place for each interface whose feature is on, a note naming those off and a table of all six | `PROGRAMMABILITY.parse`, `load_programmability_page` | v0.3.0 |
+| `load_programmability_page` | `(client) -> ProgrammabilityPage` | `show feature`; for each feature that is on, the configuration text and its own show command as text | `routes/programmability` | v0.3.0 |
+| `check_programmability_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Programmability `ProtocolSite` | v0.3.0 |
+| `build_programmability_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_programmability`, `routes/programmability` | v0.3.0 |
+
+## `app/system_settings.py` — the switch-wide settings
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_system_config` | `(config) -> dict` | The page's lines (logging source, DNS and HTTP source, TCP, XML server, ACL log level and the other switch-wide lines) from `show running-config` text, as setting values; indented lines are left alone | `parse_system_settings` | v0.3.0 |
+| `parse_time_ranges` | `(config) -> list[tuple[str, list[str], dict[str, str]]]` | Each `time-range NAME` of the configuration with its entries and its first repeating entry as setting values | `parse_system_settings` | v0.3.0 |
+| `parse_system_settings` | `(config) -> ProtocolView` | The page from the configuration text (None: not read, with a note): the settings and each time range | `SYSTEM_SETTINGS.parse`, `load_system_settings_page` | v0.3.0 |
+| `load_system_settings_page` | `(client) -> SystemSettingsPage` | `show running-config` as text | `routes/system_settings` | v0.3.0 |
+| `check_system_settings_place` | `(page, ident) -> None` | Nothing to check: the one scope is the whole switch | the page's `ProtocolSite` | v0.3.0 |
+| `build_system_settings_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_system_settings`, `routes/system_settings` | v0.3.0 |
+
+## `app/twamp.py` — the TWAMP server
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_twamp_config` | `(config) -> dict` | `ip sla server twamp` with its `port` and `timer inactivity` lines, and `ip sla responder twamp`, from the configuration text as setting values by scope | `parse_twamp` | v0.3.0 |
+| `parse_standards` | `(output) -> tuple[tuple[str, ...], ...]` | The rows of `show ip sla twamp standards`: feature, organization, standard | `parse_twamp` | v0.3.0 |
+| `parse_twamp` | `(config, session=None, standards=None) -> ProtocolView` | The page: the server and the responder, the state the switch prints and the standards table | `TWAMP.parse`, `load_twamp_page` | v0.3.0 |
+| `load_twamp_page` | `(client) -> TwampPage` | `show feature`; while the feature is on, the configuration section, the session state and the standards as text | `routes/twamp` | v0.3.0 |
+| `check_twamp_place` | `(page, ident) -> None` | Nothing to check: both scopes are the whole switch | the TWAMP `ProtocolSite` | v0.3.0 |
+| `build_twamp_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_twamp`, `routes/twamp` | v0.3.0 |
+
+## `app/rmon.py` — RMON events and alarms
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_events` | `(output) -> list[RmonEvent]` | The events of `show rmon events`: number, log, trap community, description, owner, last fired | `parse_rmon` | v0.3.0 |
+| `parse_alarms` | `(output) -> list[RmonAlarm]` | The alarms of `show rmon alarms` or `show rmon hcalarms`: object, interval, samples, thresholds with their events, owner, start-up alarm | `parse_rmon` | v0.3.0 |
+| `parse_rmon` | `(events, alarms, hcalarms, info) -> ProtocolView` | The page: a place for each event, alarm and high-capacity alarm, and the alarm count table | `RMON.parse`, `load_rmon_page` | v0.3.0 |
+| `load_rmon_page` | `(client) -> RmonPage` | The four `show rmon` reads, as text | `routes/rmon` | v0.3.0 |
+| `check_rmon_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the RMON `ProtocolSite` | v0.3.0 |
+| `build_rmon_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; an alarm's falling threshold must be below its rising one | `NxapiClient.configure_rmon`, `routes/rmon` | v0.3.0 |
+
+## `app/analytics.py` — flow analytics objects
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_analytics_config` | `(config) -> dict` | The flow exporters, records, monitors, profiles, filters and events and `flow system config` from `show running-config analytics all`, with each one's setting values | `parse_analytics` | v0.3.0 |
+| `parse_analytics` | `(config) -> ProtocolView` | The page: a place for each object (none, with a note, while the configuration could not be read) | `ANALYTICS.parse`, `load_analytics_page` | v0.3.0 |
+| `load_analytics_page` | `(client) -> AnalyticsPage` | `show feature` and `show vrf`; while the feature is on, the configuration text | `routes/analytics` | v0.3.0 |
+| `check_analytics_place` | `(page, ident) -> None` | Nothing to check: every identity is a name the user makes | the Flow analytics `ProtocolSite` | v0.3.0 |
+| `build_analytics_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_analytics`, `routes/analytics` | v0.3.0 |
+
+## `app/maintenance.py` — maintenance mode settings and snapshots
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_mode` | `(output) -> str` | The mode in `show system mode` ("Normal"), or "" when not read | `parse_maintenance` | v0.3.0 |
+| `parse_reasons` | `(output) -> list[str]` | The reset reasons that start the switch in maintenance mode, from `show maintenance on-reload reset-reasons` | `parse_maintenance` | v0.3.0 |
+| `parse_profiles` | `(output) -> list[tuple[str, str]]` | The profiles of `show maintenance profile` with their lines | `parse_maintenance` | v0.3.0 |
+| `parse_snapshots` | `(output) -> list[tuple[str, str, str]]` | The rows of `show snapshots`: name, time, description | `parse_maintenance` | v0.3.0 |
+| `parse_maintenance` | `(mode, timeout, maint_delay, snapshot_delay, reasons, profiles, snapshots) -> ProtocolView` | The page: the mode and the settings set, a place for each snapshot, the profiles table and the note that NXray never enters maintenance mode | `MAINTENANCE.parse`, `load_maintenance_page` | v0.3.0 |
+| `load_maintenance_page` | `(client) -> MaintenancePage` | The seven reads, as text | `routes/maintenance` | v0.3.0 |
+| `check_maintenance_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Maintenance mode `ProtocolSite` | v0.3.0 |
+| `build_maintenance_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page; taking or deleting a snapshot is marked as no configuration | `NxapiClient.configure_maintenance`, `routes/maintenance` | v0.3.0 |
+
+## `app/pki.py` — SSH and certificates: the host key, key pairs, trustpoints, certificates
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_certificate` | `(trustpoint, role, block) -> Certificate` | One certificate from its printed `subject=`, `issuer=`, `notAfter=` and `SHA1 Fingerprint=` lines | `parse_certificates` | v0.2.1 |
+| `parse_certificates` | `(body) -> list[Certificate]` | Every trustpoint's CA and own certificates from `show crypto ca certificates` (all trustpoints, or one) | `parse_pki` | v0.2.1 |
+| `parse_pki` | `(bodies) -> ProtocolView` | The page: the SSH key, a place per key pair and trustpoint with its current settings, and the certificates table | `load_pki_page` | v0.2.1 |
+| `pkcs12_files` | `(listing) -> tuple[str, ...]` | The `.p12` and `.pfx` files of a `dir bootflash:` body | `load_pki_page` | v0.2.1 |
+| `load_pki_page` | `(client) -> PkiPage` | One request for the key, key pairs, trustpoints and certificates; the file list | `routes/pki` | v0.2.1 |
+| `build_pki_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page, with SSH off and on around a new host key and the trustpoint left before an import | `NxapiClient.configure_pki`, `routes/pki` | v0.2.1 |
+| `check_ca_certificates` | `(pasted) -> PastedCa` | Reads pasted PEM CA certificates (refusing other text, a non-CA or more than 10) and writes them again with their SHA1 fingerprints | `routes/pki.pki_authenticate` | v0.2.1 |
+
+## `app/switch_files.py` — bootflash files, the NX-OS image and install, tech-support
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_listing` | `(body) -> Listing` | `dir bootflash:`: the files and folders with size and date, files first, and the space used, free and total | `load_files_page`, `load_software_page` | v0.2.1 |
+| `parse_software` | `(version, boot) -> Software` | The version, the running image and the boot images from `show version` and `show boot` | `load_files_page`, `load_software_page` | v0.2.1 |
+| `scp_on` | `(feature_body) -> bool` | Whether `show feature` has the SCP server on | `load_files_page` | v0.2.1 |
+| `load_files_page` | `(client) -> FilesPage` | The listing, the images in use (never deleted) and whether SCP is on | `routes/switch_files` | v0.2.1 |
+| `check_delete` | `(page, name) -> None` | ValueError for a name that is not a plain file on bootflash, or an image in use | `files_delete` | v0.2.1 |
+| `check_upload` | `(page, name, size) -> None` | ValueError for a bad or existing name, an empty file, or too little room left | `files_upload` | v0.2.1 |
+| `upload_work` | `(session, local, size, name) -> Callable` | The job copying an upload to bootflash with SCP, removing NXray's copy either way | `files_upload` | v0.2.1 |
+| `save_upload` | `(source, data_dir) -> tuple[Path, int]` | Copies an uploaded file into the data folder, as the request's own copy goes once it ends | `files_upload` | v0.2.1 |
+| `parse_install_status` | `(body) -> InstallStatus` | `show install all status`: the images and versions, the compatibility result and the steps | `load_software_page` | v0.2.1 |
+| `load_software_page` | `(client) -> SoftwarePage` | The version and boot images, the `.bin` images on bootflash, the free space and the last install | `routes/switch_files` | v0.2.1 |
+| `check_image` | `(page, name) -> None` | ValueError unless `name` is an image on bootflash | the Software routes | v0.2.1 |
+| `checksum_word` | `(expected) -> tuple[str, str]` | The pasted checksum in lower case and `md5sum`, `sha256sum` or `sha512sum` for its length | `checksum_work`, `software_checksum` | v0.2.1 |
+| `checksum_work` | `(session, image, expected) -> Callable` | The job having the switch work out the image's checksum and comparing it | `software_checksum` | v0.2.1 |
+| `parse_impact` | `(printed) -> dict[str, str]` | The compatibility check's result, versions and notes from what `show install all impact` prints | `impact_work` | v0.2.1 |
+| `impact_work` | `(session, image) -> Callable` | The job running the switch's compatibility check for an image | `software_check` | v0.2.1 |
+| `ready_to_install` | `(checksum, impact, image) -> str` | Why an image may not be installed yet: both jobs must have passed for it | `render_software_page`, `software_install` | v0.2.1 |
+| `install_work` | `(session, image) -> Callable` | The job running `install all nxos ... non-interruptive`; the session dropping after the restart message is a good end | `software_install` | v0.2.1 |
+| `tech_path` | `(data_dir, switch_id) -> Path` | Where a switch's collected tech-support is kept | the Tech support routes | v0.2.1 |
+| `tech_file` | `(data_dir, switch_id) -> TechFile \| None` | The collected tech-support with its size and time, if any | the Tech support routes | v0.2.1 |
+| `tech_work` | `(session, target) -> Callable` | The job running `show tech-support` into a gzipped file, replacing the last one once whole | `tech_collect` | v0.2.1 |
+
+`app/switch_jobs.py` holds the background jobs (`Jobs`, `Job`): one of each kind per
+switch at a time, in memory only, run at once in tests (`Jobs(background=False)`).
+
+## `app/vxlan.py` — VXLAN and EVPN: the NVE interface, VNIs, EVPN settings, and every setting
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_vxlan_config` | `(config: str) -> VxlanConfig` | `show running-config vxlan` text as a tree by its indentation (`children(*path)`, `has(*path)`) | `load_vxlan_page`, and other pages' configuration readers (`nat.parse_nat_config`, `track.parse_track_config`, `igmp_snooping.parse_snooping_config`, `nbm.parse_nbm_config`, `trm.parse_trm_config`, ...) | v0.2.1 |
+| `parse_vxlan` | `(bodies, config=None) -> ProtocolView` | The page from `show nve interface`, `show nve peers`, `show nve vni` and the configuration (None when the role may not read it): the NVE interface, VLAN to VNI lines, member VNIs, EVPN blocks and VRF lines as places, the peers and VNIs as tables | `VXLAN.parse`, `load_vxlan_page` | v0.2.1 |
+| `load_vxlan_page` | `(client) -> VxlanPage` | One request for the features, VLANs and VRFs, then the `show nve` commands and the configuration text (`show_text`) while the features are on; a role that may not read the text gives the page without it | `routes/vxlan` | v0.2.1 |
+| `build_vxlan_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the VXLAN page | `NxapiClient.configure_vxlan`, `routes/vxlan` | v0.2.1 |
+| `target_field` | `(label="Value") -> Field` | A route distinguisher or route-target value field | the VXLAN EVPN and VRF settings, `mpls` VPN VRFs | v0.2.1 |
+| `check_target` | `(values) -> None` | Refuses a `target` that is not auto, ASN:number or address:number | the VXLAN EVPN and VRF settings, `mpls` VPN VRFs | v0.2.1 |
+
 ## `app/switch_admin.py` — Switch admin: name, clock and NTP, DNS, logging, SNMP, banner, and the log
 
 | Function | Signature | Does | Used by | Since |
@@ -1188,7 +1963,7 @@ would take them out silently.
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
-| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page` | v0.1.0 |
+| `vrf_choices` | `(vrf_body) -> tuple[str, ...]` | The VRFs in `show vrf` for a VRF field's list: default, management, then the others | `load_switch_admin_page`, `dhcp_security.load_dhcp_page`, `ip_sla.load_ip_sla_page`, `nat.load_nat_page`, `epbr.load_epbr_page`, `track.load_track_page`, `nbm.load_nbm_page`, `trm.load_trm_page` | v0.1.0 |
 | `log_command` | `(lines: int) -> str` | `show logging last <n>` for 50, 200 or 1000; ValueError otherwise | `load_switch_log` | v0.1.0 |
 | `parse_log` | `(output, search="", worst=None) -> list[LogLine]` | The log's lines newest first, each with its severity from `%FACILITY-5-NAME:`, kept to those containing `search` and of `worst` or more urgent | `routes/switch_admin.switch_log_page` | v0.1.0 |
 | `load_switch_log` | `(client, lines) -> str` | The last lines of the switch's log as it prints them (`show_text`) | `routes/switch_admin.switch_log_page` | v0.1.0 |
@@ -1208,7 +1983,7 @@ address, or an address and mask), `ethertype` (0x0600-0xffff), and `arpip` and
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `parse_acl_config` | `(config) -> AclConfig` | The IPv4, IPv6 and MAC ACLs, their entry lines and statistics, the object groups, VLAN access maps and filters, the TCAM sizes set, and the interfaces and ports the ACLs apply on, from `show running-config` | `parse_acls` | v0.1.0 |
-| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls` | v0.1.0 |
+| `parse_tcam_regions` | `(text) -> list[tuple[str, str, str]]` | `show hardware access-list tcam region` as text: each region's name, what it is for and its size in entries | `parse_acls`, `nat.nat_regions`, `nbm.load_nbm_page` | v0.1.0 |
 | `parse_acls` | `(bodies, config_text=None, tcam_text=None) -> ProtocolView` | The ACLs page: each IPv4, IPv6 and MAC ACL with its entries and where it applies, each object group, VLAN access map entry and VLAN filter, each interface with its ACLs, a table of every ACL, one of the groups and maps, and one of the TCAM regions; a note when the configuration cannot be read | `ACLS.parse`, `load_acls_page` | v0.1.0 |
 | `needs_v14` | `(scope, setting) -> bool` | Whether an ACLs page change needs role version 14 (MAC ACLs, object groups, VLAN access maps and filters, TCAM, MAC port ACLs) | `routes/security.acl_needs` | v0.1.0 |
 | `layer3_names` | `(brief) -> tuple[str, ...]` | VLAN interfaces up to Vlan254 and routed ports and port-channels in `show interface brief` | `load_acls_page` | v0.1.0 |
@@ -1314,7 +2089,7 @@ reason)` return the alerts a sample starts or resolves.
 | --- | --- | --- | --- | --- |
 | `load_routing` | `(client) -> RoutingView` | Whether interface-vlan is on, the VLANs, the VRFs, the static routes, every VLAN interface and routed port with its VRF and addresses; one request, plus one for the VLAN interfaces | `routes/routing` | v0.1.0 |
 | `long_name` | `(name: str) -> str` | `Eth1/3` (as `show ip interface` writes it) -> `Ethernet1/3` | `parse_ipv4`, `parse_ipv6` | v0.1.0 |
-| `parse_brief` | `(brief_body) -> tuple[list[str], list[dict]]` | VLAN interface names, and the rows of routed front ports and port-channels, from `show interface brief` | `load_routing` | v0.1.0 |
+| `parse_brief` | `(brief_body) -> tuple[list[str], list[dict]]` | VLAN interface names, and the rows of routed front ports and port-channels, from `show interface brief` | `load_routing`, `track.track_interfaces` | v0.1.0 |
 | `parse_ipv4` | `(body) -> dict[str, tuple[str, list[Address], dict]]` | Interface -> (VRF, IPv4 addresses with the main one first, row) from `show ip interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
 | `parse_ipv6` | `(body) -> dict[str, tuple[str, list[Address], str]]` | Interface -> (VRF, IPv6 addresses, link-local address) from `show ipv6 interface vrf all` | `load_routing`, `port_settings.parse_port_settings` | v0.1.0 |
 | `parse_routed_port` | `(row, ipv4, ipv6, descriptions) -> L3Interface` | One routed front port or port-channel from its `show interface brief` row and the address tables | `load_routing` | v0.1.0 |
@@ -1349,6 +2124,7 @@ the switch delete its addresses, which the confirm page says.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `format_mac` | `(text: str) -> str` | `0cea.1439.bb3a` -> `0c:ea:14:39:bb:3a`; other text as is | `neighbors.parse_mac_table`, `parse_arp` | v0.1.0 |
+| `is_group_mac` | `(text: str) -> bool` | A group (multicast or broadcast) address, which no one device owns or receives | `validate_device_mac`, `protocols._mac`, `sflow` | v0.1.0 |
 | `is_local_mac` | `(text: str) -> bool` | A locally administered address (made up by a VM, a container or a phone), which has no maker | `mac_maker`, `neighbors.parse_mac_table` | v0.1.0 |
 | `mac_maker` | `(text: str) -> str` | The organisation the IEEE assigned the address block to (the smallest matching MA-S, MA-M or MA-L block), or "" | `neighbors.parse_mac_table` | v0.1.0 |
 | `normalize_mac` | `(text: str) -> str \| None` | The 12 hex digits of a MAC address written any common way, or None | everything here, `NeighborView.ips_of` | v0.1.0 |

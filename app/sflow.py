@@ -16,8 +16,9 @@ This module has three parts:
   and skipped, as NXray reads the counters over NX-API already.
 - ``SflowCollector``: adds each sample up per switch, minute, VLAN and device
   (the MAC address that sent it, and the one it went to), in memory. Only
-  datagrams whose agent address is one of NXray's switches count: sFlow has no
-  authentication, so anything else is only noted.
+  datagrams count whose agent address is one of NXray's switches and that
+  were sent from an address of that same switch: sFlow has no authentication,
+  so anything else is only noted.
 - Storage and reading: completed minutes go into the ``sflow_traffic`` table,
   kept ``NXRAY_SFLOW_KEEP_DAYS`` days, and the Traffic page reads them back as
   top lists and charts.
@@ -43,6 +44,7 @@ from pathlib import Path
 from app.charts import SERIES_COLOURS, Line, area_chart
 from app.db import open_db
 from app.history import RANGES, ChartView, bucket_seconds, chart_view, rate_text
+from app.oui import is_group_mac
 
 log = logging.getLogger("nxray.sflow")
 
@@ -262,11 +264,6 @@ def decode_datagram(data: bytes) -> Datagram:
     return Datagram(agent, sequence, tuple(samples), counters)
 
 
-def _is_group_mac(mac: str) -> bool:
-    """Broadcast and multicast addresses: no one device receives them."""
-    return bool(mac) and int(mac[:2], 16) & 1 == 1
-
-
 # ---- adding up -------------------------------------------------------------------
 
 
@@ -286,6 +283,23 @@ class _Minute:
     totals: dict[tuple[str, str], list[int]] = field(default_factory=dict)
 
 
+def _switch_addresses(
+    connections: Iterable[tuple[int, str, str]], *, every: bool
+) -> dict[str, int]:
+    """The IP addresses in (switch id, NX-API host, stored agent) rows: the
+    first one of each row, or all of them when ``every``. A name is not looked up."""
+    found: dict[str, int] = {}
+    for switch_id, host, agent in connections:
+        for text in (agent, host):
+            try:
+                found.setdefault(str(ipaddress.ip_address(text.strip())), switch_id)
+            except ValueError:
+                continue
+            if not every:
+                break
+    return found
+
+
 def agent_addresses(connections: Iterable[tuple[int, str, str]]) -> dict[str, int]:
     """Which agent address belongs to which of NXray's switches.
 
@@ -293,15 +307,28 @@ def agent_addresses(connections: Iterable[tuple[int, str, str]]) -> dict[str, in
     on the switch, "" when none): the stored agent address counts, else the
     host when it is an IP address. A name is not looked up.
     """
-    found: dict[str, int] = {}
-    for switch_id, host, agent in connections:
-        for text in (agent, host):
-            try:
-                found.setdefault(str(ipaddress.ip_address(text.strip())), switch_id)
-                break
-            except ValueError:
-                continue
-    return found
+    return _switch_addresses(connections, every=False)
+
+
+def sender_addresses(connections: Iterable[tuple[int, str, str]]) -> dict[str, int]:
+    """Every IP address a datagram of one of NXray's switches may be sent from.
+
+    Same ``connections`` as ``agent_addresses``, but both the agent address and
+    the NX-API host count (a switch can send from another interface than the
+    one it names as its agent).
+    """
+    return _switch_addresses(connections, every=True)
+
+
+def _sender_text(sender: str) -> str:
+    """The sender's address in the same form as ``agent_addresses`` keys: an
+    IPv4 address a dual-stack socket reports as ``::ffff:a.b.c.d`` is plain."""
+    try:
+        address = ipaddress.ip_address(sender.strip())
+    except ValueError:
+        return sender
+    mapped = getattr(address, "ipv4_mapped", None)
+    return str(mapped or address)
 
 
 class SflowCollector:
@@ -312,6 +339,7 @@ class SflowCollector:
         self._clock = clock
         self._lock = threading.Lock()
         self._agents: dict[str, int] = {}
+        self._senders: dict[str, int] = {}
         # Per switch: SNMP ifIndex -> the VLAN a frame without a tag belongs to.
         self._port_vlans: dict[int, dict[int, int]] = {}
         self._minutes: dict[tuple[int, int], _Minute] = {}
@@ -320,9 +348,12 @@ class SflowCollector:
         self.malformed = 0
         self.listening_port = 0
 
-    def set_agents(self, agents: dict[str, int]) -> None:
+    def set_agents(self, agents: dict[str, int], senders: dict[str, int] | None = None) -> None:
+        """``agents``: agent address -> switch; ``senders``: the addresses a
+        switch's datagrams may come from (the agent addresses when not given)."""
         with self._lock:
             self._agents = dict(agents)
+            self._senders = dict(agents if senders is None else senders)
 
     def set_port_vlans(self, switch_id: int, port_vlans: dict[int, int]) -> None:
         """Which VLAN an untagged frame belongs to, by the ifIndex of the port it
@@ -330,9 +361,10 @@ class SflowCollector:
         with self._lock:
             self._port_vlans[switch_id] = dict(port_vlans)
 
-    def receive(self, data: bytes, now: float | None = None) -> int:
+    def receive(self, data: bytes, now: float | None = None, *, sender: str) -> int:
         """Add one datagram up; how many of its samples counted (0 for one
-        that is damaged or from an address that is not one of NXray's switches)."""
+        that is damaged, or whose agent address or sender (the address the
+        UDP packet really came from) is not one of the same NXray switch)."""
         moment = self._clock() if now is None else now
         try:
             datagram = decode_datagram(data)
@@ -341,10 +373,14 @@ class SflowCollector:
                 self.malformed += 1
             return 0
         with self._lock:
+            sender = _sender_text(sender)
             switch_id = self._agents.get(datagram.agent)
-            if switch_id is None:
-                if len(self._unknown) < 100 or datagram.agent in self._unknown:
-                    self._unknown[datagram.agent] = moment
+            if switch_id is None or self._senders.get(sender) != switch_id:
+                # The agent field is written by whoever sends the packet, so
+                # the address it really came from is the one to report.
+                shown = datagram.agent if switch_id is None else sender
+                if len(self._unknown) < 100 or shown in self._unknown:
+                    self._unknown[shown] = moment
                 return 0
             status = self._status.setdefault(switch_id, AgentStatus())
             status.datagrams += 1
@@ -360,9 +396,9 @@ class SflowCollector:
                 # A frame without a tag belongs to the VLAN of the port it came in on.
                 vlan = sample.vlan or port_vlans.get(sample.input_index, 0)
                 self._add(bucket, VLAN, str(vlan) if vlan else UNKNOWN_VLAN, size)
-                if sample.src_mac and not _is_group_mac(sample.src_mac):
+                if sample.src_mac and not is_group_mac(sample.src_mac):
                     self._add(bucket, MAC_SENDS, sample.src_mac, size)
-                if sample.dst_mac and not _is_group_mac(sample.dst_mac):
+                if sample.dst_mac and not is_group_mac(sample.dst_mac):
                     self._add(bucket, MAC_RECEIVES, sample.dst_mac, size)
             return len(datagram.samples)
 
@@ -631,11 +667,13 @@ def sflow_charts(
 # ---- the listener ----------------------------------------------------------------
 
 
-def load_agents(db_path: Path) -> dict[str, int]:
-    """The agent address of each of NXray's switches, from the database."""
+def load_agents(db_path: Path) -> tuple[dict[str, int], dict[str, int]]:
+    """The agent address of each of NXray's switches, and every address a
+    datagram of theirs may be sent from, from the database."""
     with open_db(db_path) as conn:
         found = conn.execute("SELECT id, host, sflow_agent FROM switch_connection").fetchall()
-    return agent_addresses((row["id"], row["host"], row["sflow_agent"]) for row in found)
+    connections = [(row["id"], row["host"], row["sflow_agent"]) for row in found]
+    return agent_addresses(connections), sender_addresses(connections)
 
 
 def run_collector(
@@ -654,21 +692,21 @@ def run_collector(
             now = clock()
             if now >= next_agents:
                 try:
-                    collector.set_agents(load_agents(db_path))
+                    collector.set_agents(*load_agents(db_path))
                 except sqlite3.Error as exc:
                     log.warning("sFlow: could not read NXray's switches: %s", exc)
                 next_agents = now + AGENTS_SECONDS
             try:
-                data, _sender = sock.recvfrom(MAX_DATAGRAM)
+                data, (sender, *_rest) = sock.recvfrom(MAX_DATAGRAM)
             except TimeoutError:
-                data = b""
+                data, sender = b"", ""
             except OSError as exc:
                 if stop.is_set():
                     break
                 log.warning("sFlow: receiving failed: %s", exc)
-                data = b""
+                data, sender = b"", ""
             if data:
-                collector.receive(data)
+                collector.receive(data, sender=sender)
             now = clock()
             if now >= next_flush:
                 _flush(collector, db_path, now, keep_days, purge=now >= next_purge)

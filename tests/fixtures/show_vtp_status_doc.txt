@@ -1,0 +1,14 @@
+VTP Status Information
+----------------------
+VTP Version                     : 2 (capable)
+Configuration Revision          : 0
+Maximum VLANs supported locally : 1005
+Number of existing VLANs        : 8
+VTP Operating Mode              : Transparent
+VTP Domain Name                 : campus
+VTP Pruning Mode                : Disabled (Operationally Disabled)
+VTP V2 Mode                     : Disabled
+VTP Traps Generation            : Disabled
+MD5 Digest                      : 0x11 0x22 0x33 0x44 0x55 0x66 0x77 0x88
+Configuration last modified by 0.0.0.0 at 0-0-00 00:00:00
+VTP version running             : 1

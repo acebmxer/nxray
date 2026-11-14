@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 from contextlib import asynccontextmanager
+from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
@@ -19,43 +21,100 @@ from app.dependencies import (
     RedirectToLogin,
     add_security_headers,
     current_role,
+    reuse_page_reads,
     share_switch_reads,
     templates,
 )
 from app.history import start_sampler
 from app.live import LiveCache
 from app.logging_conf import configure_logging
+from app.page_reads import PageReads
 from app.role_upgrade import upgrade_stored_roles
 from app.routes import (
+    aaa,
     activity,
     alerts,
+    analytics,
     auth,
+    callhome,
     config_page,
+    copp,
     dashboard,
+    dot1x,
+    eem,
+    epbr,
+    errdisable,
+    evb,
     features,
+    flexlink,
     health,
     history,
+    igmp_snooping,
+    ip_sla,
+    itd,
+    licensing,
     live,
+    loopbacks,
+    maintenance,
+    monitor,
+    mpls,
+    nat,
+    nbm,
     neighbors,
+    ngoam,
+    pbr,
+    pfc,
+    pki,
     port_channels,
     ports,
     preferences,
+    private_vlans,
+    programmability,
     protocols,
+    ptp,
+    qos,
+    rmon,
     routing,
+    scheduler,
     security,
     settings_page,
     spanning_tree,
     switch_accounts,
     switch_admin,
+    switch_files,
     switch_page,
+    system_settings,
+    telemetry,
+    track,
     traffic,
+    trm,
+    tunnel_encryption,
+    tunnels,
+    twamp,
+    udld,
     users,
     vlans,
+    vmtracker,
+    vpc,
+    vtp,
+    vxlan,
 )
 from app.security import current_user, purge_expired_sessions, purge_old_login_attempts
 from app.sflow import SflowCollector, start_collector
+from app.switch_jobs import Jobs
 from app.update import finish_pending_update, start_background_checker
 from app.users import bootstrap_admin
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """The static files, sent with ``Cache-Control: no-cache``: the browser asks again on
+    every load (an unchanged file is a short 304 answer), so a new stylesheet or script
+    shows at once after an update instead of the old copy it kept."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
 
 
 @asynccontextmanager
@@ -139,11 +198,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.nxapi_transport = None
     # The newest switch readings the self-refreshing pages share (app/live.py).
     app.state.live_cache = LiveCache()
+    # The recent answers a page a person opens reuses (app/page_reads.py).
+    app.state.page_reads = PageReads()
     # sFlow samples added up per switch and minute (app/sflow.py); listened for
     # only with NXRAY_SFLOW_PORT set.
     app.state.sflow_collector = SflowCollector()
-    # ...and a pretend SSH shell opener here (app/switch_ssh.py).
+    # ...and a pretend SSH shell opener here (app/switch_ssh.py), and a pretend SSH
+    # session opener for the switch file pages' commands and copies.
     app.state.ssh_opener = None
+    app.state.ssh_session_opener = None
+    # The switch file pages' slow work (app/switch_jobs.py); tests run it at once.
+    app.state.jobs = Jobs()
     # ...and an httpx.MockTransport for webhooks here (app/alerts.py), and set
     # this to False so a change alert is sent before the request answers.
     app.state.alert_transport = None
@@ -151,7 +216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RedirectToLogin)
     async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
-        return RedirectResponse(url=f"/login?next={exc.next_url}", status_code=303)
+        return RedirectResponse(url=f"/login?next={quote(exc.next_url, safe='/')}", status_code=303)
 
     @app.exception_handler(CsrfFailed)
     async def _csrf_failed(request: Request, exc: CsrfFailed) -> Response:
@@ -172,8 +237,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.middleware("http")(share_switch_reads)
+    app.middleware("http")(reuse_page_reads)
     app.middleware("http")(add_security_headers)
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(dashboard.router)
@@ -188,6 +254,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routing.router)
     app.include_router(protocols.router)
     app.include_router(spanning_tree.router)
+    app.include_router(vpc.router)
+    app.include_router(vxlan.router)
+    app.include_router(monitor.router)
+    app.include_router(qos.router)
+    app.include_router(pfc.router)
+    app.include_router(private_vlans.router)
+    app.include_router(udld.router)
+    app.include_router(vtp.router)
+    app.include_router(dot1x.router)
+    app.include_router(errdisable.router)
+    app.include_router(callhome.router)
+    app.include_router(scheduler.router)
+    app.include_router(eem.router)
+    app.include_router(ip_sla.router)
+    app.include_router(loopbacks.router)
+    app.include_router(tunnels.router)
+    app.include_router(ptp.router)
+    app.include_router(telemetry.router)
+    app.include_router(aaa.router)
+    app.include_router(pki.router)
+    app.include_router(switch_files.router)
+    app.include_router(pbr.router)
+    app.include_router(itd.router)
+    app.include_router(epbr.router)
+    app.include_router(mpls.router)
+    app.include_router(nat.router)
+    app.include_router(track.router)
+    app.include_router(igmp_snooping.router)
+    app.include_router(nbm.router)
+    app.include_router(trm.router)
+    app.include_router(flexlink.router)
+    app.include_router(vmtracker.router)
+    app.include_router(evb.router)
+    app.include_router(programmability.router)
+    app.include_router(licensing.router)
+    app.include_router(maintenance.router)
+    app.include_router(system_settings.router)
+    app.include_router(twamp.router)
+    app.include_router(rmon.router)
+    app.include_router(analytics.router)
+    app.include_router(tunnel_encryption.router)
+    app.include_router(ngoam.router)
+    app.include_router(copp.router)
     app.include_router(switch_admin.router)
     app.include_router(security.router)
     app.include_router(config_page.router)

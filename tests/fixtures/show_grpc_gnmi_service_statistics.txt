@@ -1,0 +1,25 @@
+=============
+gRPC Endpoint
+=============
+
+Vrf            : management
+Server address : [::]:50051
+
+Cert notBefore : Nov 13 17:48:48 2026 GMT
+Cert notAfter  : Nov 14 17:48:48 2026 GMT
+
+Max concurrent calls            :  8
+Listen calls                    :  1
+Active calls                    :  0
+
+Number of created calls         :  1
+Number of bad calls             :  0
+
+Subscription stream/once/poll   :  0/0/0
+
+Max gNMI::Get concurrent        :  5
+Max grpc message size           :  8388608
+gNMI Synchronous calls          :  0
+gNMI Synchronous errors         :  0
+gNMI Adapter errors             :  0
+gNMI Dtx errors                 :  0

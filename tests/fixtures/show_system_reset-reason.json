@@ -1,0 +1,23 @@
+{
+  "TABLE_reason": {
+    "ROW_reason": {
+      "slot": 0,
+      "TABLE_rr": {
+        "ROW_rr": [
+          {
+            "time": "1) At 543458 usecs after Mon Oct 26 23:16:53 2026\n",
+            "reason": "Module PowerCycled",
+            "service": "HW check by card-client",
+            "version": ""
+          },
+          {
+            "time": "2) At 826749 usecs after Thu Oct 22 00:14:30 2026\n",
+            "reason": "Reset Requested by CLI command reload",
+            "service": "",
+            "version": "9.3(16)"
+          }
+        ]
+      }
+    }
+  }
+}

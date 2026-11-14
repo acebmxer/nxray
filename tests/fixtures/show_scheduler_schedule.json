@@ -1,0 +1,49 @@
+{
+ "TABLE_schedules": {
+  "ROW_schedules": [
+   {
+    "schedulename": "hourly",
+    "scheduleusername": "nxray",
+    "scheduletype": "Schedule Type       : Run every 0 Days 1 Hrs 0 Mins\n",
+    "starttime": "Wed Nov 11 22:34:18 2026\n",
+    "lastexectime": "Last Execution Time : Wed Nov 11 22:34:18 2026\n",
+    "lastcompletiontime": "Last Completion Time: Wed Nov 11 22:34:19 2026\n",
+    "execcount": "Execution count     : 1\n",
+    "TABLE_jobs": {
+     "ROW_jobs": {
+      "jobname": "probe",
+      "execstatus": "Failed  (244)\n"
+     }
+    }
+   },
+   {
+    "schedulename": "night",
+    "scheduleusername": "nxray",
+    "scheduletype": "Schedule Type       : Run every day at 3 Hrs 5 Mins\n",
+    "lastexectime": "Last Execution Time : Yet to be executed\n",
+    "jobcount": "          No jobs assigned to schedule\n"
+   },
+   {
+    "schedulename": "backup",
+    "scheduleusername": "admin",
+    "scheduletype": "Schedule Type       : Run every 0 Days 1 Hrs 0 Mins\n",
+    "starttime": "Wed Nov 11 22:41:21 2026\n",
+    "lastexectime": "Last Execution Time : Wed Nov 11 22:41:21 2026\n",
+    "lastcompletiontime": "Last Completion Time: Wed Nov 11 22:41:22 2026\n",
+    "execcount": "Execution count     : 1\n",
+    "TABLE_jobs": {
+     "ROW_jobs": [
+      {
+       "jobname": "clock",
+       "execstatus": "Success (0)\n"
+      },
+      {
+       "jobname": "nightly",
+       "execstatus": "Success (0)\n"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

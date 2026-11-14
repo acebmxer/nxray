@@ -1,0 +1,18 @@
+{
+  "TABLE_installversion": {
+    "ROW_installversion": [
+      {"entryid": 1, "version_module_id": 1, "image": "nxos", "running_version": "7.0(3)I7(3)", "new_version": "9.3(16)I9(1)", "upg_required": "yes"},
+      {"entryid": 2, "version_module_id": 1, "image": "bios", "running_version": "v07.59(08/26/2016):v07.59(08/26/2016)", "new_version": "v07.71(11/10/2024)", "upg_required": "yes"}
+    ]
+  },
+  "TABLE_installcompatibility": {
+    "ROW_installcompatibility": {"compat_module_id": 1, "bootable": "yes", "impact": "disruptive", "install_type": "reset", "reason": "Incompatible image for ISSU"}
+  },
+  "TABLE_installstage": {
+    "ROW_installstage": [
+      {"rownum": 1, "moduleid": 1, "starttime": "none", "stage": "Verifying image bootflash:/nxos.9.3.16.bin for boot variable nxos.", "stagestatus": "SUCCESS", "endtime": "none"},
+      {"rownum": 7, "moduleid": 1, "starttime": "none", "stage": "Switch will be reloaded for disruptive upgrade.", "stagestatus": "none", "endtime": "none"},
+      {"rownum": 13, "moduleid": 1, "starttime": "none", "stage": "Finishing the upgrade, switch will reboot in 10 seconds.", "stagestatus": "none", "endtime": "none"}
+    ]
+  }
+}

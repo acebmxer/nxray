@@ -115,8 +115,9 @@ To check, read-only:
 ### NetFlow
 
 NetFlow (Flexible NetFlow) is another way to measure, but which Nexus 9000
-models support it varies (mainly the -EX and -FX ones). NXray uses sFlow,
-below, which the 9000s have.
+models support it varies (mainly the -EX and -FX ones). An N9K-C92160YC-X
+refuses `feature netflow` ("Netflow feature is not supported on the platform").
+NXray uses sFlow, below, which the 9000s have.
 
 To check, read-only:
 
@@ -211,12 +212,15 @@ trunks and ports with several devices included**, on the **Traffic** page
   15 MB a day; `NXRAY_SFLOW_KEEP_DAYS` (7 by default, up to 90) says how long
   it is kept. Forgetting a switch deletes its measured traffic.
 - **Several switches** send to the same port; NXray tells them apart by the
-  agent address. Datagrams from an address that is none of its switches are
-  not counted, and the Traffic page names that address.
-- **No password.** sFlow has none: NXray counts only datagrams that name one
-  of its switches, but anyone who can reach the port could send made-up
-  samples. Keep the port on a network you trust, or allow only the switch's
-  address in front of it.
+  agent address. A datagram counts only when its agent address is one of its
+  switches **and** the packet was sent from an address of that same switch (its
+  agent address or the address NXray reaches it on). Anything else is not
+  counted, and the Traffic page names the address. If NXray runs behind
+  something that rewrites the sender's address (some container networks do),
+  the Traffic page lists that address and nothing is counted.
+- **No password.** sFlow has none: NXray checks who sent a datagram, but UDP
+  addresses can be forged by anyone on the same network. Keep the port on a
+  network you trust, or allow only the switch's address in front of it.
 - What NXray has added up but not yet stored (the current minute) is lost on
   a restart; stored minutes are kept.
 

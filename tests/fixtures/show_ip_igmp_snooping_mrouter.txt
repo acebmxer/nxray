@@ -1,0 +1,5 @@
+Type: S - Static, D - Dynamic, V - vPC Peer Link
+      I - Internal, F - Fabricpath core port
+      C - Co-learned, U - User Configured
+      P - learnt by Peer
+Vlan  Router-port   Type      Uptime      Expires

@@ -16,7 +16,7 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
-from app.features import OFF_WARNING, ON_WARNINGS, FeatureView, load_features
+from app.features import OFF_WARNING, OFF_WARNINGS, ON_WARNINGS, FeatureView, load_features
 from app.nxapi import NxapiClient, NxapiError
 from app.routes.ports import change_refused
 from app.security import csrf_token
@@ -126,7 +126,10 @@ def feature_set(
         if turn_on:
             warnings = [ON_WARNINGS[feature.name]] if feature.name in ON_WARNINGS else []
         else:
-            warnings = [OFF_WARNING]
+            warnings = [
+                OFF_WARNING,
+                *([OFF_WARNINGS[feature.name]] if feature.name in OFF_WARNINGS else []),
+            ]
         return templates.TemplateResponse(
             request,
             "confirm.html",
@@ -167,5 +170,10 @@ def feature_set(
         notice += (
             " To make VLAN interfaces on the Routing page, press Update the port list on the "
             "Switch page: NXray's role names them only once interface-vlan is on."
+        )
+    if feature.name == "nve" and turn_on and not connection.role_nve:
+        notice += (
+            " To change VXLAN on the VXLAN page, press Update the port list on the Switch "
+            "page: NXray's role names the NVE interface only once the nve feature is on."
         )
     return _render(request, username, notice=notice)

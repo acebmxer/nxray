@@ -48,6 +48,12 @@ def is_local_mac(text: str) -> bool:
     return digits is not None and bool(int(digits[:2], 16) & 0x02)
 
 
+def is_group_mac(text: str) -> bool:
+    """True for a group (multicast or broadcast) address: no one device owns or receives it."""
+    digits = normalize_mac(text)
+    return digits is not None and bool(int(digits[:2], 16) & 0x01)
+
+
 @lru_cache(maxsize=1)
 def _makers() -> dict[str, str]:
     """Hex prefix (upper case, 6, 7 or 9 digits) -> organisation. Read once, on first use."""

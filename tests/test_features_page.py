@@ -130,6 +130,12 @@ def test_nav_has_features(logged_in: TestClient, switch: FakeSwitch) -> None:
     assert 'href="/features"' in logged_in.get("/").text
 
 
+def test_each_feature_row_can_be_linked_to(logged_in: TestClient, switch: FakeSwitch) -> None:
+    html = logged_in.get("/features").text
+    assert '<tr id="feature-lldp">' in html
+    assert '<tr id="feature-interface-vlan">' in html
+
+
 def test_viewers_and_operators_look_but_get_no_buttons(
     logged_in: TestClient, enabled: FakeSwitch
 ) -> None:
@@ -157,7 +163,7 @@ def test_buttons_follow_what_may_change(logged_in: TestClient, enabled: FakeSwit
     assert "in use: remove what uses it first" in text
     assert 'name="name" value="nxapi"' not in html and 'name="name" value="sshServer"' not in html
     assert "kept on: NXray needs it" in text
-    assert 'name="name" value="icam"' not in html and "not changed from NXray" in text
+    assert 'name="name" value="icam"' not in html and "no feature command on this switch" in text
 
 
 # ---- changing ---------------------------------------------------------------
@@ -283,7 +289,7 @@ def test_old_role_offers_feature_changes_without_a_wait(
     assert (
         "Turn on feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
         "protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
         in page
         and "There is no wait this time" in page
     )
@@ -294,7 +300,7 @@ def test_old_role_offers_feature_changes_without_a_wait(
     assert (
         "Feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, "
         "spanning tree, switch admin, security and config, layer 2 security, traffic measuring, "
-        "reset to defaults, sFlow status and switch restart changes are on: "
+        "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes are on: "
         "nxray may now also "
         "turn switch features on and off on the Features page, turn CDP and LLDP on or off" in text
     )

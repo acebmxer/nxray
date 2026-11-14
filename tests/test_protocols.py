@@ -52,6 +52,8 @@ from tests.conftest import load_fixture
         ("mac", "02:00:00:00:00:01", "0200.0000.0001"),
         ("mac", "0200.0000.0001", "0200.0000.0001"),
         ("maddr4", "239.1.1.1", "239.1.1.1"),
+        ("account", "administrator@vsphere.local", "administrator@vsphere.local"),
+        ("account", "svc-nexus", "svc-nexus"),
     ],
 )
 def test_check_value_takes(kind: str, raw: str, expected: str) -> None:
@@ -93,6 +95,10 @@ def test_check_value_takes(kind: str, raw: str, expected: str) -> None:
         ("mac", "zz00.0000.0001"),
         ("maddr4", "192.0.2.1"),
         ("maddr4", "224.0.0.5"),
+        ("account", "has space"),
+        ("account", "@first"),
+        ("account", "dom\\user"),
+        ("account", "a" * 65),
     ],
 )
 def test_check_value_refuses(kind: str, raw: str) -> None:

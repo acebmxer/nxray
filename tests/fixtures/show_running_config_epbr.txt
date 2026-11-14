@@ -1,0 +1,49 @@
+!Command: show running-config (the ePBR lines, recorded on cisco-25gb)
+version 9.3(16) Bios:version 07.71 
+feature epbr
+
+interface Vlan251
+  no shutdown
+  ip address 198.51.101.1/24
+  epbr ip policy web-chain 
+  epbr ip policy web-chain reverse
+  epbr ipv6 policy web6-chain 
+
+epbr service firewall
+  service-interface Vlan250
+   probe icmp retry-down-count 5 
+  service-end-point ip 198.51.100.10 interface Vlan250
+     probe track 250
+    reverse ip 198.51.100.20 interface Vlan250
+       probe track 250
+  service-end-point ip 198.51.100.13 interface Vlan250
+     probe icmp 
+    reverse ip 198.51.100.23 interface Vlan250
+
+epbr service cache
+  service-interface Vlan250
+   probe icmp 
+  service-end-point ip 198.51.100.30
+     probe icmp 
+
+epbr service firewall6
+   probe icmp 
+  service-end-point ipv6 2001:db8:250::10 interface Vlan250
+    reverse ipv6 2001:db8:250::20 interface Vlan250
+
+epbr policy web-chain
+  statistics
+  match ip address web
+    load-balance method dst-ip 
+    10 set service firewall fail-action drop
+    30 set service firewall fail-action forward
+
+epbr policy mail-chain
+  match ip address mail
+    load-balance method src-ip 
+    10 set service cache
+
+epbr policy web6-chain
+  match ipv6 address web6
+    10 set service firewall6
+

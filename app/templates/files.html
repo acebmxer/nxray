@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Files — NXray{% endblock %}
+{% block head_extra %}{% if running %}<meta http-equiv="refresh" content="5;url=/files">{% endif %}{% endblock %}
+
+{% block content %}
+{% set title = "Files" %}{% set lead = "The files on the switch's bootflash: images, saved configurations, logs." %}
+{% include "_switch_files_top.html" %}
+{% if not connection %}
+<div class="card"><p>No switch is set up yet.</p></div>
+{% elif page is none %}
+<div class="card"><p class="alert alert-error" role="alert">{{ status.message if status else (problem or "The switch could not be read.") }}</p></div>
+{% else %}
+{% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
+{% with job = jobs.upload, what = "Copying a file to the switch" %}{% include "_switch_job.html" %}{% endwith %}
+<section class="card">
+  <h2 class="card-title">bootflash:</h2>
+  <p class="lead">{{ page.listing.free|bytes }} free of {{ page.listing.total|bytes }} ({{ page.listing.used|bytes }} used).</p>
+  {% if can_change and not page.scp_on %}<p class="warning">{{ scp_off }}</p>{% endif %}
+  <table class="table table-devices">
+    <thead><tr><th>Name</th><th>Size</th><th>Date</th><th></th></tr></thead>
+    <tbody>
+    {% for f in page.listing.files %}
+      <tr>
+        <td class="wrap">{{ f.name }}{% if f.folder %}/{% endif %}{% if f.name in page.protected %} <span class="badge badge-ok">in use</span>{% endif %}</td>
+        <td class="mono">{% if f.folder %}<span class="dim">folder</span>{% else %}{{ f.size|bytes }}{% endif %}</td>
+        <td class="mono">{{ f.date }}</td>
+        <td>
+          {% if can_change and not f.folder %}
+          <div class="row-actions">
+            {% if page.scp_on %}<a class="btn btn-quiet" href="/files/download?name={{ f.name|urlencode }}">Download</a>{% endif %}
+            {% if f.name not in page.protected and (page.boot_known or not f.name.lower().endswith(".bin")) %}
+            <form method="post" action="/files/delete" class="inline">
+              <input type="hidden" name="csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="name" value="{{ f.name }}">
+              <button type="submit" class="btn btn-quiet">Delete</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">The image the switch runs or starts from is marked in use and is never deleted. Folders are the switch's own and are not changed here.</p>
+</section>
+
+{% if can_change %}
+<section class="card" id="upload">
+  <h2 class="card-title">Copy a file to the switch</h2>
+  <p class="lead">An NX-OS image, a configuration or a certificate file, copied to bootflash with SCP. The name stays as it is; a file of the same name is not replaced.</p>
+  {% if page.scp_on %}
+  <form method="post" action="/files/upload" enctype="multipart/form-data" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="upload">File</label>
+    <input id="upload" name="upload" type="file" required>
+    <p class="hint">An image of about 2 GB first reaches NXray, then the switch: allow several minutes.</p>
+    <div class="button-row"><button type="submit" class="btn btn-primary">Copy to bootflash</button></div>
+  </form>
+  {% else %}
+  <p class="dim">{{ scp_off }}</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+{% include "_switch_files_bottom.html" %}
+{% endblock %}

@@ -34,18 +34,60 @@ from app.port_changes import (
     missing_changes,
 )
 from app.role_upgrade import SETUP_LOCK
+from app.routes.aaa import render_aaa_page
+from app.routes.analytics import render_analytics_page
+from app.routes.callhome import render_callhome_page
 from app.routes.config_page import render_config_page
+from app.routes.copp import render_copp_page
+from app.routes.dot1x import render_dot1x_page
+from app.routes.eem import render_eem_page
+from app.routes.epbr import render_epbr_page
+from app.routes.errdisable import render_errdisable_page
+from app.routes.evb import render_evb_page
 from app.routes.features import render_features_page
+from app.routes.flexlink import render_flexlink_page
+from app.routes.igmp_snooping import render_snooping_page
+from app.routes.ip_sla import render_ip_sla_page
+from app.routes.itd import render_itd_page
+from app.routes.licensing import render_licensing_page
+from app.routes.loopbacks import render_loopbacks_page
+from app.routes.maintenance import render_maintenance_page
+from app.routes.monitor import render_monitor_page
+from app.routes.mpls import render_mpls_page
+from app.routes.nat import render_nat_page
+from app.routes.nbm import render_nbm_page
 from app.routes.neighbors import render_neighbors_page
+from app.routes.ngoam import render_ngoam_page
+from app.routes.pbr import render_pbr_page
+from app.routes.pfc import render_pfc_page
+from app.routes.pki import render_pki_page
 from app.routes.port_channels import render_port_channels_page
 from app.routes.ports import ports_origin, render_port_page, render_ports_page
+from app.routes.private_vlans import render_private_vlans_page
+from app.routes.programmability import render_programmability_page
 from app.routes.protocols import render_protocol_page, render_protocols_page
+from app.routes.ptp import render_ptp_page
+from app.routes.qos import render_qos_page
+from app.routes.rmon import render_rmon_page
 from app.routes.routing import render_routing_page
+from app.routes.scheduler import render_scheduler_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
+from app.routes.system_settings import render_system_settings_page
+from app.routes.telemetry import render_telemetry_page
+from app.routes.track import render_track_page
 from app.routes.traffic import render_traffic_page
+from app.routes.trm import render_trm_page
+from app.routes.tunnel_encryption import render_tunnel_encryption_page
+from app.routes.tunnels import render_tunnels_page
+from app.routes.twamp import render_twamp_page
+from app.routes.udld import render_udld_page
 from app.routes.vlans import render_vlans_page
+from app.routes.vmtracker import render_vmtracker_page
+from app.routes.vpc import render_vpc_page
+from app.routes.vtp import render_vtp_page
+from app.routes.vxlan import render_vxlan_page
 from app.routing_protocols import protocol as find_protocol
 from app.security import csrf_token, csrf_valid_any_switch
 from app.switch_choice import choose_switch, remember_switch, resolve_switch_id, selected_switch_id
@@ -184,14 +226,15 @@ def _mode_words(mode: str) -> str:
     if mode == ROLE_BROAD:
         return (
             "The role permits any configuration change on the listed ports except accounts, "
-            "roles, AAA and the boot image, so new features need no role update. The account "
-            "can change any other setting on the switch."
+            "roles, AAA, the boot image and EEM applets, so new features need no role update. "
+            "The account can change any other setting on the switch."
         )
     if mode == ROLE_STORED:
         return (
-            "The role has the listed rules only. The switch admin login is stored, encrypted, "
-            "and NXray adds new rules itself after an update. A copy of NXray's database "
-            "exposes that login, not only the low-privilege account."
+            "The role has the listed rules only. The switch admin login is stored, encrypted; "
+            "NXray adds new rules itself after an update and sends with it the changes of the "
+            "pages that need every configuration command (EEM, Scheduler, QoS and the like). A "
+            "copy of NXray's database exposes that login, not only the low-privilege account."
         )
     return (
         "The role has the listed rules only. After an update that adds rules, an admin "
@@ -335,6 +378,7 @@ def switch_setup(
                 pause_seconds=role.pause_seconds,
                 role_version=ROLE_VERSION,
                 vlan_interfaces=role.vlan_interfaces,
+                nve=role.nve,
                 role_mode=role_mode,
             )
             if role_mode == ROLE_STORED:
@@ -695,6 +739,7 @@ def switch_enable_changes(
             account_name=connection.username,
             role_version=connection.role_version,
             vlan_interfaces_listed=connection.role_vlan_interfaces,
+            nve_listed=connection.role_nve,
             mode=new_mode,
             previous_mode=mode_before,
             transport=request.app.state.nxapi_transport,
@@ -724,6 +769,7 @@ def switch_enable_changes(
             pause_seconds=result.pause_seconds,
             role_version=ROLE_VERSION,
             vlan_interfaces=result.vlan_interfaces,
+            nve=result.nve,
             role_mode=new_mode,
         )
     note_activity(
@@ -787,6 +833,14 @@ def switch_enable_changes(
         "put a port or a port-channel back to how it came out of the box, on its own page or "
         "the Port-channels page"
     )
+    vpc_words = (
+        "make the vPC domain, set the peer keepalive, and mark the peer-link and the vPCs of "
+        "port-channels on the vPC page"
+    )
+    vxlan_words = (
+        "set up the NVE interface, map VLANs to VNIs and make the EVPN settings of the VNIs "
+        "on the VXLAN page"
+    )
     if mode_before != new_mode and (new_mode == ROLE_BROAD or mode_before is not None):
         wait = (
             " The switch applies a new role once it has not heard from NXray for a while, so "
@@ -804,28 +858,50 @@ def switch_enable_changes(
         done = (
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
-            "layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
-            "restart changes are on: "
+            "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
+            "restart, vPC and VXLAN changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "
             f"rename and delete VLANs, {features_words}, {neighbor_words}, {channel_words}, "
             f"{layer3_words}, {vrf_words}, {route_words}, {protocol_words}, {stp_words}, "
-            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, and "
-            f"{reset_words}. "
+            f"{admin_words}, {security_words}, {layer2_words}, {traffic_words}, "
+            f"{reset_words}, {vpc_words}, and {vxlan_words}. "
             "The switch applies this once it has not heard from NXray for a while, so NXray "
             f"now waits about {minutes} minutes before contacting it again."
         )
     elif connection.role_version >= ROLE_VERSION:
-        vlans = (
-            " and the VLAN interfaces"
-            if result.vlan_interfaces and not connection.role_vlan_interfaces
-            else ""
-        )
+        named = [
+            name
+            for name, now, before in (
+                ("the VLAN interfaces", result.vlan_interfaces, connection.role_vlan_interfaces),
+                ("the NVE interface", result.nve, connection.role_nve),
+            )
+            if now and not before
+        ]
+        vlans = f" and {' and '.join(named)}" if named else ""
         done = (
             f"The port list is updated: NXray's role now names the {count} front ports the "
             f"switch has now{vlans}. The switch applies this at once, so there is no wait."
         )
+        if connection.broad_role_behind and new_mode == ROLE_BROAD:
+            done += " The role now also denies EEM applets."
+        if connection.broad_role_without_loopbacks and new_mode == ROLE_BROAD:
+            done += " The role now also names the loopbacks."
+        if connection.broad_role_without_itd_statistics and new_mode == ROLE_BROAD:
+            done += " The role now also allows ITD's counters."
+        if connection.broad_role_without_nat_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing NAT's translations and counters."
+        if connection.broad_role_without_epbr_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing ePBR's counters."
+        if connection.broad_role_without_snooping_clear and new_mode == ROLE_BROAD:
+            done += " The role now also allows clearing IGMP snooping's groups and counters."
+        if connection.broad_role_without_vmtracker_refresh and new_mode == ROLE_BROAD:
+            done += " The role now also allows syncing a VM Tracker connection now."
+        if connection.broad_role_without_ngoam_tools and new_mode == ROLE_BROAD:
+            done += " The role now also allows VXLAN OAM's ping, traceroute and pathtrace."
+        if connection.broad_role_without_snapshots and new_mode == ROLE_BROAD:
+            done += " The role now also allows taking and deleting a snapshot."
     else:
         parts = []
         if connection.role_version < 2:
@@ -857,6 +933,8 @@ def switch_enable_changes(
         if connection.role_version < 15:
             parts.append(traffic_words)
         parts.append(reset_words)
+        parts.append(vpc_words)
+        parts.append(vxlan_words)
         allowed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])}, and {parts[-1]}"
         kinds = missing_changes(connection.role_version)
         done = (
@@ -932,9 +1010,15 @@ def switch_save(
     ``back`` names the page the button was on (``port`` with ``port`` set,
     ``ports``, ``vlans``, ``features``, ``neighbors``, ``port-channels``, ``routing``,
     ``protocols``, ``protocol`` with ``protocol`` set to a protocol page's key, ``spanning-tree``,
+    ``vpc``, ``vxlan``, ``monitor``, ``qos``, ``pfc``, ``copp``, ``private-vlans``, ``udld``,
+    ``vtp``, ``dot1x``, ``errdisable``, ``callhome``, ``scheduler``, ``eem``, ``ip-sla``,
+    ``loopbacks``, ``tunnels``, ``ptp``, ``telemetry``, ``aaa``, ``pki``, ``pbr``, ``itd``,
+    ``mpls``, ``nat``, ``track``, ``epbr``, ``igmp-snooping``, ``nbm``, ``trm``, ``flexlink``,
+    ``vmtracker``, ``evb``, ``tunnel-encryption``, ``ngoam``, ``programmability``,
+    ``licensing``, ``twamp``, ``rmon``, ``analytics``, ``maintenance``,
     ``switch-admin``, ``acls``, ``port-security``, ``dhcp`` or ``config``); the answer is
-    shown there. From the Ports page, ``show``, ``color`` and ``port`` keep its
-    filter, colour mode and open side panel.
+    shown there. From the Ports page,
+    ``show``, ``color`` and ``port`` keep its filter, colour mode and open side panel.
     Anything else means the
     Switch page, so the field can never send the browser elsewhere.
     """
@@ -973,6 +1057,90 @@ def switch_save(
             return render_protocol_page(request, username, protocol, error=error, notice=notice)
         if back == "spanning-tree":
             return render_spanning_tree_page(request, username, error=error, notice=notice)
+        if back == "vpc":
+            return render_vpc_page(request, username, error=error, notice=notice)
+        if back == "vxlan":
+            return render_vxlan_page(request, username, error=error, notice=notice)
+        if back == "monitor":
+            return render_monitor_page(request, username, error=error, notice=notice)
+        if back == "qos":
+            return render_qos_page(request, username, error=error, notice=notice)
+        if back == "pfc":
+            return render_pfc_page(request, username, error=error, notice=notice)
+        if back == "copp":
+            return render_copp_page(request, username, error=error, notice=notice)
+        if back == "private-vlans":
+            return render_private_vlans_page(request, username, error=error, notice=notice)
+        if back == "udld":
+            return render_udld_page(request, username, error=error, notice=notice)
+        if back == "vtp":
+            return render_vtp_page(request, username, error=error, notice=notice)
+        if back == "dot1x":
+            return render_dot1x_page(request, username, error=error, notice=notice)
+        if back == "errdisable":
+            return render_errdisable_page(request, username, error=error, notice=notice)
+        if back == "callhome":
+            return render_callhome_page(request, username, error=error, notice=notice)
+        if back == "scheduler":
+            return render_scheduler_page(request, username, error=error, notice=notice)
+        if back == "eem":
+            return render_eem_page(request, username, error=error, notice=notice)
+        if back == "ip-sla":
+            return render_ip_sla_page(request, username, error=error, notice=notice)
+        if back == "loopbacks":
+            return render_loopbacks_page(request, username, error=error, notice=notice)
+        if back == "tunnels":
+            return render_tunnels_page(request, username, error=error, notice=notice)
+        if back == "ptp":
+            return render_ptp_page(request, username, error=error, notice=notice)
+        if back == "telemetry":
+            return render_telemetry_page(request, username, error=error, notice=notice)
+        if back == "aaa":
+            return render_aaa_page(request, username, error=error, notice=notice)
+        if back == "pki":
+            return render_pki_page(request, username, error=error, notice=notice)
+        if back == "pbr":
+            return render_pbr_page(request, username, error=error, notice=notice)
+        if back == "itd":
+            return render_itd_page(request, username, error=error, notice=notice)
+        if back == "mpls":
+            return render_mpls_page(request, username, error=error, notice=notice)
+        if back == "epbr":
+            return render_epbr_page(request, username, error=error, notice=notice)
+        if back == "nat":
+            return render_nat_page(request, username, error=error, notice=notice)
+        if back == "track":
+            return render_track_page(request, username, error=error, notice=notice)
+        if back == "igmp-snooping":
+            return render_snooping_page(request, username, error=error, notice=notice)
+        if back == "nbm":
+            return render_nbm_page(request, username, error=error, notice=notice)
+        if back == "trm":
+            return render_trm_page(request, username, error=error, notice=notice)
+        if back == "flexlink":
+            return render_flexlink_page(request, username, error=error, notice=notice)
+        if back == "vmtracker":
+            return render_vmtracker_page(request, username, error=error, notice=notice)
+        if back == "evb":
+            return render_evb_page(request, username, error=error, notice=notice)
+        if back == "programmability":
+            return render_programmability_page(request, username, error=error, notice=notice)
+        if back == "licensing":
+            return render_licensing_page(request, username, error=error, notice=notice)
+        if back == "system-settings":
+            return render_system_settings_page(request, username, error=error, notice=notice)
+        if back == "twamp":
+            return render_twamp_page(request, username, error=error, notice=notice)
+        if back == "rmon":
+            return render_rmon_page(request, username, error=error, notice=notice)
+        if back == "analytics":
+            return render_analytics_page(request, username, error=error, notice=notice)
+        if back == "maintenance":
+            return render_maintenance_page(request, username, error=error, notice=notice)
+        if back == "tunnel-encryption":
+            return render_tunnel_encryption_page(request, username, error=error, notice=notice)
+        if back == "ngoam":
+            return render_ngoam_page(request, username, error=error, notice=notice)
         if back == "switch-admin":
             return render_switch_admin_page(request, username, error=error, notice=notice)
         if back == "acls":

@@ -1,0 +1,25 @@
+{
+  "TABLE_interface": {
+    "ROW_interface": [
+      {
+        "interface": "Ethernet1/54",
+        "vlan": "1",
+        "type": "eth",
+        "portmode": "access",
+        "state": "down",
+        "state_rsn_desc": "XCVR not inserted",
+        "speed": "auto",
+        "ratemode": "D"
+      },
+      {
+        "interface": "loopback250",
+        "state": "up",
+        "desc": "nxprobe lo"
+      },
+      {
+        "interface": "loopback251",
+        "state": "down"
+      }
+    ]
+  }
+}

@@ -122,6 +122,28 @@ def test_an_lldp_neighbor_without_a_name_is_known_by_its_chassis_id() -> None:
     assert neighbor.platform == "" and neighbor.capabilities == ""
 
 
+def test_an_lldp_field_the_switch_prints_as_null_is_treated_as_not_sent() -> None:
+    body = {
+        "TABLE_nbor_detail": {
+            "ROW_nbor_detail": {
+                "chassis_id": "b859.9f00.0010",
+                "port_id": "b859.9f00.0011",
+                "l_port_id": "Eth1/33",
+                "sys_name": "null",
+                "port_desc": "null",
+                "sys_desc": "null",
+                "mgmt_addr": "null",
+                "vlan_id": "null",
+            }
+        }
+    }
+    (neighbor,) = parse_lldp_neighbors(body)
+    assert neighbor.name == "b859.9f00.0010"
+    assert neighbor.remote_port == "b859.9f00.0011"
+    assert neighbor.platform == "" and neighbor.software == ""
+    assert neighbor.address == "" and neighbor.vlan == ""
+
+
 def test_the_mac_table_as_recorded() -> None:
     macs = parse_mac_table(load_fixture("show_mac_address_table"))
     assert len(macs) == 42

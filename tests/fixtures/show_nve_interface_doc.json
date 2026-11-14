@@ -1,0 +1,15 @@
+{
+  "TABLE_nve_if": {
+    "ROW_nve_if": {
+      "if-name": "nve1",
+      "state": "Up",
+      "encap-type": "VXLAN",
+      "source-if": "loopback1",
+      "source-if-state": "Up",
+      "primary-ip": "192.0.2.1",
+      "host-reach-mode": "Control Plane",
+      "adv-vmac": "False",
+      "vip-rmac": "0200.c000.0201"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+Event 1 is active, owned by PMON@FATAL
+Description is FATAL(1)
+ Event firing causes log and trap to community public, last fired never
+Event 2 is active, owned by PMON@CRITICAL
+Description is CRITICAL(2)
+ Event firing causes log and trap to community public, last fired never
+Event 5 is active, owned by PMON@INFO
+Description is INFORMATION(5)
+ Event firing causes log and trap to community public, last fired never
+Event 250 is active, owned by 
+Description is 
+ Event firing causes nothing, last fired never
+Event 251 is active, owned by 
+Description is newdesc
+ Event firing causes trap to community public, last fired never
+Event 253 is active, owned by nxprobe
+Description is probe-253
+ Event firing causes log, last fired never

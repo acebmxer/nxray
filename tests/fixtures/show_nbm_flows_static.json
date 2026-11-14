@@ -1,0 +1,34 @@
+{
+ "TABLE_vrf": {
+  "ROW_vrf": {
+   "vrf-name": "default",
+   "TABLE_stitched": {
+    "ROW_stitched": {
+     "stitchedSrc": "192.0.2.10",
+     "stitchedGrp": "239.250.1.5",
+     "TABLE_stitchedEgress": {
+      "ROW_stitchedEgress": {
+       "stitchedEgressIntf": "Null0"
+      }
+     }
+    }
+   },
+   "TABLE_unstitched": {
+    "ROW_unstitched": {
+     "unstitchedSrc": "192.0.2.10",
+     "unstitchedGrp": "239.250.1.5",
+     "TABLE_unstitchedEgress": {
+      "ROW_unstitchedEgress": {
+       "unstitchedEgressIntf": "eth1/54"
+      }
+     },
+     "TABLE_unstitchedHost": {
+      "ROW_unstitchedHost": {
+       "unstitchedHostIp": "192.0.2.30"
+      }
+     }
+    }
+   }
+  }
+ }
+}

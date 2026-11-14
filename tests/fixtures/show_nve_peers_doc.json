@@ -1,0 +1,22 @@
+{
+  "TABLE_nve_peers": {
+    "ROW_nve_peers": [
+      {
+        "if-name": "nve1",
+        "peer-ip": "192.0.2.2",
+        "peer-state": "Up",
+        "learn-type": "CP",
+        "uptime": "01:12:44",
+        "router-mac": "5254.0012.3456"
+      },
+      {
+        "if-name": "nve1",
+        "peer-ip": "192.0.2.3",
+        "peer-state": "Down",
+        "learn-type": "CP",
+        "uptime": "00:00:00",
+        "router-mac": "n/a"
+      }
+    ]
+  }
+}

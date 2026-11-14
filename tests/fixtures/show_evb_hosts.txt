@@ -1,0 +1,12 @@
+
+EVB Host table
+
+No. of Hosts: 0
+No. of VSIs:  0
+
+Flags: + - Multiple addresses
+       > - Cisco OUI L3 address
+
+Host Name       VNI      Vlan  BD    Mac-address    IP-Address        Interface      
+--------------- -------- ----- ----- -------------- ----------------- ---------------
+

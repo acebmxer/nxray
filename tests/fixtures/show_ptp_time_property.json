@@ -1,0 +1,10 @@
+{
+  "current-utc-offset-valid": 0,
+  "current-utc-offset": 37,
+  "leap-59": 0,
+  "leap-61": 0,
+  "time-traceable": 0,
+  "freq-traceable": 0,
+  "ptp-timescale": 0,
+  "time-source": "0xa0(Internal Oscillator)"
+}

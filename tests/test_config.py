@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import stat
 from pathlib import Path
 
@@ -70,6 +71,26 @@ def test_secret_key_is_generated_private_and_reused(
 
     # A restart must reuse the stored key, or every restart logs everyone out.
     assert load_settings().secret_key == first.secret_key
+
+
+def test_data_folder_is_owner_only_and_the_key_is_never_looser(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("NXRAY_ADMIN_PASSWORD_HASH", FAKE_HASH)
+    data = tmp_path / "fresh"
+    monkeypatch.setenv("NXRAY_DATA_DIR", str(data))
+    old_umask = os.umask(0o022)
+    try:
+        load_settings()
+    finally:
+        os.umask(old_umask)
+    assert stat.S_IMODE(data.stat().st_mode) == 0o700
+    assert stat.S_IMODE((data / "secret_key").stat().st_mode) == 0o600
+
+    # A folder made earlier with the default mode is tightened too.
+    data.chmod(0o755)
+    load_settings()
+    assert stat.S_IMODE(data.stat().st_mode) == 0o700
 
 
 def test_explicit_secret_key_wins(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

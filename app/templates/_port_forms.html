@@ -119,7 +119,7 @@
   {% endif %}
   <button type="submit" class="btn btn-primary">Change CDP and LLDP</button>
 </form>
-<p class="note">The change asks you to confirm first.{% if not discovery.lldp_known and not (neighbors and neighbors.lldp_enabled) %} LLDP can be set per port once it is on for the whole switch; {% if ctx.role == "admin" %}turn it on on the <a href="/features">Features page</a>{% else %}an NXray admin turns it on on the Features page{% endif %}.{% endif %}</p>
+<p class="note">The change asks you to confirm first.{% if not discovery.lldp_known and not (neighbors and neighbors.lldp_enabled) %} LLDP can be set per port once it is on for the whole switch; {% if ctx.role == "admin" %}turn it on on the <a href="/features#{{ feature_anchor('lldp') }}">Features page</a>{% else %}an NXray admin turns it on on the Features page{% endif %}.{% endif %}</p>
 {% elif ctx.can_change and ctx.connection.changes_enabled %}
 <p class="lead">Neighbor changes are off. {% if ctx.role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %} to turn CDP and LLDP on or off on this port and change the MAC address table.</p>
 {% endif %}

@@ -46,7 +46,8 @@
     <table class="table">
       <tbody>
         {% for key, label in counter_labels.items() %}
-        <tr><td>{{ label }}</td><td class="num">{{ "{:,}".format(port.counters.get(key, 0)) }}</td></tr>
+        {% set number = port.counters.get(key, 0) %}
+        <tr><td>{{ label }}</td><td class="num">{% if number and key in error_keys %}<span class="errs">{{ "{:,}".format(number) }}</span>{% else %}{{ "{:,}".format(number) }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

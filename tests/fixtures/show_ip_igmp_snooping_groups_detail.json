@@ -1,0 +1,42 @@
+{
+ "TABLE_vlan": {
+  "ROW_vlan": {
+   "vlan-id": 10,
+   "TABLE_group": {
+    "ROW_group": {
+     "addr": "239.255.255.250",
+     "GroupMfdmPending": "false",
+     "GroupVersion": "3",
+     "oldHostTimer": "never",
+     "ReporterAddress": "192.0.2.200",
+     "static": "false",
+     "dynamic": "true",
+     "vpcPeerLinkExcludeFlag": "false",
+     "ReportSuppressFlag": "false",
+     "JoinedSourcesCount": "0",
+     "TABLE_star_g_ports": {
+      "ROW_star_g_ports": [
+       {
+        "star-g-if-name": "Ethernet1/47",
+        "expires": "00:03:08"
+       },
+       {
+        "star-g-if-name": "Ethernet1/34",
+        "expires": "00:00:13"
+       },
+       {
+        "star-g-if-name": "Ethernet1/48",
+        "expires": "0.000000"
+       },
+       {
+        "star-g-if-name": "Ethernet1/36",
+        "expires": "0.000000"
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}
+

@@ -37,14 +37,20 @@ from typing import Any
 
 from app.nxapi import (
     DEFAULT_VRF,
+    FLASH_FILE,
     VLAN_INTERFACE_MAX,
     validate_channel_number,
     validate_description,
+    validate_ip_interface,
+    validate_ipv6_interface,
     validate_port_name,
     validate_routed_interface,
     validate_vlan_id,
     validate_vrf_name,
 )
+from app.oui import is_group_mac, normalize_mac
+from app.switch import text
+from app.switch_setup import scrub_secrets
 
 # ---- fields --------------------------------------------------------------------
 
@@ -52,8 +58,8 @@ from app.nxapi import (
 # chains: a letter or digit first, then letters, digits, ".", "_" or "-".
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 # Secrets (passwords, keys): printable ASCII without spaces, ";" or "?",
-# which NX-API refuses or splits on.
-_SECRET = re.compile(r"^[\x21-\x7e]{1,63}$")
+# which NX-API refuses or splits on; at most the field's maximum (63 when not given).
+_SECRET = re.compile(r"^[\x21-\x7e]+$")
 # An IS-IS NET: area (1-13 bytes), system ID (6 bytes), selector 00, in
 # groups of four hex digits: 49.0001.1920.0000.2001.00.
 _ISIS_NET = re.compile(r"^[0-9a-fA-F]{2}(?:\.[0-9a-fA-F]{4}){1,6}(?:\.[0-9a-fA-F]{4}){3}\.00$")
@@ -84,6 +90,8 @@ KINDS = (
     "mac",  # a unicast MAC address, written 0200.0000.0001
     "maddr4",  # one IPv4 multicast group address: 239.1.1.1
     "port",  # a front port or port-channel, switched (layer 2): spanning tree
+    "channel",  # a port-channel that exists on the switch: port-channel20 (or po20)
+    "numlist",  # whole numbers and ranges from minimum to maximum: 46 or 8,10-12
     "vlan",  # one VLAN number, 1 to 3967 (the switch keeps 3968-4094 for itself)
     "vlans",  # VLAN numbers and ranges, 1 to 3967: 10 or 10,20-30
     "host",  # a server: an IP address or a DNS name such as ntp.example.net
@@ -100,6 +108,37 @@ KINDS = (
     "ethertype",  # an EtherType written 0x0800, 0x0600 to 0xffff
     "arpip",  # an ARP ACL's IPv4 match: any, or one address (as host <address>)
     "arpmac",  # an ARP ACL's MAC match: any, or one address (as host <address>)
+    "url",  # a web address: http://<host>[:<port>][/<path>], no "?" (NX-API refuses it)
+    "slalife",  # how long an IP SLA entry runs: forever, or 1 to 2147483647 seconds
+    "slastart",  # when an IP SLA entry starts: now, pending, after 00:10:00, 14:30 or
+    # 14:30:00, with a date after it if wanted (14:30:00 Nov 12)
+    "email",  # an email address: noc@example.net
+    "phone",  # an international phone number: + and up to 16 digits, +15550100
+    "weburl",  # a web address starting http:// or https://, no "?" (NX-API refuses it)
+    "flashfile",  # a file name on bootflash: letters, digits, ".", "_" and "-": backup.cfg
+    "eemlabel",  # an EEM action's label: a number, or a number and one digit (1, 1.0, 20.5)
+    "quoted",  # text the switch takes inside double quotes: as "text", without '"'
+    "schedstart",  # when a scheduler schedule starts: now, +02:00 (in 2 hours), 23:30
+    # (today) or 2026-12-01 03:00
+    "schedrepeat",  # how often a scheduler schedule repeats: 02:00 (hours:minutes) or
+    # 1:00:00 (days:hours:minutes)
+    "syspolicy",  # an EEM system policy's name: two underscores first, __ethpm_link_flap
+    "ifaddr4",  # an IPv4 address on an interface with its prefix length: 192.0.2.1/32
+    "ifaddr6",  # an IPv6 address on an interface with its prefix length: 2001:db8::1/128
+    "ipv4list",  # one or more IPv4 addresses, written with spaces: 192.0.2.1 192.0.2.2
+    "ipv6list",  # one or more IPv6 addresses, written with spaces
+    "telpath",  # a telemetry sensor path or condition: printable, no spaces, not starting
+    # with a double quote: sys/intf or eq(ethpmPhysIf.operSt,"down")
+    "ifname",  # any interface the switch has, by name, to read its state or use its address: a
+    # front port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
+    "urlpath",  # the page an HTTP health probe asks for: index.html or /status/health;
+    # letters, digits and . _ ~ % / -, up to 128 characters
+    "ipv4any",  # one IPv4 address, or any (also typed 0.0.0.0), sent as 0.0.0.0: an NBM
+    # host policy's host or sender
+    "account",  # a user name another system signs NXray's switch in with: letters, digits
+    # and . _ @ -, up to 64, such as administrator@vsphere.local (a VM Tracker connection)
+    "hexkey",  # an even number of hexadecimal digits, 2 to 64: a tunnel encryption key's ID
+    "oid",  # an SNMP object's number, dotted: 1.3.6.1.2.1.2.2.1.10.436234240 (an RMON alarm)
 )
 
 # The highest VLAN a spanning-tree line may name: NX-OS keeps 3968-4094 as its
@@ -209,7 +248,6 @@ def _interface(value: str, label: str) -> str:
 
 
 _LOOPBACK = re.compile(r"(?i)^(?:lo|loopback)\s*([0-9]{1,4})$")
-_MAC_DIGITS = re.compile(r"[0-9a-f]{12}")
 # Characters a key or password may not start with: the switch reads them as
 # an output pipe, a redirect, an escape or the start of a quoted string.
 _SECRET_FIRST = "|>\\('\""
@@ -282,6 +320,48 @@ def _switch_port(value: str, label: str) -> str:
         raise ValueError(f"{label}: a front port such as Ethernet1/3 or a port-channel") from exc
 
 
+_TUNNEL = re.compile(r"(?i)^tunnel\s*([0-9]{1,5})$")
+
+
+def _ifname(value: str, label: str) -> str:
+    """Any interface by the name the switch writes: Ethernet1/5, port-channel10, Vlan300,
+    loopback0, mgmt0, nve1, Tunnel5. For lines that read an interface's state (a
+    tracked object) or use its address (a log source), so a VLAN interface above NXray's
+    own range is taken too."""
+    if _CHANNEL.fullmatch(value):
+        return _channel_name(value, label)
+    if match := re.fullmatch(r"(?i)vlan\s*([0-9]{1,4})", value):
+        try:
+            return f"Vlan{validate_vlan_id(match.group(1))}"
+        except ValueError as exc:
+            raise ValueError(f"{label}: {exc}") from exc
+    if _LOOPBACK.fullmatch(value):
+        return _source(value, label)
+    if match := _TUNNEL.fullmatch(value):
+        if int(match.group(1)) > 65535:
+            raise ValueError(f"{label}: tunnels are numbered 0 to 65535")
+        return f"Tunnel{int(match.group(1))}"
+    if value.lower() in ("mgmt0", "nve1"):
+        return value.lower()
+    match = _ETHERNET.fullmatch(value)
+    try:
+        return validate_port_name(f"Ethernet{match.group(1)}" if match else value)
+    except ValueError as exc:
+        raise ValueError(
+            f"{label} is an interface such as Ethernet1/49, port-channel10, Vlan10 or loopback0"
+        ) from exc
+
+
+def _channel_name(value: str, label: str) -> str:
+    match = _CHANNEL.fullmatch(value)
+    if not match:
+        raise ValueError(f"{label} is a port-channel such as port-channel20")
+    try:
+        return f"port-channel{validate_channel_number(match.group(1))}"
+    except ValueError as exc:
+        raise ValueError(f"{label}: {exc}") from exc
+
+
 def _vlan(value: str, label: str) -> str:
     try:
         number = validate_vlan_id(value)
@@ -307,6 +387,25 @@ def _vlans(value: str, label: str) -> str:
     return compact
 
 
+_NUMBER_LIST = re.compile(r"^[0-9]{1,5}(?:-[0-9]{1,5})?(?:,[0-9]{1,5}(?:-[0-9]{1,5})?)*$")
+
+
+def _numlist(value: str, low: int | None, high: int | None, label: str) -> str:
+    """'8, 10-12' -> '8,10-12': every number from ``low`` to ``high``, every range
+    lower-higher."""
+    compact = re.sub(r"\s*([,-])\s*", r"\1", value)
+    if not _NUMBER_LIST.fullmatch(compact):
+        raise ValueError(f"{label} is numbers and ranges such as 8,10-12")
+    for part in compact.split(","):
+        first, _, last = part.partition("-")
+        _int(first, low, high, label)
+        if last:
+            _int(last, low, high, label)
+            if int(last) <= int(first):
+                raise ValueError(f"{label}: in {part} the second number must be the higher one")
+    return compact
+
+
 def _source(value: str, label: str) -> str:
     if match := _LOOPBACK.fullmatch(value):
         number = int(match.group(1))
@@ -317,10 +416,10 @@ def _source(value: str, label: str) -> str:
 
 
 def _mac(value: str, label: str) -> str:
-    digits = re.sub(r"[.:-]", "", value.lower())
-    if not _MAC_DIGITS.fullmatch(digits):
+    digits = normalize_mac(value)
+    if digits is None:
         raise ValueError(f"{label} is written like 0200.0000.0001")
-    if int(digits[1], 16) & 1:
+    if is_group_mac(digits):
         raise ValueError(f"{label}: {value} is a multicast MAC address, not one a gateway can have")
     if digits == "0" * 12:
         raise ValueError(f"{label}: 0000.0000.0000 is not a MAC address a gateway can have")
@@ -400,8 +499,8 @@ def _object_group(value: str, word: str, label: str) -> str:
 
 def _any_mac(value: str, label: str) -> str:
     """Any MAC address, multicast and broadcast too, written 0200.0000.0001."""
-    digits = re.sub(r"[.:-]", "", value.lower())
-    if not _MAC_DIGITS.fullmatch(digits):
+    digits = normalize_mac(value)
+    if digits is None:
         raise ValueError(f"{label}: {value!r} is not a MAC address such as 0200.0000.0001")
     return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
 
@@ -434,6 +533,128 @@ def _arp_match(value: str, kind: str, label: str) -> str:
     if kind == "arpmac":
         return f"host {_any_mac(value, label)}"
     return f"host {_address(value, 4, label)}"
+
+
+_URL = re.compile(r"^http://([^/:\s]+)(?::([0-9]{1,5}))?(/[A-Za-z0-9._~%!$&'()*+,=:@/-]*)?$")
+
+
+def _url(value: str, label: str) -> str:
+    """'http://192.0.2.1/', 'http://www.example.net:8080/status': an address the switch
+    fetches. Only http: the switch's IP SLA ``http get`` takes no other scheme."""
+    match = _URL.fullmatch(value)
+    if not match:
+        raise ValueError(f"{label} is a web address such as http://192.0.2.1/index.html")
+    host = _host(match.group(1), label)
+    port = match.group(2)
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise ValueError(f"{label}: the port is 1 to 65535")
+    return f"http://{host}{':' + port if port else ''}{match.group(3) or '/'}"
+
+
+# The longest life and the largest number of seconds an IP SLA line takes.
+SLA_SECONDS_MAX = 2147483647
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_SLA_AT = re.compile(r"^([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)(?:\s+([A-Za-z]{3})\s+([0-9]{1,2}))?$")
+
+
+def _sla_life(value: str, label: str) -> str:
+    if value.lower() == "forever":
+        return "forever"
+    return _int(value, 1, SLA_SECONDS_MAX, label + " (seconds, or forever)")
+
+
+def _sla_start(value: str, label: str) -> str:
+    """now, pending, 'after 00:10:00' (a wait), or a time of day with an optional date:
+    '14:30', '14:30:00', '14:30:00 Nov 12'."""
+    words = " ".join(value.split())
+    if words.lower() in ("now", "pending"):
+        return words.lower()
+    if words.lower().startswith("after "):
+        return "after " + _time_of_day(words[6:], label + " (after)", True)
+    match = _SLA_AT.fullmatch(words)
+    if not match:
+        raise ValueError(
+            f"{label} is now, pending, after 00:10:00, or a time such as 14:30 or 14:30:00 Nov 12"
+        )
+    clock = match.group(1)
+    when = _time_of_day(clock, label, clock.count(":") == 2)
+    if match.group(2) is None:
+        return when
+    month = match.group(2).capitalize()
+    day = int(match.group(3))
+    if month not in _MONTHS or not 1 <= day <= 31:
+        raise ValueError(f"{label}: the date is a month and a day, such as Nov 12")
+    return f"{when} {month} {day}"
+
+
+_EMAIL = re.compile(
+    r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$"
+)
+_PHONE = re.compile(r"^\+[0-9]{1,16}$")
+_WEB_URL = re.compile(
+    r"^(https?)://([^/:\s]+)(?::([0-9]{1,5}))?(/[A-Za-z0-9._~%!$&'()*+,=:@/-]*)?$"
+)
+_EEM_LABEL = re.compile(r"^[0-9]{1,16}(?:\.[0-9])?$")
+_SCHED_DATE = re.compile(r"^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})\s+([0-9]{1,2}:[0-9]{2})$")
+_SCHED_REPEAT = re.compile(r"^(?:([0-9]{1,3}):)?([0-9]{1,2}):([0-9]{2})$")
+
+
+def _email(value: str, label: str, longest: int) -> str:
+    if not _EMAIL.fullmatch(value) or len(value) > longest:
+        raise ValueError(f"{label} is an email address such as noc@example.net")
+    return value
+
+
+def _web_url(value: str, label: str) -> str:
+    """'https://tools.example.net/its/service/oddce/services/DDCEService': an address
+    the switch sends to, http or https."""
+    match = _WEB_URL.fullmatch(value)
+    if not match or len(value) > 255:
+        raise ValueError(f"{label} is a web address such as https://example.net/callhome")
+    host = _host(match.group(2), label)
+    port = match.group(3)
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise ValueError(f"{label}: the port is 1 to 65535")
+    return f"{match.group(1)}://{host}{':' + port if port else ''}{match.group(4) or '/'}"
+
+
+def _flash_file(value: str, label: str) -> str:
+    if not FLASH_FILE.fullmatch(value):
+        raise ValueError(
+            f"{label} is a file name of letters, digits, '.', '_' or '-', such as backup.cfg"
+        )
+    return value
+
+
+def _sched_start(value: str, label: str) -> str:
+    """now; +02:00 (that long from now); 23:30 (today); 2026-12-01 03:00. Sent the way the
+    switch writes them: now, +02:00, 23:30, 2026:12:01:03:00."""
+    words = " ".join(value.split())
+    if words.lower() == "now":
+        return "now"
+    if words.startswith("+"):
+        return "+" + _time_of_day(words[1:], label + " (a wait)", False)
+    if match := _SCHED_DATE.fullmatch(words):
+        year, month, day = (int(g) for g in match.groups()[:3])
+        if not (2000 <= year <= 2099 and 1 <= month <= 12 and 1 <= day <= 31):
+            raise ValueError(f"{label}: the date is written like 2026-12-01")
+        at = _time_of_day(match.group(4), label, False)
+        return f"{year}:{month:02d}:{day:02d}:{at}"
+    if _HHMM.fullmatch(words):
+        return _time_of_day(words, label, False)
+    raise ValueError(f"{label} is now, +02:00 (a wait), 23:30 (today) or 2026-12-01 03:00")
+
+
+def _sched_repeat(value: str, label: str) -> str:
+    match = _SCHED_REPEAT.fullmatch(value.strip())
+    if not match:
+        raise ValueError(f"{label} is hours:minutes (02:00) or days:hours:minutes (1:00:00)")
+    days = int(match.group(1) or 0)
+    hours, minutes = int(match.group(2)), int(match.group(3))
+    if hours > 23 or minutes > 59 or not (days or hours or minutes):
+        raise ValueError(f"{label}: hours go to 23, minutes to 59, and it cannot be 0")
+    return f"{days}:{hours:02d}:{minutes:02d}" if days else f"{hours:02d}:{minutes:02d}"
 
 
 def check_value(spec: Field, raw: str) -> str:
@@ -496,16 +717,22 @@ def check_value(spec: Field, raw: str) -> str:
         return _interface(value, spec.label)
     if kind == "source":
         return _source(value, spec.label)
+    if kind == "ifname":
+        return _ifname(value, spec.label)
     if kind == "mac":
         return _mac(value, spec.label)
     if kind == "maddr4":
         return _multicast_address(value, spec.label)
     if kind == "port":
         return _switch_port(value, spec.label)
+    if kind == "channel":
+        return _channel_name(value, spec.label)
     if kind == "vlan":
         return _vlan(value, spec.label)
     if kind == "vlans":
         return _vlans(value, spec.label)
+    if kind == "numlist":
+        return _numlist(value, spec.minimum, spec.maximum, spec.label)
     if kind == "host":
         return _host(value, spec.label)
     if kind == "domain":
@@ -522,8 +749,98 @@ def check_value(spec: Field, raw: str) -> str:
         return _ethertype(value, spec.label)
     if kind in ("arpip", "arpmac"):
         return _arp_match(value, kind, spec.label)
+    if kind == "url":
+        return _url(value, spec.label)
+    if kind == "slalife":
+        return _sla_life(value, spec.label)
+    if kind == "slastart":
+        return _sla_start(value, spec.label)
     if kind in ("hhmm", "hhmmss"):
         return _time_of_day(value, spec.label, kind == "hhmmss")
+    if kind == "email":
+        return _email(value, spec.label, spec.maximum or 255)
+    if kind == "phone":
+        if not _PHONE.fullmatch(value):
+            raise ValueError(f"{spec.label} is + and the number's digits, such as +15550100")
+        return value
+    if kind == "weburl":
+        return _web_url(value, spec.label)
+    if kind == "flashfile":
+        return _flash_file(value, spec.label)
+    if kind == "eemlabel":
+        if not _EEM_LABEL.fullmatch(value):
+            raise ValueError(f"{spec.label} is a number such as 1, or 1.0 to 1.9")
+        return value
+    if kind == "quoted":
+        try:
+            text = validate_description(value)
+        except ValueError as exc:
+            raise ValueError(f"{spec.label}: {exc}") from exc
+        if '"' in text:
+            raise ValueError(f'{spec.label} cannot contain a double quote (")')
+        if spec.maximum is not None and len(text) > spec.maximum:
+            raise ValueError(f"{spec.label} is at most {spec.maximum} characters")
+        return text
+    if kind == "telpath":
+        longest = spec.maximum or 512
+        if not _TELPATH.fullmatch(value) or len(value) > longest:
+            raise ValueError(
+                f"{spec.label} is up to {longest} characters without spaces, such as sys/intf"
+            )
+        return value
+    if kind == "urlpath":
+        if not _URLPATH.fullmatch(value):
+            raise ValueError(
+                f"{spec.label} is a page such as index.html or /status: up to 128 letters, "
+                "digits and . _ ~ % / -"
+            )
+        return value
+    if kind == "schedstart":
+        return _sched_start(value, spec.label)
+    if kind == "schedrepeat":
+        return _sched_repeat(value, spec.label)
+    if kind == "syspolicy":
+        if not re.fullmatch(r"__[A-Za-z0-9_]{1,60}", value):
+            raise ValueError(f"{spec.label} is a system policy's name, such as __ethpm_link_flap")
+        return value
+    if kind == "account":
+        if not _ACCOUNT.fullmatch(value):
+            raise ValueError(
+                f"{spec.label} is 1 to 64 letters, digits, '.', '_', '@' or '-', starting with "
+                "a letter or digit, such as administrator@vsphere.local"
+            )
+        return value
+    if kind == "oid":
+        if not _OID.fullmatch(value) or len(value) > 127:
+            raise ValueError(
+                f"{spec.label} is an SNMP object's number of at least two parts joined by dots, "
+                "such as 1.3.6.1.2.1.2.2.1.10.436234240"
+            )
+        return value
+    if kind == "hexkey":
+        if not re.fullmatch(r"(?:[0-9a-fA-F]{2}){1,32}", value):
+            raise ValueError(
+                f"{spec.label} is an even number of hexadecimal digits, 2 to 64, such as 2006"
+            )
+        return value.lower()
+    if kind == "ipv4any":
+        if value.lower() in ("any", "0.0.0.0"):
+            return "0.0.0.0"
+        return _address(value, 4, spec.label)
+    if kind in ("ipv4list", "ipv6list"):
+        parts = value.replace(",", " ").split()
+        if not parts:
+            raise ValueError(f"{spec.label}: give at least one address")
+        if spec.maximum is not None and len(parts) > spec.maximum:
+            raise ValueError(f"{spec.label}: at most {spec.maximum} addresses")
+        version = 4 if kind == "ipv4list" else 6
+        return " ".join(_address(part, version, spec.label) for part in parts)
+    if kind in ("ifaddr4", "ifaddr6"):
+        check = validate_ip_interface if kind == "ifaddr4" else validate_ipv6_interface
+        try:
+            return check(value)
+        except ValueError as exc:
+            raise ValueError(f"{spec.label}: {exc}") from exc
     if kind == "vrf":
         if value == DEFAULT_VRF:
             if not spec.optional:
@@ -544,6 +861,15 @@ def check_value(spec: Field, raw: str) -> str:
 
 
 _FORBIDDEN = re.compile(r"[;?\r\n]")
+# A telemetry path or condition: printable ASCII without spaces; a double quote first
+# would make the switch read it as a quoted string.
+_TELPATH = re.compile(r"^[\x21\x23-\x7e][\x21-\x7e]*$")
+# A web page an HTTP probe fetches, as the switch takes it after ``http get``.
+_URLPATH = re.compile(r"^[A-Za-z0-9._~%/-]{1,128}$")
+# A user name for a server the switch signs in to (vCenter).
+_ACCOUNT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$")
+# An SNMP object's number: digits in two or more parts joined by dots, no leading dot.
+_OID = re.compile(r"^[0-9]+(?:\.[0-9]+)+$")
 
 # ---- templates -------------------------------------------------------------------
 
@@ -593,7 +919,8 @@ class Setting:
     typed at the top level and carry the place in them (``spanning-tree vlan
     {vlan} priority {priority}``); the scope checks it has them. ``config``
     false marks a command that changes no configuration (``clock set``): it
-    leaves nothing to save.
+    leaves nothing to save. ``button``, when given, names the form's set button
+    instead of Set (Run, for a VXLAN OAM tool).
     """
 
     key: str
@@ -609,6 +936,7 @@ class Setting:
     check: Callable[[dict[str, str]], None] | None = None
     ident: tuple[str, ...] = ()
     config: bool = True
+    button: str = ""
 
     def __post_init__(self) -> None:
         names = {f.name for f in self.fields} | set(self.ident)
@@ -687,6 +1015,9 @@ class Table:
     rows: tuple[tuple[str, ...], ...] = ()
     empty: str = "None."
     note: str = ""
+    # When set, only this column (counted from 0) wraps its text and takes the spare
+    # width; the other columns stay on one line. None: every column wraps.
+    wrap_column: int | None = None
 
 
 @dataclass(frozen=True)
@@ -769,13 +1100,6 @@ def _checked(fields: Iterable[Field], raw: dict[str, str]) -> dict[str, str]:
     return {f.name: check_value(f, raw.get(f.name, "")) for f in fields}
 
 
-def _mask(line: str, values: dict[str, str], secrets: set[str]) -> str:
-    for name in secrets:
-        if values.get(name):
-            line = line.replace(values[name], "***")
-    return line
-
-
 def _where(scope: Scope, ident: dict[str, str]) -> str:
     parts = [f"{f.label} {ident[f.name]}" for f in scope.ident if ident.get(f.name)]
     return f"{scope.label} ({', '.join(parts)})" if parts else scope.label
@@ -847,7 +1171,7 @@ def build_change(
             if setting.no_line
             else "no " + render(setting.line, {**borrowed, **checked})
         )
-    label = _mask(line, checked, setting.secret_fields)
+    label = scrub_secrets(line, *(checked.get(name, "") for name in setting.secret_fields))
     shown = [
         "***" if f.kind == "secret" else checked[f.name]
         for f in setting.fields
@@ -870,11 +1194,6 @@ def build_change(
 
 
 # ---- helpers for the protocol modules ------------------------------------------
-
-
-def text(value: Any) -> str:
-    """A value from NX-OS output as stripped text ("" for None)."""
-    return "" if value is None else str(value).strip()
 
 
 _DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")
@@ -957,6 +1276,17 @@ def port_field() -> Field:
     )
 
 
+def channel_field() -> Field:
+    """The port-channel identity field of the vPC page's port-channel scope."""
+    return Field(
+        "channel",
+        "Port-channel",
+        "channel",
+        hint="A port-channel made on the Port-channels page",
+        placeholder="port-channel20",
+    )
+
+
 def interface_field() -> Field:
     """The interface identity field of interface scopes."""
     return Field(
@@ -981,6 +1311,7 @@ __all__ = [
     "Table",
     "blanks",
     "build_change",
+    "channel_field",
     "check_value",
     "interface_field",
     "port_field",

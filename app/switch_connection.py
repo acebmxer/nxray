@@ -28,8 +28,37 @@ ROLE_STORED = "stored"
 ROLE_MODES = (ROLE_LIMITED, ROLE_BROAD, ROLE_STORED)
 
 # The role version kept for a broad role: it permits every configuration command,
-# so no later NXray version can add a rule it lacks. Above any real ROLE_VERSION.
-BROAD_ROLE_VERSION = 1000
+# so no later NXray version can add a command permit it lacks. Above any real
+# ROLE_VERSION. It counts the broad role's own changes instead: 1000 had the account,
+# role, AAA and boot denies; 1001 added the EEM denies (app/port_changes.py
+# EEM_DENY_RULES); 1002 named the loopbacks in its port list (LOOPBACK_PERMIT); 1003
+# allowed ITD's counters (ITD_STATISTICS_RULES); 1004 allowed clearing NAT's translations and
+# counters (NAT_CLEAR_RULES); 1005 allowed clearing ePBR's counters (EPBR_CLEAR_RULES); 1006
+# allowed clearing IGMP snooping's groups and counters (SNOOPING_CLEAR_RULES) and syncing a VM
+# Tracker connection (VMTRACKER_REFRESH_RULES); 1007 allowed VXLAN OAM's tools, counters' clears
+# and loop detection's probe and bring-up (NGOAM_RULES); 1008 allowed taking and deleting a
+# snapshot (SNAPSHOT_RULES). A broad role below it is written again by Update the port list on
+# the Switch page.
+BROAD_ROLE_VERSION = 1008
+# The broad role version that first denied EEM applets: one below it lets the account get
+# past the other denies, which every page warns about.
+BROAD_EEM_DENY_VERSION = 1001
+# The broad role version that first named the loopbacks in its port list.
+BROAD_LOOPBACK_VERSION = 1002
+# The broad role version that first allowed ITD's counters (itd statistics).
+BROAD_ITD_VERSION = 1003
+# The broad role version that first allowed clearing NAT's translations and counters.
+BROAD_NAT_VERSION = 1004
+# The broad role version that first allowed clearing ePBR's counters.
+BROAD_EPBR_VERSION = 1005
+# The broad role version that first allowed clearing IGMP snooping's groups and counters.
+BROAD_SNOOPING_CLEAR_VERSION = 1006
+# The broad role version that first allowed syncing a VM Tracker connection now.
+BROAD_VMTRACKER_VERSION = 1006
+# The broad role version that first allowed VXLAN OAM's ping, traceroute and pathtrace.
+BROAD_NGOAM_VERSION = 1007
+# The broad role version that first allowed taking and deleting a snapshot.
+BROAD_MAINTENANCE_VERSION = 1008
 
 
 @dataclass(frozen=True)
@@ -52,6 +81,8 @@ class SwitchConnection:
     role_version: int = 0
     # The role's port list names the VLAN interfaces (needs interface-vlan on).
     role_vlan_interfaces: bool = False
+    # The role's port list names the NVE interface (needs the nve feature on).
+    role_nve: bool = False
     # As last read from the switch (dashboard, connection test); empty until then.
     switch_model: str = ""
     nxos_version: str = ""
@@ -72,6 +103,104 @@ class SwitchConnection:
     def changes_enabled(self) -> bool:
         """True once NXray's account has been given the port-changes role."""
         return self.changes_enabled_at is not None
+
+    @property
+    def broad_role_behind(self) -> bool:
+        """True when the account has a broad role written before its EEM denies
+        (``BROAD_EEM_DENY_VERSION``): Update the port list on the Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_EEM_DENY_VERSION
+        )
+
+    @property
+    def broad_role_without_loopbacks(self) -> bool:
+        """True when the account has a broad role written before its port list named the
+        loopbacks (``BROAD_LOOPBACK_VERSION``): Update the port list on the Switch page
+        adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_LOOPBACK_VERSION
+        )
+
+    @property
+    def broad_role_without_itd_statistics(self) -> bool:
+        """True when the account has a broad role written before it allowed ITD's counters
+        (``BROAD_ITD_VERSION``): Update the port list on the Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_ITD_VERSION
+        )
+
+    @property
+    def broad_role_without_nat_clear(self) -> bool:
+        """True when the account has a broad role written before it allowed clearing NAT's
+        translations and counters (``BROAD_NAT_VERSION``): Update the port list on the
+        Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_NAT_VERSION
+        )
+
+    @property
+    def broad_role_without_epbr_clear(self) -> bool:
+        """True when the account has a broad role written before it allowed clearing ePBR's
+        counters (``BROAD_EPBR_VERSION``): Update the port list on the Switch page adds
+        it."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_EPBR_VERSION
+        )
+
+    @property
+    def broad_role_without_snooping_clear(self) -> bool:
+        """True when the account has a broad role written before it allowed clearing IGMP
+        snooping's groups and counters (``BROAD_SNOOPING_CLEAR_VERSION``): Update the port
+        list on the Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_SNOOPING_CLEAR_VERSION
+        )
+
+    @property
+    def broad_role_without_vmtracker_refresh(self) -> bool:
+        """True when the account has a broad role written before it allowed syncing a VM
+        Tracker connection now (``BROAD_VMTRACKER_VERSION``): Update the port list on the
+        Switch page adds it."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_VMTRACKER_VERSION
+        )
+
+    @property
+    def broad_role_without_ngoam_tools(self) -> bool:
+        """True when the account has a broad role written before it allowed VXLAN OAM's
+        ping, traceroute and pathtrace, counters' clears and loop detection's probe and
+        bring-up (``BROAD_NGOAM_VERSION``): Update the port list on the Switch page adds
+        them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_NGOAM_VERSION
+        )
+
+    @property
+    def broad_role_without_snapshots(self) -> bool:
+        """True when the account has a broad role written before it allowed taking and
+        deleting a snapshot (``BROAD_MAINTENANCE_VERSION``): Update the port list on the
+        Switch page adds them."""
+        return (
+            self.changes_enabled
+            and self.role_mode == ROLE_BROAD
+            and self.role_version < BROAD_MAINTENANCE_VERSION
+        )
 
     @property
     def vlan_changes_enabled(self) -> bool:
@@ -111,6 +240,239 @@ class SwitchConnection:
         """True once the role also names the VLAN interfaces in its port list, which
         the switch takes only while interface-vlan is on."""
         return self.layer3_changes_enabled and self.role_vlan_interfaces
+
+    @property
+    def vxlan_changes_enabled(self) -> bool:
+        """True once that role includes the VXLAN rules and names the NVE interface in
+        its port list (role version 20 or later, with the nve feature on when it was
+        written)."""
+        return self.changes_enabled and self.role_version >= 20 and self.role_nve
+
+    @property
+    def monitor_changes_enabled(self) -> bool:
+        """True when NXray may make monitor sessions: with the broad role, or the stored
+        admin login, which both allow every configuration command. The limited role has
+        a rule for each command and no rule numbers left for these (a role holds 256)."""
+        return self.changes_enabled and self.role_mode in (ROLE_BROAD, ROLE_STORED)
+
+    @property
+    def qos_changes_enabled(self) -> bool:
+        """True when NXray may make QoS class-maps and policy-maps: the same as for monitor
+        sessions (the broad role or the stored admin login; the limited role has no rule
+        numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def pfc_changes_enabled(self) -> bool:
+        """True when NXray may change priority flow control: the same as for monitor
+        sessions (the broad role or the stored admin login; the limited role has no rule
+        numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def private_vlan_changes_enabled(self) -> bool:
+        """True when NXray may change private VLANs: the same as for monitor sessions (the
+        broad role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def udld_changes_enabled(self) -> bool:
+        """True when NXray may change UDLD: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def vtp_changes_enabled(self) -> bool:
+        """True when NXray may change VTP: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def dot1x_changes_enabled(self) -> bool:
+        """True when NXray may change 802.1X: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def ip_sla_changes_enabled(self) -> bool:
+        """True when NXray may change IP SLA: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rule numbers left)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def errdisable_changes_enabled(self) -> bool:
+        """True when NXray may change errdisable detection and recovery: the same as for
+        monitor sessions (the broad role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def callhome_changes_enabled(self) -> bool:
+        """True when NXray may change Call Home: the same as for monitor sessions (the broad
+        role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def scheduler_changes_enabled(self) -> bool:
+        """True when NXray may make scheduler jobs and schedules: the same as for monitor
+        sessions (the broad role or the stored admin login). A job runs as the account
+        that made it, so with the broad role its commands keep that role's limits."""
+        return self.monitor_changes_enabled
+
+    @property
+    def loopback_changes_enabled(self) -> bool:
+        """True when NXray may change loopbacks: the same as for monitor sessions (the broad
+        role, whose port list names them, or the stored admin login; the limited role's
+        port list does not name them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def eem_changes_enabled(self) -> bool:
+        """True when NXray may change EEM: with the stored admin login only. An applet's
+        commands run as the switch's admin, so the broad role denies EEM."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
+    def pbr_changes_enabled(self) -> bool:
+        """True when NXray may change policy-based routing: the same as for monitor sessions
+        (the broad role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def itd_changes_enabled(self) -> bool:
+        """True when NXray may change ITD: the same as for monitor sessions (the broad role or
+        the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def nat_changes_enabled(self) -> bool:
+        """True when NXray may change NAT: the same as for monitor sessions (the broad role or
+        the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def epbr_changes_enabled(self) -> bool:
+        """True when NXray may change enhanced policy-based routing: the same as for monitor
+        sessions (the broad role or the stored admin login; the limited role has no rules for
+        it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def multicast_changes_enabled(self) -> bool:
+        """True when NXray may change IGMP snooping, non-blocking multicast and multicast
+        over VXLAN: the same as for monitor sessions (the broad role or the stored admin
+        login; the limited role has no rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def layer2_changes_enabled(self) -> bool:
+        """True when NXray may change Flex Links, VM Tracker and Edge Virtual Bridging: the
+        same as for monitor sessions (the broad role or the stored admin login; the limited
+        role has no rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def vxlan_extra_changes_enabled(self) -> bool:
+        """True when NXray may change VXLAN tunnel encryption and VXLAN OAM and run its tools:
+        the same as for monitor sessions (the broad role or the stored admin login; the
+        limited role has no rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def track_changes_enabled(self) -> bool:
+        """True when NXray may change tracked objects: the same as for monitor sessions (the
+        broad role or the stored admin login; the limited role has no rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def mpls_changes_enabled(self) -> bool:
+        """True when NXray may change MPLS: the same as for monitor sessions (the broad role
+        or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def programmability_changes_enabled(self) -> bool:
+        """True when NXray may change gRPC, NETCONF and NX-SDK settings: the same as for
+        monitor sessions (the broad role or the stored admin login; the limited role has no
+        rules for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def licensing_changes_enabled(self) -> bool:
+        """True when NXray may change Smart Licensing: the same as for monitor sessions (the
+        broad role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def twamp_changes_enabled(self) -> bool:
+        """True when NXray may change the TWAMP server: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def system_settings_changes_enabled(self) -> bool:
+        """True when NXray may change the switch-wide settings: the same as for monitor
+        sessions (the broad role or the stored admin login; the limited role has no rules
+        for them)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def rmon_changes_enabled(self) -> bool:
+        """True when NXray may change RMON events and alarms: the same as for monitor sessions
+        (the broad role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def analytics_changes_enabled(self) -> bool:
+        """True when NXray may change flow analytics: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def maintenance_changes_enabled(self) -> bool:
+        """True when NXray may change maintenance mode's settings and snapshots: the same as
+        for monitor sessions (the broad role or the stored admin login; the limited role has no
+        rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def ptp_changes_enabled(self) -> bool:
+        """True when NXray may change PTP: the same as for monitor sessions (the broad role
+        or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def telemetry_changes_enabled(self) -> bool:
+        """True when NXray may change telemetry: the same as for monitor sessions (the broad
+        role or the stored admin login; the limited role has no rules for it)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def aaa_changes_enabled(self) -> bool:
+        """True when NXray may change AAA (sign-in methods, RADIUS, TACACS+): with the
+        stored admin login only. These decide who may sign in, so the broad role denies
+        them."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
+    def pki_changes_enabled(self) -> bool:
+        """True when NXray may change the SSH host key, key pairs and trustpoints: the
+        same as for monitor sessions (the broad role or the stored admin login)."""
+        return self.monitor_changes_enabled
+
+    @property
+    def file_changes_enabled(self) -> bool:
+        """True when NXray may copy, delete and install files on bootflash and collect
+        tech-support: with the stored admin login only. These are commands outside
+        configuration mode the broad role does not permit, and SCP signs in as the
+        account that copies."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
+
+    @property
+    def tunnel_changes_enabled(self) -> bool:
+        """True when NXray may change tunnel interfaces: with the stored admin login only.
+        The broad role lists the interfaces it may change, and the switch refuses to list
+        tunnels while tunnel is off, so the role cannot name them."""
+        return self.changes_enabled and self.role_mode == ROLE_STORED
 
     @property
     def vrf_changes_enabled(self) -> bool:
@@ -165,6 +527,11 @@ class SwitchConnection:
         """True once that role includes the reset rule (role version 16 or later):
         putting a port or a port-channel back to how it came out of the box."""
         return self.changes_enabled and self.role_version >= 16
+
+    @property
+    def vpc_changes_enabled(self) -> bool:
+        """True once that role includes the vPC rules (role version 19 or later)."""
+        return self.changes_enabled and self.role_version >= 19
 
     @property
     def can_restart(self) -> bool:
@@ -236,6 +603,7 @@ def _connection(row: sqlite3.Row) -> SwitchConnection:
         unsaved_changes=bool(row["unsaved_changes"]),
         role_version=row["role_version"],
         role_vlan_interfaces=bool(row["role_vlan_interfaces"]),
+        role_nve=bool(row["role_nve"]),
         switch_model=row["switch_model"],
         nxos_version=row["nxos_version"],
         sflow_agent=row["sflow_agent"],
@@ -277,9 +645,11 @@ def set_changes_enabled(
     role_version: int,
     vlan_interfaces: bool | None = None,
     role_mode: str | None = None,
+    nve: bool | None = None,
 ) -> None:
     """Record that port changes are on with the given role version, and whether
-    its port list names the VLAN interfaces (None keeps what is stored).
+    its port list names the VLAN interfaces and the NVE interface (None keeps what
+    is stored).
     ``role_mode`` (None keeps it) is stored with ``BROAD_ROLE_VERSION`` as the
     version for a broad role; the admin login is kept by ``set_admin_login``.
 
@@ -295,6 +665,7 @@ def set_changes_enabled(
                paused_until = MAX(COALESCE(paused_until, 0), ?),
                role_version = ?,
                role_vlan_interfaces = COALESCE(?, role_vlan_interfaces),
+               role_nve = COALESCE(?, role_nve),
                role_mode = COALESCE(?, role_mode)
          WHERE id = ?
         """,
@@ -303,6 +674,7 @@ def set_changes_enabled(
             until,
             BROAD_ROLE_VERSION if role_mode == ROLE_BROAD else role_version,
             None if vlan_interfaces is None else int(vlan_interfaces),
+            None if nve is None else int(nve),
             role_mode,
             switch_id,
         ),
@@ -314,7 +686,7 @@ def set_changes_off(conn: sqlite3.Connection, switch_id: int) -> None:
     """Record that port changes are off (the role is gone from the switch)."""
     conn.execute(
         "UPDATE switch_connection SET changes_enabled_at = NULL, role_version = 0, "
-        "role_vlan_interfaces = 0, role_mode = 'limited', admin_user = '', "
+        "role_vlan_interfaces = 0, role_nve = 0, role_mode = 'limited', admin_user = '', "
         "admin_password_encrypted = '', admin_ssh_port = 22 WHERE id = ?",
         (switch_id,),
     )
@@ -509,7 +881,16 @@ def load_target(conn: sqlite3.Connection, switch_id: int | None, secret_key: str
 
 
 __all__ = [
+    "BROAD_EEM_DENY_VERSION",
+    "BROAD_EPBR_VERSION",
+    "BROAD_ITD_VERSION",
+    "BROAD_LOOPBACK_VERSION",
+    "BROAD_MAINTENANCE_VERSION",
+    "BROAD_NAT_VERSION",
+    "BROAD_NGOAM_VERSION",
     "BROAD_ROLE_VERSION",
+    "BROAD_SNOOPING_CLEAR_VERSION",
+    "BROAD_VMTRACKER_VERSION",
     "ROLE_BROAD",
     "ROLE_LIMITED",
     "ROLE_MODES",

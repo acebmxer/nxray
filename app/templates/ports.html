@@ -255,7 +255,7 @@
         </select>
         {% endfor %}
       </div>
-      {% if neighbors and not neighbors.lldp_enabled %}<p class="note">LLDP is off for the whole switch, so it can be set per port only once it is on{% if role == "admin" %} (<a href="/features">Features page</a>){% endif %}.</p>{% endif %}
+      {% if neighbors and not neighbors.lldp_enabled %}<p class="note">LLDP is off for the whole switch, so it can be set per port only once it is on{% if role == "admin" %} (<a href="/features#{{ feature_anchor('lldp') }}">Features page</a>){% endif %}.</p>{% endif %}
     </section>
     {% endif %}
     <div class="drawer-part bulk-config">
@@ -340,7 +340,10 @@
         <dt>Out now</dt><dd>{{ port.out_bits_per_second|rate }}</dd>
         <dt>Received</dt><dd>{{ port.in_bytes|bytes }}</dd>
         <dt>Sent</dt><dd>{{ port.out_bytes|bytes }}</dd>
-        <dt>Errors</dt><dd>{{ "{:,}".format(port.errors) }}</dd>
+        <dt>Errors</dt><dd>{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>{% else %}0{% endif %}</dd>
+        {% for kind, number in port.error_kinds %}
+        <dt class="err-kind">{{ kind }}</dt><dd class="err-kind"><span class="errs">{{ "{:,}".format(number) }}</span></dd>
+        {% endfor %}
       </dl>
     </section>
     <section class="drawer-part">

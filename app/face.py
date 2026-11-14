@@ -76,6 +76,37 @@ _SPEED_CLASSES = {
 }
 
 
+# Words for the colours of the Traffic and Errors views, shared by port_colour
+# and the legends below.
+_NO_LINK = ("f-none", "No link")
+_TRAFFIC = (
+    ("f-t0", "Up, under 1 % of the link"),
+    ("f-t1", "1 to 10 %"),
+    ("f-t2", "10 to 50 %"),
+    ("f-t3", "50 % of the link or more"),
+)
+_ERRORS = (
+    ("f-err", "Errors or discards counted"),
+    ("f-clean", "Up, no errors"),
+    ("f-none", "No link, no errors"),
+)
+_SPEED_LEGEND = (*_SPEED_CLASSES.values(), _NO_LINK)
+
+# Every colour a fixed-colour view can use, so its legend always shows all of
+# them. VLAN and port-channel colours depend on the switch and are not listed.
+_FULL_LEGENDS = {
+    "state": (
+        *((css, f"Up, {words}") for css, words in _SPEED_CLASSES.values()),
+        ("f-down", "Down: something is plugged in, no link"),
+        ("f-empty", "Empty: nothing plugged in"),
+        ("f-off", "Turned off"),
+    ),
+    "speed": _SPEED_LEGEND,
+    "traffic": (_NO_LINK, *_TRAFFIC),
+    "errors": _ERRORS,
+}
+
+
 @dataclass(frozen=True)
 class LegendEntry:
     css: str
@@ -185,7 +216,7 @@ def channel_colours(neighbors: NeighborView | None) -> dict[str, int]:
 def speed_class(port: Port) -> tuple[str, str]:
     """(CSS class, words) for the speed a port runs at; f-none when it has no link."""
     if not port.up:
-        return "f-none", "No link"
+        return _NO_LINK
     known = _SPEED_CLASSES.get(port.bandwidth_bits)
     if known:
         return known
@@ -213,22 +244,20 @@ def port_colour(
         return "f-none", "Not in a port-channel"
     if mode == "traffic":
         if not port.up:
-            return "f-none", "No link"
+            return _NO_LINK
         busiest = max(port.in_bits_per_second, port.out_bits_per_second)
         share = busiest / port.bandwidth_bits if port.bandwidth_bits else 0.0
         if share >= 0.5:
-            return "f-t3", "50 % of the link or more"
+            return _TRAFFIC[3]
         if share >= 0.1:
-            return "f-t2", "10 to 50 %"
+            return _TRAFFIC[2]
         if share >= 0.01:
-            return "f-t1", "1 to 10 %"
-        return "f-t0", "Up, under 1 % of the link"
+            return _TRAFFIC[1]
+        return _TRAFFIC[0]
     if mode == "errors":
         if port.errors:
-            return "f-err", "Errors or discards counted"
-        if port.up:
-            return "f-clean", "Up, no errors"
-        return "f-none", "No link, no errors"
+            return _ERRORS[0]
+        return _ERRORS[1] if port.up else _ERRORS[2]
     if mode == "vlan":
         faded = "" if port.up else " f-faded"
         if port.vlan == "trunk":
@@ -241,7 +270,9 @@ def port_colour(
             return f"f-vlan s{colours[port.vlan]}{faded}", words
         return "f-none" + faded, "No VLAN"
     if port.up:
-        return "f-up", "Up"
+        # The cage shows the speed; the light in its corner shows it is up.
+        css, speed = speed_class(port)
+        return css, f"Up, {speed}"
     if not port.admin_up:
         return "f-off", "Turned off"
     if port.transceiver.present:
@@ -358,6 +389,9 @@ def draw_face(
     left = _PAD + (_BADGE if model else 0)
     cages, width, height = panel_layout(ports, left)
     counts: dict[tuple[str, str], int] = {}
+    # Every colour the view can use is in the legend, even with no port in it.
+    for key in _FULL_LEGENDS.get(mode, ()):
+        counts[key] = 0
     parts = [
         f'<svg class="face" viewBox="0 0 {width:.0f} {height:.0f}" role="group" '
         f'aria-label="Front panel" xmlns="http://www.w3.org/2000/svg">',
@@ -446,16 +480,15 @@ def draw_face(
 
 
 _ORDER = (
-    "f-up",
-    "f-down",
-    "f-empty",
-    "f-off",
     "f-1g",
     "f-10g",
     "f-25g",
     "f-40g",
     "f-100g",
     "f-other",
+    "f-down",
+    "f-empty",
+    "f-off",
     "f-t0",
     "f-t1",
     "f-t2",

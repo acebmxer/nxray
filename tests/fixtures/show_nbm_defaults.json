@@ -1,0 +1,27 @@
+{
+ "TABLE_vrf": {
+  "ROW_vrf": {
+   "vrfName": "default",
+   "contextId": 1,
+   "bandwidthInKbps": 100,
+   "dscp": 46,
+   "qid": 7,
+   "policer": "Disabled",
+   "operModeCache": "TOR_PIM_A",
+   "operMode": "TOR_PIM_A",
+   "unicastFabricBandwidth": 10,
+   "ResBwRxOnly": 1,
+   "numAsmGroup": 1,
+   "senderPolicy": "Permit",
+   "localReceiverPolicy": "Permit",
+   "externalReceiverPolicy": "Permit",
+   "TABLE_ASM": {
+    "ROW_ASM": {
+     "groupId": 1,
+     "groupPrefix": "239.250.0.0",
+     "groupMaskLen": 16
+    }
+   }
+  }
+ }
+}

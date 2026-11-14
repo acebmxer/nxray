@@ -1,0 +1,10 @@
+{
+  "gptp-flag": 0,
+  "ptp-end": "PTP-END",
+  "TABLE_ptp": {
+    "ROW_ptp": {
+      "ptp-ifindex": "Eth1/5 (unicast)",
+      "state": "disabled"
+    }
+  }
+}

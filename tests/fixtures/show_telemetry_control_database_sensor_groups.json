@@ -1,0 +1,30 @@
+{
+  "sensor_grp_db_size": 1,
+  "TABLE_sensor_grp": {
+    "ROW_sensor_grp": {
+      "snsr_grp_row_idx": 1,
+      "snsr_grp_id": 250,
+      "snsr_grp_type": "Timer",
+      "snsr_grp_collector_type": "DME",
+      "snsr_grp_timer_interval": 30000,
+      "snsr_grp_timer_status": "Running",
+      "snsr_grp_sub_count": 1,
+      "snsr_grp_sub_id": 250,
+      "snsr_grp_dc_cur_time": 0,
+      "snsr_grp_dc_min_time": 0,
+      "snsr_grp_dc_max_time": 0,
+      "snsr_grp_enc_cur_time": 0,
+      "snsr_grp_enc_min_time": 0,
+      "snsr_grp_enc_max_time": 0,
+      "snsr_grp_trans_cur_time": 0,
+      "snsr_grp_trans_min_time": 0,
+      "snsr_grp_trans_max_time": 0,
+      "snsr_grp_stream_cur_time": 0,
+      "snsr_grp_stream_min_time": 0,
+      "snsr_grp_stream_max_time": 0,
+      "snsr_grp_stream_col_id_drop": 0,
+      "snsr_grp_stream_last_col_id_drop": 0,
+      "snsr_grp_stream_col_drop": 0
+    }
+  }
+}

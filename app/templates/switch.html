@@ -31,7 +31,7 @@
     </label>
     <p class="hint">
       Any configuration command and any show command, except configuration of
-      accounts, roles, AAA, TACACS+, RADIUS and the boot image. New features need
+      accounts, roles, AAA, TACACS+, RADIUS, the boot image and EEM applets. New features need
       no role update, and the account is still limited to the ports the role
       names. Tradeoff: the account can change any other setting on the switch.
     </p>
@@ -41,8 +41,10 @@
     </label>
     <p class="hint">
       The same rules as the limited role. NXray keeps the switch admin login
-      typed below, encrypted like its own account's password, and adds new rules
-      itself after an update. Tradeoff: a stolen NXray database then exposes the
+      typed below, encrypted like its own account's password, adds new rules
+      itself after an update, and sends with it the changes of the pages that need
+      every configuration command (EEM, Scheduler, QoS and the like). Tradeoff: a
+      stolen NXray database then exposes the
       switch's real admin login, not only the low-privilege account.
     </p>
   </fieldset>
@@ -211,7 +213,7 @@
       alone for about 11 minutes: the switch only applies the new role to an
       account it has not heard from for a while, so the pages show a waiting
       message until then. This wait happens once: after it, port, VLAN, port
-      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes take effect straight
+      settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes take effect straight
       away, with no further waits.
     </p>
     <label class="check">
@@ -235,7 +237,7 @@
 {% endmacro %}
 
 <section class="card">
-  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes</h2>
+  <h2 class="card-title">Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes</h2>
   {% if connection.changes_enabled %}
   {% if connection.settings_changes_enabled %}
   <p class="lead">
@@ -307,13 +309,15 @@
     Now: <strong>{{ role_mode_words[connection.role_mode] }}</strong>.
     {% if connection.role_mode == "broad" %}
     The role permits any configuration command and any show command on the ports
-    it names, except configuration of accounts, roles, AAA, TACACS+, RADIUS and
-    the boot image. New features need no role update, but the account can
-    change any other setting on the switch.
+    it names, except configuration of accounts, roles, AAA, TACACS+, RADIUS, the
+    boot image and EEM applets. New features need no role update, but the account
+    can change any other setting on the switch.
     {% elif connection.role_mode == "stored" %}
     The role has the listed rules only, and the switch admin login
     ({{ connection.admin_user }}) is stored, encrypted. NXray adds new rules
-    itself after an update; a stolen NXray database would expose that login.
+    itself after an update, and sends with it the changes of the pages that need
+    every configuration command (EEM, Scheduler, QoS and the like); a stolen NXray
+    database would expose that login.
     {% else %}
     The role has the listed rules only. After an update that adds rules, an
     admin presses Update the port list; the banner says when.
@@ -414,6 +418,72 @@
 {% endif %}
 <section class="card">
   <h2 class="card-title">Update the port list</h2>
+  {% if connection.broad_role_behind %}
+  <p class="warning">
+    NXray's broad role on the switch was written by an older NXray and does not
+    deny EEM applets yet. An applet's commands run as the switch's admin, so
+    with it the account could get past the other denies. Press Update the port
+    list to write the role again with the deny; EEM changes then need the stored
+    admin login.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_itd_statistics %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed ITD's counters,
+    so the switch refuses Count the traffic and Clear the counters on the ITD page.
+    Press Update the port list to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_nat_clear %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed clearing NAT's
+    translations and counters, so the switch refuses the Clear buttons on the NAT
+    page. Press Update the port list to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_epbr_clear %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed clearing ePBR's
+    counters, so the switch refuses Clear the counters on the Enhanced policy routing
+    page. Press Update the port list to write the role again with it.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_snooping_clear %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed clearing IGMP
+    snooping's groups and counters, so the switch refuses the Clear buttons on the IGMP
+    snooping page. Press Update the port list to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_vmtracker_refresh %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed syncing a VM Tracker
+    connection now, so the switch refuses Sync now on the VM Tracker page. Press Update
+    the port list to write the role again with it.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_ngoam_tools %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed VXLAN OAM's ping,
+    traceroute and pathtrace, so the switch refuses them, the counters' Clear buttons and
+    loop detection's probe and bring-up on the VXLAN OAM page. Press Update the port list
+    to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_snapshots %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it allowed taking and deleting a
+    snapshot, so the switch refuses them on the Maintenance mode page. Press Update the
+    port list to write the role again with them.
+  </p>
+  {% endif %}
+  {% if connection.broad_role_without_loopbacks %}
+  <p class="warning">
+    NXray's broad role on the switch was written before it named the loopbacks,
+    so the switch refuses NXray's changes on the Loopbacks page. Press Update
+    the port list to write the role again with them.
+  </p>
+  {% endif %}
   {% if not connection.role_vlan_interfaces %}
   <p class="warning">
     NXray's role does not name the VLAN interfaces yet: interface-vlan was off
@@ -424,7 +494,7 @@
   {% endif %}
   <p class="lead">
     NXray's role names every front port it may change one by one, and the
-    VLAN interfaces. After a 100G
+    VLAN interfaces{% if connection.role_mode == "broad" %} and the loopbacks{% endif %}. After a 100G
     port is split into four, or four split ports are joined again, the role
     does not name the new ports yet, and the switch refuses NXray's changes to
     them. {% if connection.role_mode == "stored" %}NXray signs in to the switch
@@ -438,7 +508,7 @@
 {% else %}
   <p class="lead">
     Off: NXray's account can only read. Turning port, VLAN, port settings,
-    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes on gives it a role
+    feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes on gives it a role
     ({{ role_name }}) that allows exactly this: on the front ports, port-channels
     and VLAN interfaces only,
     turning a port on or off, editing its description, setting its mode
@@ -483,7 +553,7 @@
     The admin password is used for this only and never stored, unless you pick
     the option to store it.
   </p>
-  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart changes", true, true) }}
+  {{ admin_form("Turn on port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes", true, true) }}
 </section>
 {% endif %}
 

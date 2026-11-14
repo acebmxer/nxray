@@ -23,14 +23,26 @@ timers, graceful restart, confederation, route reflector cluster ID and
 safety checks; the VRF parts (each VRF's own router ID, timers, local AS);
 the address families of the process and of each VRF (networks, aggregates,
 redistribution through a route-map, maximum paths, distance, default route,
-dampening, additional paths, next-hop and table maps); neighbors (remote AS,
-description, update source, multihop, timers, password, BFD, shutdown, local
-AS, private AS removal and the session options) and each neighbor's address
-families (route-maps, prefix-lists, filter-lists, soft reconfiguration,
-next-hop-self, communities, route reflector client, maximum prefixes,
-allowas-in, default route, weight, AS override, unsuppress-map).
-Route-maps, prefix-lists and AS-path lists are made on the Routing policy
-page; here they are named.
+dampening, additional paths, next-hop and table maps, MPLS labels for every
+route); the VPN address families of the process (``vpnv4 unicast``, ``vpnv6
+unicast``) for Layer 3 VPNs over segment routing (MPLS page); neighbors (remote
+AS, description, update source, multihop, timers, password, BFD, shutdown,
+local AS, private AS removal and the session options) and each neighbor's
+address families, labelled unicast, the VPN families and the VXLAN overlay families
+(``l2vpn evpn``, ``ipv4 mvpn``) included (route-maps,
+prefix-lists, filter-lists, soft reconfiguration, next-hop-self, communities,
+route reflector client, maximum prefixes, allowas-in, default route, weight,
+AS override, unsuppress-map). Route-maps, prefix-lists and AS-path lists are
+made on the Routing policy page; here they are named.
+
+The VPN and labelled-unicast lines (``address-family vpnv4|vpnv6 unicast``,
+``allocate-label option-b``, ``allocate-label all``, a neighbor's
+``address-family ipv4 labeled-unicast``) follow Cisco's NX-OS 9.3 Label
+Switching guide ("Configuring Segment Routing") and were not tried on a
+switch: cisco-25gb refuses ``feature mpls l3vpn`` while VXLAN is on. The overlay families
+(a neighbor's ``address-family l2vpn evpn`` and ``ipv4 mvpn``, and ``rewrite-rt-asn``) follow
+Cisco's NX-OS 9.3 VXLAN guide ("Configure Tenant Routed Multicast") and were not tried on a
+switch either: the probe that would have turned BGP and EVPN on was not run.
 
 Tried on cisco-25gb (NX-OS 9.3(16)) as NXray's restricted account, all
 accepted: ``router bgp 65001`` with ``router-id``, ``log-neighbor-changes``,
@@ -66,14 +78,23 @@ from app.protocols import (
     route_age,
     source_field,
     table_rows,
-    text,
     vrf_field,
 )
 from app.routing import long_name
+from app.switch import is_enabled, row_vrf, text
 
 # ---- fields ----------------------------------------------------------------------
 
 ADDRESS_FAMILIES = ("ipv4 unicast", "ipv6 unicast", "ipv4 multicast", "ipv6 multicast")
+# Layer 3 VPN routes over MPLS (the MPLS page): the process's own families, default VRF only.
+VPN_FAMILIES = ("vpnv4 unicast", "vpnv6 unicast")
+# What a neighbor may exchange: the above, and IPv4 routes with their MPLS labels.
+LABELED_UNICAST = "ipv4 labeled-unicast"
+# The VXLAN EVPN overlay's families (Multicast over VXLAN page, VXLAN page): EVPN routes and
+# tenant routed multicast's MVPN routes, default VRF only. The process's own part of them is
+# on the Multicast over VXLAN page.
+OVERLAY_FAMILIES = ("ipv4 mvpn", "l2vpn evpn")
+NEIGHBOR_FAMILIES = (*ADDRESS_FAMILIES, LABELED_UNICAST, *VPN_FAMILIES, *OVERLAY_FAMILIES)
 
 
 def _asn_field() -> Field:
@@ -86,14 +107,11 @@ def _asn_field() -> Field:
     )
 
 
-def _af_field() -> Field:
-    return Field(
-        "af",
-        "Address family",
-        "choice",
-        choices=ADDRESS_FAMILIES,
-        hint="Which kind of routes: IPv4 or IPv6, unicast (normal) or multicast",
-    )
+def _af_field(
+    choices: tuple[str, ...] = ADDRESS_FAMILIES,
+    hint: str = "Which kind of routes: IPv4 or IPv6, unicast (normal) or multicast",
+) -> Field:
+    return Field("af", "Address family", "choice", choices=choices, hint=hint)
 
 
 def _neighbor_field() -> Field:
@@ -494,6 +512,25 @@ _AF_SETTINGS = (
         help="A route-map applied to BGP routes on their way into the routing table",
         group="Maps",
     ),
+    Setting(
+        "allocate_label_all",
+        "MPLS labels for every route",
+        "allocate-label all",
+        help="IPv4 unicast in the default VRF: give BGP's routes MPLS labels, for "
+        "neighbors that exchange labelled unicast (segment routing, on the MPLS page)",
+        group="Labels",
+    ),
+)
+
+_VPN_AF_SETTINGS = (
+    Setting(
+        "allocate_label_option_b",
+        "Labels for inter-AS option B",
+        "allocate-label option-b",
+        help="Hand out labels for VPN routes passed on to another AS (inter-AS option B); "
+        "removing it turns that off",
+        group="Labels",
+    ),
 )
 
 # ---- neighbor settings -----------------------------------------------------------
@@ -805,6 +842,14 @@ _NEIGHBOR_AF_SETTINGS = (
         group="Loops",
     ),
     Setting(
+        "rewrite_rt_asn",
+        "Rewrite route-targets' AS",
+        "rewrite-rt-asn",
+        help="l2vpn evpn and ipv4 mvpn: put this switch's AS into the route-targets of routes "
+        "from an eBGP neighbor (Cisco's spine setting for multicast over VXLAN)",
+        group="Loops",
+    ),
+    Setting(
         "suppress_inactive",
         "Only active routes",
         "suppress-inactive",
@@ -875,10 +920,38 @@ NEIGHBOR = Scope(
     "family to it, or no routes are exchanged.",
 )
 
+VPN_AF = Scope(
+    "vpn_af",
+    "VPN address family",
+    (
+        _asn_field(),
+        _af_field(VPN_FAMILIES, "vpnv4 for IPv4 VPN routes, vpnv6 for IPv6 VPN routes"),
+    ),
+    (_ENTER, "address-family {af}"),
+    _VPN_AF_SETTINGS,
+    create=True,
+    create_label="Add a VPN address family",
+    delete=(_ENTER, "no address-family {af}"),
+    delete_warning="Every Layer 3 VPN route is withdrawn from the neighbors.",
+    help="Carries the routes of Layer 3 VPNs (MPLS page) between switches, in the default "
+    "VRF. Add the same family to each VPN neighbor, with extended communities sent.",
+)
+
 NEIGHBOR_AF = Scope(
     "neighbor_af",
     "Neighbor address family",
-    (_asn_field(), vrf_field(), _neighbor_field(), _af_field()),
+    (
+        _asn_field(),
+        vrf_field(),
+        _neighbor_field(),
+        _af_field(
+            NEIGHBOR_FAMILIES,
+            "Which kind of routes: IPv4 or IPv6, unicast (normal) or multicast; labelled "
+            "unicast for IPv4 routes with their MPLS labels; vpnv4 or vpnv6 for Layer 3 VPN "
+            "routes; l2vpn evpn for VXLAN EVPN and ipv4 mvpn for multicast over VXLAN (those "
+            "five in the default VRF only)",
+        ),
+    ),
     (_ENTER, _IN_VRF, "neighbor {address}", "address-family {af}"),
     _NEIGHBOR_AF_SETTINGS,
     create=True,
@@ -891,14 +964,23 @@ NEIGHBOR_AF = Scope(
 # ---- parsing ---------------------------------------------------------------------
 
 
-def _true(value: Any) -> bool:
-    return text(value).lower() in ("true", "yes", "enabled")
-
-
 def _af_name(value: Any) -> str:
-    """'IPv4 Unicast' -> 'ipv4 unicast' (the words the address-family line takes)."""
+    """'IPv4 Unicast' -> 'ipv4 unicast' (the words the address-family line takes);
+    'IPv4 Label Unicast' -> 'ipv4 labeled-unicast'; "" for a family NXray does not offer.
+
+    The labelled unicast name is the one Cisco's guide shows (``show bgp ipv4
+    labeled-unicast``); the VPN names follow the same pattern, not seen on a switch."""
     name = " ".join(text(value).lower().split())
-    return name if name in ADDRESS_FAMILIES else ""
+    name = re.sub(r"^ipv4 label(?:ed)?[ -]unicast$", LABELED_UNICAST, name)
+    return name if name in NEIGHBOR_FAMILIES else ""
+
+
+def _af_scope(af: str) -> str:
+    """The scope a family of the process (or a VRF part) belongs to: "af", "vpn_af", or ""
+    for labelled unicast, which only neighbors have."""
+    if af in VPN_FAMILIES:
+        return "vpn_af"
+    return "af" if af in ADDRESS_FAMILIES else ""
 
 
 def _af_label(af: str) -> str:
@@ -912,8 +994,8 @@ def _set_id(value: Any) -> str:
     return "" if found in ("", "0", "0.0.0.0") else found
 
 
-def _vrf_name(row: dict[str, Any]) -> str:
-    return text(row.get("vrf-name-out")) or "default"
+# The key a BGP row names its VRF under.
+_VRF_KEYS = ("vrf-name-out",)
 
 
 def _redistribution(row: dict[str, Any]) -> tuple[str, dict[str, str]] | None:
@@ -944,7 +1026,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
         return [], []
     instances: list[Instance] = []
     vrf_rows = table_rows(body, "TABLE_vrf", "ROW_vrf")
-    default = next((r for r in vrf_rows if _vrf_name(r) == "default"), {})
+    default = next((r for r in vrf_rows if row_vrf(r, *_VRF_KEYS) == "default"), {})
     values: dict[str, dict[str, str]] = {}
     if router_id := _set_id(default.get("vrf-cfgd-id")):
         values["router_id"] = {"router_id": router_id}
@@ -973,7 +1055,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
     )
     vrfs = []
     for row in vrf_rows:
-        vrf = _vrf_name(row)
+        vrf = row_vrf(row, *_VRF_KEYS)
         vrfs.append(vrf)
         if vrf != "default":
             vrf_values = {}
@@ -1000,7 +1082,10 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
             )
         for af_row in table_rows(row, "TABLE_af", "ROW_af"):
             af = _af_name(af_row.get("af-name"))
-            if not af:
+            scope = _af_scope(af)
+            if scope == "vpn_af" and vrf == "default":
+                instances.append(_vpn_af(asn, af, text(af_row.get("af-peer-routes")), af_row))
+            if scope != "af":
                 continue
             af_values: dict[str, dict[str, str]] = {}
             redistributed = []
@@ -1014,7 +1099,7 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
                 )
                 if found and found[0] not in af_values:
                     af_values[found[0]] = found[1]
-            if _true(af_row.get("default-information-enabled")):
+            if is_enabled(af_row.get("default-information-enabled")):
                 af_values["default_information"] = {}
             instances.append(
                 Instance(
@@ -1034,15 +1119,27 @@ def _process(body: dict[str, Any]) -> tuple[list[Instance], list[str]]:
     return instances, vrfs
 
 
+def _vpn_af(asn: str, af: str, routes: str, row: dict[str, Any]) -> Instance:
+    """A VPN address family of the process, from ``show bgp process`` (``af-peer-routes``,
+    ``af-num-peers``) or the summary (``totalnetworks``, ``configuredpeers``)."""
+    neighbors = text(row.get("af-num-peers")) or text(row.get("configuredpeers"))
+    return Instance(
+        "vpn_af",
+        {"asn": asn, "af": af},
+        _af_label(af).replace("vpnv", "VPNv"),
+        (("Routes", routes or "0"), ("Neighbors", neighbors or "0")),
+    )
+
+
 def _summary_vrfs(summary: dict[str, Any], sessions: dict[str, Any]) -> dict[str, dict[str, str]]:
     """Every VRF BGP has, from the summary and sessions: router ID, local AS, neighbor counts."""
     found: dict[str, dict[str, str]] = {}
     for row in table_rows(summary, "TABLE_vrf", "ROW_vrf"):
-        found.setdefault(_vrf_name(row), {}).update(
+        found.setdefault(row_vrf(row, *_VRF_KEYS), {}).update(
             {"router_id": text(row.get("vrf-router-id")), "asn": text(row.get("vrf-local-as"))}
         )
     for row in table_rows(sessions, "TABLE_vrf", "ROW_vrf"):
-        entry = found.setdefault(_vrf_name(row), {})
+        entry = found.setdefault(row_vrf(row, *_VRF_KEYS), {})
         entry.setdefault("router_id", text(row.get("router-id")))
         entry.setdefault("asn", text(row.get("local-as")))
         entry["peers"] = text(row.get("vrfpeers")) or "0"
@@ -1062,7 +1159,7 @@ def _summary_afs(summary: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]
             for saf in table_rows(af_row, "TABLE_saf", "ROW_saf"):
                 af = _af_name(saf.get("af-name"))
                 if af:
-                    found.append((_vrf_name(row), af, saf))
+                    found.append((row_vrf(row, *_VRF_KEYS), af, saf))
     return found
 
 
@@ -1084,8 +1181,8 @@ def _policies(saf: dict[str, Any], way: str) -> dict[str, dict[str, str]]:
 
 def _neighbor_af_values(saf: dict[str, Any]) -> dict[str, dict[str, str]]:
     values = {**_policies(saf, "in"), **_policies(saf, "out")}
-    if _true(saf.get("insoftreconfigallowed")):
-        always = "always" if _true(saf.get("insoftreconfigallowedalways")) else ""
+    if is_enabled(saf.get("insoftreconfigallowed")):
+        always = "always" if is_enabled(saf.get("insoftreconfigallowedalways")) else ""
         values["soft_reconfiguration"] = {"always": always}
     for key, setting in (
         ("sendcommunity", "send_community"),
@@ -1094,9 +1191,9 @@ def _neighbor_af_values(saf: dict[str, Any]) -> dict[str, dict[str, str]]:
         ("peerascheckdisabled", "disable_peer_as_check"),
         ("rrconfigured", "route_reflector_client"),
     ):
-        if _true(saf.get(key)):
+        if is_enabled(saf.get(key)):
             values[setting] = {}
-    if _true(saf.get("defaultoriginate")):
+    if is_enabled(saf.get("defaultoriginate")):
         values["default_originate"] = {"route_map": text(saf.get("defaultoriginatermap"))}
     return values
 
@@ -1121,11 +1218,11 @@ def _neighbors(body: dict[str, Any], asn: str) -> list[Instance]:
             values["description"] = {"description": description}
         if source := text(row.get("sourceif")):
             values["update_source"] = {"source": long_name(source)}
-        if _true(row.get("bfd")):
+        if is_enabled(row.get("bfd")):
             values["bfd"] = {}
-        if _true(row.get("passiveonly")):
+        if is_enabled(row.get("passiveonly")):
             values["transport_passive"] = {}
-        if _true(row.get("remove-privateas")):
+        if is_enabled(row.get("remove-privateas")):
             values["remove_private_as"] = {"mode": ""}
         state = text(row.get("state"))
         since = route_age(text(row.get("elapsedtime")))
@@ -1202,7 +1299,7 @@ def _neighbor_table(summary: dict[str, Any]) -> Table:
 def _session_table(sessions: dict[str, Any]) -> Table:
     rows = []
     for vrf_row in table_rows(sessions, "TABLE_vrf", "ROW_vrf"):
-        vrf = _vrf_name(vrf_row)
+        vrf = row_vrf(vrf_row, *_VRF_KEYS)
         for row in table_rows(vrf_row, "TABLE_neighbor", "ROW_neighbor"):
             ports = [text(row.get("localport")), text(row.get("remoteport"))]
             rows.append(
@@ -1238,7 +1335,7 @@ def _session_table(sessions: dict[str, Any]) -> Table:
 def _ipv6_table(body: dict[str, Any]) -> Table:
     rows = []
     for vrf_row in table_rows(body, "TABLE_vrf", "ROW_vrf"):
-        vrf = _vrf_name(vrf_row)
+        vrf = row_vrf(vrf_row, *_VRF_KEYS)
         for afi in table_rows(vrf_row, "TABLE_afi", "ROW_afi"):
             for safi in table_rows(afi, "TABLE_safi", "ROW_safi"):
                 prefixes = table_rows(safi, "TABLE_prefix", "ROW_prefix")
@@ -1324,8 +1421,15 @@ def parse_bgp(bodies: list[dict[str, Any]]) -> ProtocolView:
             )
         )
     seen_afs = {(i.ident["vrf"], i.ident["af"]) for i in instances if i.scope == "af"}
+    seen_vpn = {i.ident["af"] for i in instances if i.scope == "vpn_af"}
     for vrf, af, saf in _summary_afs(summary):
-        if (vrf, af) in seen_afs or not text(saf.get("tableversion")):
+        scope = _af_scope(af)
+        if not text(saf.get("tableversion")):
+            continue
+        if scope == "vpn_af" and vrf == "default" and af not in seen_vpn:
+            seen_vpn.add(af)
+            instances.append(_vpn_af(asn, af, text(saf.get("totalnetworks")), saf))
+        if scope != "af" or (vrf, af) in seen_afs:
             continue
         seen_afs.add((vrf, af))
         instances.append(
@@ -1370,7 +1474,7 @@ BGP = Protocol(
         "show bgp ipv6 unicast vrf all",
     ),
     parse=parse_bgp,
-    scopes=(PROCESS, VRF, ADDRESS_FAMILY, NEIGHBOR, NEIGHBOR_AF),
+    scopes=(PROCESS, VRF, ADDRESS_FAMILY, VPN_AF, NEIGHBOR, NEIGHBOR_AF),
     about="BGP exchanges routes between autonomous systems (AS): each network has an AS "
     "number, and BGP tells neighbors which networks it can reach. A neighbor in another "
     "AS is outside (eBGP), one in the same AS inside (iBGP). The switch runs one BGP "

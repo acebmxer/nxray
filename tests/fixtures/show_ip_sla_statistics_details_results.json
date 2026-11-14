@@ -1,0 +1,39 @@
+{
+  "TABLE_stats": {
+    "ROW_stats": [
+      {
+        "index": 9000,
+        "life-left": 94217,
+        "oper-state": "Active",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "update-count": 1,
+            "micro-accuracy": "disabled",
+            "nano-accuracy": "disabled",
+            "latest-RTT": 1,
+            "latest-return-code": 1,
+            "latest-start-time": "10:58:21.754 UTC Wed Nov 11 2026\n",
+            "outstring1": "Number of successes: 3\n",
+            "outstring2": "Number of failures: 0\n"
+          }
+        }
+      },
+      {
+        "index": 9001,
+        "life-left": 294082,
+        "oper-state": "Active",
+        "reset-time": "Never",
+        "TABLE_detail": {
+          "ROW_detail": {
+            "update-count": 1,
+            "latest-return-code": 4,
+            "latest-start-time": "10:57:36.929 UTC Wed Nov 11 2026\n",
+            "outstring1": "Number of successes: 0\n",
+            "outstring2": "Number of failures: 1\n"
+          }
+        }
+      }
+    ]
+  }
+}

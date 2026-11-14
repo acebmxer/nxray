@@ -615,3 +615,16 @@ def test_deleting_an_account_keeps_the_last_active_admin(settings: Settings) -> 
         assert get_user(conn, "boss") is None
         with pytest.raises(UserError, match="no longer exists"):
             delete_user(conn, boss.id)
+
+
+def test_may_change_follows_the_accounts_can_change() -> None:
+    from types import SimpleNamespace
+
+    from app.dependencies import may_change
+
+    def request(account: object) -> SimpleNamespace:
+        return SimpleNamespace(state=SimpleNamespace(account_looked_up=True, account=account))
+
+    assert may_change(request(SimpleNamespace(can_change=True)))
+    assert not may_change(request(SimpleNamespace(can_change=False)))
+    assert not may_change(request(None))

@@ -1,0 +1,83 @@
+{
+ "last_clear_time": "Fri Nov 13 02:48:40 2026\n",
+ "total_active_translations": 9,
+ "static_translations": 9,
+ "dynamic_translations": 0,
+ "icmp_translations": 0,
+ "total_exp_translations": 0,
+ "syn_exp_translations": 0,
+ "finrst_exp_translations": 0,
+ "inactive_exp_translations": 0,
+ "total_hits": 0,
+ "total_misses": 0,
+ "io_hits": 0,
+ "io_misses": 0,
+ "oi_hits": 0,
+ "oi_misses": 0,
+ "total_sw_translated": 0,
+ "io_sw_translated": 0,
+ "oi_sw_translated": 0,
+ "total_sw_dropped": 0,
+ "io_sw_dropped": 0,
+ "oi_sw_dropped": 0,
+ "addr_alloc_fail_drop": 0,
+ "port_alloc_fail_drop": 0,
+ "dyn_trans_maxlimit_drop": 0,
+ "icmp_maxlimit_drop": 0,
+ "allhost_maxlimit_drop": 0,
+ "total_tcp_session_created": 0,
+ "total_tcp_session_closed": 0,
+ "TABLE_NAT_inside_source_list": {
+  "ROW_NAT_inside_source_list": [
+   {
+    "nat_in_acl_name": "nat-inside",
+    "nat_in_acl_refcount": 0,
+    "nat_in_pool_name": "inside-pool",
+    "nat_pool_overload": "Overload",
+    "in_pool_total_address": 11,
+    "in_pool_allocated": 0,
+    "in_pool_allocated_percentage": "0%",
+    "in_pool_missed": 0
+   },
+   {
+    "nat_in_acl_name": "nat-pat",
+    "nat_in_acl_refcount": 0,
+    "interface_name": "loopback250",
+    "interface_status": "UP",
+    "interface_ip_addr": "198.51.100.1"
+   },
+   {
+    "nat_in_acl_name": "nat-mgmt",
+    "nat_in_acl_refcount": 0,
+    "nat_in_pool_name": "mgmt-pool",
+    "nat_pool_overload": "Overload",
+    "in_pool_total_address": 11,
+    "in_pool_allocated": 0,
+    "in_pool_allocated_percentage": "0%",
+    "in_pool_missed": 0
+   }
+  ]
+ },
+ "TABLE_NAT_outside_source_list": {
+  "ROW_NAT_outside_source_list": [
+   {
+    "nat_out_acl_name": "nat-outside",
+    "nat_out_acl_refcount": 0,
+    "nat_out_pool_name": "outside-pool",
+    "out_pool_total_address": 11,
+    "out_pool_allocated": 0,
+    "out_pool_allocated_percentage": "0%",
+    "out_pool_missed": 0
+   },
+   {
+    "nat_out_acl_name": "nat-back",
+    "nat_out_acl_refcount": 0,
+    "nat_out_pool_name": "back-pool",
+    "out_pool_total_address": 11,
+    "out_pool_allocated": 0,
+    "out_pool_allocated_percentage": "0%",
+    "out_pool_missed": 0
+   }
+  ]
+ }
+}

@@ -38,7 +38,6 @@ commands, and were never seen live.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from app.protocols import (
@@ -51,10 +50,10 @@ from app.protocols import (
     Table,
     interface_field,
     table_rows,
-    text,
     vrf_field,
 )
 from app.routing import long_name
+from app.switch import ISO_DURATION, duration_text, is_true, text
 
 # ---- fields ---------------------------------------------------------------------
 
@@ -864,9 +863,6 @@ def _interface_settings(version: int) -> tuple[Setting, ...]:
 
 # ---- reading ------------------------------------------------------------------------
 
-_DURATION = re.compile(
-    r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$"
-)
 _STATE = {
     "DOWN": "down",
     "LOOPBACK": "loopback",
@@ -884,36 +880,22 @@ def _body(bodies: list[dict[str, Any]], index: int) -> dict[str, Any]:
     return bodies[index] if index < len(bodies) and isinstance(bodies[index], dict) else {}
 
 
-def _yes(value: Any) -> bool:
-    return text(value).lower() == "true"
-
-
 def _seconds(value: Any) -> float | None:
-    match = _DURATION.match(text(value))
+    match = ISO_DURATION.match(text(value))
     if not match or not any(match.groupdict().values()):
         return None
     parts = {k: float(v) if v else 0.0 for k, v in match.groupdict().items()}
     return parts["d"] * 86400 + parts["h"] * 3600 + parts["m"] * 60 + parts["s"]
 
 
-def _duration(value: Any) -> str:
-    """ "P7DT11H59M45S" -> "7d 11h 59m 45s"; anything else as it is."""
-    raw = text(value)
-    match = _DURATION.match(raw)
-    if not match or not any(match.groupdict().values()):
-        return raw
-    shown = [f"{v}{k}" for k, v in match.groupdict().items() if v and float(v)]
-    return " ".join(shown) or "0s"
-
-
 def _area_type(row: dict[str, Any]) -> str:
-    if _yes(row.get("stub")):
-        return "stub, no summaries" if _yes(row.get("no_summary")) else "stub"
-    if _yes(row.get("nssa")):
+    if is_true(row.get("stub")):
+        return "stub, no summaries" if is_true(row.get("no_summary")) else "stub"
+    if is_true(row.get("nssa")):
         words = ["NSSA"]
-        if _yes(row.get("no_summary")):
+        if is_true(row.get("no_summary")):
             words.append("no summaries")
-        if _yes(row.get("no_redist")):
+        if is_true(row.get("no_redist")):
             words.append("no redistribution")
         return ", ".join(words)
     return "backbone" if text(row.get("aname")) == "0.0.0.0" else "normal"
@@ -942,10 +924,10 @@ def _process_values(row: dict[str, Any], version: int) -> dict[str, dict[str, st
             if mbps % 1000 == 0
             else {"bandwidth": str(mbps), "unit": "Mbps"}
         )
-    if _yes(row.get("passive_dflt")):
+    if is_true(row.get("passive_dflt")):
         values["passive_default"] = {}
-    if _yes(row.get("gr_ha")):
-        planned = "planned-only" if _yes(row.get("gr_planned_only")) else ""
+    if is_true(row.get("gr_ha")):
+        planned = "planned-only" if is_true(row.get("gr_planned_only")) else ""
         values["graceful_restart"] = {"planned_only": planned}
         grace = _seconds(row.get("gr_grace_period"))
         if grace is not None:
@@ -976,9 +958,9 @@ def _process_facts(row: dict[str, Any], areas: list[dict[str, Any]]) -> tuple[tu
         ),
     ]
     roles = []
-    if _yes(row.get("is_abr")):
+    if is_true(row.get("is_abr")):
         roles.append("area border router")
-    if _yes(row.get("is_asbr")):
+    if is_true(row.get("is_asbr")):
         roles.append("AS boundary router (brings in outside routes)")
     if roles:
         facts.append(("Role", ", ".join(roles)))
@@ -991,8 +973,9 @@ def _process_facts(row: dict[str, Any], areas: list[dict[str, Any]]) -> tuple[tu
     facts.append(
         (
             "SPF timers",
-            f"start {_duration(row.get('spf_start_time'))}, hold "
-            f"{_duration(row.get('spf_hold_time'))}, max {_duration(row.get('spf_max_time'))}",
+            f"start {duration_text(row.get('spf_start_time'))}, "
+            f"hold {duration_text(row.get('spf_hold_time'))}, "
+            f"max {duration_text(row.get('spf_max_time'))}",
         )
     )
     if distance := text(row.get("admin_dist")):
@@ -1002,19 +985,19 @@ def _process_facts(row: dict[str, Any], areas: list[dict[str, Any]]) -> tuple[tu
     redistributed = [text(r.get("proto")) for r in table_rows(row, "TABLE_redist", "ROW_redist")]
     if redistributed:
         facts.append(("Redistributes", ", ".join(p for p in redistributed if p)))
-    if _yes(row.get("passive_dflt")):
+    if is_true(row.get("passive_dflt")):
         facts.append(("Interfaces", "passive unless made active"))
-    if _yes(row.get("gr_ha")):
-        planned = " (planned restarts only)" if _yes(row.get("gr_planned_only")) else ""
+    if is_true(row.get("gr_ha")):
+        planned = " (planned restarts only)" if is_true(row.get("gr_planned_only")) else ""
         facts.append(
             (
                 "Graceful restart",
-                f"on{planned}, grace period {_duration(row.get('gr_grace_period'))}",
+                f"on{planned}, grace period {duration_text(row.get('gr_grace_period'))}",
             )
         )
     else:
         facts.append(("Graceful restart", "off"))
-    if _yes(row.get("max_metric_adver")):
+    if is_true(row.get("max_metric_adver")):
         facts.append(("Stub router", "advertising the highest cost"))
     return tuple(facts)
 
@@ -1070,7 +1053,7 @@ def _interfaces(body: dict[str, Any]) -> tuple[list[Instance], list[tuple[str, .
             cost = text(row.get("cost"))
             kind = text(row.get("type_str")).upper()
             network = _NETWORK.get(kind, "")
-            passive = _yes(row.get("passive"))
+            passive = is_true(row.get("passive"))
             state = text(row.get("state_str"))
             rows.append(
                 (
@@ -1116,7 +1099,7 @@ def _neighbors(body: dict[str, Any]) -> list[tuple[str, ...]]:
                     text(row.get("addr")),
                     long_name(text(row.get("intf"))),
                     f"{state}/{role}" if role else state,
-                    _duration(row.get("uptime")),
+                    duration_text(row.get("uptime")),
                     vrf,
                     tag,
                 )
@@ -1131,7 +1114,7 @@ def _summaries(body: dict[str, Any]) -> list[tuple[str, ...]]:
         vrf = text(ctx.get("cname")) or "default"
         for row in table_rows(ctx, "TABLE_sum", "ROW_sum"):
             prefix = f"{text(row.get('addr'))}/{text(row.get('masklen'))}"
-            status = "waiting for routes" if _yes(row.get("pending")) else "advertised"
+            status = "waiting for routes" if is_true(row.get("pending")) else "advertised"
             rows.append((tag, vrf, prefix, status))
     return rows
 

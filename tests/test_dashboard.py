@@ -52,7 +52,16 @@ def test_everything_comes_from_one_request_with_the_nxray_account(
 ) -> None:
     assert logged_in.get("/").status_code == 200
     assert switch.requests == [
-        ["show version", "show environment", "show system resources", "show interface brief"]
+        [
+            "show hostname",
+            "show inventory",
+            "show module",
+            "show system uptime",
+            "show system reset-reason",
+            "show environment",
+            "show system resources",
+            "show interface brief",
+        ]
     ]
 
 

@@ -20,6 +20,7 @@ IN_VRF = {"asn": "65001", "vrf": "lab"}
 AF = {"asn": "65001", "vrf": "default", "af": "ipv4 unicast"}
 NEIGHBOR = {"asn": "65001", "vrf": "", "address": "192.0.2.2"}
 NEIGHBOR_AF = {**NEIGHBOR, "af": "ipv4 unicast"}
+VPN_AF = {"asn": "65001", "af": "vpnv4 unicast"}
 
 ENTER = {
     "process": ["router bgp 65001"],
@@ -27,8 +28,16 @@ ENTER = {
     "af": ["router bgp 65001", "address-family ipv4 unicast"],
     "neighbor": ["router bgp 65001", "neighbor 192.0.2.2"],
     "neighbor_af": ["router bgp 65001", "neighbor 192.0.2.2", "address-family ipv4 unicast"],
+    "vpn_af": ["router bgp 65001", "address-family vpnv4 unicast"],
 }
-IDENT = {"process": ASN, "vrf": IN_VRF, "af": AF, "neighbor": NEIGHBOR, "neighbor_af": NEIGHBOR_AF}
+IDENT = {
+    "process": ASN,
+    "vrf": IN_VRF,
+    "af": AF,
+    "neighbor": NEIGHBOR,
+    "neighbor_af": NEIGHBOR_AF,
+    "vpn_af": VPN_AF,
+}
 
 
 def _view():
@@ -62,7 +71,14 @@ def test_protocol_reads_in_one_request_with_the_bgp_feature():
         "show bgp ipv6 unicast vrf all",
     )
     assert "show ip bgp vrf all" not in BGP.commands  # no JSON on NX-OS 9.3
-    assert [s.key for s in BGP.scopes] == ["process", "vrf", "af", "neighbor", "neighbor_af"]
+    assert [s.key for s in BGP.scopes] == [
+        "process",
+        "vrf",
+        "af",
+        "vpn_af",
+        "neighbor",
+        "neighbor_af",
+    ]
 
 
 # ---- parsing -------------------------------------------------------------------
@@ -278,6 +294,72 @@ def test_create_and_delete_a_neighbor_address_family():
     ]
 
 
+def test_vpn_address_families_and_labelled_unicast():
+    """Layer 3 VPNs over segment routing (Cisco's 9.3 Label Switching guide): the VPN
+    families of the process, and a neighbor exchanging VPN routes or labelled unicast."""
+    assert _lines("vpn_af", "", "create", VPN_AF) == ENTER["vpn_af"]
+    assert _lines("vpn_af", "", "delete", {**VPN_AF, "af": "vpnv6 unicast"}) == [
+        "router bgp 65001",
+        "no address-family vpnv6 unicast",
+    ]
+    for af in ("vpnv4 unicast", "ipv4 labeled-unicast"):
+        assert _lines("neighbor_af", "send_community_extended", "set", {**NEIGHBOR, "af": af}) == [
+            "router bgp 65001",
+            "neighbor 192.0.2.2",
+            f"address-family {af}",
+            "send-community extended",
+        ]
+    # The process's own families stay as they were: no VPN family in a VRF part.
+    with pytest.raises(ValueError):
+        _lines("af", "", "create", {**AF, "af": "vpnv4 unicast"})
+    with pytest.raises(ValueError):
+        _lines("vpn_af", "", "create", {**VPN_AF, "af": "ipv4 unicast"})
+
+
+def test_vpn_and_labelled_families_are_read():
+    """A VPN family in show bgp process becomes its own place; a neighbor's labelled
+    unicast and VPN families are read under the names Cisco's guide prints."""
+    process = load_fixture("show_bgp_process")
+    vrf_row = process["TABLE_vrf"]["ROW_vrf"]
+    default = next(r for r in (vrf_row if isinstance(vrf_row, list) else [vrf_row])
+                   if r.get("vrf-name-out") == "default")  # fmt: skip
+    rows = default["TABLE_af"]["ROW_af"]
+    rows = rows if isinstance(rows, list) else [rows]
+    default["TABLE_af"]["ROW_af"] = [
+        *rows,
+        {"af-name": "VPNv4 Unicast", "af-peer-routes": "12", "af-num-peers": "1"},
+    ]
+    neighbors = {
+        "TABLE_neighbor": {
+            "ROW_neighbor": {
+                "neighbor": "192.0.2.9",
+                "remoteas": "65001",
+                "state": "Idle",
+                "TABLE_peraf": {
+                    "ROW_peraf": {
+                        "TABLE_persaf": {
+                            "ROW_persaf": [
+                                {"per-af-name": "IPv4 Label Unicast", "sendextcommunity": "true"},
+                                {"per-af-name": "VPNv4 Unicast", "sendextcommunity": "true"},
+                            ]
+                        }
+                    }
+                },
+            }
+        }
+    }
+    view = parse_bgp([process, {}, neighbors, {}, {}])
+    (vpn,) = view.of("vpn_af")
+    assert vpn.ident == {"asn": vpn.ident["asn"], "af": "vpnv4 unicast"}
+    assert dict(vpn.facts) == {"Routes": "12", "Neighbors": "1"}
+    assert not any(i.ident.get("af") == "vpnv4 unicast" for i in view.of("af"))
+    families = {i.ident["af"]: i.values for i in view.of("neighbor_af")}
+    assert families == {
+        "ipv4 labeled-unicast": {"send_community_extended": {}},
+        "vpnv4 unicast": {"send_community_extended": {}},
+    }
+
+
 # ---- changes: every setting -----------------------------------------------------
 
 _COMMON = [
@@ -434,6 +516,8 @@ CASES = [
     ("neighbor_af", "next_hop_self", {"all": "on"}, "next-hop-self all"),
     ("neighbor_af", "send_community", {}, "send-community"),
     ("neighbor_af", "send_community_extended", {}, "send-community extended"),
+    ("af", "allocate_label_all", {}, "allocate-label all"),
+    ("vpn_af", "allocate_label_option_b", {}, "allocate-label option-b"),
     ("neighbor_af", "route_reflector_client", {}, "route-reflector-client"),
     ("neighbor_af", "default_originate", {}, "default-originate"),
     (
@@ -460,6 +544,7 @@ CASES = [
     ("neighbor_af", "allowas_in", {"count": "2"}, "allowas-in 2"),
     ("neighbor_af", "as_override", {}, "as-override"),
     ("neighbor_af", "disable_peer_as_check", {}, "disable-peer-as-check"),
+    ("neighbor_af", "rewrite_rt_asn", {}, "rewrite-rt-asn"),
     ("neighbor_af", "suppress_inactive", {}, "suppress-inactive"),
 ]
 

@@ -1,0 +1,8 @@
+Feature                      Ins  Lic   Status Expiry Date Comments
+                                 Count
+--------------------------------------------------------------------------------
+ACI-STRG                      No    -   Unused             -
+N9K_LIC_1G                    No    -   Unused             -
+SECURITY_PKG                  No    0   Unused             -
+LAN_ENTERPRISE_SERVICES_PKG   Yes   -   Unused never       -
+--------------------------------------------------------------------------------

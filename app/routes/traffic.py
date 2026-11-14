@@ -18,8 +18,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import (
-    current_role,
     login_required,
+    may_change,
     note_activity,
     operator_required,
     require_csrf,
@@ -170,7 +170,6 @@ def _render(
             front=[port.name for port in ports or []],
         )
     vlan_total = sum(top.bits_per_second for top in vlans) or 1
-    role = current_role(request)
     return templates.TemplateResponse(
         request,
         "traffic.html",
@@ -184,7 +183,7 @@ def _render(
             "notice": notice,
             "form": form or {},
             "csrf_token": csrf_token(request),
-            "can_change": role in ("admin", "operator"),
+            "can_change": may_change(request),
             "listening_port": collector.listening_port,
             "sflow_port": settings.sflow_port,
             "keep_days": settings.sflow_keep_days,
@@ -316,7 +315,7 @@ def traffic_sflow_setup(
     with open_db(settings.db_path) as conn:
         set_sflow_agent(conn, connection.id, form["agent"])
         set_unsaved_changes(conn, connection.id, True)
-    request.app.state.sflow_collector.set_agents(load_agents(settings.db_path))
+    request.app.state.sflow_collector.set_agents(*load_agents(settings.db_path))
     words = " ".join(plan.lines)
     log.info("sFlow setup on %s by %s: %s", connection.host, username, words)
     note_activity(request, username, "Traffic", f"sFlow: {words}", connection.host)

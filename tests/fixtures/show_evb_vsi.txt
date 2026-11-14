@@ -1,0 +1,15 @@
+
+VSI entry table
+
+No. of VSI entries: 0
+No. of associated:  0
+
+E-state: P  - Pre-associated
+         PR - Pre-associated with reservation
+         A  - Associated
+         D  - De-associated
+         S  - Standby
+
+Mgr ID   VSI ID           Interface       Profile ID    M-state  E-State RWD/RKA
+-------- ---------------- --------------- ------------- -------- ------- -------
+

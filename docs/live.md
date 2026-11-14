@@ -58,7 +58,12 @@ older than a floor:
 A page that refreshes whole reads the switch through the same kind of shared
 reading: each command is kept per switch and read again only after the floor
 above (the slower one for printed text such as the running configuration).
-Opening a page yourself, or sending a form, always reads the switch itself.
+Opening a page yourself reads the switch too, but reuses what it answered a few seconds ago
+for the page before (`NXRAY_PAGE_READ_SECONDS`, 15 s): the switch answers one request at a
+time and needs up to a second on a single command, so clicking through pages would otherwise
+ask it for the same lists again and again. Sending a form, or reloading the page in the
+browser (F5), reads the switch itself; a change made at the switch's own command line shows
+on a page you open after those seconds, or after a reload.
 
 Ten browsers on **Live** cost the switch what one does. Nothing is read when
 nobody has a page open with a refresh on: reads happen only when a page asks,

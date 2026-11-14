@@ -7,6 +7,7 @@ a setting is called, what it defaults to, and what validates it.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import secrets
 from dataclasses import dataclass, field
@@ -21,7 +22,8 @@ def _env_str(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
-def _env_bool(name: str, default: bool = False) -> bool:
+def env_bool(name: str, default: bool = False) -> bool:
+    """A true/false setting; ConfigError for any other word. Everything reads these through here."""
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
         return default
@@ -78,6 +80,10 @@ class Settings:
     # are cheap; the MAC and ARP tables cost the switch more.
     live_min_interval: int = 2
     live_clients_min_interval: int = 10
+    # Pages a person opens (app/page_reads.py): how many seconds the answers to
+    # read-only switch commands are reused by the next page; 0 reads the switch
+    # for every page.
+    page_read_seconds: int = 15
     # The sFlow collector (app/sflow.py): the UDP port it listens on, 0 for
     # off, and how many days of measured traffic it keeps.
     sflow_port: int = 0
@@ -110,7 +116,11 @@ def _load_or_create_secret_key(data_dir: Path) -> str:
             return stored
 
     generated = secrets.token_urlsafe(48)
-    key_file.write_text(generated, encoding="utf-8")
+    # Created mode 600, not written first and restricted after. An empty file
+    # left by an earlier start is opened as it is, and made 600 as well.
+    fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(generated)
     key_file.chmod(0o600)
     return generated
 
@@ -119,9 +129,13 @@ def load_settings() -> Settings:
     """Build the settings object, or raise ConfigError with a fix to apply."""
     data_dir = Path(_env_str("NXRAY_DATA_DIR", "/data"))
     try:
-        data_dir.mkdir(parents=True, exist_ok=True)
+        data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError as exc:
         raise ConfigError(f"cannot create data directory {data_dir}: {exc}") from exc
+    # The folder holds the database, the session key and the TLS key: owner only.
+    # A folder the app does not own (a bind mount) is left as it is.
+    with contextlib.suppress(OSError):
+        data_dir.chmod(0o700)
 
     password_hash = _env_str("NXRAY_ADMIN_PASSWORD_HASH")
     if not password_hash:
@@ -151,7 +165,7 @@ def load_settings() -> Settings:
     # Built-in HTTPS means the browser is always on HTTPS (NXray's own nginx
     # terminates it), so it implies the Secure cookie flag. NXRAY_HTTPS stays
     # for the other case: a reverse proxy of your own, which NXray can't see.
-    enable_https = _env_bool("NXRAY_ENABLE_HTTPS", False)
+    enable_https = env_bool("NXRAY_ENABLE_HTTPS", False)
 
     history_interval = _env_int("NXRAY_HISTORY_INTERVAL", 60, 0, 3600)
     if 0 < history_interval < 10:
@@ -162,6 +176,7 @@ def load_settings() -> Settings:
 
     live_min_interval = _env_int("NXRAY_LIVE_MIN_INTERVAL", 2, 1, 60)
     live_clients_min_interval = _env_int("NXRAY_LIVE_CLIENTS_MIN_INTERVAL", 10, 1, 300)
+    page_read_seconds = _env_int("NXRAY_PAGE_READ_SECONDS", 15, 0, 120)
     sflow_port = _env_int("NXRAY_SFLOW_PORT", 0, 0, 65535)
 
     return Settings(
@@ -169,18 +184,19 @@ def load_settings() -> Settings:
         admin_user=_env_str("NXRAY_ADMIN_USER", "admin") or "admin",
         admin_password_hash=password_hash,
         secret_key=_load_or_create_secret_key(data_dir),
-        https_only=_env_bool("NXRAY_HTTPS", enable_https),
+        https_only=env_bool("NXRAY_HTTPS", enable_https),
         session_hours=_env_int("NXRAY_SESSION_HOURS", 12, 1, 720),
         login_max_attempts=_env_int("NXRAY_LOGIN_MAX_ATTEMPTS", 5, 1, 100),
         login_lockout_minutes=_env_int("NXRAY_LOGIN_LOCKOUT_MINUTES", 15, 1, 1440),
         log_level=log_level,
         enable_https=enable_https,
         https_port=_env_int("NXRAY_HTTPS_PORT", 8443, 1, 65535),
-        enable_self_update=_env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
-        dev_build=_env_bool("NXRAY_DEV_BUILD", False),
+        enable_self_update=env_bool("NXRAY_ENABLE_SELF_UPDATE", False),
+        dev_build=env_bool("NXRAY_DEV_BUILD", False),
         history_interval=history_interval,
         live_min_interval=live_min_interval,
         live_clients_min_interval=live_clients_min_interval,
+        page_read_seconds=page_read_seconds,
         sflow_port=sflow_port,
         sflow_keep_days=_env_int("NXRAY_SFLOW_KEEP_DAYS", 7, 1, 90),
     )

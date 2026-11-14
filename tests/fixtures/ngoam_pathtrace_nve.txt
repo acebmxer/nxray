@@ -1,0 +1,13 @@
+
+Codes: '!' - success, 'Q' - request not sent, '.' - timeout,
+'D' - Destination Unreachable, 'X' - unknown return code,
+'m' - malformed request(parameter problem),
+'c' - Corrupted Data/Test, '#' - Duplicate response,
+'v' - Other - Use verbose to see the result
+
+Sender handle: 224
+
+Hop   Code   ReplyIP   IngressI/f  EgressI/f   State   Delay
+===============================================================
+Q Failed to get vni data from nve, vni = 5000
+

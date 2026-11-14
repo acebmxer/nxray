@@ -1,0 +1,16 @@
+{
+  "TABLE_xpmap": {
+    "ROW_xpmap": {
+      "xpmap-name": "default-8q-nq-policy"
+    }
+  },
+  "TABLE_pmap": {
+    "ROW_pmap": {
+      "pmap-key": "default-8q-out-policy",
+      "pmap-inner-outer": "0",
+      "in-or-out": "output",
+      "yqos-or-q": "queuing",
+      "pmap-name": "default-8q-out-policy"
+    }
+  }
+}

@@ -36,6 +36,7 @@ from app.switch_setup import (
     account_names,
     describe_error,
     generate_password,
+    scrub_secrets,
     verify_account,
 )
 
@@ -67,13 +68,6 @@ def role_names(role_body: dict) -> set[str]:
         for row in rows(role_body, "TABLE_role", "ROW_role")
         if row.get("role_name")
     }
-
-
-def _scrub(text: str, *secrets_to_hide: str) -> str:
-    for value in secrets_to_hide:
-        if value:
-            text = text.replace(value, "***")
-    return text
 
 
 def run_repair(
@@ -112,7 +106,7 @@ def run_repair(
             )
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, port, "admin"), admin_password)
             ) from exc
         hostname = parse_version(version).hostname
         existed = account_name.lower() in account_names(users)
@@ -123,7 +117,7 @@ def run_repair(
             # For an existing account this changes the password and keeps its roles.
             client.create_user(account_name, password, ACCOUNT_ROLE)
         except NxapiError as exc:
-            message = _scrub(str(exc), password, admin_password)
+            message = scrub_secrets(str(exc), password, admin_password)
             raise SetupError(f"The switch did not change the account: {message}") from exc
         log.info(
             "%s switch account %s on %s (%s)",
@@ -143,7 +137,7 @@ def run_repair(
                     client.give_role(account_name, ROLE_NAME)
                 except NxapiError as exc:
                     raise SetupError(
-                        _scrub(
+                        scrub_secrets(
                             f"NXray gave {account_name} a new password but could not give it "
                             f"the {ROLE_NAME} role again: {exc}. Press Run setup again to "
                             "retry.",
@@ -167,7 +161,7 @@ def run_repair(
             else:
                 detail = f"NXray could not store the login: {exc}"
             raise SetupError(
-                _scrub(
+                scrub_secrets(
                     detail + f" The account {account_name} now has a password NXray does not "
                     "keep. Press Run setup again to give it another one.",
                     password,
@@ -185,7 +179,7 @@ def run_repair(
                 port_role,
                 wait,
                 False,
-                _scrub(str(exc), password, admin_password),
+                scrub_secrets(str(exc), password, admin_password),
             )
 
     log.info("saved the switch configuration on %s", host)

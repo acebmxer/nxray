@@ -1,0 +1,28 @@
+{
+  "TABLE_rmap": {
+    "ROW_rmap": [
+      {
+        "name": "pbr-web",
+        "action": "permit",
+        "seq": "10",
+        "descript": "web to the firewall",
+        "TABLE_rmap_match": {"ROW_rmap_match": {"match_type": "ip address", "match_stmt": "web-acl"}},
+        "TABLE_rmap_set": {"ROW_rmap_set": {"set_type": "ip next-hop", "set_stmt": "198.51.100.10 198.51.100.11 load-share"}}
+      },
+      {
+        "name": "pbr-web",
+        "action": "permit",
+        "seq": "20",
+        "TABLE_rmap_match": {"ROW_rmap_match": {"match_type": "ip address", "match_stmt": "junk-acl"}},
+        "TABLE_rmap_set": {"ROW_rmap_set": {"set_type": "interface", "set_stmt": "null0"}}
+      },
+      {
+        "name": "pbr-v6",
+        "action": "permit",
+        "seq": "10",
+        "TABLE_rmap_match": {"ROW_rmap_match": {"match_type": "ipv6 address", "match_stmt": "web6"}},
+        "TABLE_rmap_set": {"ROW_rmap_set": {"set_type": "ipv6 next-hop", "set_stmt": "2001:db8::10"}}
+      }
+    ]
+  }
+}

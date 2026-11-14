@@ -18,7 +18,7 @@ from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 
 from app import healthcheck, tls
-from app.config import Settings
+from app.config import ConfigError, Settings
 from app.db import open_db
 from app.users import create_user
 from tests.conftest import with_settings
@@ -228,6 +228,15 @@ def test_the_health_check_follows_the_https_setting(
 ) -> None:
     monkeypatch.setenv("NXRAY_ENABLE_HTTPS", value)
     assert healthcheck.https_enabled() is on
+
+
+def test_the_health_check_is_unhealthy_for_a_value_the_app_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NXRAY_ENABLE_HTTPS", "maybe")
+    with pytest.raises(ConfigError):
+        healthcheck.https_enabled()
+    assert healthcheck.main() == 1
 
 
 # ---- the Settings page ------------------------------------------------------------------

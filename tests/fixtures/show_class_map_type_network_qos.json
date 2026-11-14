@@ -1,0 +1,38 @@
+{
+  "TABLE_cmap": {
+    "ROW_cmap": [
+      {
+        "cmap-key": "c-nq1",
+        "xcmap-name": "c-nq1",
+        "desc": "Default class on qos-group 1",
+        "TABLE_xmatch": {
+          "ROW_xmatch": {
+            "xmatch-key": "1",
+            "xqos-group-list": "1"
+          }
+        }
+      },
+      {
+        "cmap-key": "c-8q-nq-default",
+        "xcmap-name": "c-8q-nq-default",
+        "desc": "Default class on qos-group 0",
+        "TABLE_xmatch": {
+          "ROW_xmatch": {
+            "xmatch-key": "1",
+            "xqos-group-list": "0"
+          }
+        }
+      },
+      {
+        "cmap-key": "nxprobe-nq",
+        "xcmap-name": "nxprobe-nq",
+        "TABLE_xmatch": {
+          "ROW_xmatch": {
+            "xmatch-key": "1",
+            "xqos-group-list": "3"
+          }
+        }
+      }
+    ]
+  }
+}

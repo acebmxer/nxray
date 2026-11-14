@@ -1,0 +1,7 @@
+{
+ "max_dyn_translations": "1023",
+ "max_all_host": "100",
+ "static_translations": 9,
+ "dynamic_translations": 0,
+ "icmp_translations": 0
+}

@@ -1,0 +1,15 @@
+total number of groups: 1
+
+following LDAP server groups are configured:
+    group lgrp:
+        Use-vrf: management
+        Mode: UnSecure
+        Authentication: Search and Bind
+        Bind and Search : append with basedn (cn=$userid)
+        Authentication: Do bind instead of compare
+        Bind and Search : compare passwd attribute userPassword
+        CERT-DN match enabled
+        Group validation enabled
+        Authentication Mech: Default(PLAIN)
+        server: 10.250.250.250 port: 636 timeout: 7
+        Search map: smap

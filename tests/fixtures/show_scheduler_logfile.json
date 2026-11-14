@@ -1,0 +1,22 @@
+{
+ "TABLE_joblog": {
+  "ROW_joblog": [
+   {
+    "jobname": "clock",
+    "jobstatus": "0",
+    "schedulename": "backup",
+    "scheduleusername": "admin",
+    "completiontime": "Wed Nov 11 22:41:22 2026\n",
+    "joboutput": "`show clock`\nWarning: No NTP peer/server configured. Time may be out of sync.\n22:41:22.008 UTC Wed Nov 11 2026\nTime source is NTP\n"
+   },
+   {
+    "jobname": "nightly",
+    "jobstatus": "0",
+    "schedulename": "backup",
+    "scheduleusername": "admin",
+    "completiontime": "Wed Nov 11 22:41:22 2026\n",
+    "joboutput": "`copy running-config bootflash:/nightly.cfg`\nCopy complete, now saving to disk (please wait)...\nCopy complete.\n"
+   }
+  ]
+ }
+}

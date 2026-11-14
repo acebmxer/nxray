@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.nxapi import NxapiClient
-from app.switch import rows
+from app.switch import int_or, rows
 
 PORTS_COMMANDS = (
     "show interface",
@@ -23,13 +23,6 @@ PORTS_COMMANDS = (
 )
 
 _PORT_NAME = re.compile(r"^Ethernet(\d+)/(\d+)(?:/(\d+))?$")
-
-
-def _int(value: Any) -> int:
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return 0
 
 
 def port_sort_key(name: str) -> tuple[int, ...]:
@@ -90,6 +83,27 @@ class Port:
         return sum(self.counters.get(name, 0) for name in ERROR_COUNTERS)
 
     @property
+    def error_kinds(self) -> list[tuple[str, int]]:
+        """What ``errors`` is made of, as (kind, count) for each kind that is not zero.
+
+        The switch's input errors already include CRC errors, runts and giants, so those
+        are named first and only what is left is "Other input errors": the counts add up
+        to ``errors``.
+        """
+        count = self.counters.get
+        crc, runts, giants = count("eth_crc", 0), count("eth_runts", 0), count("eth_giants", 0)
+        kinds = [
+            ("CRC errors", crc),
+            ("Runts", runts),
+            ("Giants", giants),
+            ("Other input errors", max(count("eth_inerr", 0) - crc - runts - giants, 0)),
+            ("Input discards", count("eth_indiscard", 0)),
+            ("Output errors", count("eth_outerr", 0)),
+            ("Output discards", count("eth_outdiscard", 0)),
+        ]
+        return [(kind, number) for kind, number in kinds if number]
+
+    @property
     def state_label(self) -> str:
         if self.up:
             return "Up"
@@ -120,6 +134,9 @@ COUNTER_LABELS = {
 
 # Summed into Port.errors. CRC errors are already part of input errors.
 ERROR_COUNTERS = ("eth_inerr", "eth_outerr", "eth_indiscard", "eth_outdiscard")
+
+# The counters ``Port.error_kinds`` names, as written on the Counters card of a port's page.
+ERROR_KEYS = frozenset({*ERROR_COUNTERS, "eth_crc", "eth_runts", "eth_giants"})
 
 
 def parse_transceivers(body: dict[str, Any]) -> dict[str, Transceiver]:
@@ -180,20 +197,20 @@ def parse_ports(
                 mac=str(row.get("eth_hw_addr", "")).strip(),
                 last_flap=str(row.get("eth_link_flapped", "")).strip(),
                 transceiver=transceivers.get(name, Transceiver(present=False)),
-                in_bits_per_second=_int(row.get("eth_inrate1_bits")),
-                out_bits_per_second=_int(row.get("eth_outrate1_bits")),
-                in_bytes=_int(row.get("eth_inbytes")),
-                out_bytes=_int(row.get("eth_outbytes")),
-                in_packets=_int(row.get("eth_inpkts")),
-                out_packets=_int(row.get("eth_outpkts")),
-                counters={key: _int(row.get(key)) for key in COUNTER_LABELS},
+                in_bits_per_second=int_or(row.get("eth_inrate1_bits")),
+                out_bits_per_second=int_or(row.get("eth_outrate1_bits")),
+                in_bytes=int_or(row.get("eth_inbytes")),
+                out_bytes=int_or(row.get("eth_outbytes")),
+                in_packets=int_or(row.get("eth_inpkts")),
+                out_packets=int_or(row.get("eth_outpkts")),
+                counters={key: int_or(row.get(key)) for key in COUNTER_LABELS},
                 # eth_bw is in kilobits per second.
-                bandwidth_bits=_int(row.get("eth_bw")) * 1000,
+                bandwidth_bits=int_or(row.get("eth_bw")) * 1000,
                 status_speed=str(status.get("speed", "")).strip(),
                 duplex=str(row.get("eth_duplex", "")).strip(),
                 fec=str(row.get("eth_admin_fec_state", "")).strip(),
                 fec_oper=str(row.get("eth_oper_fec_state", "")).strip(),
-                load_interval=_int(row.get("eth_load_interval1_rx")),
+                load_interval=int_or(row.get("eth_load_interval1_rx")),
             )
         )
     ports.sort(key=lambda port: port_sort_key(port.name))

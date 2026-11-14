@@ -1,0 +1,47 @@
+{
+ "TABLE_pmap": {
+  "ROW_pmap": {
+   "pname": "web-chain",
+   "match_stmt": "web",
+   "bcount": 2,
+   "TABLE_pmap_t_match": {
+    "ROW_pmap_t_match": [
+     {
+      "bname": "epbr_web-chain_1_fwd_bucket_1",
+      "TABLE_pmap_b_stats": {
+       "ROW_pmap_b_stats": [
+        {
+         "sname": "firewall",
+         "pval": 0,
+         "action": 0
+        },
+        {
+         "sname": "firewall",
+         "pval": 0,
+         "action": 0
+        }
+       ]
+      }
+     },
+     {
+      "bname": "epbr_web-chain_1_fwd_bucket_2",
+      "TABLE_pmap_b_stats": {
+       "ROW_pmap_b_stats": [
+        {
+         "sname": "firewall",
+         "pval": 0,
+         "action": 0
+        },
+        {
+         "sname": "firewall",
+         "pval": 0,
+         "action": 0
+        }
+       ]
+      }
+     }
+    ]
+   }
+  }
+ }
+}

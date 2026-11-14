@@ -1,0 +1,9 @@
+{
+ "TABLE_connection": {
+  "ROW_connection": {
+   "name": "nxprobe-vc",
+   "host_or_ip": "192.0.2.51",
+   "conn_status": "No Connect"
+  }
+ }
+}

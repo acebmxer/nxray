@@ -39,7 +39,15 @@ def test_broad_rules_fit_a_role_and_the_denies_beat_the_permit() -> None:
     denies = [r for r in BROAD_RULES if " deny command " in r]
     assert {r.split("conf t ; ")[1] for r in denies} == {
         f"{form}{word} *"
-        for word in ("username", "role", "aaa", "tacacs-server", "radius-server", "boot")
+        for word in (
+            "username",
+            "role",
+            "aaa",
+            "tacacs-server",
+            "radius-server",
+            "boot",
+            "event manager",
+        )
         for form in ("", "no ")
     }
     # The rule with the higher number wins, so every deny is numbered above the permit.
@@ -239,6 +247,32 @@ def test_broad_role_never_asks_for_a_role_update(
     assert "Broad role with a deny list" in body
     assert "Off: this version of NXray can also" not in body
     assert switch.roles[ROLE_NAME].rules[1] == ("permit", "conf t ; *")
+
+
+def test_an_older_broad_role_is_flagged_and_updating_it_adds_the_eem_deny(
+    logged_in: TestClient, switch: FakeSwitch, settings: Settings
+) -> None:
+    # A broad role written before the EEM denies (BROAD_ROLE_VERSION 1000): an applet's
+    # commands run as the switch's admin, so the role is flagged until it is written again.
+    assert _setup(logged_in, role_mode=ROLE_BROAD).status_code == 200
+    role = switch.roles[ROLE_NAME]
+    for number in (23, 24):
+        role.rules.pop(number)
+    conn = sqlite3.connect(settings.db_path)
+    conn.execute("UPDATE switch_connection SET role_version = 1000")
+    conn.commit()
+    conn.close()
+    assert "does not deny EEM applets yet" in _text(logged_in.get("/switch").text)
+    assert "does not yet deny EEM applets" in _text(logged_in.get("/vlans").text)
+
+    response = _enable_page(logged_in)
+    assert response.status_code == 200
+    assert "The role now also denies EEM applets" in _text(response.text)
+    assert switch.roles[ROLE_NAME].rules[23] == ("deny", "conf t ; event manager *")
+    assert switch.roles[ROLE_NAME].rules[24] == ("deny", "conf t ; no event manager *")
+    assert _row(settings)["role_version"] == BROAD_ROLE_VERSION
+    assert "deny EEM applets" not in _text(logged_in.get("/switch").text)
+    assert "deny EEM applets" not in _text(logged_in.get("/vlans").text)
 
 
 def test_changing_the_mode_asks_for_the_login_and_removes_the_old_rules(

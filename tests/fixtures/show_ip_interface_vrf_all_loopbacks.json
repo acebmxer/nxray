@@ -1,0 +1,37 @@
+{
+  "TABLE_intf": {
+    "ROW_intf": [
+      {
+        "vrf-name-out": "default",
+        "intf-name": "loopback250",
+        "proto-state": "up",
+        "link-state": "up",
+        "admin-state": "up",
+        "prefix": "198.51.100.250",
+        "subnet": "198.51.100.250",
+        "masklen": 32,
+        "num-addr": 2,
+        "mtu": 1500,
+        "TABLE_secondary_address": {
+          "ROW_secondary_address": {
+            "prefix1": "198.51.100.251",
+            "subnet1": "198.51.100.251",
+            "masklen1": 32
+          }
+        }
+      },
+      {
+        "vrf-name-out": "lab",
+        "intf-name": "loopback251",
+        "proto-state": "down",
+        "link-state": "down",
+        "admin-state": "down",
+        "prefix": "198.51.100.252",
+        "subnet": "198.51.100.252",
+        "masklen": 32,
+        "num-addr": 1,
+        "mtu": 1500
+      }
+    ]
+  }
+}

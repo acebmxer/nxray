@@ -421,6 +421,27 @@ NXray then:
          rule 231 permit command conf t ; no sflow *
          rule 232 permit command conf t ; default interface *
          rule 233 permit command show sflow
+         rule 234 permit command terminal dont-ask
+         rule 235 permit command reload
+         rule 236 permit command conf t ; vpc domain *
+         rule 237 permit command conf t ; no vpc domain *
+         rule 238 permit command conf t ; interface * ; vpc *
+         rule 239 permit command conf t ; interface * ; no vpc *
+         rule 240 permit command show running-config vpc
+         rule 241 permit command show running-config vpc *
+         rule 242 permit command conf t ; nv overlay evpn
+         rule 243 permit command conf t ; no nv overlay evpn
+         rule 244 permit command conf t ; fabric forwarding *
+         rule 245 permit command conf t ; no fabric forwarding *
+         rule 246 permit command conf t ; vlan * ; vn-segment *
+         rule 247 permit command conf t ; vlan * ; no vn-segment *
+         rule 248 permit command conf t ; interface nve*
+         rule 249 permit command conf t ; no interface nve*
+         rule 250 permit command conf t ; evpn*
+         rule 251 permit command conf t ; vrf context * ; vni *
+         rule 252 permit command conf t ; vrf context * ; no vni *
+         rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *
+         rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *
          interface policy deny
            permit interface Ethernet1/1
            ... (one line per front-panel port)
@@ -979,6 +1000,637 @@ login and SSH port and types the same two lines over SSH, once; the password
 is never stored. The switch dropping the connection is how NXray knows it went
 down; it answers again after several minutes.
 
+**vPC.** The **vPC** page (role version 19, from Update the port list) needs the
+`vpc` and `lacp` features (Features page). It reads `show vpc` and, as text,
+`show running-config vpc`, and types the vPC domain with its settings
+(`vpc domain 10`, `peer-keepalive destination ...`, `peer-switch`, ...) and on a
+port-channel `vpc peer-link` or `vpc <number>`, each with its `no` form. The
+port-channel must exist first (Port-channels page); the same domain and vPC
+numbers are set on the other switch of the pair, from its own NXray. Written
+from Cisco's NX-OS 9.3 guides; not yet tried on a switch.
+
+**Control-plane policing.** The **Control-plane policing** page only reads, so it needs no
+rule of its own and works with every role mode. It reads `show policy-map interface
+control-plane` (the policy, its classes, rate limits and counters). Read on cisco-25gb
+(NX-OS 9.3(16)).
+
+**Priority flow control.** The **Priority flow control** page needs no rule of its own, so
+it works with the broad role and with a stored admin login, and is off with the limited
+role (it has no rule numbers left). It reads `show interface priority-flow-control detail`
+and `show interface brief`, and types `priority-flow-control mode on|off|auto` and
+`priority-flow-control watch-dog-interval on|off` on a port, and, for the whole switch,
+`priority-flow-control watch-dog-interval on|off` and `priority-flow-control
+override-interface mode off`, each with its `no` form. Which classes are paused is set on the
+QoS page (`pause pfc-cos` in a network-qos policy). The show output was read on cisco-25gb
+(NX-OS 9.3(16)); the configuration lines are written from Cisco's NX-OS 9.3 guide and were
+not tried on a switch.
+
+**Private VLANs.** The **Private VLANs** page needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role (it has no rule
+numbers left). It needs `feature private-vlan` (Features page): the private VLAN show
+commands do not exist before. It reads `show feature`, `show vlan brief`, `show interface
+brief`, `show vlan private-vlan type`, `show vlan private-vlan`, `show interface switchport`
+and `show interface private-vlan mapping`, and types `private-vlan primary|isolated|community`
+and `private-vlan association <list>` (and `association remove <list>`) in a VLAN;
+`switchport mode private-vlan host|promiscuous|trunk promiscuous|trunk secondary`,
+`switchport private-vlan host-association`, `switchport private-vlan mapping` (and `mapping
+<primary> remove <list>`), `switchport private-vlan mapping trunk`, `switchport private-vlan
+association trunk`, `switchport private-vlan trunk allowed vlan` and `switchport private-vlan
+trunk native vlan` on a port; and `private-vlan mapping <list>` (and `mapping remove <list>`)
+on a VLAN interface; each with its `no` form. The association and mapping lines add to what
+is there rather than replace it. Tried on cisco-25gb (NX-OS 9.3(16)) on a spare port and
+throwaway VLANs.
+
+**UDLD.** The **UDLD** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role (it has no rule numbers left).
+It needs `feature udld` (Features page), which starts UDLD on every fibre port at once. It
+reads `show feature`, `show interface brief`, `show udld global` and `show udld` (the last
+two as text), and types `udld message-time <7-90>` and `udld aggressive` at the top, and
+`udld enable`, `udld disable` and `udld aggressive` on a front port, with their `no` forms
+(the message interval has none: set 15). Written from Cisco's NX-OS 9.3 guide and not tried
+on a switch.
+
+**VTP.** The **VTP** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role. It needs `feature vtp`
+(Features page). A Nexus 9000 runs VTP in transparent mode only: it never takes its VLAN
+list from another switch. The page reads `show feature`, `show interface brief`, `show vtp
+status`, `show vtp interface` and `show vtp counters` (the last three as text; never `show
+vtp password`), and types `vtp mode transparent|off`, `vtp domain <name>`, `vtp version
+1|2`, `vtp password <password>` (and `no vtp password`) at the top, and `vtp` or `no vtp`
+on a port. Written from Cisco's NX-OS 9.3 guide and not tried on a switch; the guide names
+the modes and the per-port setting without printing those two commands.
+
+**802.1X.** The **802.1X** page needs no rule of its own, so it works with the broad role
+and with a stored admin login, and is off with the limited role. It needs `feature dot1x`
+(Features page) and RADIUS servers already set up on the switch. It reads `show feature`,
+`show interface brief`, `show dot1x` and `show dot1x all details` (the last two as text),
+and types `aaa authentication dot1x default group <group>`, `aaa accounting dot1x default
+group <group>`, `dot1x system-auth-control`, `dot1x radius-accounting` and `dot1x mac-move
+permit|deny` at the top, and `dot1x port-control auto|force-authorized|force-unauthorized`,
+`dot1x host-mode single-host|multi-host|multi-auth`, `dot1x mac-auth-bypass [eap]`, `dot1x
+pae authenticator`, `dot1x re-authentication`, `dot1x timeout <timer> <1-65535>`, `dot1x
+max-req <1-10>` and `dot1x max-reauth-req <1-10>` on a switched front port, with their `no`
+forms. NX-OS has no guest VLAN and no auth-fail VLAN, so the page has neither. Written from
+Cisco's NX-OS 9.3 guide and not tried on a switch.
+
+**IP SLA.** The **IP SLA** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role. It needs `feature sla sender`
+(Features page): the IP SLA show commands do not exist before. It reads `show feature`,
+`show vrf`, `show ip sla configuration`, `show ip sla statistics details` and `show
+running-config sla sender` (as text), and types `ip sla <n>` followed by one of `icmp-echo`,
+`udp-echo`, `udp-jitter`, `tcp-connect`, `dns ... name-server` or `http get`, then
+`frequency`, `threshold`, `timeout`, `vrf`, `tos`, `request-data-size`, `verify-data`,
+`tag`, `owner` and the `history` lines inside the entry; `no ip sla <n>`; `ip sla schedule
+<n> [life] [start-time] [ageout] [recurring]`; `ip sla reaction-configuration <n> react
+<event> ...`; and `ip sla reaction-trigger <n> <n>`; each with its `no` form. The switch
+refuses every change to an entry while it is scheduled. Tried on cisco-25gb (NX-OS 9.3(16))
+with throwaway entries.
+
+**With the admin login stored.** The pages that need the broad role or a stored admin
+login (Monitor sessions, QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X, IP
+SLA, Errdisable, Scheduler, Call Home, EEM, Loopbacks, Tunnels, Policy-based routing, ITD,
+Enhanced policy routing, MPLS, NAT, Tracked objects, IGMP snooping, Non-blocking multicast,
+Multicast over VXLAN, Flex Links, VM Tracker, Edge Virtual Bridging, PTP and Telemetry) send
+their changes with the stored admin
+login when the switch is in that mode: NXray's own account then has only the limited
+role's rules, which have none for them. They still read the switch with NXray's account.
+
+**Loopbacks.** The **Loopbacks** page (under Configure, next to Routing) needs no rule of
+its own, but the role's port list must name the loopbacks: the broad role's does, the
+limited role's does not, so it works with the broad role and with a stored admin login,
+and is off with the limited role. It reads `show interface brief`, `show ip interface vrf
+all`, `show ipv6 interface vrf all`, `show vrf` and `show vrf interface`, and types
+`interface loopback<0-1023>` (which makes one) and `no interface loopback<n>`, and inside
+one `description`, `ip address <address/length>`, `ip address <address/length> secondary`,
+`ipv6 address <address/length>`, `vrf member <vrf>`, `shutdown` and `no shutdown`, with the
+`no` forms. Moving a loopback into or out of a VRF deletes its addresses, as on a VLAN
+interface. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway loopbacks and a throwaway VRF.
+
+**Tunnels.** The **Tunnels** page (under Configure, next to Loopbacks) changes tunnel
+interfaces only with a stored admin login: NXray's roles name the interfaces they may
+change, and the switch refuses to name a tunnel in a role while tunnel is off, so neither
+the limited nor the broad role can cover them. It needs `feature tunnel` (Features page),
+which the switch refuses while VXLAN (`feature nv overlay`) is on: the two cannot be on
+together. It reads `show feature`, `show vrf`, `show interface brief` and `show
+running-config` (as text, with the role's `show running-config` rule), and types
+`interface tunnel <0-65535>` (which makes one) and `no interface tunnel <n>`, and inside
+one `tunnel mode gre ip|ipip ip|ipip decapsulate-any`, `tunnel source <address|interface>`,
+`tunnel destination <address>`, `tunnel use-vrf <vrf>`, `tunnel ttl <1-255>`, `ip address
+<address/length>`, `description`, `mtu <64-9192>`, `vrf member <vrf>`, `tunnel
+path-mtu-discovery age-timer <10-30>`, `tunnel path-mtu-discovery min-mtu <64-9192>`,
+`shutdown` and `no shutdown`, with the `no` forms. Built from Cisco's NX-OS 9.3
+Interfaces Configuration Guide and not yet tried on a switch: cisco-25gb has VXLAN on.
+
+**Policy-based routing.** The **Policy-based routing** page (under Configure) needs no
+rule of its own, so it works with the broad role and with a stored admin login, and is off
+with the limited role. It needs `feature pbr` (Features page). It reads `show route-map`,
+`show ip policy`, `show ipv6 policy` and `show route-map <name> pbr-statistics`, and types
+`route-map <name> permit|deny <n>` with `description`, `match ip address <acl>`, `match
+ipv6 address <acl>`, `set ip next-hop <addresses> [load-share] [force-order]
+[drop-on-fail]`, `set ipv6 next-hop ...` and `set interface null0` (and their `no` forms,
+the next-hop one with the whole line: its bare `no` form removes nothing), `no route-map
+<name>`, `route-map <name> pbr-statistics`, and `ip policy route-map <name>` and `ipv6
+policy route-map <name>` on a VLAN interface, routed port or routed port-channel. Tried on
+cisco-25gb (NX-OS 9.3(16)) with a throwaway route-map and VLAN interface.
+
+**ITD.** The **ITD** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It needs `feature pbr` and `feature itd`
+(Features page). It reads `show itd`, `show running-config` (as text) and `show itd
+<service> statistics`, and types `itd device-group <name>` with its `probe icmp|tcp port
+<n>|udp port <n>|dns host <name>` line (with `frequency`, `timeout`, `retry-down-count`
+and `retry-up-count`) and `node ip <address>` lines (with `weight`, `standby ip` and `mode
+hot-standby`), and `itd <service>` with `device-group`, `ingress interface`, `virtual ip`,
+`load-balance method`, `failaction`, `peer local service`, `nat destination`,
+`access-list`, `exclude access-list`, `shutdown` and `no shutdown`, each with its `no`
+form. The counters are turned on and off with `itd statistics <service>`, `no itd
+statistics <service>` and `clear itd statistics <service>`, typed outside configuration
+mode: the broad role allows them with rules 25 to 27. Tried on cisco-25gb with a
+throwaway device group and service; the counter rules were not.
+
+**MPLS.** The **MPLS** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It turns MPLS on itself, in Cisco's order:
+`install feature-set mpls`, `feature-set mpls`, `feature mpls static` (each with its `no`
+form); the switch refuses static MPLS while VXLAN (`feature nv overlay` or
+`vn-segment-vlan-based`) is on. It reads `show feature`, `show feature-set` (as text),
+`show mpls switching` and `show running-config` (as text), and types `mpls label range
+<min> <max> [static <min> <max>]`, `mpls ip forwarding` on an interface, and `mpls static
+configuration`, `address-family ipv4|ipv6 unicast`, `local-label <label> prefix <prefix>`
+with `next-hop auto-resolve out-label <n>`, `next-hop <address> out-label implicit-null`
+or `next-hop backup <interface> <address> out-label <n>`. Built from Cisco's NX-OS 9.3
+Label Switching Configuration Guide; on cisco-25gb only the feature-set lines were tried.
+
+For Layer 3 VPNs over segment routing it types `feature mpls segment-routing` and `feature
+mpls l3vpn` (each with its `no` form; static MPLS and segment routing are never on
+together, and the switch refuses both while VXLAN is on), `segment-routing` then `mpls`
+(and `no segment-routing`), `global-block <first> <last>` inside it,
+`connected-prefix-sid-map`, `address-family ipv4` and `<prefix> index|absolute <n>` (and
+its `no` form), and in `vrf context <name>` the lines `rd <value>` and, inside
+`address-family ipv4|ipv6 unicast`, `route-target import|export <value>`. It also reads
+`show license usage`, since Cisco's guide asks for the VPN Fabric licence (cisco-25gb
+lists it as not installed). The BGP side is on the BGP page, inside `router bgp`, which
+the role already allows: `address-family vpnv4|vpnv6 unicast` with `allocate-label
+option-b`, `allocate-label all` in `address-family ipv4 unicast`, and a neighbor's
+`address-family ipv4 labeled-unicast|vpnv4 unicast|vpnv6 unicast`. None of these lines was
+tried on a switch. Layer 3 VPNs over LDP are not offered: Cisco's guide lists them only for
+Nexus 3600-R and 9500 -R line cards, and the 92160YC-X has no LDP.
+
+**NAT.** The **NAT** page (under Configure) works with the broad role and with a stored
+admin login, and is off with the limited role. It needs `feature nat` (Features page) and,
+on a Nexus 9000, TCAM space in the `nat` region (`hardware access-list tcam region nat
+<size>`, on the ACLs page; it counts only after Save config and a restart of the switch).
+It reads `show feature`, `show interface brief`, `show vrf`, `show vrf interface`, `show
+hardware access-list tcam region` (as text: the page says plainly when the nat region is
+0), `show ip nat translations verbose`, `show ip nat statistics`, `show ip nat max` and
+`show running-config` (as text), and types `ip nat inside` and `ip nat outside` on a VLAN
+interface, routed port or routed port-channel; `ip nat inside|outside source static
+[tcp|udp] <address> [<port>] <address> [<port>] [vrf <vrf> [match-in-vrf]] [add-route]`;
+`ip nat pool <name> <first> <last> prefix-length <n>`; `ip nat inside|outside source list
+<acl> pool <pool> [vrf <vrf>] [overload] [add-route]`; `ip nat inside source list <acl>
+interface <interface> overload`; `ip nat translation timeout|tcp-timeout|udp-timeout|
+icmp-timeout|syn-timeout|finrst-timeout <seconds>` and `ip nat translation max-entries
+[all-host] <1-1023>`, each with its `no` form. It clears with `clear ip nat translation
+all`, `clear ip nat translation inside <global> <local>`, `clear ip nat translation outside
+<local> <global>` and `clear ip nat statistics`, typed outside configuration mode: the broad
+role allows them with rules 28 and 29. Tried on cisco-25gb (NX-OS 9.3(16)), whose nat region
+is 0, with throwaway translations and pools: every line above was taken except `ip nat
+inside` and `ip nat outside` on an interface ("Nat tcam not carved") and the SYN and FIN/RST
+timeouts, which need the `tcp-nat` region. The clear rules were not tried (the fake switch
+stands in).
+
+**Enhanced policy-based routing.** The **Enhanced policy routing** page (under Configure)
+works with the broad role and with a stored admin login, and is off with the limited role.
+It needs `feature epbr` (Features page; `feature pbr` is not needed). It reads `show
+feature`, `show interface brief`, `show vrf`, `show vrf interface`, `show epbr policy`,
+`show running-config` (as text), and for each applied policy `show epbr policy <name>
+reverse` and `show epbr statistics policy <name> [reverse]`. It types `epbr service <name>`
+and inside it `probe icmp|tcp <port>|udp <port> [control enable]|http get <page>|dns host
+<name>` with `frequency`, `timeout`, `retry-down-count`, `retry-up-count` and
+`source-interface`, `service-interface <interface>`, `vrf <vrf>`, `service-end-point
+ip|ipv6 <address> [interface <interface>]` and inside that `reverse ip|ipv6 <address>
+interface <interface>` and a probe (or `probe track <object>`); `epbr policy <name>` and
+inside it `statistics`, `match ip|ipv6 address <acl>` and inside that `load-balance [buckets
+<n>] [method src-ip|dst-ip]` and `<n> set service <service> [fail-action
+bypass|drop|forward]`; `epbr ip|ipv6 policy <name> [reverse]` on a VLAN interface, routed
+port or routed port-channel; each with its `no` form. A service an applied policy uses, and
+an applied policy, are changed inside `epbr session` ... `commit` (a configuration command,
+which `conf t ; *` covers); if the switch refuses a line there, NXray sends `epbr session`
+and `abort` so no session is left open. It clears with `clear epbr statistics policy
+<name>`, typed outside configuration mode: the broad role allows it with rule 30. Tried on
+cisco-25gb (N9K-C92160YC-X, NX-OS 9.3(16)) with throwaway services, policies and VLAN
+interfaces: every line above was taken, a policy applied on a VLAN interface (the HTTP probe's `no` form and the DNS probe's were
+not tried); the clear rule was not tried (the fake switch stands in). ePBR makes IP SLA
+entries (from 20001), tracked objects and `epbr_` route-maps and ACLs of its own for its
+probes; the IP SLA and Tracked objects pages show its entries and objects too.
+
+**Tracked objects.** The **Tracked objects** page (under Configure) needs no rule of its
+own and no feature, so it works with the broad role and with a stored admin login, and is
+off with the limited role. It reads `show interface brief`, `show vrf`, `show track` and
+`show running-config` (as text), and types `track <1-512> interface <interface>
+line-protocol|ip routing|ipv6 routing`, `track <n> ip|ipv6 route <prefix> reachability`,
+`track <n> ip sla <entry> state|reachability`, `track <n> list boolean and|or` and `track <n>
+list threshold weight|percentage`, and inside one `delay [up <0-180>] [down <0-180>]`,
+`vrf member <vrf>` (route objects), `object <n> [not|weight <1-255>]` and `threshold
+weight|percentage [up <n>] [down <n>]` (lists), each with its `no` form, and `no track <n>`.
+Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects.
+
+**IGMP snooping.** The **IGMP snooping** page (under Configure) needs no rule of its own and
+no feature (snooping is on by default), so it works with the broad role and with a stored
+admin login, and is off with the limited role. It reads `show interface brief`, `show ip
+igmp snooping`, `show ip igmp snooping groups detail`, `show ip igmp snooping querier`, and
+as text `show ip igmp snooping mrouter` and `show running-config`. Switch-wide it types `[no]
+ip igmp snooping`, `ip igmp snooping report-suppression`, `v3-report-suppression`,
+`link-local-groups-suppression`, `proxy general-queries [mrt <1-25>]`, `group-timeout
+<1-10080>|never`, `event-history <buffer> size small|medium|large`, `vxlan` and
+`disable-nve-static-router-port`; inside `vlan configuration <n>` it types `[no] ip igmp
+snooping`, `querier <address>`, `query-interval`, `query-max-response-time`,
+`querier-timeout`, `startup-query-interval`, `startup-query-count`, `robustness-variable`,
+`last-member-query-interval`, `version 2|3`, `fast-leave`, `explicit-tracking`,
+`group-timeout`, `report-suppression`, `v3-report-suppression`,
+`link-local-groups-suppression`, `report-flood all`, `proxy-leave use-group-address`, `proxy
+general-queries`, `mrouter interface <port>`, `static-group <group> [source <address>]
+interface <port>`, `report-flood interface <port>` and `report-policy|access-group
+route-map|prefix-list <name> interface <port>`, each with its `no` form. The VLAN lines were
+tried on cisco-25gb (NX-OS 9.3(16)) in a throwaway VLAN; the switch-wide lines follow
+Cisco's 9.3 guides and were not tried (they are settings the switch already has). Typed
+inside `vlan configuration`, a switch-wide-only line changes the whole switch, so the page
+sends only the lines above there. It also reads `show ip igmp snooping statistics` and clears,
+outside configuration mode and one VLAN at a time, with `clear ip igmp snooping groups *|<group>
+[<source>] vlan <n>`, `clear ip igmp snooping statistics vlan <n>` and `clear ip igmp snooping
+explicit-tracking vlan <n>`: the broad role allows them with rules 31 to 33. Those lines were
+tried on cisco-25gb as admin in a throwaway VLAN (the switch has no form for every VLAN at
+once); the rules were not (the fake switch stands in).
+
+**Non-blocking multicast.** The **Non-blocking multicast** page (under Configure) works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature nbm` (Features page). It reads `show feature`, `show interface brief`, `show
+vrf`, `show vrf interface`, `show hardware access-list tcam region` (as text), `show nbm
+defaults`, `show nbm flow-policy`, `show nbm host-policy all sender|receiver local|receiver
+external`, `show nbm flows summary`, `show nbm flows static`, `show nbm interface bandwidth`
+and `show running-config` (as text). It types, at the top level or inside `nbm vrf <vrf>`,
+`nbm mode pim-active|pim-passive`, `nbm flow bandwidth <n> kbps|mbps|gbps`, `nbm flow dscp`,
+`nbm flow policer`, `nbm reserve unicast fabric bandwidth <percent>`, `nbm flow asm range
+<groups>`, `nbm flow reserve-bandwidth receiver-only`; `nbm flow-policy` with `policy <name>`
+and inside it `bandwidth`, `dscp`, `policer`, `ip group-range <first> to <last>` and `ip
+group <group>` with `priority critical`; `nbm host-policy` with `sender`, `receiver` and
+`pim` entries (`<n> host ... group ... permit|deny`, `no <n>`) and `default permit|deny`;
+`nbm flow-definition <group> <source>` with `stage-flow`, `egress-interface` and
+`egress-host`; and `nbm external-link` on a routed front port; each with its `no` form. Tried
+on cisco-25gb (N9K-C92160YC-X, NX-OS 9.3(16)) with throwaway policies, the feature turned
+back off: the switch takes NBM. Cisco's guide says NBM is not supported with VXLAN on and
+needs the `ing-nbm` TCAM region (with `ing-racl 256` and `ing-l3-vlan-qos 256`, after a
+restart); the page says so when either applies, as on cisco-25gb.
+
+**Multicast over VXLAN.** The **Multicast over VXLAN** page (under Configure) works with the
+broad role and with a stored admin login, and is off with the limited role. It needs
+`feature ngmvpn` (Features page) on a VXLAN EVPN switch. It reads `show feature`, `show
+vrf` and `show running-config` (as text), and types `ip multicast overlay-spt-only`, `ip
+multicast overlay-distributed-dr`, `advertise evpn multicast` and `ip pim
+evpn-border-leaf`; in `interface nve1` `mcast-routing override source-interface <loopback>`
+and in `member vni <n> associate-vrf` `mcast-group <group>`; in `vrf context <vrf>` `ip
+multicast multipath s-g-hash next-hop-based`, and in its `address-family ipv4 unicast`
+`route-target both auto mvpn` and `route-target import|export <value> mvpn`; in `router bgp
+<as>` `address-family ipv4 mvpn|l2vpn evpn` with `advertise-pip`, `retain route-target all`
+and `maximum-paths`; each with its `no` form. The neighbors' `address-family ipv4 mvpn` and
+`l2vpn evpn` (with `send-community extended` and `rewrite-rt-asn`) are on the BGP page,
+whose role rules cover them. Tried on cisco-25gb: `feature ngmvpn`, the first three
+switch-wide lines, the VRF's `s-g-hash` line and `mcast-routing override`; the MVPN
+route-targets, the layer 3 VNI's group and the BGP lines need BGP and EVPN on and were not
+tried on a switch.
+
+**Flex Links.** The **Flex Links** page (under Configure) works with the broad role and with
+a stored admin login, and is off with the limited role. It needs `feature flexlink`
+(Features page). It reads `show feature`, `show version` and `show interface brief`, and
+while the feature is on `show interface switchport backup` and `show running-config` as
+text. On the active port it types `switchport backup interface <backup>` and `switchport
+backup interface <backup> preemption mode forced|bandwidth|off`, `... preemption delay
+<1-300>` and `... multicast fast-convergence`, each with its `no` form. Cisco's 9.3 guide
+lists Flex Links for the Nexus 9300-EX, -FX, -FX2 and -GX, the 9364C, the 93108TC-FX3H and
+-FX3P and the 93180YC-FX3 only: cisco-25gb (N9K-C92160YC-X) refused `feature flexlink`
+("Feature flexlink is not supported on this platform"), and the page says so on a Nexus
+9200. None of the lines was tried on a switch.
+
+**VM Tracker.** The **VM Tracker** page (under Configure) works with the broad role and with
+a stored admin login, and is off with the limited role. It needs `feature vmtracker` (on by
+default). It reads `show feature`, `show interface brief`, `show vmtracker status`, and as
+text `show vmtracker info detail` and `show running-config`. It types `vmtracker fabric
+auto-config` (which needs `feature fabric forwarding`), `vmtracker connection <name>` and
+inside it `remote ip address <address> [port <port>] [vrf <vrf>]`, `username <user> password 0
+<password>` (stored as `password 5`, never shown back), `connect`, `set extension-key <key>`,
+`set interval find-new-host|sync-full-info|pending-task-polling <seconds>`, `autovlan enable`
+and `allowed-vlans <list>|except <list>|all`; `[no] vmtracker enable` on a port; and, outside
+configuration mode, `vmtracker connection <name> refresh`: the broad role allows it with rule
+34. Tried on cisco-25gb with a throwaway connection to a documentation address (no vCenter
+there): every configuration line above but `connect` was taken; the switch refuses every
+`no remote` form, so an address is changed, never removed. `connect`, syncing with a real
+vCenter, the VM list and the refresh rule were not tried.
+
+**VXLAN tunnel encryption.** The **VXLAN tunnel encryption** page (under Configure) works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature tunnel-encryption` (Features page). It reads `show feature`, `show version`,
+`show interface brief` and `show vrf interface`, and while the feature is on, as text, `show
+running-config`, `show key chain`, `show tunnel-encryption session`, `show tunnel-encryption
+policy` and `show tunnel-encryption info global`. It types `key chain <name>
+tunnel-encryption`, inside it `key <hex id>`, and inside that `key-octet-string <hex>
+cryptographic-algorithm AES_128_CMAC|AES_256_CMAC` (never shown back) and `send-lifetime`;
+`tunnel-encryption source-interface loopback<n>`, `tunnel-encryption must-secure-policy` and
+`tunnel-encryption icv`; `tunnel-encryption policy <name>` with `cipher-suite`,
+`window-size` and `sak-rekey-time`; `tunnel-encryption peer-ip <address>` with `keychain
+<chain> policy <policy>` or `pki policy <policy>`; and `tunnel-encryption` on a routed port
+or port-channel; each with its `no` form. Cisco's 9.3 guide lists tunnel encryption for the
+Nexus 9300-FX2 only: cisco-25gb (N9K-C92160YC-X) refused `feature tunnel-encryption`
+("Tunnel-encryption cannot be enabled on this system"), and the page says so on any other
+model. The key chain lines were tried there (they need no feature); the rest was not tried
+on a switch.
+
+**VXLAN OAM.** The **VXLAN OAM** page (under Configure) works with the broad role and with a
+stored admin login, and is off with the limited role. It needs `feature ngoam` (Features
+page) and VXLAN. It reads `show feature`, `show version` and `show interface brief`, while
+the feature is on `show ngoam loopback|traceroute|pathtrace statistics summary`, and as text
+`show ngoam acl status` and `show running-config`. It types `ngoam install acl`, `ngoam
+authentication-key <key>` (never shown back), `ngoam xconnect hb-interval <150-5000>`,
+`ngoam profile <1-1023>` with `description`, `hop`, `sport`, `oam-channel 2`, `payload pad`,
+`dot1q` and `interface`, a profile's `flow forward|reverse` with its addresses, ports,
+protocol and VLAN, and `ngoam loop-detection` with `disable vlan`, `periodic-probe-interval`
+and `port-recovery-interval`, each with its `no` form. Outside configuration mode it runs
+`ping nve ...`, `traceroute nve ...` and `pathtrace nve ...` (sent as text, whose printed
+answer the page shows), `clear ngoam loopback|traceroute|pathtrace statistics summary` and
+`ngoam loop-detection probe|bringup vlan <vlan> port <port>`: the broad role allows them
+with rules 35 to 40. Tried on cisco-25gb with a throwaway profile: the feature, every profile
+and flow line, the switch-wide lines but `ngoam install acl`, the clears and every tool
+form were taken; the switch had no VXLAN tunnel, so no OAM answer was seen. `ngoam install
+acl` was not tried (it writes into the switch's hardware access lists), and loop detection
+is refused there ("Loop detection not supported on this hardware"), which the page says.
+The rules were not tried.
+
+**Edge Virtual Bridging.** The **Edge Virtual Bridging** page (under Configure) works with
+the broad role and with a stored admin login, and is off with the limited role. It needs
+`feature evb` (Features page). It reads `show feature`, `show evb`, and as text `show evb
+hosts`, `show evb vsi` and `show running-config`. It types `evb mac <address>`, `evb
+resource-wait-delay <exponent>`, `evb reinit-keep-alive <exponent>` and `evb batch-response
+disable`, each with its `no` form, as the switch's own command list gives them; the switch
+lists no per-port EVB lines. The shows were read on cisco-25gb, where EVB was on; the lines
+were not tried there (they are switch-wide settings EVB already has).
+
+**Smart Licensing and Programmability.** The **Smart Licensing** and **Programmability** pages
+(under Switch) need no rule of their own, so they work with the broad role and with a stored
+admin login, and are off with the limited role. Smart Licensing reads `show feature`, `show
+license usage` and, with `feature license smart` on, `show license summary`, `show license udi`
+and `show running-config | section license`; it types `license smart reservation` (and its `no`
+form). The feature is turned on on the Features page (`license smart enable`), and the switch
+then writes a Call Home section (the CiscoTAC-1 profile over http) itself. Programmability
+reads `show feature`, `show running-config` and, for each feature that is on, `show grpc gnmi
+service statistics`, `show nxsdk internal service` and `show openflow switch 1`; it types
+`grpc port <1024-65535>`, `grpc gnmi max-concurrent-calls <1-16>`, `grpc certificate <name>`,
+`netconf sessions <1-10>`, `netconf idle-timeout <0-1440>` and `nxsdk service-name <name>`,
+each with its `no` form, which names the value. All were tried on cisco-25gb with the feature
+turned on and off again; `nxsdk service-name` is refused unless an application of that name is
+installed, and OpenFlow's switch lines are refused until the TCAM has an OpenFlow region (a
+restart), so NXray only shows OpenFlow.
+
+**Switch-wide settings.** This page needs no rule of its own, so it works with the broad role
+and with a stored admin login, and is off with the limited role. It reads `show running-config`
+as text and types `logging source-interface`, `ip dns source-interface`, `ip http
+source-interface`, `ip tcp path-mtu-discovery|mss|synwait-time`, `xml server
+max-session|validate all`, `acllog match-log-level`, `rate-limit cpu`, `time-range`, `system
+default|routing|urpf|vlan`, `switching-mode`, `hardware ...`, `ip load-sharing` and other
+switch-wide lines, each with its `no` form.
+
+**TWAMP server, RMON, Flow analytics and Maintenance mode.** These pages need no rule of
+their own for their settings, so they work with the broad role and with a stored admin login,
+and are off with the limited role. TWAMP reads `show feature`, `show ip sla twamp session`,
+`show ip sla twamp standards` and `show running-config | section twamp`, and types `ip sla
+server twamp` with `port <1-65535>` and `timer inactivity <1-6000>`, and `ip sla responder
+twamp`. RMON reads `show rmon events|alarms|hcalarms|info` as text and types `rmon event
+<1-65535> [log] [trap <community>] [description <word>] [owner <word>]`, `rmon alarm` and `rmon
+hcalarm` with their `no` forms; the switch keeps an event's description and owner when it is
+entered again. Flow analytics reads `show running-config analytics all` and types the `flow
+exporter|record|monitor|profile|filter|event <name>` objects and `flow system config` with
+their lines. Maintenance mode reads `show system mode`, `show maintenance timeout|maint-delay|
+snapshot-delay|profile`, `show maintenance on-reload reset-reasons` and `show snapshots`, and
+types `system mode maintenance timeout|snapshot-delay|maint-delay|always-use-custom-profile|
+on-reload reset-reason`, and, outside configuration mode (rules 41 and 42, below),
+`snapshot create <name> <description>` and `snapshot delete <name>`; `show snapshots compare <a>
+<b> summary` needs no rule. **NXray never types `system mode maintenance` to enter or leave
+maintenance mode.** All were tried on cisco-25gb with throwaway objects, put back afterwards
+(the restart reasons make the switch start in maintenance mode after that kind of restart, so
+they were removed at once). The Nexus 9200 takes the flow analytics lines but cannot put a
+monitor on a port.
+
+**Errdisable.** The **Errdisable** page needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role. It reads `show
+errdisable detect`, `show errdisable recovery` and `show interface status err-disabled` (as
+text), and types `errdisable recovery cause <cause>`, `errdisable recovery interval
+<30-65535>` and `errdisable detect cause <cause>`, with the `no` forms of the cause lines
+(the interval has none: set 300). On cisco-25gb (NX-OS 9.3(16)) the switch took the causes
+`bpduguard`, `failed-port-state`, `link-flap`, `loopback`, `psecure-violation`,
+`security-violation`, `storm-control`, `udld` and `vpc-peerlink` and refused `miscabling`
+(listed in Cisco's guide), so the page offers those and `all`. Not tried: `recovery cause
+all`, `detect cause acl-exception` and the `no` forms of the detect lines.
+
+**Scheduler.** The **Scheduler** page needs no rule of its own, so it works with the broad
+role and with a stored admin login, and is off with the limited role. It needs `feature
+scheduler` (Features page): the scheduler's show commands are refused before. It reads
+`show feature`, `show interface brief`, `show scheduler config`, `show scheduler schedule`
+and `show scheduler logfile`, and types `scheduler job name <name>` with the job's lines,
+`no scheduler job name <name>`, `scheduler schedule name <name>` with `job name <job>` and
+one of `time daily`, `time weekly`, `time monthly` or `time start ... [repeat ...]` (and `no
+time`), `no scheduler schedule name <name>` (after `no time`: the switch refuses to delete
+a schedule whose time is set), and `scheduler logfile size <16-1024>`. A job's lines come
+from a fixed menu, never typed: save the configuration, copy it to a bootflash file, turn
+a port off or on, clear a port's counters, or run a show command from a list. The switch
+takes a job's lines only when the job is made ("Error: job exists" after), so a job is
+changed by making it again. A job runs as the account that made it: with the broad role
+the switch refuses the copy to bootflash and clearing counters, which then need the stored
+admin login. Tried on cisco-25gb with throwaway jobs and schedules; not tried: `scheduler
+logfile size`.
+
+**EEM.** The **EEM** page changes EEM only with a stored admin login: an applet's `action
+... cli` lines run as the switch's admin, whoever made the applet, so the broad role denies
+`event manager` (see How much access NXray's account gets). It reads `show interface
+brief`, `show event manager system-policy`, `show event manager history events` and `show
+running-config eem` (as text), and types `event manager applet <name> [override
+<system-policy>]` with its `description`, `event ...` and `action <label> ...` lines (and
+their `no` forms), `no event manager applet <name>`, and `event manager environment <name>
+"<value>"` (and `no event manager environment <name>`). An applet's commands come from the
+same fixed menu as the scheduler's, one `action <label> cli <command>` line each (a command
+of several lines takes the labels `<n>.1`, `<n>.2`, ...). Tried on cisco-25gb: an applet with
+a description, an `event cli match`, `syslog`, `cli` and `event-default` actions, and an
+environment variable (its value must be quoted). The other event and action lines are from
+Cisco's NX-OS 9.3 guide and were not tried; timers and `event none` need `feature evmed`.
+
+**Call Home.** The **Call Home** page needs no rule of its own, so it works with the broad
+role and with a stored admin login, and is off with the limited role. It reads `show vrf`,
+`show callhome`, `show callhome destination-profile`, `show callhome transport` and `show
+running-config callhome` (all as text), and types, inside `callhome`: `email-contact`,
+`phone-contact`, `streetaddress`, `contract-id`, `customer-id`, `site-id` (each removed with
+its bare `no` form), `switch-priority`, `duplicate-message throttle`, `periodic-inventory
+notification`, `enable`, `callhome test`, `destination-profile <name>` with `format`,
+`transport-method`, `index <n> email-addr`, `index <n> http`, `message-level`,
+`message-size` and `alert-group`, `no destination-profile <name>`, and the `transport email
+mail-server|from|reply-to` and `transport http use-vrf|proxy server|proxy enable` lines.
+Tried on cisco-25gb with throwaway values: the contact, profile and transport lines and
+their `no` forms (the switch wants an index on every email or web address, and
+`transport-method` adds a method). Not tried: `enable` (it starts sending), the test
+message, `switch-priority`, `duplicate-message throttle`, `periodic-inventory` and `transport
+http proxy enable`.
+
+**PTP.** The **PTP** page (under Switch) needs no rule of its own, so it works with the
+broad role and with a stored admin login, and is off with the limited role. It needs
+`feature ptp` (Features page). It reads `show feature`, `show interface brief`, `show vrf`,
+`show ptp clock`, `show ptp parent`, `show ptp time-property`, `show ptp brief`, `show ptp
+counters all` and `show running-config` (as text, with the role's `show running-config`
+rule; without it the forms start empty), and types `ptp source <IPv4> [vrf <vrf>]`, `ptp
+domain <0-127>`, `ptp priority1|priority2 <0-255>`, `ptp correction-range <10-1000000000>`,
+`ptp correction-range logging`, `ptp mean-path-delay <10-1000000000>`, `ptp management`,
+`ptp notification type parent-change|gm-change`, `ptp notification type high-correction
+interval <1-300>|immediate`, `ptp notification type port-state-change [category
+all|master-slave-only] interval <1-300>|immediate`, and on a front port `ptp`, `ptp
+transmission multicast|unicast`, `ptp role master|slave|dynamic`, `ptp vlan <n>`, `ptp
+announce interval <0-4>`, `ptp announce timeout <2-4>`, `ptp sync interval <-3-1>`, `ptp
+delay-request minimum interval <-1-6>`, `ptp ucast-source <IPv4>`, `ptp master <IPv4>` and
+`ptp slave <IPv4>`, each with its `no` form (which names the value; `no ptp` takes every
+PTP line off a port). The switch refuses a port's `ptp` until the source address is set,
+and removing the source while a port runs PTP. Tried on cisco-25gb (NX-OS 9.3(16)) with
+throwaway values on an empty port.
+
+**Telemetry.** The **Telemetry** page (under Switch) needs no rule of its own, so it works
+with the broad role and with a stored admin login, and is off with the limited role. It
+needs `feature telemetry` (Features page). It reads `show feature`, `show vrf`, `show
+telemetry transport`, `show telemetry control database sensor-groups`, `show telemetry
+data collector brief` and `show running-config` (as text, with the role's `show
+running-config` rule; without it only the collectors and running sensor groups are
+listed), and types, inside `telemetry`: `destination-profile` with `use-vrf`,
+`use-compression gzip`, `source-interface`, `use-retry size <10-1500>` and `use-nodeid`;
+`destination-group <n>` with `ip address|ipv6 address <address> port <port> protocol
+gRPC|HTTP|UDP encoding GPB|JSON` and `use-vrf`; `sensor-group <n>` with `data-source
+DME|NX-API|YANG|NATIVE` and `path <path> [depth <0-32>|unbounded] [query-condition <q>]
+[filter-condition <f>]` (an NX-API path is one show command in double quotes, without `|`,
+`<` or `>`); `subscription <n>` with `dst-grp <n>` and `snsr-grp <n> sample-interval
+<ms>`; each with its `no` form, and `no destination-group|sensor-group|subscription <n>`.
+The switch takes gRPC with GPB only and HTTP with JSON only. Tried on cisco-25gb (NX-OS
+9.3(16)) with throwaway groups.
+
+**AAA.** The **AAA** page (under Switch) changes AAA only with a stored admin login, and only
+for an NXray admin: its lines decide who may sign in to the switch, NXray's own account
+included, so the broad role denies `aaa`, `tacacs-server` and `radius-server` (see How much
+access NXray's account gets). It reads `show aaa authentication`, `show aaa authentication
+login error-enable`, `show aaa accounting`, `show aaa authorization`, `show aaa groups`, `show
+aaa user default-role`, `show radius-server`, `show vrf`, `show radius-server groups`
+(network-operator, and so NXray's limited account, is refused it; with the admin login
+stored the page reads with that login), and `show tacacs-server` and `show tacacs-server
+groups` (refused while `feature tacacs+` is off; the Features page turns it on). It types `aaa authentication login default|console group
+<g> [<g> [<g>]]`, `aaa authentication login default|console local`, `aaa authentication login
+default|console fallback error local`, `aaa authentication login error-enable`, `aaa user
+default-role`, `aaa accounting default group <g> ...` or `local`, `aaa authorization
+commands|config-commands default group <g> ... [local]`, `radius-server host <a> [key 0 <k>]
+[auth-port <p>] [acct-port <p>] [authentication] [accounting] [timeout <s>] [retransmit
+<n>]`, `tacacs-server host <a> [key 0 <k>] [port <p>] [timeout <s>]`, the switch-wide `key 0`,
+`timeout`, `retransmit` and `deadtime` lines, and `aaa group server radius|tacacs+ <g>` with
+`server <a>`, `use-vrf <v>` and `deadtime <m>`; each with its `no` form, which names the
+value. With `feature ldap` on it also reads `show ldap-server`, `show ldap-server groups` and
+`show running-config | section ldap` (as text) and types `ldap-server host <a>` with `enable-ssl`,
+`port <p>`, `timeout <s>` and `rootDN "<dn>" password <pw>` on lines of their own, `ldap-server
+timeout|port|deadtime <n>`, `ldap search-map <m>`, and `aaa group server ldap <g>` with
+`server`, `use-vrf`, `deadtime`, `enable Cert-DN-match`, `enable user-server-group` and
+`ldap-search-map <m>`. Tried on cisco-25gb (NX-OS 9.3(16)) (NX-OS 9.3(16)) with throwaway servers and groups: the server,
+group and TACACS+ switch-wide lines and their `no` forms. Not tried, as each changes how
+people sign in to a switch in production: the `aaa authentication`, `aaa accounting` and
+`aaa authorization` lines, the RADIUS switch-wide lines and `aaa user default-role`.
+
+**SSH and certificates.** The **SSH and certificates** page (under Switch) needs no rule of
+its own, so it works with the broad role and with a stored admin login, for an NXray admin.
+It reads `show ssh key`, `show crypto key mypubkey rsa`, `show crypto ca trustpoints`, `show
+crypto ca certificates` and `dir bootflash:`, and types: for a new SSH host key `no feature
+ssh`, `ssh key rsa|ecdsa <bits> force` and `feature ssh` in one request (when the switch
+refuses the key, `feature ssh` is sent again on its own, so SSH is not left off); `crypto key
+generate rsa label <l> [exportable] modulus <bits>` and `crypto key zeroize rsa <l>`; `crypto
+ca trustpoint <t>` with `rsakeypair <l>`, `enrollment terminal`, `revocation-check <how>`,
+`delete certificate force` and `delete ca-certificate`; `no crypto ca trustpoint <t>`; and
+`crypto ca import <t> pkcs12 bootflash:<file> <password>` (copy the file there on the Files
+page first). A pasted CA certificate goes over SSH (`crypto ca authenticate <t>`, the
+certificate, `END OF INPUT`), and NXray answers yes only when the switch shows the
+fingerprints of the certificates it read. Tried on cisco-25gb with a throwaway key pair,
+trustpoints and test CA: everything but the new SSH host key, which would replace the key
+of a switch in production. A certificate dated after the switch's clock is refused ("not
+yet valid").
+
+**Files, Software and Tech support.** These three pages (under Switch) read `dir
+bootflash:`, `show version`, `show boot`, `show feature` and `show install all status` with
+the stored admin login when there is one, else with NXray's own account
+(network-operator, and so the limited account, is refused `show boot` and `show install
+all status`: the pages say so, and no image is offered for deleting then). They do
+everything else with the stored admin login, for an NXray admin: copying a
+file to or from bootflash goes over SCP, which needs `feature scp-server` on (Features
+page; the switch's SFTP server closes every session at once, so NXray does not use it);
+deleting a file is `delete bootflash:<file> no-prompt` (never the image the switch runs or
+starts from); an image's checksum is `show file bootflash:<image> md5sum|sha256sum|sha512sum`
+(by the length of the checksum pasted from Cisco's download page); the compatibility check
+is `show install all impact nxos bootflash:<image>`; the install is `install all nxos
+bootflash:<image> non-interruptive`, offered only once the same image's checksum and check
+passed and after the switch's name is typed; and tech-support is `show tech-support`, kept
+gzipped in NXray's data folder. The slow ones run in the background over SSH and their page
+reloads itself until they end; NXray forgets a running one if it restarts. As Cisco's
+upgrade guide says, the install saves the running configuration and, on this model,
+restarts the switch. Tried on cisco-25gb (NX-OS 9.3(16)): the reads, SCP both ways and the
+delete with a throwaway file, the checksums, the compatibility check (which reported
+"disruptive") and tech-support (125 MB in about four minutes, 8 MB gzipped). Not tried: the
+install itself.
+
+**QoS.** The **QoS** page needs no rule of its own, so it works with the broad role and
+with a stored admin login, and is off with the limited role (it has no rule numbers left).
+It reads `show class-map type qos`, `show policy-map type qos`, `show class-map type
+network-qos`, `show policy-map type network-qos`, `show policy-map type queuing`, `show
+policy-map interface brief`, `show policy-map system` and `show queuing interface`, and
+types `class-map type qos match-any|match-all <name>` with `match dscp`, `cos`,
+`precedence`, `access-group name` and `ip rtp`; `policy-map type qos <name>` with
+`class <class-map>`, `set qos-group`, `set dscp`, `set cos`, `set precedence` and `police
+cir ... conform transmit violate drop`; `service-policy type qos input <policy>` on a port;
+`class-map` and `policy-map type network-qos` with `mtu` and `pause pfc-cos`;
+`policy-map type queuing` with `class type queuing c-out-8q-q3` and `bandwidth remaining
+percent`, `priority level`, `shape min ... max ...` and `queue-limit ... bytes`; and, under
+`system qos`, `service-policy type network-qos|queuing output|qos input <policy>`, each
+with its `no` form. Tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects on
+Ethernet1/54: the switch refuses `match ip dscp`, `match vlan` and DSCP names such as
+`af11`; `no set cos` and `no police` alone (the whole line is needed); a classification
+policy as `output`; a queuing policy on a port; and `priority level` together with
+`bandwidth` in one queue. Applying a policy under `system qos` changes the whole switch
+and was not tried, so those lines are written from Cisco's guide. While no class-map or
+policy-map was made, the switch prints nothing for the first two commands.
+
+**Monitor sessions.** The **Monitor sessions** page needs no rule of its own, so it works
+with the broad role and with a stored admin login, and is off with the limited role (a
+role holds 256 rules and the limited one has 254 in use). It reads `show monitor session
+all` and, as text, `show running-config monitor` (for the ERSPAN source address), and
+types `monitor session <n>` (`monitor session <n> type erspan-source` for ERSPAN, which
+the switch needs every time) with its `source interface`, `source vlan`, `filter vlan`,
+`destination interface` or `destination ip`, `erspan-id`, `vrf`, `ip ttl`, `ip dscp`,
+`mtu` and `shut` / `no shut`, `switchport monitor` on a destination port, and `monitor
+erspan origin ip-address <address> global`, each with its `no` form. Tried on
+cisco-25gb (NX-OS 9.3(16)) with throwaway sessions: sessions are numbered 1 to 32, the
+switch refuses `tx` and `both` on a port source while sFlow is on, a description is at
+most 32 characters, and `header-type` was refused. A session did not leave "Session
+admin shut" on the test ports (no transceiver on the destination), so a session coming up
+was not seen. ERSPAN destination sessions (`monitor session <n> type erspan-destination`,
+`source ip`, `erspan-id`, `vrf`, `destination interface`) are written from Cisco's guide:
+the switch refuses them while the nve feature is on, and it was on, so they were not tried.
+
+**VXLAN.** The **VXLAN** page (role version 20, from Update the port list) needs the
+`nve` and `vnseg_vlan` features (Features page). It reads `show nve interface`,
+`show nve peers`, `show nve vni` and, as text, `show running-config` (there is no
+`show running-config vxlan`), and types
+the NVE interface (`interface nve1`, `source-interface`, `host-reachability protocol
+bgp`, `member vni`), a VLAN's `vn-segment`, the `evpn` block of a VNI, a VRF's `vni`
+and EVPN route-targets, and the switch-wide `nv overlay evpn` and anycast gateway MAC,
+each with its `no` form. Entering `interface nve1` also needs the role's port list to
+name it (`permit interface nve1`), which NXray writes only while the nve feature is on
+(the switch is expected to refuse it otherwise, as with the VLAN interfaces): turn the
+feature on first, then press Update the port list. The same VNIs are set on every
+switch of the fabric, from each one's NXray. The EVPN block and a VRF's EVPN
+route-targets need `feature bgp` and `nv overlay evpn` first; the switch refuses them
+otherwise, and `member vni ... associate-vrf` needs `host-reachability protocol bgp`.
+The lines were tried on cisco-25gb (NX-OS 9.3(16)) with throwaway objects; the role
+rules and EVPN with a real BGP neighbor were not.
+
 **Config.** The **Config** page (admins only: a configuration holds every
 setting of the switch, SNMP communities and password hashes included) shows
 whether the running configuration differs from the saved one, line by line,
@@ -1077,19 +1729,79 @@ changes**) and changeable later on the Switch page under **How much access
 NXray's account gets**. Changing it asks for the switch admin login, writes the
 `nxray-ports` role again, removes the rules the new mode does not have, and
 saves the configuration. The port list (`interface policy deny` and the ports it
-names) is the same in every mode, so the account stays limited to those ports.
+names) is the same in every mode, so the account stays limited to those ports; the broad
+role's also names every loopback (`permit interface loopback0-1023`), which the Loopbacks
+page needs, and a role leaving the broad mode has that line taken out again.
 
 | Mode | The role | After an NXray update that adds rules |
 | --- | --- | --- |
 | **Limited role** (default) | Only the listed rules. | An admin presses **Update the port list**; the banner says when. |
-| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server` and `boot` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
-| **Limited role, admin login stored** | The listed rules, as in the limited mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
+| **Broad role with a deny list** | `rule 1 permit command conf t ; *` and `show *`, the few commands typed outside configuration mode (`copy running-config startup-config`, `clear mac address-table dynamic`, `clock set`, `checkpoint`, `terminal dont-ask`, `reload`, ITD's `itd statistics`, NAT's `clear ip nat`, ePBR's `clear epbr statistics`, IGMP snooping's `clear ip igmp snooping`, VM Tracker's `vmtracker connection <name> refresh`, VXLAN OAM's `ping nve`, `traceroute nve`, `pathtrace nve`, `clear ngoam` and `ngoam loop-detection probe\|bringup`, Maintenance mode's `snapshot create` and `snapshot delete`), and denies for configuration of `username`, `role`, `aaa`, `tacacs-server`, `radius-server`, `boot` and `event manager` (and their `no` forms). | Nothing: new features need no role update. The account can change any other setting on the switch. |
+| **Limited role, admin login stored** | The listed rules, as in the limited mode; the pages that need every configuration command (EEM, Scheduler, QoS and the like) send their changes with the stored admin login, and AAA, Files, Software and Tech support work only in this mode. | NXray adds the rules itself when it starts. A stolen NXray database exposes the switch's real admin login, not only the low-privilege account. |
 
 In the broad role a rule with a higher number wins over a lower one, so the
 denies are numbered right after the permit for `conf t ; *`, and the other
 permits after them. Checked on a switch (NX-OS 9.3(16)): the `username` deny,
 and that the port list still limits the account. Not yet tried: the denies for
-`role`, `aaa`, `tacacs-server`, `radius-server` and `boot`, and the `no` forms.
+`role`, `aaa`, `tacacs-server`, `radius-server` and `boot`, and their `no` forms.
+
+The `event manager` denies (rules 23 and 24) came later. An EEM applet's `action
+cli` lines run as the switch's admin, not as the account that made the applet, so
+without them the account could make an applet that runs what the other denies
+refuse. Checked on a switch (NX-OS 9.3(16)): both denies refuse `event manager
+applet` and `event manager environment`, and other configuration still goes
+through. A scheduler job runs as the account that made it, so the denies hold
+inside a job and the scheduler needs no deny. A broad role written by an older
+NXray lacks the EEM denies: the Switch page and a banner say so, and **Update the
+port list** writes the role again with them. EEM changes then need the stored
+admin login.
+
+The loopbacks came into the broad role's port list after that. A broad role written
+before lacks them, and the switch answers the Loopbacks page's changes with "Interface
+permission denied": the Switch page says so on the **Update the port list** card, and
+pressing it writes the role again with them. Checked on a switch (NX-OS 9.3(16)) with a
+throwaway role and account: the switch keeps `permit interface loopback0-1023` as that one
+line (unlike the VLAN interfaces, which it writes out one per line), takes it with no
+feature on, lets the account make, change and delete the loopbacks it names and refuses
+the others, and `no permit interface loopback0-1023` takes it out again.
+
+ITD's counters came after that (rules 25 to 27: `itd statistics *`, `no itd statistics *`
+and `clear itd statistics *`, typed outside configuration mode, so `conf t ; *` does not
+cover them). A broad role written before lacks them, and the switch refuses the ITD
+page's **Count the traffic** and **Clear the counters**: the Switch page says so on the
+**Update the port list** card, and pressing it writes the role again with them.
+
+Clearing NAT's translations and counters came after that (rules 28 and 29: `clear ip nat
+translation *` and `clear ip nat statistics`, typed outside configuration mode). A broad
+role written before lacks them, and the switch refuses the NAT page's Clear buttons: the
+Switch page says so on the **Update the port list** card, and pressing it writes the role
+again with them.
+
+Clearing ePBR's counters came after that (rule 30: `clear epbr statistics *`, typed outside
+configuration mode). A broad role written before lacks it, and the switch refuses **Clear
+the counters** on the Enhanced policy routing page: the Switch page says so on the **Update
+the port list** card, and pressing it writes the role again with it.
+
+Clearing IGMP snooping's groups and counters and syncing a VM Tracker connection now came
+next (rules 31 to 33: `clear ip igmp snooping groups *`, `clear ip igmp snooping statistics *`
+and `clear ip igmp snooping explicit-tracking *`; rule 34: `vmtracker connection *`, all typed
+outside configuration mode). A broad role written before lacks them, and the switch refuses
+the Clear buttons on the IGMP snooping page and **Sync now** on the VM Tracker page: the
+Switch page says so on the **Update the port list** card, and pressing it writes the role
+again with them.
+
+VXLAN OAM's tools came next (rules 35 to 40: `ping nve *`, `traceroute nve *`, `pathtrace nve
+*`, `clear ngoam *`, `ngoam loop-detection probe *` and `ngoam loop-detection bringup *`, all
+typed outside configuration mode). A broad role written before lacks them, and the switch
+refuses ping, traceroute and pathtrace, the counters' Clear buttons and loop detection's
+probe and bring-up on the VXLAN OAM page: the Switch page says so on the **Update the port
+list** card, and pressing it writes the role again with them.
+
+Maintenance mode's snapshots came last (rules 41 and 42: `snapshot create *` and `snapshot
+delete *`, typed outside configuration mode; comparing two is a `show` command and needs no
+rule). A broad role written before lacks them, and the switch refuses taking and deleting a
+snapshot on the Maintenance mode page: the Switch page says so on the **Update the port list**
+card, and pressing it writes the role again with them.
 
 With the login stored, it is kept encrypted with the same key as NXray's own
 account password (see [Configuration](configuration.md)), with the SSH port
@@ -1125,4 +1837,6 @@ not touched. **Forget this switch** removes it too.
 
 The switch's NX-API uses a self-signed certificate. NXray accepts it without
 checking, and does the same with the switch's SSH host key when turning on
-port changes; see [SECURITY.md](../SECURITY.md).
+port changes and on the file pages; see [SECURITY.md](../SECURITY.md). The **SSH and
+certificates** page shows the host key's fingerprint and makes a new key; SSH clients
+that knew the old one then warn until their known-hosts entry is updated.

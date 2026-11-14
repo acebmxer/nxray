@@ -16,10 +16,16 @@ from app.switch import (
     DASHBOARD_COMMANDS,
     Dashboard,
     TempSensor,
+    chassis_description,
+    chassis_model,
+    duration_text,
     fan_speed_percent,
     health_problems,
+    last_reset_reason,
     load_dashboard,
+    module_version,
     parse_environment,
+    parse_identity,
     parse_port_summary,
     parse_resources,
     parse_version,
@@ -67,6 +73,62 @@ def test_parse_version() -> None:
     assert info.nxos_version == "9.3(16)"
     assert info.uptime == "23 minutes"
     assert info.last_reset_reason == "Module PowerCycled"
+
+
+def test_the_lighter_commands_give_what_show_version_gives() -> None:
+    """The dashboard asks for five quick commands instead of the 1.5 second ``show version``
+    (#97); what it shows must be what ``show version`` gave."""
+    by_version = parse_version(load_fixture("show_version"))
+    by_commands = parse_identity(
+        {"hostname": "nexus-lab"},
+        load_fixture("show_inventory"),
+        load_fixture("show_module"),
+        load_fixture("show_system_uptime"),
+        load_fixture("show_system_reset-reason"),
+    )
+    assert by_commands == by_version
+
+
+def test_parse_identity_of_empty_bodies() -> None:
+    info = parse_identity(None, None, None, None, None)
+    assert (info.hostname, info.model, info.nxos_version) == ("unknown", "unknown", "unknown")
+    assert info.uptime == "0 minutes"
+    assert info.last_reset_reason == ""
+
+
+def test_the_chassis_is_the_inventory_row_named_chassis() -> None:
+    body = load_fixture("show_inventory")
+    assert chassis_description(body) == "Nexus9000 C92160YC-X chassis"
+    assert chassis_model(body) == "Nexus9000 C92160YC-X chassis N9K-C92160YC-X"
+    rows_ = body["TABLE_inv"]["ROW_inv"]
+    rows_.reverse()  # the chassis is not always listed first
+    assert chassis_description(body) == "Nexus9000 C92160YC-X chassis"
+    assert chassis_description({}) == "" and chassis_model(None) == ""
+
+
+def test_the_version_is_the_active_modules() -> None:
+    body = {
+        "TABLE_modinfo": {
+            "ROW_modinfo": [
+                {"modinf": 5, "status": "ha-standby"},
+                {"modinf": 6, "status": "active *"},
+            ]
+        },
+        "TABLE_modwwninfo": {
+            "ROW_modwwninfo": [
+                {"modwwn": 5, "sw": "9.3(1)"},
+                {"modwwn": 6, "sw": "9.3(16)"},
+            ]
+        },
+    }
+    assert module_version(body) == "9.3(16)"
+    assert module_version(load_fixture("show_module")) == "9.3(16)"
+    assert module_version({}) == "" and module_version(None) == ""
+
+
+def test_the_reset_reason_is_the_newest_one() -> None:
+    assert last_reset_reason(load_fixture("show_system_reset-reason")) == "Module PowerCycled"
+    assert last_reset_reason({}) == "" and last_reset_reason(None) == ""
 
 
 def test_uptime_wording() -> None:
@@ -152,7 +214,11 @@ def test_parse_port_summary_counts_front_panel_ports_only() -> None:
 
 def test_load_dashboard_uses_one_request() -> None:
     fixtures = {
-        "show version": load_fixture("show_version"),
+        "show hostname": {"hostname": "nexus-lab"},
+        "show inventory": load_fixture("show_inventory"),
+        "show module": load_fixture("show_module"),
+        "show system uptime": load_fixture("show_system_uptime"),
+        "show system reset-reason": load_fixture("show_system_reset-reason"),
         "show environment": load_fixture("show_environment"),
         "show system resources": load_fixture("show_system_resources"),
         "show interface brief": load_fixture("show_interface_brief"),
@@ -204,3 +270,17 @@ def test_health_problems_names_each_problem() -> None:
         "Fan Fan1(sys_fan1) reports Absent.",
         "Power supply 1 reports no status.",
     ]
+
+
+def test_duration_text_drops_zero_parts_and_keeps_fractions() -> None:
+    # The OSPF and multicast pages both read durations through this one function.
+    assert duration_text("P7DT11H59M45S") == "7d 11h 59m 45s"
+    assert duration_text("P0DT2H0M5S") == "2h 5s"
+    assert duration_text("P0DT0H0M5.5S") == "5.5s"
+    assert duration_text("PT0S") == "0s"
+
+
+def test_duration_text_returns_anything_else_unchanged() -> None:
+    assert duration_text("never") == "never"
+    assert duration_text("P") == "P"
+    assert duration_text(None) == ""

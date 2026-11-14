@@ -1,0 +1,22 @@
+{
+  "TABLE_summary": {
+    "ROW_summary": {
+      "service_name": "web",
+      "state": "ACTIVE",
+      "reason": "None",
+      "lb_scheme": "src-ip",
+      "buckets": "4",
+      "TABLE_device": {"ROW_device": {"device_grp": "servers", "dg_probe": "ICMP"}},
+      "TABLE_vip": {
+        "ROW_vip": {
+          "TABLE_vip_node": {
+            "ROW_vip_node": [
+              {"vip_node": "1   198.51.100.10", "vip_config": "Active", "vip_weight": "2", "vip_status": "OK", "vip_node_probe": "PROBE_SUCCESS"},
+              {"vip_node": "2   198.51.100.11", "vip_config": "Active", "vip_weight": "1", "vip_status": "OK", "vip_node_probe": "PROBE_SUCCESS"}
+            ]
+          }
+        }
+      }
+    }
+  }
+}

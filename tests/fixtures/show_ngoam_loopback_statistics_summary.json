@@ -1,0 +1,19 @@
+{
+  "TABLE_statistics_summary": {
+    "ROW_statistics_summary": {
+      "last-clear-summary-stats": "Fri Nov 13 12:11:01.371 UTC",
+      "tx": 0,
+      "rx": 0,
+      "timeout": 0,
+      "unsent": 1213,
+      "req-sw-fwd": 0,
+      "req-drop": 0,
+      "resp-tx": 0,
+      "resp-rx": 0,
+      "resp-unsent": 0,
+      "resp-dup": 0,
+      "resp-sw-fwd": 0,
+      "resp-drop": 0
+    }
+  }
+}

@@ -59,7 +59,7 @@
   </form>
   {% endif %}
   {% else %}
-  <p>LACP is off on the switch, so only static port-channels can be made. {% if role == "admin" %}Turn it on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns it on on the <a href="/features">Features</a> page.{% endif %}</p>
+  <p>LACP is off on the switch, so only static port-channels can be made. {% if role == "admin" %}Turn it on on the <a href="/features#{{ feature_anchor('lacp') }}">Features</a> page.{% else %}An NXray admin turns it on on the <a href="/features#{{ feature_anchor('lacp') }}">Features</a> page.{% endif %}</p>
   {% endif %}
 </section>
 

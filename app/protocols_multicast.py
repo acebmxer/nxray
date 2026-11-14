@@ -66,10 +66,10 @@ from app.protocols import (
     interface_field,
     source_field,
     table_rows,
-    text,
     vrf_field,
 )
 from app.routing import long_name
+from app.switch import duration_text, row_vrf, text
 
 # ---- shared fields -------------------------------------------------------------
 
@@ -548,14 +548,8 @@ def _vrfs(body: dict[str, Any]) -> list[dict[str, Any]]:
     return table_rows(body, "TABLE_vrf", "ROW_vrf")
 
 
-def _vrf_name(row: dict[str, Any]) -> str:
-    return (
-        text(row.get("vrf-name"))
-        or text(row.get("out-context"))
-        or text(row.get("vrf"))
-        or text(row.get("out-vrf"))
-        or "default"
-    )
+# The keys a multicast row may name its VRF under, tried in this order.
+_VRF_KEYS = ("vrf-name", "out-context", "vrf", "out-vrf")
 
 
 def _address_summary(value: Any) -> str:
@@ -563,16 +557,6 @@ def _address_summary(value: Any) -> str:
     found = text(value)
     match = re.search(r"IP address: ([^,\s]+), IP subnet: \S+/(\d+)", found)
     return f"{match.group(1)}/{match.group(2)}" if match else found
-
-
-def _duration(value: Any) -> str:
-    """ "P2DT13H19M57S" (ISO 8601, as MSDP gives it) -> "2d 13h 19m 57s"."""
-    found = text(value)
-    match = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", found)
-    if not match or not found.strip("PT"):
-        return found
-    parts = [f"{n}{unit}" for n, unit in zip(match.groups(), "dhms", strict=True) if n]
-    return " ".join(parts) or "0s"
 
 
 def _incoming(value: Any) -> str:
@@ -600,7 +584,7 @@ def _pim_interfaces(
     rows: list[tuple[str, ...]] = []
     vrfs: list[str] = []
     for vrf in _vrfs(body):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(vrf_name)
         for row in table_rows(vrf, "TABLE_iod", "ROW_iod"):
             name = long_name(text(row.get("if-name")))
@@ -666,7 +650,7 @@ def _rps(
     per_vrf: dict[str, dict[str, Any]] = {}
     vrfs: list[str] = []
     for vrf in _vrfs(body):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(vrf_name)
         found: dict[str, Any] = {"facts": [], "values": {}}
         for label, key in (("BSR", "is-bsr-enabled"), ("Auto-RP", "is-autorp-enabled")):
@@ -766,7 +750,7 @@ def parse_pim(bodies: list[dict[str, Any]]) -> ProtocolView:
     # uptime, expires, dr-priority, bfd-state).
     neighbors: list[tuple[str, ...]] = []
     for vrf in _vrfs(_body(bodies, 1)):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(vrf_name)
         for row in table_rows(vrf, "TABLE_neighbor", "ROW_neighbor"):
             neighbors.append(
@@ -784,7 +768,7 @@ def parse_pim(bodies: list[dict[str, Any]]) -> ProtocolView:
     ranges: list[tuple[str, ...]] = []
     extra: dict[str, dict[str, Any]] = {}
     for vrf in _vrfs(_body(bodies, 3)):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(vrf_name)
         ssm: list[str] = []
         for row in table_rows(vrf, "TABLE_group", "ROW_group"):
@@ -809,7 +793,7 @@ def parse_pim(bodies: list[dict[str, Any]]) -> ProtocolView:
 
     mroutes: list[tuple[str, ...]] = []
     for vrf in _vrfs(_body(bodies, 4)):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(vrf_name)
         for row in table_rows(vrf, "TABLE_one_route", "ROW_one_route"):
             group = text(row.get("group_addrs"))
@@ -910,7 +894,7 @@ def parse_igmp(bodies: list[dict[str, Any]]) -> ProtocolView:
     instances: list[Instance] = []
     rows: list[tuple[str, ...]] = []
     for vrf in _vrfs(_body(bodies, 0)):
-        vrf_name = _vrf_name(vrf)
+        vrf_name = row_vrf(vrf, *_VRF_KEYS)
         for row in table_rows(vrf, "TABLE_if", "ROW_if"):
             name = long_name(text(row.get("if-name")))
             if not name:
@@ -992,7 +976,7 @@ def parse_msdp(bodies: list[dict[str, Any]]) -> ProtocolView:
     per_vrf: dict[str, dict[str, Any]] = {}
     vrfs: list[str] = []
     for vrf in table_rows(_body(bodies, 1), "TABLE_VRF", "ROW_VRF"):
-        name = _vrf_name(vrf)
+        name = row_vrf(vrf, *_VRF_KEYS)
         vrfs.append(name)
         facts = [
             ("Local AS", text(vrf.get("local-asn"))),
@@ -1011,7 +995,7 @@ def parse_msdp(bodies: list[dict[str, Any]]) -> ProtocolView:
         address = text(row.get("peer-ipaddr"))
         if not address:
             continue
-        vrf_name = _vrf_name(row)
+        vrf_name = row_vrf(row, *_VRF_KEYS)
         vrfs.append(vrf_name)
         state = text(row.get("connection-status"))
         asn = text(row.get("peer-asn"))
@@ -1041,7 +1025,7 @@ def parse_msdp(bodies: list[dict[str, Any]]) -> ProtocolView:
         found = per_vrf.setdefault(vrf_name, {"facts": [], "values": {}})
         if reconnect.isdigit() and "reconnect_interval" not in found["values"]:
             found["values"]["reconnect_interval"] = {"seconds": reconnect}
-        uptime = _duration(row.get("peer-uptime"))
+        uptime = duration_text(row.get("peer-uptime"))
         facts = (
             ("VRF", vrf_name),
             ("State", state),

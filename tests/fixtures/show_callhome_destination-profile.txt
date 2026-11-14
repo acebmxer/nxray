@@ -1,0 +1,52 @@
+noc destination profile information
+maximum message size:100000
+message format:full-txt
+message-level:5
+transport-method:email and http
+email addresses configured:
+Index: 1 noc@example.net
+Index: 2 team@example.net
+
+url addresses configured:
+Index: 1 https://example.net/callhome
+
+alert groups configured:
+environmental
+syslog-group-port
+
+full_txt destination profile information
+maximum message size:2500000
+message format:full-txt
+message-level:0
+transport-method:email
+email addresses configured:
+
+url addresses configured:
+
+alert groups configured:
+all
+short_txt destination profile information
+maximum message size:4000
+message format:short-txt
+message-level:0
+transport-method:email
+email addresses configured:
+
+url addresses configured:
+
+alert groups configured:
+all
+CiscoTAC-1 destination profile information
+maximum message size:5000000
+message format:XML
+message-level:0
+transport-method:email
+email addresses configured:
+
+url addresses configured:
+
+alert groups configured:
+cisco-tac
+
+
+

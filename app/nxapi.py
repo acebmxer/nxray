@@ -33,6 +33,7 @@ configuration.
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import re
 import threading
@@ -43,7 +44,7 @@ from typing import Any
 
 import httpx
 
-from app.oui import normalize_mac
+from app.oui import is_group_mac, normalize_mac
 
 # A hostname (RFC 1123 labels) or an IPv4/IPv6 literal. Anything else, such
 # as a value with a path, scheme or credentials in it, is refused so the
@@ -141,21 +142,24 @@ SFLOW_DEFAULT_PORT = 6343
 # What may follow "feature": the commands ``feature ?`` lists on an
 # N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
 # (``feature nv ?`` gives overlay). Left out: ``password`` (not a feature),
-# ``license`` alone, and ``ntp``, ``netflow``, ``pnp`` and
-# ``signature-verification``, which ``show feature`` does not list, so NXray
-# cannot show whether they are on.
+# ``license`` alone. ``ntp`` and ``signature-verification`` are accepted but
+# ``show feature`` does not list them, so NXray cannot show whether they are on.
+# ``show cli list`` also lists commands this model then refuses with a syntax
+# error (poe, ofm, macsec, srv6, hardware-telemetry, frequency-synchronization,
+# pong, mvpn, mpls ldp/evpn/oam) or "not supported" (pnp, netflow); tried one by one
+# on cisco-25gb, 2026-11-13.
 FEATURE_COMMANDS = frozenset(
     {
-        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x",
-        "eigrp", "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp",
-        "imp", "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
-        "mpls segment-routing", "msdp", "nat", "nbm", "netconf", "ngmvpn", "ngoam",
-        "nv overlay", "nxapi", "nxsdk", "openflow", "ospf", "ospfv3", "pbr", "pim", "pim6",
-        "port-security", "private-vlan", "ptp", "restconf", "rip", "scheduler",
-        "scp-server", "sflow", "sftp-server", "sla responder", "sla sender",
-        "sla twamp-server", "ssh", "tacacs+", "telemetry", "telnet", "tunnel",
-        "tunnel-encryption", "udld", "vmtracker", "vn-segment-vlan-based", "vpc", "vrrp",
-        "vrrpv3", "vtp",
+        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x", "eigrp",
+        "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp", "imp",
+        "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
+        "mpls segment-routing", "mpls segment-routing traffic-engineering", "msdp", "nat",
+        "nbm", "netconf", "ngmvpn", "ngoam", "ntp", "nv overlay", "nxapi", "nxsdk", "openflow",
+        "ospf", "ospfv3", "pbr", "pim", "pim6", "port-security", "privilege", "private-vlan", "ptp",
+        "restconf", "rip", "scheduler", "scp-server", "sflow", "sftp-server",
+        "signature-verification", "sla responder", "sla sender", "sla twamp-server", "ssh",
+        "tacacs+", "telemetry", "telnet", "tunnel", "tunnel-encryption", "udld", "vmtracker",
+        "vn-segment-vlan-based", "vpc", "vrrp", "vrrpv3", "vtp",
     }
 )  # fmt: skip
 
@@ -262,7 +266,7 @@ def is_valid_host(value: str) -> bool:
         ipaddress.ip_address(value)
         return True
     except ValueError:
-        return bool(_HOSTNAME.match(value))
+        return bool(_HOSTNAME.fullmatch(value))
 
 
 def check_switch_password(password: str) -> str:
@@ -272,7 +276,7 @@ def check_switch_password(password: str) -> str:
     as a separator, a quote or a request for help ("?"). The message never
     repeats the password.
     """
-    if not _SAFE_PASSWORD.match(password):
+    if not _SAFE_PASSWORD.fullmatch(password):
         raise ValueError(
             "a switch password is 8 to 64 letters and digits, with no other characters"
         )
@@ -292,7 +296,7 @@ def _person_roles(roles: Iterable[str], *, allow_empty: bool = False) -> list[st
 
 def validate_account_name(name: str) -> str:
     """Return the name, or raise ValueError if NXray would not use it on a switch."""
-    if not _ACCOUNT_NAME.match(name):
+    if not _ACCOUNT_NAME.fullmatch(name):
         raise ValueError(
             "an account name is 1-28 characters: a letter first, then letters, "
             "digits, dots, dashes or underscores"
@@ -304,7 +308,7 @@ def validate_account_name(name: str) -> str:
 
 def validate_port_name(name: str) -> str:
     """Return the name, or raise ValueError if it is not a front-panel Ethernet port."""
-    if not _PORT_NAME.match(name):
+    if not _PORT_NAME.fullmatch(name):
         raise ValueError(f"{name!r} is not a front-panel port name such as Ethernet1/3")
     return name
 
@@ -606,7 +610,7 @@ def validate_device_mac(text: str) -> str:
     digits = normalize_mac(text)
     if digits is None:
         raise ValueError(f"{text.strip()!r} is not a MAC address such as 00:11:22:33:44:55")
-    if int(digits[:2], 16) & 0x01:
+    if is_group_mac(digits):
         raise ValueError("that is a multicast address, not one device's address")
     if digits == "0" * 12:
         raise ValueError("00:00:00:00:00:00 is not a device's address")
@@ -682,6 +686,12 @@ def validate_checkpoint_name(name: str) -> str:
     if not _CHECKPOINT_NAME.fullmatch(name):
         raise ValueError(f"{name!r} is not one of NXray's checkpoints (nxray-<number>)")
     return name
+
+
+# A file name on bootflash, the one form NXray names a file in: a letter or digit, then
+# letters, digits, ".", "_" or "-" (backup.cfg, nxos.9.3.16.bin); no folder, no "..".
+# app/protocols.py's "flashfile" field kind checks with the same pattern.
+FLASH_FILE = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 
 
 def validate_show_command(command: str) -> str:
@@ -787,6 +797,19 @@ shared_reads: ContextVar[Callable[[tuple[str, ...], bool, Callable[[], Any]], An
     ContextVar("nxray_shared_reads", default=None)
 )
 
+# Set for the length of one page a person opened (app/page_reads.py): ``show`` then
+# hands its commands to it, and it answers those it read a few seconds ago from
+# memory and asks the switch only for the rest. ``(switch, commands, read)``:
+# ``switch`` names the switch and account, ``read(missing)`` asks the switch for some
+# of the commands. None, the default, reads the switch every time.
+page_reads: ContextVar[
+    Callable[
+        [tuple[str, ...], list[str], Callable[[list[str]], list[dict[str, Any]]]],
+        list[dict[str, Any]],
+    ]
+    | None
+] = ContextVar("nxray_page_reads", default=None)
+
 
 class NxapiClient:
     """A connection to one switch's NX-API.
@@ -829,10 +852,18 @@ class NxapiClient:
         if not commands:
             raise ValueError("no commands given")
         cleaned = [validate_show_command(command) for command in commands]
+        timeout = self._target.timeout
+        if (reuse := page_reads.get()) is not None:
+            target = self._target
+            return reuse(
+                (target.host, str(target.port), target.username),
+                cleaned,
+                lambda missing: self._send(missing, missing, timeout),
+            )
         return self._shared(
             ("show", *cleaned),
             False,
-            lambda: self._send(cleaned, cleaned, self._target.timeout),
+            lambda: self._send(cleaned, cleaned, timeout),
         )
 
     def show_text(self, command: str) -> str:
@@ -843,15 +874,7 @@ class NxapiClient:
         return self._shared(("text", cleaned), True, lambda: self._read_text(cleaned))
 
     def _read_text(self, cleaned: str) -> str:
-        payload = self._post(build_payload([cleaned], "cli_ascii"), self._target.timeout)
-        entry = payload[0] if isinstance(payload, list) and payload else payload
-        if not isinstance(entry, dict):
-            raise NxapiProtocolError(f"no answer for {cleaned!r}")
-        if "error" in entry:
-            raise NxapiCommandError(f"{cleaned!r}: {error_message(entry['error'])}")
-        result = entry.get("result")
-        message = result.get("msg") if isinstance(result, dict) else None
-        return message if isinstance(message, str) else ""
+        return self._exec_text(cleaned, self._target.timeout)
 
     def create_user(self, name: str, password: str, role: str) -> None:
         """Create a local switch account. Needs an admin login.
@@ -861,7 +884,7 @@ class NxapiClient:
         The password never appears in an error message.
         """
         validate_account_name(name)
-        if not _SAFE_PASSWORD.match(password):
+        if not _SAFE_PASSWORD.fullmatch(password):
             raise ValueError("the password must be 8-64 letters and digits")
         if role not in ALLOWED_ROLES:
             raise ValueError(f"role {role!r} is not one NXray gives its account")
@@ -1170,8 +1193,12 @@ class NxapiClient:
         if not enabled and command in NEEDED_FEATURES:
             raise ValueError(f"NXray does not turn off {command}: it needs it")
         line = f"feature {command}" if enabled else f"no feature {command}"
+        lines = [line]
+        if enabled and command.startswith("mpls "):
+            # The MPLS commands exist only once the MPLS feature set is installed and on.
+            lines = ["install feature-set mpls", "feature-set mpls", line]
         timeout = max(self._target.timeout, FEATURE_TIMEOUT)
-        self._send([line], [line], timeout, allow_text=True)
+        self._send(lines, lines, timeout, allow_text=True)
 
     def set_port_discovery(
         self,
@@ -1513,6 +1540,903 @@ class NxapiClient:
         from app.spanning_tree import build_stp_change
 
         change = build_stp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vpc(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the vPC page: the vPC domain and its settings, or the peer-link
+        and vPC number of a port-channel.
+
+        The lines are built from the page's description and the checked values
+        (``vpc.build_vpc_change``), as for spanning tree.
+        """
+        # Imported here: the vPC description uses this module's checks.
+        from app.vpc import build_vpc_change
+
+        change = build_vpc_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vxlan(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VXLAN page: the NVE interface and its member VNIs, a VLAN's
+        VNI, the EVPN settings of a VNI, a VRF's VNI and route-targets, or the
+        switch-wide EVPN lines.
+
+        The lines are built from the page's description and the checked values
+        (``vxlan.build_vxlan_change``), as for vPC.
+        """
+        # Imported here: the VXLAN description uses this module's checks.
+        from app.vxlan import build_vxlan_change
+
+        change = build_vxlan_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_monitor(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Monitor sessions page: a local or ERSPAN source session and
+        its settings, a destination port, or the ERSPAN source address.
+
+        The lines are built from the page's description and the checked values
+        (``monitor.build_monitor_change``), as for vPC.
+        """
+        # Imported here: the monitor description uses this module's checks.
+        from app.monitor import build_monitor_change
+
+        change = build_monitor_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_qos(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the QoS page: a class-map or policy-map (classification,
+        network-qos or queuing) and its classes, a port's incoming policy, or a policy
+        applied to the system.
+
+        The lines are built from the page's description and the checked values
+        (``qos.build_qos_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the QoS description uses this module's checks.
+        from app.qos import build_qos_change
+
+        change = build_qos_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_pfc(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Priority flow control page: a port's PFC mode or watchdog, or
+        the switch-wide watchdog or override.
+
+        The lines are built from the page's description and the checked values
+        (``pfc.build_pfc_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PFC description uses this module's checks.
+        from app.pfc import build_pfc_change
+
+        change = build_pfc_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_private_vlans(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Private VLANs page: a VLAN's type or secondary VLANs, a
+        port's mode, host association, mapping or trunk lines, or a VLAN interface's
+        mapping.
+
+        The lines are built from the page's description and the checked values
+        (``private_vlans.build_private_vlan_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Private VLANs description uses this module's checks.
+        from app.private_vlans import build_private_vlan_change
+
+        change = build_private_vlan_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_udld(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the UDLD page: a port's UDLD state or aggressive mode, or the
+        switch-wide message interval or aggressive mode.
+
+        The lines are built from the page's description and the checked values
+        (``udld.build_udld_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the UDLD description uses this module's checks.
+        from app.udld import build_udld_change
+
+        change = build_udld_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vtp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VTP page: the switch's VTP mode, domain, version or password,
+        or VTP on a port.
+
+        The lines are built from the page's description and the checked values
+        (``vtp.build_vtp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the VTP description uses this module's checks.
+        from app.vtp import build_vtp_change
+
+        change = build_vtp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_dot1x(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the 802.1X page: the switch-wide 802.1X lines, or a port's
+        port control, host mode, timers or MAC authentication bypass.
+
+        The lines are built from the page's description and the checked values
+        (``dot1x.build_dot1x_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the 802.1X description uses this module's checks.
+        from app.dot1x import build_dot1x_change
+
+        change = build_dot1x_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_ip_sla(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the IP SLA page: what an entry measures and its settings, an
+        entry's schedule, or its reactions and reaction trigger.
+
+        The lines are built from the page's description and the checked values
+        (``ip_sla.build_ip_sla_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the IP SLA description uses this module's checks.
+        from app.ip_sla import build_ip_sla_change
+
+        change = build_ip_sla_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_errdisable(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Errdisable page: the causes it detects and recovers from, or
+        the recovery interval.
+
+        The lines are built from the page's description and the checked values
+        (``errdisable.build_errdisable_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Errdisable description uses this module's checks.
+        from app.errdisable import build_errdisable_change
+
+        change = build_errdisable_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_callhome(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Call Home page: the contact details, the transport, a
+        destination profile, Call Home on or off, or a test message.
+
+        The lines are built from the page's description and the checked values
+        (``callhome.build_callhome_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Call Home description uses this module's checks.
+        from app.callhome import build_callhome_change
+
+        change = build_callhome_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_scheduler(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Scheduler page: the log size, a job (made with its commands from
+        the menu) or a schedule.
+
+        The lines are built from the page's description and the checked values
+        (``scheduler.build_scheduler_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Scheduler description uses this module's checks.
+        from app.scheduler import build_scheduler_change
+
+        change = build_scheduler_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_eem(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the EEM page: an applet (its event, actions and description) or an
+        environment variable.
+
+        The lines are built from the page's description and the checked values
+        (``eem.build_eem_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the EEM description uses this module's checks.
+        from app.eem import build_eem_change
+
+        change = build_eem_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_loopbacks(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Loopbacks page: make or delete a loopback, or set its
+        description, addresses, VRF or state.
+
+        The lines are built from the page's description and the checked values
+        (``loopbacks.build_loopback_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Loopbacks description uses this module's checks.
+        from app.loopbacks import build_loopback_change
+
+        change = build_loopback_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_itd(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the ITD page: a device group and its probe, a node, a service and
+        its lines, or a service's counters.
+
+        The lines are built from the page's description and the checked values
+        (``itd.build_itd_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the ITD description uses this module's checks.
+        from app.itd import build_itd_change
+
+        change = build_itd_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_mpls(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the MPLS page: the feature set and static MPLS, the label range,
+        MPLS on an interface, or a static binding and its next hops.
+
+        The lines are built from the page's description and the checked values
+        (``mpls.build_mpls_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the MPLS description uses this module's checks.
+        from app.mpls import build_mpls_change
+
+        change = build_mpls_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_pbr(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Policy-based routing page: a route-map entry's match and set
+        lines, a route-map's counters or deletion, an interface's policy.
+
+        The lines are built from the page's description and the checked values
+        (``pbr.build_pbr_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PBR description uses this module's checks.
+        from app.pbr import build_pbr_change
+
+        change = build_pbr_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_nat(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the NAT page: an interface's side, a static or dynamic translation,
+        a pool, a timeout or limit, or clearing the translations or counters.
+
+        The lines are built from the page's description and the checked values
+        (``nat.build_nat_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the NAT description uses this module's checks.
+        from app.nat import build_nat_change
+
+        change = build_nat_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_epbr(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Enhanced policy-based routing page: a service and its probe,
+        an end-point or reverse end-point, a policy, a match and its spreading, a step of a
+        chain, an interface's policy, or clearing a policy's counters.
+
+        The lines are built from the page's description and the checked values
+        (``epbr.build_epbr_change``), as for the Monitor sessions page. When they go inside
+        an ePBR session and the switch refuses one, the session it left open is closed with
+        ``abort``, so the next change starts clean.
+        """
+        # Imported here: the ePBR description uses this module's checks.
+        from app.epbr import ABORT_LINE, SESSION_LINE, build_epbr_change
+
+        change = build_epbr_change(scope, setting, action, ident, values)
+        try:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+        except NxapiCommandError:
+            if change.lines[:1] == (SESSION_LINE,):
+                with contextlib.suppress(NxapiError):
+                    abort = [SESSION_LINE, ABORT_LINE]
+                    self._send(abort, abort, self._target.timeout, allow_text=True)
+            raise
+
+    def configure_track(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Tracked objects page: make or delete an object, or set its
+        wait, VRF, list members or thresholds.
+
+        The lines are built from the page's description and the checked values
+        (``track.build_track_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Tracked objects description uses this module's checks.
+        from app.track import build_track_change
+
+        change = build_track_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_igmp_snooping(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the IGMP snooping page: a switch-wide or VLAN setting, a VLAN's router
+        port, static group, report flooding port or report filter.
+
+        The lines are built from the page's description and the checked values
+        (``igmp_snooping.build_snooping_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.igmp_snooping import build_snooping_change
+
+        change = build_snooping_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_nbm(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Non-blocking multicast page: NBM's mode and flow defaults, a flow
+        policy or one of its groups, a host policy entry or default, a flow definition, or an
+        external link.
+
+        The lines are built from the page's description and the checked values
+        (``nbm.build_nbm_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.nbm import build_nbm_change
+
+        change = build_nbm_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_trm(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Multicast over VXLAN page: a switch-wide line, the NVE interface's
+        multicast source, a layer 3 VNI's group, a VRF's MVPN settings, or a BGP overlay
+        family.
+
+        The lines are built from the page's description and the checked values
+        (``trm.build_trm_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.trm import build_trm_change
+
+        change = build_trm_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_flexlink(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Flex Links page: a pair of an active and a backup port, or its
+        preemption and multicast settings.
+
+        The lines are built from the page's description and the checked values
+        (``flexlink.build_flexlink_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.flexlink import build_flexlink_change
+
+        change = build_flexlink_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_vmtracker(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VM Tracker page: fabric auto-configuration, a vCenter connection or
+        one of its settings (the password masked in the labels), a port, or syncing a
+        connection now.
+
+        The lines are built from the page's description and the checked values
+        (``vmtracker.build_vmtracker_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.vmtracker import build_vmtracker_change
+
+        change = build_vmtracker_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_evb(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Edge Virtual Bridging page: the VDP address, timers or batch
+        answers.
+
+        The lines are built from the page's description and the checked values
+        (``evb.build_evb_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.evb import build_evb_change
+
+        change = build_evb_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_tunnel_encryption(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the VXLAN tunnel encryption page: a switch-wide line, a key chain or
+        key (its string masked in the labels), a policy, a peer, or a link.
+
+        The lines are built from the page's description and the checked values
+        (``tunnel_encryption.build_tunnel_encryption_change``), as for the Monitor sessions
+        page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.tunnel_encryption import build_tunnel_encryption_change
+
+        change = build_tunnel_encryption_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_ngoam(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> str | None:
+        """One change on the VXLAN OAM page: a switch-wide line, a profile or flow line, loop
+        detection, a counters' clear, or one of the tools.
+
+        The lines are built from the page's description and the checked values
+        (``ngoam.build_ngoam_change``), as for the Monitor sessions page. A tool (ping,
+        traceroute or pathtrace nve) is one command typed outside configuration mode, whose
+        printed answer is returned; it may take as long as its count and timeouts add up to
+        (``ngoam.tool_wait``). Anything else returns None.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.ngoam import TOOLS, build_ngoam_change, tool_wait
+
+        change = build_ngoam_change(scope, setting, action, ident, values)
+        if scope not in TOOLS:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+            return None
+        (line,) = change.lines
+        wait = max(self._target.timeout, tool_wait(line))
+        return self._exec_text(line, wait)
+
+    def _exec_text(self, command: str, timeout: float) -> str:
+        """One command typed outside configuration mode, built and checked by the caller,
+        whose printed text is the answer (``cli_ascii``, as for ``show_text``)."""
+        payload = self._post(build_payload([command], "cli_ascii"), timeout)
+        entry = payload[0] if isinstance(payload, list) and payload else payload
+        if not isinstance(entry, dict):
+            raise NxapiProtocolError(f"no answer for {command!r}")
+        if "error" in entry:
+            raise NxapiCommandError(f"{command!r}: {error_message(entry['error'])}")
+        result = entry.get("result")
+        message = result.get("msg") if isinstance(result, dict) else None
+        return message if isinstance(message, str) else ""
+
+    def configure_programmability(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Programmability page: a gRPC, NETCONF or NX-SDK setting.
+
+        The lines are built from the page's description and the checked values
+        (``programmability.build_programmability_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.programmability import build_programmability_change
+
+        change = build_programmability_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_licensing(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Smart Licensing page: the licence reservation.
+
+        The lines are built from the page's description and the checked values
+        (``licensing.build_licensing_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.licensing import build_licensing_change
+
+        change = build_licensing_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_twamp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the TWAMP server page: the server's port and idle time, or the
+        responder line.
+
+        The lines are built from the page's description and the checked values
+        (``twamp.build_twamp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.twamp import build_twamp_change
+
+        change = build_twamp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_system_settings(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Switch-wide settings page: a logging, TCP, DNS, HTTP, XML server
+        or ACL log line, set or removed.
+
+        The lines are built from the page's description and the checked values
+        (``system_settings.build_system_settings_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.system_settings import build_system_settings_change
+
+        change = build_system_settings_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_rmon(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the RMON page: an event, an alarm or a high-capacity alarm, made or
+        deleted.
+
+        The lines are built from the page's description and the checked values
+        (``rmon.build_rmon_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.rmon import build_rmon_change
+
+        change = build_rmon_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_analytics(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Flow analytics page: a flow exporter, record, monitor, profile,
+        filter or event, or the system settings.
+
+        The lines are built from the page's description and the checked values
+        (``analytics.build_analytics_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.analytics import build_analytics_change
+
+        change = build_analytics_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_maintenance(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> str | None:
+        """One change on the Maintenance mode page: a setting of how maintenance mode runs,
+        or a snapshot (taken, deleted or compared).
+
+        The lines are built from the page's description and the checked values
+        (``maintenance.build_maintenance_change``). A snapshot's commands are typed outside
+        configuration mode, and their printed answer is returned (taking one takes a few
+        seconds, ``maintenance.SNAPSHOT_WAIT``); a setting returns None. Nothing here puts
+        the switch into or out of maintenance mode.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.maintenance import EXEC_SCOPES, SNAPSHOT_WAIT, build_maintenance_change
+
+        change = build_maintenance_change(scope, setting, action, ident, values)
+        if scope not in EXEC_SCOPES:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+            return None
+        (line,) = change.lines
+        return self._exec_text(line, max(self._target.timeout, SNAPSHOT_WAIT))
+
+    def configure_ptp(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the PTP page: a setting of the switch's PTP clock (source address,
+        domain, priorities, limits, notifications) or of one port (PTP on or off, role,
+        transmission, VLAN, message intervals, unicast peers).
+
+        The lines are built from the page's description and the checked values
+        (``ptp.build_ptp_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the PTP description uses this module's checks.
+        from app.ptp import build_ptp_change
+
+        change = build_ptp_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_telemetry(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Telemetry page: the destination profile, or make, change or
+        delete a destination group, sensor group or subscription.
+
+        The lines are built from the page's description and the checked values
+        (``telemetry.build_telemetry_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Telemetry description uses this module's checks.
+        from app.telemetry import build_telemetry_change
+
+        change = build_telemetry_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_aaa(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the AAA page: the sign-in, accounting and command authorization
+        methods, a RADIUS or TACACS+ server or switch-wide setting, or a server group.
+
+        The lines are built from the page's description and the checked values
+        (``aaa.build_aaa_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the AAA description uses this module's checks.
+        from app.aaa import build_aaa_change
+
+        change = build_aaa_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
+    def configure_pki(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the SSH and certificates page: a new SSH host key, a key pair, or
+        a trustpoint (its settings, a PKCS#12 import, deleting its certificates).
+
+        A new SSH key is made with SSH off (``no feature ssh``, the key, ``feature ssh``);
+        when the switch refuses the key, ``feature ssh`` is sent again on its own so SSH
+        is never left off. The lines are built by ``pki.build_pki_change``.
+        """
+        # Imported here: the description uses this module's checks.
+        from app.pki import SSH_ON, build_pki_change
+
+        change = build_pki_change(scope, setting, action, ident, values)
+        try:
+            self._send(
+                list(change.lines), list(change.labels), self._target.timeout, allow_text=True
+            )
+        except NxapiCommandError:
+            if SSH_ON in change.lines:
+                self._send([SSH_ON], [SSH_ON], self._target.timeout, allow_text=True)
+            raise
+
+    def list_files(self) -> dict[str, Any]:
+        """``dir bootflash:``: its files and folders with their sizes and dates, and the
+        space used and free."""
+        command = "dir bootflash:"
+        (body,) = self._send([command], [command], self._target.timeout)
+        return body
+
+    def delete_file(self, name: str) -> None:
+        """``delete bootflash:<name> no-prompt``: remove one file. ``name`` is checked to
+        be a plain file name (no folder, no other file system) before anything is sent."""
+        if not FLASH_FILE.fullmatch(name):
+            raise ValueError(f"{name!r} is not a bootflash file name NXray deletes")
+        command = f"delete bootflash:{name} no-prompt"
+        (body,) = self._send([command], [command], self._target.timeout, allow_text=True)
+        printed = str(body.get("text", body.get("msg", ""))).strip()
+        if printed:
+            raise NxapiCommandError(f"{command!r}: {printed}")
+
+    def configure_tunnels(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Tunnels page: make or delete a tunnel, or set its mode,
+        source, destination, transport VRF, TTL, address, description, MTU, VRF, path MTU
+        discovery or state.
+
+        The lines are built from the page's description and the checked values
+        (``tunnels.build_tunnel_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the Tunnels description uses this module's checks.
+        from app.tunnels import build_tunnel_change
+
+        change = build_tunnel_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
     def configure_switch_admin(

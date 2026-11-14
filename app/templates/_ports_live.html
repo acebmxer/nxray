@@ -79,7 +79,8 @@ tick-{{ name|replace("/", "-")|replace(" ", "-") }}
         </td>
         <td class="num">{% if port.up %}{{ port.in_bits_per_second|rate }}{% endif %}</td>
         <td class="num">{% if port.up %}{{ port.out_bits_per_second|rate }}{% endif %}</td>
-        <td class="num">{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>{% else %}<span class="dim">0</span>{% endif %}</td>
+        <td class="num">{% if port.errors %}<span class="errs">{{ "{:,}".format(port.errors) }}</span>
+          <span class="err-kinds">{% for kind, number in port.error_kinds %}<span class="err-kind-line">{{ kind }}{% if port.error_kinds|length > 1 %} {{ "{:,}".format(number) }}{% endif %}</span>{% endfor %}</span>{% else %}<span class="dim">0</span>{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="{{ 12 if bulk_on else 11 }}">No ports match this filter.</td></tr>
@@ -87,5 +88,5 @@ tick-{{ name|replace("/", "-")|replace(" ", "-") }}
 {% endmacro %}
 
 {% macro ratenote() %}
-<p class="note" data-live-region="ratenote">In and Out are {% if rates_window %}the rate measured {{ window_words() }}{% else %}the switch's own average, over the last 30 seconds unless a port's rate average was changed{% endif %}; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared.</p>
+<p class="note" data-live-region="ratenote">In and Out are {% if rates_window %}the rate measured {{ window_words() }}{% else %}the switch's own average, over the last 30 seconds unless a port's rate average was changed{% endif %}; the bars show them as a share of the link's speed (in on top, out below). Errors adds up input and output errors and discards since the counters were last cleared, and names each kind under the number.</p>
 {% endmacro %}

@@ -9,6 +9,624 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
+### Added
+
+- **Change switch-wide settings (#102).** The new **Switch-wide settings** page (under
+  Configure) sets the logging source interface, the DNS and HTTP source interfaces, TCP path MTU
+  discovery, maximum segment size and connection wait, the XML server's session limit and schema
+  validation, the ACL log level, the CPU rate limit (log only), onboard failure logging, SNMP
+  long interface descriptions and time ranges (made, filled and deleted), and shows each one set.
+  It also takes the settings that change forwarding or need a restart (`system default
+  switchport`, `system routing max-mode`, `system urpf disable`, `mac-learn disable`,
+  `switching-mode`, the `hardware` lines, `ip load-sharing`, `fips mode enable` and others),
+  each with a warning; those were built from the switch's own command list and not tried on the
+  production switch. `ip icmp-errors source-interface` is listed by the switch but refused, so
+  it is not there. Needs the broad role or a stored admin login.
+- **Finish the Features page (#101).** Privilege levels, segment routing traffic engineering, NTP and image
+  signature checking now have Turn on / Turn off (turning on an MPLS feature installs and
+  turns on the MPLS feature set first). The switch does not report NTP or signature checking in
+  `show feature`, so those rows say "unknown" and offer both buttons; turning signature
+  checking off warns that unsigned images would install. Every other feature without a button
+  was tried on the switch one by one and refused (`poe`, `ofm`, `macsec`, `srv6`,
+  `hardware-telemetry`, `frequency-synchronization`, `pong`, `mvpn`, `mpls ldp`, `mpls evpn`,
+  `mpls oam`, `pnp`, `netflow`, `l2vpn`, `vni`, `evc`, `mvrp`, `bulkstat`, `onep` and the
+  switch-internal ones such as `plb`, `rise` and `npiv`); the row now says so, and "not changed from NXray" reads "no
+  feature command on this switch".
+- **Set up the TWAMP server (#95).** The new **TWAMP server** page (under Configure) shows the
+  server's state while `feature sla twamp-server` is on (turned on on the Features page),
+  sets its port and idle time and puts the responder line in or takes it out. Tried on a
+  switch where the feature was already on; everything put back. Needs the broad role or a
+  stored admin login.
+- **Make RMON events and alarms (#95).** The new **RMON** page (under Configure) lists the
+  switch's events, alarms and high-capacity alarms and makes or deletes them: an event writes
+  to the log, sends a trap to a community, or both; an alarm watches one SNMP object (given by
+  its dotted number) and fires events when it rises past or falls below a threshold. The
+  switch keeps an event's description and owner when it is entered again, so these can be
+  changed but only emptied by deleting the event; the page says so. Tried on a switch with
+  throwaway events and alarms, all removed. Needs the broad role or a stored admin login.
+- **Set up flow analytics objects (#95).** The new **Flow analytics** page (under Configure)
+  reads the switch's flow exporters, records, monitors, profiles, filters and events and the
+  system settings (`feature analytics`, turned on on the Features page), and makes, changes
+  and deletes them. Tried on a switch with throwaway objects, all removed: the Nexus 9200 takes
+  the lines but cannot put a monitor on a port and keeps only the IPv4 5-tuple in a record, so
+  the page only sets the objects up. Needs the broad role or a stored admin login.
+- **See maintenance mode and take snapshots (#95).** The new **Maintenance mode** page (under
+  Switch) shows the switch's mode and its maintenance profiles, sets how maintenance mode
+  behaves (time limit, waits before the command line and the after-snapshot, the custom
+  profile, and the restart reasons that start the switch in maintenance mode), takes and deletes
+  snapshots of the switch's interfaces, VLANs and routes, and compares two. NXray never puts the
+  switch into or out of maintenance mode, which takes it off the network: that is done at the
+  switch. Taking and deleting a snapshot are commands outside configuration mode, so the broad
+  role gets two rules for them (rules 41 and 42): Update the port list on the Switch page for a
+  broad role written before. Tried on a switch with throwaway settings and snapshots, all
+  removed; the profiles are shown only, since a profile cannot be opened over NX-API.
+- **Set up LDAP sign-in on the AAA page (#95).** With `feature ldap` on, the **AAA** page also
+  shows the LDAP servers (port, wait, bind account, TLS) and groups, and sets a server and its
+  TLS, port, wait and bind account (the password is never shown back), the switch-wide wait,
+  port and skip time, LDAP groups (servers, VRF, skip time, certificate DN match, group
+  validation, search map) and search maps by name. Like the rest of AAA it needs the stored
+  admin login and an NXray admin. Tried on a switch with a throwaway server, group and
+  search map, all removed; a search map's attribute lines were refused as typed, so they are
+  set on the switch, and the `no` forms of the server's port, wait, TLS and bind lines were
+  not tried.
+- **Manage Smart Licensing (#95).** The new **Smart Licensing** page (under Switch) shows the
+  licence features and their use, and, while Smart Licensing is on, whether the switch is
+  registered, what it may export and its identity (model and serial number), and reserves
+  licences. Turning it on is done on the Features page, and the switch then writes a Call Home
+  section to Cisco itself. Registering with a token, renewing and deregistering are not
+  offered (they need a Cisco account). Needs the broad role or a stored admin login.
+- **See and set gRPC, NETCONF and NX-SDK, and see RESTCONF, Container Tracker and OpenFlow
+  (#95).** The new **Programmability** page (under Switch) shows which of the six is on and,
+  for each that is, what the switch says of it, and sets the gRPC port, calls at once and
+  certificate, NETCONF's sessions and idle time, and an NX-SDK application service. RESTCONF
+  and Container Tracker have no setting on this switch beyond their feature; OpenFlow is shown
+  only: the Nexus 9200 has no OpenFlow TCAM region, and carving one needs a restart, so its
+  switch lines are refused. A feature is turned on on the Features page. Needs the broad role
+  or a stored admin login.
+- **Ping, traceroute and pathtrace across the VXLAN fabric (#95).** The new **VXLAN OAM**
+  page (under Configure) runs VXLAN OAM's ping, traceroute and pathtrace from the switch, to
+  an address in a VNI or a VRF, to a host found by its traffic, or to a MAC address, with the
+  source port, source address, count, size, interval, timeout, hops, outgoing port, each
+  hop's counters and full answers, and shows what the switch printed. It also makes and
+  changes OAM profiles and their flows, sets the OAM access list, the authentication key
+  (never shown back) and the cross connect heartbeat, turns loop detection on and runs its
+  probe and bring-up, shows and clears the tools' counters. Each change and each run shows
+  its lines and asks first. It needs the ngoam feature and works with the broad role or a
+  stored admin login; a broad role written before needs Update the port list on the Switch
+  page to run the tools. Tried on a switch without a VXLAN tunnel, so no OAM message was
+  answered; loop detection is refused by a Nexus 9200, and the page says so; the OAM access
+  list was not tried.
+- **Encrypt VXLAN traffic between sites (#95).** The new **VXLAN tunnel encryption** page
+  (under Configure) sets up CloudSec between the border gateways of a multi-site VXLAN
+  fabric: key chains and keys (the key never shown back, its algorithm and send lifetime),
+  the source loopback, encrypted traffic only, the integrity check, policies (cipher, replay
+  window, rekey time), peers with their key chain and policy or certificates, and the links
+  that encrypt, with the sessions, policies and keys in tables. Each change shows its lines
+  and asks first. It needs the tunnel-encryption feature and works with the broad role or a
+  stored admin login. Cisco supports it on the Nexus 9300-FX2 only; other switches refuse
+  the feature, and the page says so plainly. The key chain lines were tried on a switch; the
+  rest follows Cisco's guide and was not tried.
+- **See the VMs servers announce over Edge Virtual Bridging (#95).** The new **Edge Virtual
+  Bridging** page (under Configure) shows the switch's VDP role, address, timers and
+  counters, and the hosts and virtual station interfaces the servers' virtual switches
+  announced, and sets the VDP address, the answer wait, the keep-alive and batch answers.
+  Each change shows its lines and asks first. It needs the evb feature and works with the
+  broad role or a stored admin login. The page was read on a switch; the settings follow the
+  switch's own command list and were not tried there.
+- **Follow VMware VMs to their ports with VM Tracker (#95).** The new **VM Tracker** page
+  (under Configure) shows each vCenter connection and its state and the VMs behind each
+  port, and sets up a connection (its address, VRF, login, extension key, timers, whether it
+  makes VLANs and which ones), connects it, syncs it now, turns VM Tracker off on a port and
+  hands the VLANs to fabric auto-configuration. The vCenter password is never shown back.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; syncing now needs Update the port list on the Switch page for a broad role
+  written before. Tried on a switch with a throwaway connection, without a vCenter:
+  connecting and the VM list were not tried.
+- **Pair a port with a backup that takes over at once: Flex Links (#95).** The new **Flex
+  Links** page (under Configure) shows the pairs with their state and makes or deletes a
+  pair of ports or port-channels, with its preemption mode and delay and multicast fast
+  convergence. Each change shows its lines and asks first. It needs the flexlink feature and
+  works with the broad role or a stored admin login. Cisco supports Flex Links on some Nexus
+  9300 models only; a Nexus 9200 refuses the feature, and the page says so plainly. Built
+  from Cisco's guide, not tried on a switch that takes it.
+- **Route multicast across a VXLAN EVPN fabric (#95).** The new **Multicast over VXLAN**
+  page (under Configure) sets up tenant routed multicast: the switch-wide choices (shortest
+  path only, the distributed designated router, multicast in EVPN, an anycast border leaf),
+  the NVE interface's multicast source, each layer 3 VNI's multicast group, each VRF's flow
+  spreading and MVPN route-targets, and the BGP process's ipv4 mvpn and l2vpn evpn families
+  (with advertise-pip for vPC border leafs), with a table of the layer 3 VNIs. The BGP page
+  now also takes the ipv4 mvpn and l2vpn evpn families on a neighbor, with Rewrite
+  route-targets' AS. Each change shows its lines and asks first. It needs the ngmvpn feature
+  and works with the broad role or a stored admin login. The feature and the switch-wide,
+  VRF and NVE lines were tried on a switch; the route-target, layer 3 VNI and BGP lines need
+  BGP and EVPN running and were not.
+- **Reserve bandwidth for media multicast with non-blocking multicast (#95).** The new
+  **Non-blocking multicast** page (under Configure) shows NBM's defaults, flow policies, host
+  policies, flows, defined flows and each interface's bandwidth left, and sets the mode and
+  default flow bandwidth, DSCP and policer, the unicast share and ASM ranges, flow policies
+  and their groups (with critical priority), which senders and receivers are allowed, flow
+  definitions and external links, for the whole switch or an NBM VRF. It says plainly when
+  VXLAN is on (Cisco does not support NBM with it) or the TCAM has no room for NBM. Each
+  change shows its lines and asks first. It needs the nbm feature and works with the broad
+  role or a stored admin login. Tried on a switch with throwaway policies.
+- **Set up IGMP snooping (#95).** The new **IGMP snooping** page (under Configure) shows
+  snooping switch-wide and in every VLAN, the queriers, router ports, the groups hosts
+  joined with their ports, and each VLAN's static groups and report filters. It turns
+  snooping on or off, sets report suppression, the general query proxy, group timeouts,
+  event history and snooping in VXLAN VLANs for the whole switch, and per VLAN a querier
+  with its timers and version, fast leave, explicit tracking, report flooding, router ports,
+  static groups and report filters, and shows each VLAN's counters, with buttons that clear a
+  VLAN's learned groups, counters or tracked IGMPv3 hosts. Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login; clearing needs Update
+  the port list on the Switch page for a broad role written before. The VLAN lines and the
+  clears were tried on a switch in a throwaway VLAN; the switch-wide lines were not (they
+  follow Cisco's guide).
+- **Steer traffic through firewalls and other appliances with enhanced policy-based routing
+  (#95).** The new **Enhanced policy routing** page (under Configure) shows the ePBR
+  services with their end-points, reverse end-points and health probes, the policies with
+  their matches and service chains, which interfaces apply them (forward and reverse), the
+  state of every end-point's probe, and each counting policy's packets per bucket. It makes
+  and deletes services, end-points (with a reverse address for the traffic coming back),
+  policies, matches for an IPv4 or IPv6 ACL and the steps of a chain (with what to do when
+  a service is down), sets probes (ping, TCP, UDP, a web page, DNS or a tracked object), a
+  service's interface and VRF, how traffic is spread over the end-points, turns counting on,
+  applies a policy to an interface and clears the counters. A service or policy already in
+  use is changed in an ePBR session that NXray commits, as the switch asks; what the switch
+  will not change then is refused with the reason. Each change shows its lines and asks
+  first. It works with the broad role or a stored admin login; clearing the counters needs a
+  broad role written by this version, so the Switch page asks for Update the port list.
+  Tried on a switch with throwaway services and policies.
+- **Set up NAT from the web interface (#95).** The new **NAT** page (under Configure) shows
+  the inside and outside interfaces, the static and dynamic translations, the address pools,
+  the timeouts and limits, every translation in use with its packets and time left, the
+  pools in use and the counters, and whether the switch has TCAM space for NAT: while its
+  nat region is 0 the page says so plainly, since the switch then refuses inside and outside
+  on interfaces. It marks an interface inside or outside, adds and deletes static
+  translations (an address, or one TCP or UDP port, in a VRF, with a route), address pools,
+  dynamic translations to a pool (sharing addresses by port if wanted) or to an interface's
+  address, sets the timeouts and the most translations, and clears the translations or
+  counters. Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login; clearing needs a broad role written by this version, so the Switch
+  page asks for Update the port list. Tried on a switch with throwaway translations and
+  pools, except inside and outside on an interface, which the switch refuses without NAT
+  TCAM space.
+- **Make tracked objects from the web interface (#95).** The new **Tracked objects** page
+  (under Configure) shows every object with what it follows, its state, how often it
+  changed and the lists that use it. It makes and deletes objects that follow an
+  interface's link or routing, a route (in a VRF too) or an IP SLA entry, and lists of other
+  objects (all up, any up, or enough by weight or percentage, with their thresholds), and
+  sets how long an object waits before it changes state. Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login. The tracked object
+  fields on the HSRP, VRRP and EEM pages now point to it. Tried on a switch with throwaway
+  objects.
+- **Fold the menu's groups shut (#94).** Pressing a group's heading in the left menu
+  (Monitor, Configure, Switch, Admin) hides or shows its pages, so the groups not in use
+  take no room. The browser remembers which groups are shut; the group holding the open
+  page always opens, and the narrow menu still shows every page.
+- **Manage the switch's SSH host key and certificates from the web interface (#88).** The new
+  **SSH and certificates** page (under Switch) shows the SSH host key with its fingerprint,
+  the RSA key pairs, the trustpoints and every certificate the switch holds (whose it is,
+  subject, issuer, expiry, fingerprint). It makes a new SSH host key (RSA or ECDSA; SSH is
+  turned off and on again around it, and back on even when the switch refuses the key),
+  makes and deletes key pairs and trustpoints, sets a trustpoint's key pair, enrolment and
+  revocation check, imports a certificate with its key from a PKCS#12 file on bootflash,
+  deletes a trustpoint's certificates, and gives a trustpoint its CA certificate pasted in
+  PEM form: NXray reads it, shows it, and accepts it on the switch only when the switch
+  shows the same fingerprint. Each change shows its lines and asks first. It works with
+  the broad role or a stored admin login, for an NXray admin. Tried on a switch with
+  throwaway key pairs and trustpoints, except a new SSH host key.
+- **Collect show tech-support from the web interface (#86).** The new **Tech support** page
+  (under Switch) runs `show tech-support` in the background (over 100 MB, a few minutes;
+  the page shows how far it got), keeps it gzipped in NXray, and offers it for download
+  until it is collected again or removed. It needs the stored admin login and an NXray
+  admin. Tried on a switch.
+- **Browse and manage bootflash files from the web interface (#85).** The new **Files** page
+  (under Switch) lists bootflash's files with their size and date and the space used and
+  free, copies a file from your computer to bootflash or from bootflash to your computer,
+  and deletes a file after asking. The image the switch runs or starts from is marked and
+  never deleted, and an existing file is never replaced. Copies use SCP, which needs
+  `scp-server` on (Features page). It needs the stored admin login and an NXray admin.
+  Tried on a switch with a throwaway file.
+- **Upgrade the NX-OS image from the web interface (#84).** The new **Software** page (under
+  Switch) shows the running version and image, the image the switch starts from next, the
+  images on bootflash and the last install or check. For a new image (copied there on the
+  Files page) it checks the checksum pasted from Cisco's download page, runs the switch's
+  own compatibility check (which says whether the install restarts the switch) and then
+  installs it, only once both passed and after the switch's name is typed; each step runs
+  in the background and the page follows it. It needs the stored admin login and an NXray
+  admin. The checks were tried on a switch; the install itself was not, as it restarts the
+  switch.
+- **Manage AAA, TACACS+ and RADIUS from the web interface (#83).** The new **AAA** page
+  (under Switch) shows how people sign in (default and console), whether a failed sign-in
+  says why, accounting, command authorization, and the RADIUS and TACACS+ servers and
+  server groups. It sets sign-in through up to three server groups or the switch's own
+  accounts, the fallback to them, accounting, TACACS+ command authorization, servers
+  (address, key, ports, timeout, tries), the switch-wide key, timeout, tries and dead time,
+  and server groups with their servers, VRF and dead time. Each change shows its lines and
+  asks first, with a warning where a change can lock everyone out. Keys are never shown
+  back. It needs the stored admin login and an NXray admin: NXray's broad role still
+  refuses these lines. The server and group lines were tried on a switch; the sign-in,
+  accounting and authorization lines were not.
+- **Manage streaming telemetry from the web interface (#75).** The new **Telemetry** page
+  (under Switch) lists the destination profile, every destination group with its
+  collectors, every sensor group with its data source and paths, and every subscription
+  with its groups and intervals, plus each collector's connection state and how much data
+  the switch has collected. It sets the profile's VRF, compression, source interface,
+  retry buffer and node ID, makes and deletes destination groups, sensor groups and
+  subscriptions, adds and removes collectors (address, port, protocol and encoding),
+  paths (DME or YANG, or a show command for NX-API) and a subscription's groups. Each
+  change shows its lines and asks first. It works with the broad role or a stored admin
+  login. The lines and show output were tried on a switch.
+- **Manage PTP from the web interface (#74).** The new **PTP** page (under Switch) shows
+  the switch's PTP clock (its state, domain, source address, priorities, the grandmaster,
+  the offset and path delay) and every port that runs PTP with its state and message
+  counters. It sets the clock's source address, domain, priorities, correction and path
+  delay limits and notifications, and on a port turns PTP on or off and sets its role,
+  multicast or unicast transmission, PTP VLAN, message intervals and unicast masters and
+  slaves. Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login. The lines and show output were tried on a switch.
+- **Manage MPLS from the web interface: static labels and Layer 3 VPNs (#78).** The new
+  **MPLS** page (under Configure) shows whether the MPLS feature set, static MPLS, segment
+  routing and Layer 3 VPNs are on, the label range, the interfaces with MPLS forwarding,
+  the static bindings, the segment routing block and prefix SIDs, each VPN VRF's route
+  distinguisher and route-targets, the labels in use, and whether the switch has the VPN
+  Fabric licence Cisco asks for. It turns MPLS on step by step (install the feature set,
+  turn it on, then static MPLS, or segment routing and Layer 3 VPNs), sets the label range,
+  turns MPLS forwarding on or off on an interface, adds and deletes bindings that swap a
+  label, take it off, or have a backup path, starts and removes segment routing, sets its
+  global block, adds and deletes prefix SIDs, and sets a VRF's route distinguisher and the
+  route-targets it imports and exports. The **BGP** page gains the VPN address families
+  (vpnv4 and vpnv6), labelled unicast and the VPN families for neighbors, and MPLS labels
+  for every IPv4 route. Each change shows its lines and asks first. It works with the broad
+  role or a stored admin login. The switch refuses static MPLS, segment routing and Layer 3
+  VPNs while VXLAN is on; the page says so. Layer 3 VPNs over LDP are not offered: Cisco
+  lists them only for other Nexus models, and this switch has no LDP. Built from Cisco's
+  guide and not yet tried on a switch past the feature set.
+- **Manage ITD from the web interface (#80).** The new **ITD** page (under Configure)
+  lists the device groups with their nodes and health probe, the services with their
+  state, virtual address and how they spread traffic, the nodes in service and, when
+  counting is on, what each bucket got. It makes and deletes device groups, nodes and
+  services, sets a group's probe (ping, TCP, UDP or DNS, with its timers), a node's
+  weight, standby node or hot standby, a service's device group, ingress interfaces,
+  virtual address, spreading method, what happens when a node fails, peer service, NAT
+  and access lists, turns a service off or on, and turns counting on, off or clears it.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; the broad role now allows ITD's counters, so a broad role written by an
+  older NXray needs **Update the port list** on the Switch page before counting.
+- **Manage policy-based routing from the web interface (#81).** The new **Policy-based
+  routing** page (under Configure) lists the route-maps with their entries (the ACL each
+  matches, the next hops it sets), the interfaces each route-map is applied to and, when
+  counting is on, the packets each entry sent. It adds and deletes route-map entries, sets
+  an entry's description, IPv4 or IPv6 ACL, IPv4 or IPv6 next hops (with load sharing,
+  order and drop-on-fail) or drop, turns counting on or off, deletes a route-map, and
+  applies a route-map to a VLAN interface, routed port or routed port-channel. Each change
+  shows its lines and asks first. It works with the broad role or a stored admin login.
+  The lines and show output were tried on a switch.
+- **Manage tunnel interfaces from the web interface (#79).** The new **Tunnels** page
+  (under Configure) lists every GRE and IP-in-IP tunnel with whether it is up, its mode,
+  source, destination, VRFs, address and MTU. It makes and deletes tunnels and sets a
+  tunnel's mode, source (an address or an interface), destination, transport VRF, TTL,
+  IPv4 address, description, MTU, VRF and path MTU discovery, and turns it off or on.
+  Each change shows its lines and asks first. Changes need the stored admin login, and
+  the switch's tunnel feature, which it refuses while VXLAN is on; the page says so.
+  Built from Cisco's guide and not yet tried on a switch.
+- **Manage loopback interfaces from the web interface (#82).** The new **Loopbacks** page
+  (under Configure) lists every loopback with whether it is on, its description, VRF and
+  IPv4 and IPv6 addresses. It makes and deletes loopbacks (0 to 1023) and sets a
+  loopback's description, main and extra IPv4 addresses, IPv6 addresses and VRF, and turns
+  it off or on. Each change shows its lines and asks first. It works with the broad role or
+  a stored admin login; the broad role now names the loopbacks in its port list, so a
+  broad role written by an older NXray needs **Update the port list** on the Switch page
+  first. The lines and show output were tried on a switch.
+- **Manage EEM applets from the web interface (#72).** The new **EEM** page (under Switch)
+  lists the applets with their event and actions, the environment variables, the
+  switch's own system policies and the recent EEM events. It makes and deletes applets
+  (an applet may override a system policy), and sets an applet's description, its event
+  (a command typed, a log message, a timer, a part put in or taken out, a temperature,
+  fan or memory alarm, a module, a tracked object, a counter, storm control, or none) and
+  its actions (log a message, send an SNMP trap, run the command typed, do what the
+  system policy does, change a counter, restart the switch, or run a command). The
+  commands an applet runs come from a fixed list: save the configuration, copy it to a
+  bootflash file, turn a port off or on, clear a port's counters, or run a show command
+  from a list; nothing is typed. An applet's commands run as the switch's admin, so EEM
+  changes need the stored admin login. Each change shows its lines and asks first. Some
+  lines were tried on a switch; the rest are from Cisco's guide.
+- **Manage the scheduler from the web interface (#73).** The new **Scheduler** page (under
+  Switch) makes jobs from the same fixed list of commands (for example a nightly copy of
+  the configuration to bootflash) and schedules that run them every day, week or month,
+  once, or again and again; it lists each job's commands, each schedule's time, last run
+  and results, and the log of what the jobs printed. A job is made once with all its
+  commands, as the switch takes them only then. It needs the scheduler feature (Features
+  page). Each change shows its lines and asks first. It works with the broad role or a
+  stored admin login; with the broad role the switch refuses the copy to bootflash and
+  clearing counters. The lines and show output were tried on a switch.
+- **Manage Smart Call Home from the web interface (#77).** The new **Call Home** page
+  (under Switch) shows whether Call Home is on, the contact details, how messages are sent
+  and every destination profile. It sets the contact email, phone, street address and
+  contract, customer and site IDs, the switch priority, holding back repeated messages
+  and the regular inventory, turns Call Home on or off and sends a test message; it sets
+  the mail servers, the from and reply-to addresses, the web VRF and proxy; and it makes,
+  changes and deletes destination profiles (format, email and web addresses, lowest
+  level, largest message, alert groups). Each change shows its lines and asks first. It
+  works with the broad role or a stored admin login. The contact, profile and transport
+  lines were tried on a switch; turning it on and the test message were not.
+- **Manage errdisable detection and recovery from the web interface (#87).** The new
+  **Errdisable** page (under Configure) lists every cause with whether the switch detects
+  it and recovers from it by itself, the recovery interval, and the ports err-disabled now
+  with the reason. It turns recovery on or off per cause, sets the interval and turns
+  detection on or off per cause. Each change shows its lines and asks first. It works with
+  the broad role or a stored admin login. The recovery lines were tried on a switch.
+- **Manage IP SLA from the web interface (#71).** The new **IP SLA** page (under Configure)
+  makes IP SLA entries that measure from the switch: ping, UDP echo, UDP jitter (with an
+  optional voice codec), TCP connect, DNS lookup and HTTP get, each with its frequency,
+  threshold, timeout, VRF, type of service, packet size, tag, owner and history settings. It
+  schedules an entry (start now, at a time, after a wait or when triggered; for a time or
+  forever; every day if wanted), adds reactions to its results (round-trip time, timeout,
+  jitter, packet loss and more, with thresholds and an SNMP trap or a trigger) and lets one
+  entry start another. It lists every entry with what it measures, its state, its latest
+  result, how many runs passed and failed, and its schedule and reactions. A scheduled entry
+  cannot be changed: the page says to remove its schedule first. It needs the sla sender
+  feature (Features page). Each change shows its lines and asks first. It works with the
+  broad role or a stored admin login. The lines and show output were tried on a switch.
+- **Manage 802.1X port authentication from the web interface (#68).** The new **802.1X**
+  page (under Configure) sets the RADIUS server groups that check sign-ins and get
+  accounting, turns 802.1X on or off for the switch, and per port sets port control (auto,
+  force-authorized, force-unauthorized), the host mode (single-host, multi-host,
+  multi-auth), MAC authentication bypass, regular sign-in, the timers and the retries. It
+  lists the ports set up for 802.1X and every device signed in, with its port, MAC address,
+  method, who checked it and the VLAN it was given. NX-OS has no guest VLAN and no
+  auth-fail VLAN, so the page has neither; the RADIUS servers themselves are still made on
+  the switch. It needs the dot1x feature (Features page). Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login. Written from Cisco's
+  guide; not tried on a switch.
+- **Manage VTP from the web interface (#67).** The new **VTP** page (under Configure) shows
+  the switch's VTP status, the ports taking part and the message counters, and sets the VTP
+  mode (transparent or off), domain, version (1 or 2) and password, and VTP on or off per
+  port. A Nexus 9000 runs VTP in transparent mode only, so it never takes its VLAN list
+  from another switch; the password that is set is never shown. It needs the vtp feature
+  (Features page). Each change shows its lines and asks first. It works with the broad role
+  or a stored admin login. Written from Cisco's guide; not tried on a switch.
+- **Manage UDLD from the web interface (#66).** The new **UDLD** page (under Configure)
+  turns UDLD on or off per port, sets aggressive mode per port or for every fibre port, and
+  sets the message interval. It lists each port's setting, state and whether its link
+  passes traffic both ways, and the neighbour each port hears. It needs the udld feature
+  (Features page), which starts UDLD on every fibre port at once. Each change shows its
+  lines and asks first. It works with the broad role or a stored admin login. Written from
+  Cisco's guide; not tried on a switch.
+- **Set up private VLANs from the web interface (#65).** The new **Private VLANs** page
+  (under Configure) makes a VLAN a primary, isolated or community VLAN, gives a primary
+  VLAN its secondary VLANs, sets a port's private VLAN mode (host, promiscuous, trunk
+  promiscuous or trunk secondary) with its host association, mapping or trunk lines, and
+  maps secondary VLANs to the primary VLAN's VLAN interface. It lists each primary and
+  secondary VLAN with its host and promiscuous ports, and every port in a private VLAN
+  mode. It needs the private-vlan feature (Features page). Each change shows its lines and
+  asks first. It works with the broad role or a stored admin login; the limited role has
+  no room left for it. The lines and show output were tried on a switch.
+- **See control-plane policing (CoPP) from the web interface (#64).** The new
+  **Control-plane policing** page (under Configure) names the CoPP policy applied to the
+  control plane and lists its classes, with what each matches, its CoS, rate limit and
+  burst, the traffic it passed and dropped, and its 5-minute offered and drop rates. The
+  page only shows; every role can look. Read from a switch. Its table uses the whole
+  width of the page, as does any page whose only card is a table, and only the matches
+  wrap onto more lines.
+- **See and set priority flow control (PFC) from the web interface (#63).** The new
+  **Priority flow control** page (under Configure) lists every port's PFC mode and
+  whether it is working, with the pause frames received and sent, and the pause counts
+  per priority (CoS) for ports that have any. It sets a port's mode (on, off or auto) and
+  watchdog, and the switch-wide watchdog and "force PFC off" setting. Each change shows
+  its lines and asks first. It works with the broad role or a stored admin login; the
+  limited role has no room left for it. The pause counters were read from a switch; the
+  configuration lines are written from Cisco's NX-OS 9.3 guide and were not tried on one.
+- **Manage QoS from the web interface (#62).** The new **QoS** page (under Configure)
+  shows the class-maps and policy-maps that were made, what is applied to each port and
+  to the whole switch, the switch's own default policies and the output queue counters
+  (packets sent and dropped per port and QoS group). It makes class-maps that match
+  DSCP, CoS, IP precedence, an ACL or RTP ports; makes policy-maps and adds classes that
+  set a QoS group, DSCP, CoS or precedence or limit the rate; applies a policy to a
+  port's incoming traffic; and makes network-qos policies (MTU, pause) and queuing
+  policies (bandwidth, priority, shaping, queue limit) and applies them to the system.
+  Each change shows its lines and asks first. It works with the broad role or a stored
+  admin login; the limited role has no room left for it. The class-map, policy-map and
+  port lines were tried on a switch with throwaway objects; applying a network-qos or
+  queuing policy to the system changes the whole switch and was not tried.
+- **Set up and monitor port mirroring (SPAN and ERSPAN) from the web interface (#61).**
+  The new **Monitor sessions** page (under Configure) lists every monitor session with
+  its state, sources and destination. It makes local (SPAN) and ERSPAN source sessions
+  and ERSPAN destination sessions and sets their source ports and VLANs with a direction,
+  the VLAN filter, the destination port or address, ERSPAN ID, VRF, time to live, DSCP,
+  the largest packet copied, a description and on/off; marks a port as a monitor destination; and sets the
+  ERSPAN source address. Each change shows its lines and asks first. It works with the
+  broad role or a stored admin login; the limited role has no room left for it. The
+  lines were tried on a switch with throwaway sessions, except ERSPAN destination
+  sessions, which the switch refuses while the nve (VXLAN) feature is on; a session
+  coming up was not seen, because the test ports were down.
+- **Set up and monitor VXLAN and EVPN from the web interface (#60).** The new
+  **VXLAN** page (under Configure) shows the NVE interface (state, source
+  address, host reachability), its peers, and every VNI with its type, mode and
+  state. It makes the NVE interface and sets its source interface, host
+  reachability through BGP, on/off state and the flooding of every VNI; ties a
+  VLAN to a VNI; adds layer 2 and layer 3 VNIs to the NVE interface with
+  suppress-ARP, multicast group and ingress replication; sets a VNI's EVPN route
+  distinguisher and route-targets; gives a VRF its layer 3 VNI and EVPN
+  route-targets; and turns the EVPN control plane and the anycast gateway MAC
+  on. Each change shows its lines and asks first. It needs the nve and
+  vnseg_vlan features (Features page) and NXray's role at version 20: admins
+  turn the features on, then press **Update the port list** on the Switch page,
+  which now also names the NVE interface in the role's port list. The lines
+  it sends were tried on a switch with throwaway objects; the role rules and EVPN with
+  a real BGP neighbor were not. The EVPN settings need the bgp feature and EVPN turned
+  on first.
+- **Set up and monitor vPC from the web interface (#59).** The new **vPC** page
+  (under Configure) shows the vPC domain (peer status, peer keepalive, which
+  switch is primary, whether the two agree), the peer-link and every vPC with
+  its state and consistency. It makes the vPC domain and sets its peer
+  keepalive, role and system priority, peer switch, peer gateway, layer 3 peer
+  router, ARP and IPv6 neighbor synchronization, auto-recovery and delay
+  restore; marks a port-channel as the peer-link; and gives a port-channel a
+  vPC number. Each change shows its lines and asks first. It needs the vpc and
+  lacp features (Features page) and NXray's role at version 19: admins press
+  **Update the port list** on the Switch page. Written from Cisco's NX-OS 9.3
+  guides and not yet tried on a switch.
+
+### Changed
+
+- **Moving between pages is faster (#98).** A page you open now reuses what the switch
+  answered for the page before, for 15 seconds (`NXRAY_PAGE_READ_SECONDS`, 0 turns it off):
+  the switch answers one request at a time and needs up to a second for one command, so the
+  same lists (features, interface brief, VRFs, the all-ports reads, one port's settings) were
+  read again by page after page. Tried on a Nexus 92160YC-X: 15 pages in a row took 17.5 to
+  18.2 s before and 6.1 to 6.7 s with it, and a port's page after the Ports page 0.7 to 1.0 s
+  instead of 2.0 to 3.4 s. CPU, memory, temperatures, fans, power, uptime and the queue counters are
+  always read fresh; port states and rates can be up to 15 seconds old on a page you open
+  (the Live choice in the top bar is unchanged). Sending a form, or reloading the page in the browser (F5), reads the
+  switch again; a change made at the switch's own command line shows after those seconds or
+  after a reload. The self-refreshing pages are unchanged.
+- **The dashboard, VXLAN OAM, Tunnel encryption and Flex Links open about 1.4 seconds faster
+  (#97).** They asked the switch for `show version`, which it needs about 1.5 seconds to
+  answer; they now ask for the commands that give the same facts (`show hostname`,
+  `show inventory`, `show module`, `show system uptime`, `show system reset-reason`), which
+  take about 0.1 second together. The Software and Files pages still need `show version` for
+  the image the switch is running, so they keep it, and reuse the answer for five minutes.
+- **A "turn it on on the Features page" link opens that feature's row (#93).** When a
+  page says a feature is off (Telemetry, PTP, VXLAN, LACP, LLDP, VLAN interfaces and the
+  other pages that need one), its Features link now scrolls to that feature on the
+  Features page and picks out its row, instead of opening the top of the list.
+- **The Ports page switch picture shows each port's speed in its normal view
+  (#58).** A port that is up is now coloured by the speed it runs at (1G, 10G,
+  25G, 40G, 100G), the same colours as the Speed view (40G is now pink, no longer
+  orange, so it cannot be mistaken for amber), and the small light in
+  its top right corner shows that it is up. Amber (down with something plugged
+  in), grey (turned off) and empty ports are unchanged. The
+  legends of the State, Speed, Traffic and Errors views always list every
+  colour, with a count of 0 when no port has it. VLAN and Port-channel keep
+  listing only the colours in use.
+
+### Fixed
+
+- **The Ports table no longer scrolls sideways in a window 1700 to 1800 pixels wide (#100).**
+  The room kept free for the side panel left the table too narrow there, so it was squeezed
+  and had a scroll bar. The room is now kept from 1840 pixels; in a narrower window the panel
+  opens over the right of the page, as it already did below 1700.
+- **The Ports page names the kind of error, not just the total (#99).** The Errors column and a
+  port's side panel showed one number (41, 32) and the kinds were only on the port's own page,
+  among sixteen counters. Each now says what the number is made of ("CRC errors 41", "Output
+  errors 32", also runts, giants, other input errors and discards), and on the port's own page
+  the error counters that are not zero are picked out in red.
+- **Restart the switch no longer stops at "Permission denied for the role" (#96).** When the
+  switch refuses to let NXray's own account restart it (NX-OS lets only the network-admin
+  role do that), the page now asks for the switch admin login and restarts with it over SSH,
+  instead of ending on the error. With a switch admin login stored on the Switch page, the
+  restart uses it and asks for nothing.
+
+- **Pages that need every configuration command work with the admin login stored
+  (#92).** With **Limited role, and store the switch admin login**, the Monitor sessions,
+  QoS, Priority flow control, Private VLANs, UDLD, VTP, 802.1X and IP SLA pages offered
+  their changes but sent them with NXray's own account, whose limited rules have none for
+  them, so the switch refused them. They now send their changes with the stored admin
+  login in that mode; they still read the switch with NXray's account.
+- **The Ports page keeps its room for the side panel again (#91).** On a screen 1700px
+  or wider, the front panel picture and the port table stretched to the right edge, so
+  a port's side panel covered their right end. They again stop short of the panel's
+  place, open or shut.
+- **The broad role now also denies EEM applets.** An EEM applet's commands run as the
+  switch's admin, not as the account that made it, so NXray's account with the broad
+  role could get past its own deny list (accounts, roles, AAA, boot) through an applet.
+  The role now denies `event manager` configuration too. A broad role written by an
+  older NXray is flagged on the Switch page and in a banner for admins: press **Update
+  the port list** there to add the deny.
+- **A page shows an update's new look without a forced reload (#90).** Browsers kept
+  the old stylesheet and scripts for a while after NXray was updated, so a changed
+  layout showed only after Ctrl+Shift+R. NXray now tells the browser to check them on
+  every load; an unchanged file costs a short answer.
+- **Table columns are no longer squeezed (#89).** In tables whose text wraps (the
+  protocol, QoS, PFC, Monitor sessions, Activity, Alerts, Routing, Neighbors and
+  Port-channels pages, among others) the first column took almost the whole width and
+  every cell had extra space above and below. Columns now size to their content, so long
+  text such as matches, messages and addresses gets the room.
+- **The Spanning tree page needs far less scrolling (#57).** Its tables (Trees,
+  Ports in the trees, Port settings) no longer stretch across the whole page.
+  They sit in the page's columns like the other cards, and a long table keeps
+  a fixed height and scrolls inside its card with the column names kept in
+  view. On a 1920px-wide screen the page is about 40% shorter.
+
+- **Neighbors no longer shows the text "null" for LLDP fields a neighbor did not
+  send (#56).** A name, port, model, address or VLAN that the switch prints as
+  `null` is now treated like "not advertised": the cell is empty, or the
+  chassis ID or port ID is shown, as it already was for a missing name.
+
+- **The release and beta workflows pin their Docker actions to commit SHAs
+  (#46).** `release.yml` and `beta.yml` used moving tags for `setup-buildx`,
+  `login`, `metadata` and `build-push` while `ci.yml` was already pinned; the
+  version stays in a comment beside each SHA.
+
+- **The container health check reads `NXRAY_ENABLE_HTTPS` the way the app does
+  (#54).** It had its own looser copy, so a value the app refuses to start with
+  (such as `maybe`) was read as "HTTPS off". It now uses `env_bool` from
+  `app/config.py` and reports unhealthy for such a value.
+
+- **A MAC address is read, and tested for being a group address, in one place
+  (#53).** The static-entry check, the gateway-MAC check and the sFlow
+  collector each had their own spelling rules and group-bit test. They all use
+  `normalize_mac` and `is_group_mac` in `app/oui.py` now.
+
+- **Which roles may change the switch is now decided in one place (#52).**
+  Four pages each had their own copy of the operator/admin check, and three
+  more wrote the role list out again. They all ask `may_change`, which asks
+  `User.can_change`, so a new role only has to be added there.
+
+- **A duration on the OSPF and multicast pages is now read one way (#51).**
+  The two pages each had their own formatter; the multicast one kept a zero
+  part such as `0d` and left a fractional-seconds time unchanged. Both use
+  `duration_text` in `app/switch.py` now.
+
+- **The small helpers that read a value from the switch's JSON now exist once
+  (#50).** `text`, whole-number, true/yes and VRF-name readers were copied
+  across a dozen modules and disagreed on what they accept. They now live in
+  `app/switch.py`, with the stricter variants named for what they do
+  (`digits_int`, `is_enabled`, `row_vrf`), so the same value reads the same way
+  on every page.
+
+- **Hiding a password or key in a message is now done one way (#49).** Seven
+  places each had their own copy of the code; they all use `scrub_secrets`
+  now, so an empty secret is handled the same everywhere.
+
+- **Signing in now returns you to the page you asked for, query string
+  included (#48).** A signed-out request to `/config?a=1&b=2` used to come back
+  to `/config` only, and the address was put in `?next=` unencoded, so a `&` or
+  `#` in it would have cut it short. The whole path and query are now kept and
+  URL-encoded; only a local address is still accepted.
+
+- **HTTPS responses now carry `Strict-Transport-Security` (#47).** With
+  `NXRAY_ENABLE_HTTPS` or `NXRAY_HTTPS` on, the browser is told to keep to
+  https:// for a year after its first visit, so a later typed `http://` address
+  can no longer be intercepted before the redirect. Browsers ignore the
+  header on a certificate they do not trust (the built-in self-signed one), but
+  for a trusted certificate that later expires they offer no click-through.
+
+- **Sign-ins are now logged (#45).** The container log records a wrong
+  password or code, a lockout, a refused disabled account, a successful
+  sign-in and a sign-out, each with the address and the account name, so an
+  admin or a log watcher such as fail2ban can see who is guessing. The name is
+  quoted and cut short, and no password or code is ever written.
+
+- **The data folder and the database are now private to NXray's user (#44).**
+  The folder is set to mode 700 and the database files (with the stored switch
+  configurations) to 600 from the moment they exist, and the session key is
+  created 600 instead of being restricted after it is written. Existing
+  installs are tightened at the next start; a bind-mounted folder NXray does
+  not own is left as it is, so set its mode on the host.
+
+- **The sFlow collector no longer trusts the agent address written inside a
+  datagram (#43).** A datagram now counts only when it was also sent from an
+  address of that same switch, so a packet from another host that names a
+  switch as its agent is ignored and its sender is listed on the Traffic page.
+
+- **A trailing line break is no longer accepted in a switch password, account
+  name, port name or switch host (#42).** The checks now refuse a value that
+  ends in a line break, like any other character outside the allowed set.
+
 ## [0.2.1] - 2026-11-08
 
 **A small release: choose how much access NXray's switch account gets, a Restart button that needs no admin login, and two fixes.** Run **Update the port list** on the Switch page once per switch to pick up the new role rules (role version 18). No `docker-compose.yml` change is needed.

@@ -1,0 +1,1227 @@
+{
+  "pmap-name": "copp-system-p-policy-strict",
+  "TABLE_cmap": {
+    "ROW_cmap": [
+      {
+        "cmap-key": "copp-system-p-class-l3uc-data",
+        "cmap-name-out": "copp-system-p-class-l3uc-data",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "800",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "exception": {
+              "opt_match_excpt": "glean"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-critical",
+        "cmap-name-out": "copp-system-p-class-critical",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "36000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "1280000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 7
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-bgp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-rip"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-vpc"
+              }
+            },
+            {
+              "match-key": 4,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-bgp6"
+              }
+            },
+            {
+              "match-key": 5,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ospf"
+              }
+            },
+            {
+              "match-key": 6,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-rip6"
+              }
+            },
+            {
+              "match-key": 7,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-eigrp"
+              }
+            },
+            {
+              "match-key": 8,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ospf6"
+              }
+            },
+            {
+              "match-key": 9,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-eigrp6"
+              }
+            },
+            {
+              "match-key": 10,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-auto-rp"
+              }
+            },
+            {
+              "match-key": 11,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-l3-isis"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-important",
+        "cmap-name-out": "copp-system-p-class-important",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "2500",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "1280000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "25534830",
+            "conform-avg-rate": "17",
+            "conform-max-rate": "110",
+            "conform-max-rate-ts": "2338603298010194259",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 6
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-hsrp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-vrrp"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-hsrp6"
+              }
+            },
+            {
+              "match-key": 4,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-vrrp6"
+              }
+            },
+            {
+              "match-key": 5,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-lldp"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-openflow",
+        "cmap-name-out": "copp-system-p-class-openflow",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 5
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-openflow"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-multicast-router",
+        "cmap-name-out": "copp-system-p-class-multicast-router",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "2600",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "128000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 6
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-pim"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-msdp"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-pim6"
+              }
+            },
+            {
+              "match-key": 4,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-pim-reg"
+              }
+            },
+            {
+              "match-key": 5,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-pim6-reg"
+              }
+            },
+            {
+              "match-key": 6,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-pim-mdt-join"
+              }
+            },
+            {
+              "match-key": 7,
+              "exception": {
+                "opt_match_excpt": "mvpn"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-multicast-host",
+        "cmap-name-out": "copp-system-p-class-multicast-host",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "128000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-mld"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-l3mc-data",
+        "cmap-name-out": "copp-system-p-class-l3mc-data",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "2400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "exception": {
+                "opt_match_excpt": "multicast-rpf-failure"
+              }
+            },
+            {
+              "match-key": 2,
+              "exception": {
+                "opt_match_excpt": "multicast-dest-miss"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-normal",
+        "cmap-name-out": "copp-system-p-class-normal",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "72076",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "47",
+            "conform-max-rate-ts": "2339179437807203668",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-dot1x"
+              }
+            },
+            {
+              "match-key": 2,
+              "protocol": {
+                "opt_match_protocol": "arp"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-ndp",
+        "cmap-name-out": "copp-system-p-class-ndp",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "19472",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "4",
+            "conform-max-rate-ts": "2338603298010194259",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 6
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-ndp"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-normal-dhcp",
+        "cmap-name-out": "copp-system-p-class-normal-dhcp",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1300",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-dhcp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-dhcp6"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-normal-dhcp-relay-response",
+        "cmap-name-out": "copp-system-p-class-normal-dhcp-relay-response",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "1500",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "64000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-dhcp-relay-response"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-dhcp6-relay-response"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-normal-igmp",
+        "cmap-name-out": "copp-system-p-class-normal-igmp",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "3000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "64000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "52663362",
+            "conform-avg-rate": "40",
+            "conform-max-rate": "146",
+            "conform-max-rate-ts": "2339179437807465030",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 3
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-igmp"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-redirect",
+        "cmap-name-out": "copp-system-p-class-redirect",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "280",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ptp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ptp-l2"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ptp-uc"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-exception",
+        "cmap-name-out": "copp-system-p-class-exception",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "150",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "exception": {
+                "opt_match_excpt": "ip-option"
+              }
+            },
+            {
+              "match-key": 2,
+              "exception": {
+                "opt_match_excpt": "ip-icmp-unreachable"
+              }
+            },
+            {
+              "match-key": 3,
+              "exception": {
+                "opt_match_excpt": "ipv6-option"
+              }
+            },
+            {
+              "match-key": 4,
+              "exception": {
+                "opt_match_excpt": "ipv6-icmp-unreachable"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-exception-diag",
+        "cmap-name-out": "copp-system-p-class-exception-diag",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "150",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "exception": {
+                "opt_match_excpt": "ttl-failure"
+              }
+            },
+            {
+              "match-key": 2,
+              "exception": {
+                "opt_match_excpt": "mtu-failure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-management",
+        "cmap-name-out": "copp-system-p-class-management",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "36000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "512000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 2
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ftp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ntp"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ssh"
+              }
+            },
+            {
+              "match-key": 4,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-http"
+              }
+            },
+            {
+              "match-key": 5,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ntp6"
+              }
+            },
+            {
+              "match-key": 6,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-sftp"
+              }
+            },
+            {
+              "match-key": 7,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-snmp"
+              }
+            },
+            {
+              "match-key": 8,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-ssh6"
+              }
+            },
+            {
+              "match-key": 9,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-tftp"
+              }
+            },
+            {
+              "match-key": 10,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-https"
+              }
+            },
+            {
+              "match-key": 11,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-snmp6"
+              }
+            },
+            {
+              "match-key": 12,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-tftp6"
+              }
+            },
+            {
+              "match-key": 13,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-radius"
+              }
+            },
+            {
+              "match-key": 14,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-tacacs"
+              }
+            },
+            {
+              "match-key": 15,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-telnet"
+              }
+            },
+            {
+              "match-key": 16,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-radius6"
+              }
+            },
+            {
+              "match-key": 17,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-tacacs6"
+              }
+            },
+            {
+              "match-key": 18,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-telnet6"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-monitoring",
+        "cmap-name-out": "copp-system-p-class-monitoring",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "360",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "128000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "4310",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "10",
+            "conform-max-rate-ts": "2339179437808181587",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-icmp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-icmp6"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-traceroute"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-l2-unpoliced",
+        "cmap-name-out": "copp-system-p-class-l2-unpoliced",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "50",
+        "opt_kbps_mbps_gbps_pps_cir": "mbps",
+        "bc": "8192000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "41931936",
+            "conform-avg-rate": "44",
+            "conform-max-rate": "49",
+            "conform-max-rate-ts": "2339179437807791949",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 7
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-stp"
+              }
+            },
+            {
+              "match-key": 2,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-lacp"
+              }
+            },
+            {
+              "match-key": 3,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-cfsoe"
+              }
+            },
+            {
+              "match-key": 4,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-sdp-srp"
+              }
+            },
+            {
+              "match-key": 5,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-l2-tunnel"
+              }
+            },
+            {
+              "match-key": 6,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-mac-cdp-udld-vtp"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-undesirable",
+        "cmap-name-out": "copp-system-p-class-undesirable",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "200",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 0
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "access_grp": {
+                "acc_grp_name": "copp-system-p-acl-undesirable"
+              }
+            },
+            {
+              "match-key": 2,
+              "exception": {
+                "opt_match_excpt": "multicast-sg-rpf-failure"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-fcoe",
+        "cmap-name-out": "copp-system-p-class-fcoe",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "30000",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "825000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 6
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-mac-fcoe"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-nat-flow",
+        "cmap-name-out": "copp-system-p-class-nat-flow",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "800",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "64000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 7
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "exception": {
+              "opt_match_excpt": "nat-flow"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-l3mcv6-data",
+        "cmap-name-out": "copp-system-p-class-l3mcv6-data",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "2400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 1
+        },
+        "TABLE_match": {
+          "ROW_match": [
+            {
+              "match-key": 1,
+              "exception": {
+                "opt_match_excpt": "multicast-ipv6-rpf-failure"
+              }
+            },
+            {
+              "match-key": 2,
+              "exception": {
+                "opt_match_excpt": "multicast-ipv6-dest-miss"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-undesirablev6",
+        "cmap-name-out": "copp-system-p-class-undesirablev6",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "200",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 0
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "exception": {
+              "opt_match_excpt": "multicast-ipv6-sg-rpf-failure"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "copp-system-p-class-l2-default",
+        "cmap-name-out": "copp-system-p-class-l2-default",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "0",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "0",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 0
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1,
+            "access_grp": {
+              "acc_grp_name": "copp-system-p-acl-mac-undesirable"
+            }
+          }
+        }
+      },
+      {
+        "cmap-key": "class-default",
+        "cmap-name-out": "class-default",
+        "opt_any_or_all": "match-any",
+        "set_vld_flg": 1,
+        "cir": "400",
+        "opt_kbps_mbps_gbps_pps_cir": "kbps",
+        "bc": "32000",
+        "opt_kbytes_mbytes_gbytes_bc": "bytes",
+        "TABLE_slot": {
+          "ROW_slot": {
+            "slot-no-out": 1,
+            "conform-bytes": "10748987",
+            "conform-avg-rate": "0",
+            "conform-max-rate": "3443",
+            "conform-max-rate-ts": "2338603298010194259",
+            "opt_drop_transmit_conform": "transmit",
+            "violate-bytes": "0",
+            "violate-avg-rate": "0",
+            "violate-max-rate": "0",
+            "opt_drop_transmit_violate": "drop"
+          }
+        },
+        "cos": {
+          "cos-val": 0
+        },
+        "TABLE_match": {
+          "ROW_match": {
+            "match-key": 1
+          }
+        }
+      }
+    ]
+  }
+}

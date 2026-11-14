@@ -1,0 +1,142 @@
+{
+  "TABLE_module": {
+    "ROW_module": {
+      "module_number": "1",
+      "TABLE_queuing_interface": {
+        "ROW_queuing_interface": [
+          {
+            "dir": "Egress",
+            "if_name_str": "Ethernet1/1",
+            "TABLE_qosgrp_egress_stats": {
+              "ROW_qosgrp_egress_stats": [
+                {
+                  "eq-qosgrp": "0",
+                  "TABLE_qosgrp_egress_stats_entry": {
+                    "ROW_qosgrp_egress_stats_entry": [
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "1200",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "120000",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "3",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "300",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Q Depth",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "eq-qosgrp": "3",
+                  "TABLE_qosgrp_egress_stats_entry": {
+                    "ROW_qosgrp_egress_stats_entry": [
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Q Depth",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "dir": "Egress",
+            "if_name_str": "Ethernet1/2",
+            "TABLE_qosgrp_egress_stats": {
+              "ROW_qosgrp_egress_stats": [
+                {
+                  "eq-qosgrp": "0",
+                  "TABLE_qosgrp_egress_stats_entry": {
+                    "ROW_qosgrp_egress_stats_entry": [
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Tx",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Pkts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "WRED/AFD & Tail Drop",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      },
+                      {
+                        "eq-stat-type": "Q Depth",
+                        "eq-stat-units": "Byts",
+                        "eq-uc-stat-value": "0",
+                        "eq-mc-stat-value": "0"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "dir": "Ingress",
+            "if_name_str": "Ethernet1/3"
+          }
+        ]
+      }
+    }
+  }
+}

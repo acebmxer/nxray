@@ -181,72 +181,78 @@ def test_role_has_the_neighbor_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in NEIGHBOR_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 18
+    assert ROLE_VERSION == 20
     # Rule numbers carry on from the feature rules and never repeat.
     numbers = [int(line.split()[1]) for line in lines if line.startswith("rule ")]
-    assert numbers == list(range(1, 236))
+    assert numbers == list(range(1, 255))
 
 
 def test_missing_changes_names_neighbor_changes() -> None:
     assert missing_changes(4) == (
         "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
         "tree, switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status and switch restart changes"
+        "defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert (
         missing_changes(3)
         == "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
         "protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(1) == (
         "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
         "route, routing protocol, spanning tree, switch admin, security and config, layer 2 "
-        "security, traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "security, traffic measuring, reset to defaults, sFlow status, switch restart, vPC and "
+        "VXLAN "
+        "changes"
     )
     assert missing_changes(6) == (
         "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
         "admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status and switch restart changes"
+        "defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert (
         missing_changes(7)
         == "VRF, static route, routing protocol, spanning tree, switch admin, security and "
-        "config, layer 2 security, traffic measuring, reset to defaults, sFlow status and switch "
-        "restart changes"
+        "config, layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
+        "restart, vPC and VXLAN changes"
     )
     assert (
         missing_changes(8)
         == "static route, routing protocol, spanning tree, switch admin, security and config, "
-        "layer 2 security, traffic measuring, reset to defaults, sFlow status and switch restart "
+        "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch restart, "
+        "vPC and VXLAN "
         "changes"
     )
     assert missing_changes(9) == (
         "routing protocol, spanning tree, switch admin, security and config, layer 2 security, "
-        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(10) == (
         "spanning tree, switch admin, security and config, layer 2 security, traffic measuring, "
-        "reset to defaults, sFlow status and switch restart changes"
+        "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(11) == (
         "switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status and switch restart changes"
+        "defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(12) == (
         "security and config, layer 2 security, traffic measuring, reset to defaults,"
-        " sFlow status and switch restart changes"
+        " sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(13) == (
         "layer 2 security, traffic measuring, reset to defaults, "
-        "sFlow status and switch restart changes"
+        "sFlow status, switch restart, vPC and VXLAN changes"
     )
     assert missing_changes(14) == (
-        "traffic measuring, reset to defaults, sFlow status and switch restart changes"
+        "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
     )
-    assert missing_changes(15) == "reset to defaults, sFlow status and switch restart changes"
-    assert missing_changes(16) == "sFlow status and switch restart changes"
-    assert missing_changes(18) == ""
+    assert (
+        missing_changes(15)
+        == "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"
+    )
+    assert missing_changes(16) == "sFlow status, switch restart, vPC and VXLAN changes"
+    assert missing_changes(20) == ""
 
 
 def test_the_role_lets_the_account_make_neighbor_changes() -> None:

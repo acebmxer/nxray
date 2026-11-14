@@ -1,0 +1,13 @@
+{
+ "TABLE_vlan": {
+  "ROW_vlan": {
+   "vlan-id": 250,
+   "QuerierAddress": "192.0.2.250",
+   "QuerierVersion": "v3",
+   "QuerierExpires": "00:00:09",
+   "QuerierInterface": "none",
+   "QuerierName": "Switch querier",
+   "IS-Querier-IOD-SVI-IOD": "true"
+  }
+ }
+}

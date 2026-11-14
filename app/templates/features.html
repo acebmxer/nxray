@@ -67,23 +67,25 @@
     </thead>
     <tbody>
       {% for f in members %}
-      <tr>
+      <tr id="{{ feature_anchor(f.name) }}">
         <td class="mono">{{ f.label }}</td>
         <td>{{ f.description or "—" }}{% if f.used_by %}<br><span class="dim">Used by {{ f.used_by|join(", ") }}.</span>{% endif %}</td>
-        <td><span class="badge {{ 'badge-ok' if f.enabled else 'badge-unknown' }}">{{ "on" if f.enabled else "off" }}</span></td>
+        <td><span class="badge {{ 'badge-ok' if f.enabled else 'badge-unknown' }}">{{ "unknown" if f.enabled is none else ("on" if f.enabled else "off") }}</span></td>
         {% if can_change and connection.feature_changes_enabled %}
         <td>
-          {% set refusal = f.refusal(not f.enabled) %}
+          {% for turn_on in ([true, false] if f.enabled is none else [not f.enabled]) %}
+          {% set refusal = f.refusal(turn_on) %}
           {% if refusal %}
-          <span class="dim">{% if f.command is none %}not changed from NXray{% elif f.used_by %}in use: remove what uses it first{% else %}kept on: NXray needs it{% endif %}</span>
+          <span class="dim">{% if f.command is none %}no feature command on this switch{% elif f.used_by %}in use: remove what uses it first{% else %}kept on: NXray needs it{% endif %}</span>
           {% else %}
           <form method="post" action="/features/set" class="inline">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <input type="hidden" name="name" value="{{ f.name }}">
-            <input type="hidden" name="state" value="{{ 'off' if f.enabled else 'on' }}">
-            <button type="submit" class="btn btn-quiet">Turn {{ "off" if f.enabled else "on" }}</button>
+            <input type="hidden" name="state" value="{{ 'on' if turn_on else 'off' }}">
+            <button type="submit" class="btn btn-quiet">Turn {{ "on" if turn_on else "off" }}</button>
           </form>
           {% endif %}
+          {% endfor %}
         </td>
         {% endif %}
       </tr>
@@ -93,8 +95,9 @@
 </section>
 {% endfor %}
 <p class="note">
-  Features the switch manages itself, or that this model does not offer, are
-  listed with their internal name and are not changed from NXray.
+  Features with no command on this switch are listed with their internal name:
+  NX-OS manages them itself, or this model refuses them. A feature that shows
+  "unknown" is one the switch does not report; NXray offers both buttons.
 </p>
 {% endif %}
 {% endif %}

@@ -1,0 +1,52 @@
+{
+ "terminal": "config terminal \n",
+ "feature": "  feature scheduler \n",
+ "logfilesize": "  scheduler logfile size 16\n",
+ "TABLE_jobconfig": {
+  "ROW_jobconfig": [
+   {
+    "jobdata": "config terminal\n scheduler job name probe\n  show version\n  \n"
+   },
+   {
+    "jobdata": "config terminal\n scheduler job name clock\n  show clock\n  \n"
+   },
+   {
+    "jobdata": "config terminal\n scheduler job name empty\n"
+   },
+   {
+    "jobdata": "config terminal\n scheduler job name nightly\n  copy running-config bootflash:/nightly.cfg\n  \n"
+   }
+  ]
+ },
+ "TABLE_scheduleconfig": {
+  "ROW_scheduleconfig": [
+   {
+    "schedulename": "hourly",
+    "scheduletype": "time start 2026:11:11:22:34 repeat 1:0\n",
+    "TABLE_jobs": {
+     "ROW_jobs": {
+      "status": "probe"
+     }
+    }
+   },
+   {
+    "schedulename": "night",
+    "scheduletype": "time daily 03:05\n"
+   },
+   {
+    "schedulename": "backup",
+    "scheduletype": "time start 2026:11:11:22:41 repeat 1:0\n",
+    "TABLE_jobs": {
+     "ROW_jobs": [
+      {
+       "status": "clock"
+      },
+      {
+       "status": "nightly"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

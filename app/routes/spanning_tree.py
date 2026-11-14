@@ -64,6 +64,7 @@ SITE = ProtocolSite(
     check_place=check_stp_place,
     build=build_stp_change,
     send=_send,
+    scroll_tables=True,
 )
 
 

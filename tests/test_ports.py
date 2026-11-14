@@ -103,6 +103,43 @@ def test_an_up_port_with_traffic_and_a_transceiver() -> None:
     assert port.errors == 5  # 3 input errors + 2 output discards; CRC is inside input errors
 
 
+def test_the_error_kinds_add_up_to_the_errors() -> None:
+    """CRC errors are inside the switch's input errors, so they are named once and only the
+    rest is "other"; the kinds then add up to the number the pages show."""
+    port = next(
+        p
+        for p in parse_ports(
+            *with_port(
+                "Ethernet1/5",
+                {
+                    "eth_inerr": "45",
+                    "eth_crc": "40",
+                    "eth_runts": "2",
+                    "eth_giants": "1",
+                    "eth_indiscard": "1",
+                    "eth_outerr": "31",
+                    "eth_outdiscard": "2",
+                },
+            )
+        )
+        if p.name == "Ethernet1/5"
+    )
+    assert port.error_kinds == [
+        ("CRC errors", 40),
+        ("Runts", 2),
+        ("Giants", 1),
+        ("Other input errors", 2),
+        ("Input discards", 1),
+        ("Output errors", 31),
+        ("Output discards", 2),
+    ]
+    assert sum(number for _kind, number in port.error_kinds) == port.errors == 79
+
+
+def test_a_port_without_errors_names_no_kind() -> None:
+    assert parse_ports(*recorded())[0].error_kinds == []
+
+
 def test_a_disabled_port() -> None:
     bodies = with_port(
         "Ethernet1/7", {"admin_state": "down", "state_rsn_desc": "Administratively down"}

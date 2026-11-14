@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Install {{ image }} — NXray{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="/software">← Software</a></p>
+<h1 class="page-title">Install {{ image }}</h1>
+<section class="card">
+  {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+  <p class="lead confirm-summary">The switch gets: install all nxos bootflash:{{ image }} non-interruptive</p>
+  <dl class="facts">
+    <dt>Checksum</dt><dd>matched</dd>
+    <dt>Compatibility check</dt><dd>bootable {{ impact.get("bootable", "-") }}, impact {{ impact.get("impact", "-") }}{% if impact.get("reason") %} ({{ impact.reason }}){% endif %}</dd>
+    {% if impact.get("versions") %}<dt>Versions</dt><dd>{{ impact.versions }}</dd>{% endif %}
+    {% if impact.get("notes") %}<dt>The switch adds</dt><dd>{{ impact.notes }}</dd>{% endif %}
+  </dl>
+  {% if impact.get("impact") != "non-disruptive" %}
+  <p class="warning">The install restarts the switch: every port stops forwarding until it is back, about ten to twenty minutes, and NXray cannot reach it meanwhile.</p>
+  {% endif %}
+  <p class="warning">The install saves the running configuration first, as Save config does, and sets the switch to start from {{ image }} from now on.</p>
+  <form method="post" action="/software/install" class="stack form-narrow" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="image" value="{{ image }}">
+    <input type="hidden" name="confirm" value="yes">
+    <label for="hostname">Type the switch's name, {{ name }}, to confirm</label>
+    <input id="hostname" name="hostname" type="text" spellcheck="false" autocomplete="off">
+    <div class="button-row">
+      <button type="submit" class="btn btn-primary">Yes, install and restart</button>
+      <a class="btn btn-quiet" href="/software">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

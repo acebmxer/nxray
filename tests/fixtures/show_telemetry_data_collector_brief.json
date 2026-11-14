@@ -1,0 +1,9 @@
+{
+  "TABLE_data_collector_brief": {
+    "ROW_data_collector_brief": [
+      {"dcb_row_idx": 1, "dcb_collector_type": "YANG", "dcb_success_count": 0, "dcb_fail_count": 0, "dcb_skip_count": 0},
+      {"dcb_row_idx": 2, "dcb_collector_type": "DME", "dcb_success_count": 42, "dcb_fail_count": 0, "dcb_skip_count": 0},
+      {"dcb_row_idx": 3, "dcb_collector_type": "NX-API", "dcb_success_count": 0, "dcb_fail_count": 1, "dcb_skip_count": 0}
+    ]
+  }
+}

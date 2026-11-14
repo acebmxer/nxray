@@ -63,7 +63,8 @@ rules and the port-channels in the role's port list, 7 the VLAN interface
 rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static route rules,
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
-15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart rules.
+15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart
+rules, 19 the vPC rules, 20 the VXLAN rules and the NVE interface in the port list.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -94,7 +95,7 @@ from app.nxapi import (
 )
 from app.switch import rows, to_int
 from app.switch_connection import ROLE_BROAD, ROLE_LIMITED, ROLE_MODES, ROLE_STORED, SWITCH_TIMEOUT
-from app.switch_setup import SetupError, account_names, describe_error
+from app.switch_setup import SetupError, account_names, describe_error, scrub_secrets
 from app.switch_ssh import (
     ShellOpener,
     SshAuthError,
@@ -558,7 +559,73 @@ RELOAD_RULES = (
 # sit right after rule 1 and every other permit after them. Numbers stay below
 # 256, the most a role takes. Only the "username" deny has been tried on a
 # switch; the others, and the "no" forms of all of them, follow it.
+#
+# EEM applets are denied too (rules 23 and 24, added later, so numbered after
+# the rest). An applet's "action cli" lines run as the switch's admin, not as the
+# account that made the applet: checked on a switch (NX-OS 9.3(16)), an applet
+# made by an account with this role ran "username ..." and made an account. Both
+# denies, and that "event manager environment" is refused with them, were checked
+# there too. Scheduler jobs need no deny: a job runs as the account that made it,
+# so the denies above still hold inside it (checked the same way).
 _DENIED_CONFIG = ("username", "role", "aaa", "tacacs-server", "radius-server", "boot")
+EEM_DENY_RULES = (
+    "rule 23 deny command conf t ; event manager *",
+    "rule 24 deny command conf t ; no event manager *",
+)
+# ITD's counters are turned on, off and cleared outside configuration mode, so "conf t
+# ; *" does not cover them (rules 25 to 27, added in BROAD_ITD_VERSION). The lines were
+# tried on cisco-25gb as admin; the rules were not (the fake switch stands in).
+ITD_STATISTICS_RULES = (
+    "rule 25 permit command itd statistics *",
+    "rule 26 permit command no itd statistics *",
+    "rule 27 permit command clear itd statistics *",
+)
+# NAT's translations and counters are cleared outside configuration mode too (rules 28 and
+# 29, added in BROAD_NAT_VERSION). The lines were tried on cisco-25gb as admin; the rules
+# were not (the fake switch stands in).
+NAT_CLEAR_RULES = (
+    "rule 28 permit command clear ip nat translation *",
+    "rule 29 permit command clear ip nat statistics",
+)
+# ePBR's counters are cleared outside configuration mode as well (rule 30, added in
+# BROAD_EPBR_VERSION); its ``epbr session`` is a configuration command, which "conf t ; *"
+# covers. The line was tried on cisco-25gb as admin; the rule was not (the fake switch
+# stands in).
+EPBR_CLEAR_RULES = ("rule 30 permit command clear epbr statistics *",)
+# IGMP snooping's learned groups, counters and tracked IGMPv3 hosts are cleared outside
+# configuration mode, one VLAN at a time (rules 31 to 33, added in
+# BROAD_SNOOPING_CLEAR_VERSION). The lines were tried on cisco-25gb as admin; the rules were
+# not (the fake switch stands in).
+SNOOPING_CLEAR_RULES = (
+    "rule 31 permit command clear ip igmp snooping groups *",
+    "rule 32 permit command clear ip igmp snooping statistics *",
+    "rule 33 permit command clear ip igmp snooping explicit-tracking *",
+)
+# A VM Tracker connection is synced now with ``vmtracker connection <name> refresh``, typed
+# outside configuration mode (rule 34, added in BROAD_VMTRACKER_VERSION; outside
+# configuration mode that is the command's only form). The line was typed on cisco-25gb as
+# admin, with no vCenter to sync from ("ERROR: failure"); the rule was not tried (the fake
+# switch stands in).
+VMTRACKER_REFRESH_RULES = ("rule 34 permit command vmtracker connection *",)
+# VXLAN OAM's tools (``ping nve``, ``traceroute nve``, ``pathtrace nve``), its counters' clears
+# and loop detection's probe and bring-up are typed outside configuration mode (rules 35 to
+# 40, added in BROAD_NGOAM_VERSION). The tools and clears were typed on cisco-25gb as admin;
+# loop detection is refused there; the rules were not tried (the fake switch stands in).
+NGOAM_RULES = (
+    "rule 35 permit command ping nve *",
+    "rule 36 permit command traceroute nve *",
+    "rule 37 permit command pathtrace nve *",
+    "rule 38 permit command clear ngoam *",
+    "rule 39 permit command ngoam loop-detection probe *",
+    "rule 40 permit command ngoam loop-detection bringup *",
+)
+# A snapshot of the switch's state is taken and deleted outside configuration mode (rules 41
+# and 42, added in BROAD_MAINTENANCE_VERSION). The commands were typed on cisco-25gb as admin;
+# the rules were not tried (the fake switch stands in).
+SNAPSHOT_RULES = (
+    "rule 41 permit command snapshot create *",
+    "rule 42 permit command snapshot delete *",
+)
 BROAD_RULES = (
     "rule 1 permit command conf t ; *",
     *(
@@ -576,13 +643,71 @@ BROAD_RULES = (
     "rule 20 permit command no checkpoint *",
     "rule 21 permit command terminal dont-ask",
     "rule 22 permit command reload",
+    *EEM_DENY_RULES,
+    *ITD_STATISTICS_RULES,
+    *NAT_CLEAR_RULES,
+    *EPBR_CLEAR_RULES,
+    *SNOOPING_CLEAR_RULES,
+    *VMTRACKER_REFRESH_RULES,
+    *NGOAM_RULES,
+    *SNAPSHOT_RULES,
 )
+
+# vPC rules, added in ROLE_VERSION 19: the vPC domain and every line inside it
+# ("conf t ; vpc domain *" covers the submode, as the routing protocol rules do),
+# ``vpc peer-link`` and ``vpc <number>`` on a port-channel, their "no" forms, and
+# reading the vPC lines of the running configuration as text. Written after
+# Cisco's NX-OS 9.3 Interfaces Configuration Guide; not yet tried on a switch (vPC
+# is off on the switch in production). The port list stays as it was, so this needs
+# no SSH save and no wait.
+VPC_RULES = (
+    "rule 236 permit command conf t ; vpc domain *",
+    "rule 237 permit command conf t ; no vpc domain *",
+    "rule 238 permit command conf t ; interface * ; vpc *",
+    "rule 239 permit command conf t ; interface * ; no vpc *",
+    "rule 240 permit command show running-config vpc",
+    "rule 241 permit command show running-config vpc *",
+)
+
+# VXLAN and EVPN rules, added in ROLE_VERSION 20: the NVE interface and every line
+# inside it (member VNIs too), the ``evpn`` block, a VLAN's ``vn-segment``, a VRF's
+# ``vni`` and route-targets, the switch-wide ``nv overlay evpn`` and ``fabric
+# forwarding`` lines and their "no" forms. Reading the lines needs no rule of its own: it is
+# ``show running-config`` (rule 170). The lines themselves were tried on cisco-25gb
+# (2026-11-10) as admin; the rules were not (the fake switch stands in).
+# Entering ``interface nve1`` also needs NVE_PERMIT in the port list, which the
+# switch is expected to take only while the nve feature is on, as with the VLAN
+# interfaces.
+VXLAN_RULES = (
+    "rule 242 permit command conf t ; nv overlay evpn",
+    "rule 243 permit command conf t ; no nv overlay evpn",
+    "rule 244 permit command conf t ; fabric forwarding *",
+    "rule 245 permit command conf t ; no fabric forwarding *",
+    "rule 246 permit command conf t ; vlan * ; vn-segment *",
+    "rule 247 permit command conf t ; vlan * ; no vn-segment *",
+    "rule 248 permit command conf t ; interface nve*",
+    "rule 249 permit command conf t ; no interface nve*",
+    "rule 250 permit command conf t ; evpn*",
+    "rule 251 permit command conf t ; vrf context * ; vni *",
+    "rule 252 permit command conf t ; vrf context * ; no vni *",
+    "rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *",
+    "rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *",
+)
+# The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
+NVE_PERMIT = "permit interface nve1"
+# Every loopback, in the broad role's port list only (BROAD_LOOPBACK_VERSION). Checked on
+# cisco-25gb (NX-OS 9.3(16)) with a throwaway role and account: the switch stores this
+# range as one line (unlike the VLAN interfaces, which it writes one per line), takes it
+# with no feature on, and with it lets the account make, change and delete the loopbacks
+# it covers, refusing others ("% Interface permission denied"). The limited role has no
+# rules for loopbacks, so its port list does not name them.
+LOOPBACK_PERMIT = "permit interface loopback0-1023"
 
 # Role versions whose port list gained a line, and so are checked and saved
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 18
+ROLE_VERSION = 20
 
 LIMITED_RULES = (
     *ROLE_RULES,
@@ -603,6 +728,8 @@ LIMITED_RULES = (
     *RESET_RULES,
     *SFLOW_STATUS_RULES,
     *RELOAD_RULES,
+    *VPC_RULES,
+    *VXLAN_RULES,
 )
 
 # What each role mode says in the page's words.
@@ -649,6 +776,8 @@ _ADDED_BY_VERSION = {
     16: "reset to defaults",
     17: "sFlow status",
     18: "switch restart",
+    19: "vPC",
+    20: "VXLAN",
 }
 
 
@@ -676,6 +805,8 @@ class EnableResult:
     had_role: bool = False
     # True when the role's port list names the VLAN interfaces (interface-vlan on).
     vlan_interfaces: bool = False
+    # True when the role's port list names the NVE interface (the nve feature on).
+    nve: bool = False
 
 
 def front_ports(interface_brief_body: dict) -> list[str]:
@@ -696,12 +827,17 @@ def role_lines(
     vlan_interfaces: bool = True,
     mode: str = ROLE_LIMITED,
     previous_mode: str | None = None,
+    nve: bool = False,
 ) -> list[str]:
     """The configuration lines that create the role and give it to the account.
 
     Typed after ``configure terminal``. Every value is checked first, so the
     lines can only ever be these. ``vlan_interfaces`` adds the VLAN interfaces
     to the port list; the switch refuses that line while interface-vlan is off.
+    ``nve`` adds the NVE interface the same way, for the nve feature. The broad role's
+    port list also names every loopback (``LOOPBACK_PERMIT``); a role leaving the broad
+    mode has that line taken out again (checked on a switch: ``no permit interface
+    loopback0-1023`` is taken).
     ``previous_mode`` is the mode the role was in (None for a new role): when its
     rules differ from ``mode``'s, they are all removed first, so the role keeps
     none the new mode lacks (a ``no rule`` for a rule that is not there is
@@ -717,7 +853,7 @@ def role_lines(
         cleared = []
     permits = [f"permit interface {validate_port_name(port)}" for port in ports]
     description = (
-        "NXray: any configuration except accounts, roles, AAA and boot, on the listed ports"
+        "NXray: any configuration except accounts, roles, AAA, boot and EEM, on the listed ports"
         if mode == ROLE_BROAD
         # Kept short: NX-OS takes up to 128 characters here.
         else "NXray: ports, port-channels, VLANs, layer 3, STP, features, MAC, "
@@ -732,6 +868,10 @@ def role_lines(
         *permits,
         CHANNEL_PERMIT,
         *([VLAN_INTERFACE_PERMIT] if vlan_interfaces else []),
+        *([NVE_PERMIT] if nve else []),
+        *([LOOPBACK_PERMIT] if mode == ROLE_BROAD else []),
+        # Leaving the broad role: the limited rules would act on the loopbacks too.
+        *(["no " + LOOPBACK_PERMIT] if previous_mode == ROLE_BROAD and mode != ROLE_BROAD else []),
         "exit",
         "exit",
         f"username {account_name} role {ROLE_NAME}",
@@ -769,22 +909,24 @@ def _check_role_output(roles_output: str, account_name: str) -> None:
 
 
 def _saved_over_ssh(
-    ssh: dict, admin_password: str, port_count: int, had_role: bool, wait: int, vlans: bool
+    ssh: dict,
+    admin_password: str,
+    port_count: int,
+    had_role: bool,
+    wait: int,
+    vlans: bool,
+    nve: bool = False,
 ) -> EnableResult:
     """Save the configuration over SSH, and the result."""
     try:
         (output,) = run_commands(lines=(SAVE_COMMAND,), **ssh)
     except SshError as exc:
-        output = _scrub(str(exc), admin_password)
+        output = scrub_secrets(str(exc), admin_password)
     if "Copy complete" not in output:
         log.warning("switch config not saved after adding %s: %s", ROLE_NAME, output)
-        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans)
+        return EnableResult(wait, port_count, False, output or "no answer", had_role, vlans, nve)
     log.info("saved the switch configuration over SSH")
-    return EnableResult(wait, port_count, True, None, had_role, vlans)
-
-
-def _scrub(text: str, secret: str) -> str:
-    return text.replace(secret, "***") if secret else text
+    return EnableResult(wait, port_count, True, None, had_role, vlans, nve)
 
 
 def enable_port_changes(
@@ -797,6 +939,7 @@ def enable_port_changes(
     account_name: str,
     role_version: int = 0,
     vlan_interfaces_listed: bool = False,
+    nve_listed: bool = False,
     mode: str = ROLE_LIMITED,
     previous_mode: str | None = None,
     transport: httpx.BaseTransport | None = None,
@@ -807,7 +950,8 @@ def enable_port_changes(
     ``role_version`` is the version NXray gave its account before (0 for
     none). Below ``LAST_PERMIT_VERSION`` the role's port list gains a line,
     and so does it when interface-vlan is on and ``vlan_interfaces_listed``
-    (the port list names the VLAN interfaces already) is false; then the
+    (the port list names the VLAN interfaces already) is false, or the nve feature is
+    on and ``nve_listed`` (the port list names the NVE interface already) is false; then the
     check and the save go over SSH, which does not depend on NX-API answering.
     ``mode`` is the role mode to write and ``previous_mode`` the one the role
     has now (None for no role yet); see ``role_lines``.
@@ -827,7 +971,7 @@ def enable_port_changes(
             )
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, nxapi_port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, nxapi_port, "admin"), admin_password)
             ) from exc
         if account_name.lower() not in account_names(users):
             raise SetupError(
@@ -837,10 +981,20 @@ def enable_port_changes(
         had_role = ROLE_NAME in account_roles(users, account_name)
         ports = front_ports(brief)
         vlans = feature_states(features).get("interface-vlan", False)
+        nve = feature_states(features).get("nve", False)
         lines = role_lines(
-            ports, account_name, vlan_interfaces=vlans, mode=mode, previous_mode=previous_mode
+            ports,
+            account_name,
+            vlan_interfaces=vlans,
+            mode=mode,
+            previous_mode=previous_mode,
+            nve=nve,
         )
-        over_ssh = role_version < LAST_PERMIT_VERSION or (vlans and not vlan_interfaces_listed)
+        over_ssh = (
+            role_version < LAST_PERMIT_VERSION
+            or (vlans and not vlan_interfaces_listed)
+            or (nve and not nve_listed)
+        )
         then = (f"show user-account {account_name}",) if over_ssh else ()
 
         try:
@@ -858,11 +1012,13 @@ def enable_port_changes(
             raise SetupError("The switch refused the admin username or password over SSH.") from exc
         except SshCommandError as exc:
             raise SetupError(
-                _scrub(f"The switch refused a line while creating the role: {exc}", admin_password)
+                scrub_secrets(
+                    f"The switch refused a line while creating the role: {exc}", admin_password
+                )
             ) from exc
         except SshError as exc:
             raise SetupError(
-                _scrub(
+                scrub_secrets(
                     f"NXray could not reach the switch over SSH at {host}, port {ssh_port}. "
                     "Check that SSH is on and that this machine can reach it. "
                     f"Details: {exc}",
@@ -889,13 +1045,13 @@ def enable_port_changes(
                 "timeout": SSH_TIMEOUT,
                 "opener": ssh_opener,
             }
-            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans)
+            return _saved_over_ssh(ssh, admin_password, len(ports), had_role, wait, vlans, nve)
 
         try:
             (users,) = client.show("show user-account")
         except NxapiError as exc:
             raise SetupError(
-                _scrub(describe_error(exc, host, nxapi_port, "admin"), admin_password)
+                scrub_secrets(describe_error(exc, host, nxapi_port, "admin"), admin_password)
             ) from exc
         if ROLE_NAME not in account_roles(users, account_name):
             raise SetupError(
@@ -908,8 +1064,14 @@ def enable_port_changes(
         except NxapiError as exc:
             log.warning("switch config not saved after adding %s: %s", ROLE_NAME, exc)
             return EnableResult(
-                wait, len(ports), False, _scrub(str(exc), admin_password), had_role, vlans
+                wait,
+                len(ports),
+                False,
+                scrub_secrets(str(exc), admin_password),
+                had_role,
+                vlans,
+                nve,
             )
 
     log.info("saved the switch configuration on %s", host)
-    return EnableResult(wait, len(ports), True, None, had_role, vlans)
+    return EnableResult(wait, len(ports), True, None, had_role, vlans, nve)

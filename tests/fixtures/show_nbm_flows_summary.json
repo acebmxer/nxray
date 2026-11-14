@@ -1,0 +1,53 @@
+{
+ "TABLE_vrf": {
+  "ROW_vrf": {
+   "vrf-name": "default",
+   "TABLE_flows_summary": {
+    "ROW_flows_summary": [
+     {
+      "flow_type": "All Flows",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows with No receivers",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows with OIF",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows with SVI IIF",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows with PHY IIF",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows (SVI) with Policing",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     },
+     {
+      "flow_type": "Flows (PHY) with Policing",
+      "starg": 0,
+      "sg": 0,
+      "total": 0
+     }
+    ]
+   }
+  }
+ }
+}

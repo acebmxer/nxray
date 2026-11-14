@@ -1,0 +1,5 @@
+    Interface            VTP Status
+------------------------------------
+    Ethernet1/1          Enabled
+    Ethernet1/2          Disabled
+    port-channel20       Enabled

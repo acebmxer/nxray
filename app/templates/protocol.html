@@ -11,7 +11,7 @@
 </select>
 {% elif f.kind == "flag" %}
 <label class="check"><input id="{{ uid }}" type="checkbox" name="{{ name }}" value="yes" {% if value %}checked{% endif %}> {{ f.choices[0] }}</label>
-{% elif f.kind == "interface" %}
+{% elif f.kind in ("interface", "ifname") %}
 <select id="{{ uid }}" name="{{ name }}">
   {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
   {% for i in page.interfaces %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
@@ -20,6 +20,10 @@
 <select id="{{ uid }}" name="{{ name }}">
   {% if f.optional %}<option value="" {% if not value %}selected{% endif %}>—</option>{% endif %}
   {% for i in page.ports %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
+</select>
+{% elif f.kind == "channel" %}
+<select id="{{ uid }}" name="{{ name }}">
+  {% for i in page.channels %}<option value="{{ i }}" {% if value == i %}selected{% endif %}>{{ i }}</option>{% endfor %}
 </select>
 {% elif f.kind == "vlan" %}
 <select id="{{ uid }}" name="{{ name }}">
@@ -35,7 +39,7 @@
   {% for v in page.vrfs %}<option value="{{ v }}" {% if (value or "default") == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
 </select>
 {% elif f.kind == "secret" %}
-<input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="63">
+<input id="{{ uid }}" name="{{ name }}" type="password" autocomplete="new-password" spellcheck="false" maxlength="{{ f.maximum or 63 }}">
 {% else %}
 <input id="{{ uid }}" name="{{ name }}" type="text" spellcheck="false" value="{{ value or '' }}" placeholder="{{ f.placeholder }}">
 {% endif %}
@@ -63,7 +67,7 @@
     {% endif %}
     {% for f in s.fields %}{{ field_input(f, "v_" ~ f.name, current.get(f.name, ""), uidbase ~ "-" ~ s.key ~ "-" ~ f.name) }}{% endfor %}
     <div class="button-row">
-      {% if s.settable %}<button type="submit" name="action" value="set" class="btn btn-quiet">Set</button>{% endif %}
+      {% if s.settable %}<button type="submit" name="action" value="set" class="btn btn-quiet">{{ s.button or "Set" }}</button>{% endif %}
       {% if s.removable %}<button type="submit" name="action" value="remove" class="btn btn-quiet">Remove</button>{% endif %}
     </div>
   </form>
@@ -98,6 +102,12 @@
 {% else %}
 {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
 {% if notice %}<p class="alert alert-ok" role="status">{{ notice }}</p>{% endif %}
+{% if output %}
+<section class="card" id="answer">
+  <h2 class="card-title">What the switch printed</h2>
+  <pre class="mono tool-output">{{ output }}</pre>
+</section>
+{% endif %}
 {% if connection.unsaved_changes and role in ("admin", "operator") %}
 <div class="warning warning-row">
   <span>NXray changed the switch since its configuration was last saved.</span>
@@ -109,24 +119,26 @@
 </div>
 {% endif %}
 
+{% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
 {% if page.missing %}
 <section class="card">
-  <p>{% for name in page.missing %}{{ feature_command(name) }}{% if not loop.last %} and {% endif %}{% endfor %} {{ "is" if page.missing|length == 1 else "are" }} off on the switch, so {{ proto.name }} is not running. {% if role == "admin" %}Turn {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% else %}An NXray admin turns {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features">Features</a> page.{% endif %}</p>
+  <p>{% for name in page.missing %}{{ feature_command(name) }}{% if not loop.last %} and {% endif %}{% endfor %} {{ "is" if page.missing|length == 1 else "are" }} off on the switch, so {{ proto.name }} is not running. {% if role == "admin" %}Turn {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features#{{ feature_anchor(page.missing[0]) }}">Features</a> page.{% else %}An NXray admin turns {{ "it" if page.missing|length == 1 else "them" }} on on the <a href="/features#{{ feature_anchor(page.missing[0]) }}">Features</a> page.{% endif %}</p>
 </section>
 {% else %}
-{% if page.problem %}<p class="warning">{{ page.problem }}</p>{% endif %}
 {% for n in page.view.notes %}<p class="note">{{ n }}</p>{% endfor %}
 
 {% for t in page.view.tables %}
 <section class="card">
   <h2 class="card-title">{{ t.title }}</h2>
   {% if t.rows %}
+  <div{% if site.scroll_tables %} class="table-capped"{% endif %}>
   <table class="table table-devices">
     <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
-      {% for r in t.rows %}<tr>{% for cell in r %}<td class="wrap">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      {% for r in t.rows %}<tr>{% for cell in r %}<td class="{{ 'wrap' if t.wrap_column is none or loop.index0 == t.wrap_column else 'one-line' }}">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="dim">{{ t.empty }}</p>
   {% endif %}
@@ -134,7 +146,7 @@
 </section>
 {% endfor %}
 
-{% for scope in proto.scopes %}
+{% for scope in (page.shown_scopes if page.shown_scopes is defined else proto.scopes) %}
 {% set sidx = loop.index %}
 <section class="card" id="{{ scope.key }}">
   <h2 class="card-title">{{ scope.label }}</h2>
@@ -172,7 +184,7 @@
   </div>
 
   {% if can_change %}
-  {% if scope.create %}
+  {% if scope.create and (scope.ident or not places) %}
   <form method="post" action="{{ site.url }}/change" class="stack form-narrow form-after">
     <input type="hidden" name="csrf" value="{{ csrf_token }}">
     <input type="hidden" name="scope" value="{{ scope.key }}">
@@ -185,9 +197,13 @@
   {% endif %}
 </section>
 {% endfor %}
+{% if site.extra_template %}{% include site.extra_template %}{% endif %}
 {% endif %}
 
-{% if role in ("admin", "operator") and not can_change %}
+{% if site.read_only %}
+{% elif site.admin_only and role == "operator" %}
+<p class="note">Your role (operator) can look at {{ site.subject }}; only an NXray admin changes {{ "them" if site.subject.endswith("s") else "it" }}.</p>
+{% elif role in ("admin", "operator") and not can_change %}
 <p class="note">{{ site.changes_name }} changes are off. {% if role == "admin" %}<a href="/switch">Turn them on on the Switch page</a>{% else %}An NXray admin can turn them on on the Switch page{% endif %}.</p>
 {% elif role not in ("admin", "operator") %}
 <p class="note">Your role ({{ role }}) can look at {{ site.subject }} but not change {{ "them" if site.subject.endswith("s") else "it" }}.</p>

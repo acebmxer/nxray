@@ -7,19 +7,25 @@ may be the self-signed one, and this runs inside the same container anyway.
 
 from __future__ import annotations
 
-import os
 import ssl
 import urllib.request
 
+from app.config import ConfigError, env_bool
+
 
 def https_enabled() -> bool:
-    """NXRAY_ENABLE_HTTPS as app/config.py reads it (true/yes/on/1)."""
-    return os.environ.get("NXRAY_ENABLE_HTTPS", "").strip().lower() in {"1", "true", "yes", "on"}
+    """NXRAY_ENABLE_HTTPS, read by app.config.env_bool; ConfigError for a value the app refuses."""
+    return env_bool("NXRAY_ENABLE_HTTPS", False)
 
 
 def main() -> int:
     """Exit status for Docker's HEALTHCHECK."""
-    if https_enabled():
+    try:
+        https = https_enabled()
+    except ConfigError:
+        # The app refuses to start with this value, so nothing is healthy.
+        return 1
+    if https:
         url, context = "https://127.0.0.1:8443/healthz", ssl._create_unverified_context()
     else:
         url, context = "http://127.0.0.1:8080/healthz", None

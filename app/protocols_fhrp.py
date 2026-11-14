@@ -57,13 +57,12 @@ from app.protocols import (
     Table,
     interface_field,
     table_rows,
-    text,
 )
 from app.routing import long_name
+from app.switch import text
+from app.track import TRACK_HINT, TRACK_MAX
 
 # ---- shared fields -------------------------------------------------------------
-
-_TRACK_MAX = 512  # tracked objects are numbered 1 to 512 (track ... global command)
 
 
 def _int(name: str, label: str, low: int, high: int, **kw: Any) -> Field:
@@ -268,7 +267,7 @@ _HSRP_GROUP = Scope(
             label="Lower priority when a tracked object goes down",
             line="track {object}[ decrement {decrement}]",
             fields=(
-                _int("object", "Tracked object", 1, _TRACK_MAX, hint="Made with the track command"),
+                _int("object", "Tracked object", 1, TRACK_MAX, hint=TRACK_HINT),
                 _int("decrement", "Lower by", 1, 255, optional=True, hint="10 if empty"),
             ),
             group="Who answers",
@@ -634,7 +633,7 @@ _VRRP_GROUP = Scope(
             label="Lower priority when a tracked object goes down",
             line="track {object} decrement {decrement}",
             fields=(
-                _int("object", "Tracked object", 1, _TRACK_MAX, hint="Made with the track command"),
+                _int("object", "Tracked object", 1, TRACK_MAX, hint=TRACK_HINT),
                 _int("decrement", "Lower by", 1, 254),
             ),
             group="Who answers",
@@ -828,7 +827,7 @@ _VRRPV3_GROUP = Scope(
             label="Lower priority when a tracked object goes down",
             line="object-track {object} decrement {decrement}",
             fields=(
-                _int("object", "Tracked object", 1, _TRACK_MAX, hint="Made with the track command"),
+                _int("object", "Tracked object", 1, TRACK_MAX, hint=TRACK_HINT),
                 _int("decrement", "Lower by", 1, 254),
             ),
             group="Who answers",

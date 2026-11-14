@@ -1,0 +1,102 @@
+{
+ "TABLE_nat_translation": {
+  "ROW_nat_translation": [
+   {
+    "Protocol": "any",
+    "Outside_local_IP_V4_Address": "10.250.0.20",
+    "Outside_global_IP_V4_Address": "198.51.100.20",
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Outside_local_IP_V4_Address": "10.250.0.21",
+    "Outside_global_IP_V4_Address": "198.51.100.21",
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Inside_global_IP_V4_Address": "198.51.100.10",
+    "Inside_local_IP_V4_Address": "10.250.0.10",
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Inside_global_IP_V4_Address": "198.51.100.11",
+    "Inside_local_IP_V4_Address": "10.250.0.11",
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "tcp",
+    "Inside_global_IP_V4_Address": "198.51.100.12",
+    "Inside_global_port": 8080,
+    "Inside_local_IP_V4_Address": "10.250.0.12",
+    "Inside_local_port": 80,
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1",
+    "Syn": "0:0:-1",
+    "Fin_rst": "0:0:-1"
+   },
+   {
+    "Protocol": "udp",
+    "Inside_global_IP_V4_Address": "198.51.100.13",
+    "Inside_global_port": 5353,
+    "Inside_local_IP_V4_Address": "10.250.0.13",
+    "Inside_local_port": 53,
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Inside_global_IP_V4_Address": "198.51.100.16",
+    "Inside_local_IP_V4_Address": "10.250.0.16",
+    "VRF": "default",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "5",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Inside_global_IP_V4_Address": "198.51.100.14",
+    "Inside_local_IP_V4_Address": "10.250.0.14",
+    "VRF": "management",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   },
+   {
+    "Protocol": "any",
+    "Inside_global_IP_V4_Address": "198.51.100.15",
+    "Inside_local_IP_V4_Address": "10.250.0.15",
+    "VRF": "management",
+    "In_stats_count": "0",
+    "Out_stats_count": "0",
+    "Group_id": "0",
+    "Time_left": "0:0:-1"
+   }
+  ]
+ }
+}

@@ -1,0 +1,44 @@
+{
+ "TABLE_vrf": {
+  "ROW_vrf": {
+   "vrfName": "default",
+   "defaultBandwidthKbps": 100,
+   "defaultDscp": 46,
+   "defaultQos": 7,
+   "defaultPolicer": "Disabled",
+   "numGroupRanges": 3,
+   "numPolicies": 2,
+   "TABLE_flow_policy": {
+    "ROW_flow_policy": [
+     {
+      "groupRange": "239.250.1.1-239.250.1.255",
+      "bandwidthKbps": 3000000,
+      "dscp": 34,
+      "qos": 7,
+      "policer": "Disabled",
+      "priority": "LOW",
+      "policyName": "nxprobefp"
+     },
+     {
+      "groupRange": "239.250.2.1-239.250.2.1",
+      "bandwidthKbps": 3000000,
+      "dscp": 34,
+      "qos": 7,
+      "policer": "Disabled",
+      "priority": "CRITICAL",
+      "policyName": "nxprobefp"
+     },
+     {
+      "groupRange": "239.250.4.0-239.250.4.9",
+      "bandwidthKbps": 2000000,
+      "dscp": 0,
+      "qos": 7,
+      "policer": "Enabled",
+      "priority": "LOW",
+      "policyName": "nxprobefp2"
+     }
+    ]
+   }
+  }
+ }
+}

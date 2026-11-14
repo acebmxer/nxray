@@ -1,0 +1,119 @@
+{
+ "GlobalSnoopEnabled": "Yes",
+ "GlobalOMF": "enabled",
+ "GlobalReportSupression": "enabled",
+ "GlobalV3ReportSupression": "disabled",
+ "GlobalLinkLocalGroupSupression": "enabled",
+ "TABLE_vlan": {
+  "ROW_vlan": [
+   {
+    "vlan-id": 1,
+    "snoop-on": "enabled",
+    "SwitchQuerier": "disabled",
+    "ExplicitTracking": "TRUE",
+    "FastLeave": "disabled",
+    "ReportSupression": "enabled",
+    "V3ReportSupression": "disabled",
+    "LinkLocalGroupSupression": "enabled",
+    "RouterPortCount": "0",
+    "GroupCount": "0",
+    "LookupMode": "IP",
+    "OMFEnabled": "Yes",
+    "EnableReportFlooding": "DISABLED",
+    "ReportFloodAll": "FALSE",
+    "UseGroupAddressForProxyLeave": "no",
+    "TABLE_active_ports": {
+     "ROW_active_ports": [
+      {
+       "ActivePorts": "Po41"
+      },
+      {
+       "ActivePorts": "Eth1/34"
+      },
+      {
+       "ActivePorts": "Eth1/36"
+      },
+      {
+       "ActivePorts": "Eth1/47"
+      }
+     ]
+    }
+   },
+   {
+    "vlan-id": 10,
+    "snoop-on": "enabled",
+    "SwitchQuerier": "disabled",
+    "ExplicitTracking": "TRUE",
+    "FastLeave": "disabled",
+    "ReportSupression": "enabled",
+    "V3ReportSupression": "disabled",
+    "LinkLocalGroupSupression": "enabled",
+    "RouterPortCount": "0",
+    "GroupCount": "1",
+    "LookupMode": "IP",
+    "OMFEnabled": "Yes",
+    "EnableReportFlooding": "DISABLED",
+    "ReportFloodAll": "FALSE",
+    "UseGroupAddressForProxyLeave": "no",
+    "TABLE_active_ports": {
+     "ROW_active_ports": [
+      {
+       "ActivePorts": "Po41"
+      },
+      {
+       "ActivePorts": "Eth1/34"
+      },
+      {
+       "ActivePorts": "Eth1/36"
+      },
+      {
+       "ActivePorts": "Eth1/47"
+      },
+      {
+       "ActivePorts": "Eth1/48"
+      }
+     ]
+    }
+   },
+   {
+    "vlan-id": 250,
+    "snoop-on": "enabled",
+    "QuerierAddress": "192.0.2.250",
+    "QuerierVersion": "3",
+    "QuerierInterval": "100",
+    "QuerierLastMemberQueryInterval": "3",
+    "QuerierRobustness": "3",
+    "SwitchQuerier": "enabled",
+    "SwitchQuerierRunning": "TRUE",
+    "ExplicitTracking": "TRUE",
+    "FastLeave": "enabled",
+    "ReportSupression": "disabled",
+    "V3ReportSupression": "disabled",
+    "LinkLocalGroupSupression": "disabled",
+    "RouterPortCount": "0",
+    "GroupCount": "0",
+    "LookupMode": "IP",
+    "OMFEnabled": "Yes",
+    "EnableReportFlooding": "ENABLED",
+    "ReportFloodAll": "TRUE",
+    "UseGroupAddressForProxyLeave": "yes",
+    "TABLE_active_ports": {
+     "ROW_active_ports": [
+      {
+       "ActivePorts": "Po41"
+      },
+      {
+       "ActivePorts": "Eth1/34"
+      },
+      {
+       "ActivePorts": "Eth1/36"
+      },
+      {
+       "ActivePorts": "Eth1/47"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

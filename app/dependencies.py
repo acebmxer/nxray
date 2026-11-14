@@ -17,8 +17,9 @@ from app import __version__
 from app.activity import record_activity, utc_time
 from app.alerts import notify_change, switch_label
 from app.db import open_db
+from app.features import feature_anchor
 from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
-from app.nxapi import SwitchTarget, shared_reads
+from app.nxapi import SwitchTarget, page_reads, shared_reads
 from app.port_changes import ROLE_VERSION, missing_changes
 from app.ports import human_bytes, human_rate
 from app.preferences import THEMES, ui_preferences
@@ -59,6 +60,11 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "same-origin",
 }
 
+# Sent only when HTTPS is on (NXRAY_ENABLE_HTTPS or NXRAY_HTTPS): after one
+# visit the browser keeps to https:// for a year. No includeSubDomains or
+# preload: NXray does not know what else runs on the same domain.
+HSTS_VALUE = "max-age=31536000"
+
 
 async def add_security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -67,6 +73,8 @@ async def add_security_headers(
     response = await call_next(request)
     for name, value in SECURITY_HEADERS.items():
         response.headers.setdefault(name, value)
+    if request.app.state.settings.https_only:
+        response.headers.setdefault("Strict-Transport-Security", HSTS_VALUE)
     return response
 
 
@@ -93,6 +101,48 @@ async def share_switch_reads(
         return await call_next(request)
     finally:
         shared_reads.reset(token)
+
+
+def reload_asked(request: Request) -> bool:
+    """True when the browser reloaded the page (F5, Ctrl+Shift+R): it sends
+    ``Cache-Control: max-age=0`` or ``no-cache`` for a reload and nothing for a link."""
+    asked = request.headers.get("cache-control", "").lower()
+    return "no-cache" in asked or "max-age=0" in asked
+
+
+async def reuse_page_reads(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """HTTP middleware: a page a person opens reads the switch through the recent
+    answers (``app/page_reads.py``), so moving between pages does not ask the switch
+    for the same things again. A form sent forgets them all, and so does a reload;
+    a page refreshing itself reads through the live cache instead."""
+    reads = request.app.state.page_reads
+    if request.method not in ("GET", "HEAD"):
+        try:
+            return await call_next(request)
+        finally:
+            reads.clear()
+    seconds = request.app.state.settings.page_read_seconds
+    if (
+        seconds <= 0
+        or request.headers.get("x-requested-with") == LIVE_REQUEST
+        or request.url.path.startswith("/live/")
+    ):
+        return await call_next(request)
+    if reload_asked(request):
+        reads.clear()
+    token = page_reads.set(reads.reader(seconds))
+    try:
+        return await call_next(request)
+    finally:
+        page_reads.reset(token)
+
+
+def request_target(request: Request) -> str:
+    """The path and query string of a request, to come back to after sign-in."""
+    query = request.url.query
+    return f"{request.url.path}?{query}" if query else request.url.path
 
 
 class RedirectToLogin(Exception):
@@ -128,7 +178,7 @@ def login_required(request: Request) -> str:
     """Return the logged-in username, or send an anonymous caller to /login."""
     username = current_user(request)
     if username is None:
-        raise RedirectToLogin(request.url.path)
+        raise RedirectToLogin(request_target(request))
     return username
 
 
@@ -139,7 +189,7 @@ def live_login_required(request: Request) -> str:
     asking."""
     username = current_user(request, touch=False)
     if username is None:
-        raise RedirectToLogin(request.url.path)
+        raise RedirectToLogin(request_target(request))
     return username
 
 
@@ -196,6 +246,17 @@ def current_role(request: Request) -> str | None:
     """
     account = current_account(request)
     return account.role if account is not None else None
+
+
+def may_change(request: Request) -> bool:
+    """True when the signed-in account may change the switch (operator or admin).
+
+    The one place pages ask this before showing change buttons; the roles
+    themselves are decided by ``User.can_change``. A page adds its own
+    ``*_changes_enabled`` flag on top.
+    """
+    account = current_account(request)
+    return account is not None and account.can_change
 
 
 templates.env.globals["current_role"] = current_role
@@ -271,12 +332,27 @@ def role_behind(request: Request) -> list[tuple[SwitchConnection, str]]:
     ]
 
 
+def broad_behind(request: Request) -> list[SwitchConnection]:
+    """Switches whose broad role was written before its latest denies
+    (``SwitchConnection.broad_role_behind``), for a warning on every page. Like
+    ``role_behind``: for an admin only, and not on the Switch page, which has its own
+    card for it."""
+    account = current_account(request)
+    if account is None or not account.is_admin or request.url.path.startswith("/switch"):
+        return []
+    switches, _ = switch_picker(request)
+    return [switch for switch in switches if switch.broad_role_behind]
+
+
 templates.env.globals["switch_picker"] = switch_picker
 templates.env.globals["role_behind"] = role_behind
+templates.env.globals["broad_behind"] = broad_behind
 templates.env.globals["ui_preferences"] = ui_preferences
 templates.env.globals["themes"] = THEMES
 templates.env.globals["live_choices"] = LIVE_CHOICES
 templates.env.globals["refreshes_whole_page"] = refreshes_whole_page
+# Links to one feature's row on the Features page.
+templates.env.globals["feature_anchor"] = feature_anchor
 # The top bar's own form; a page's forms get ``csrf_token`` from their route.
 templates.env.globals["form_token"] = csrf_token
 

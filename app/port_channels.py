@@ -46,6 +46,7 @@ from app.nxapi import (
 from app.oui import format_mac, mac_maker
 from app.ports import port_sort_key
 from app.switch import rows
+from app.switch import text as _text
 
 CHANNEL_COMMANDS = (
     "show feature",
@@ -84,10 +85,6 @@ CONFIG_MUST_MATCH = (
     "MTU, flow control); the switch refuses a port that differs. The first port's settings "
     "become the port-channel's."
 )
-
-
-def _text(value: Any) -> str:
-    return "" if value is None else str(value).strip()
 
 
 def _priority(value: Any) -> int | None:

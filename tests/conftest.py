@@ -32,6 +32,20 @@ def load_fixture(name: str) -> dict[str, Any]:
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
 
+def inventory_body(description: str, product_id: str) -> dict[str, Any]:
+    """A ``show inventory`` body with just the chassis row, as the switch prints it
+    (the description in quotes)."""
+    return {
+        "TABLE_inv": {
+            "ROW_inv": {
+                "name": '"Chassis"',
+                "desc": f'"{description}"',
+                "productid": product_id,
+            }
+        }
+    }
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(
@@ -46,6 +60,8 @@ def settings(tmp_path: Path) -> Settings:
         log_level="WARNING",
         # No sampling thread in tests: they run the sampler by hand.
         history_interval=0,
+        # Pages read the switch every time; tests/test_page_reads.py turns the reuse on.
+        page_read_seconds=0,
     )
 
 

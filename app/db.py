@@ -9,6 +9,8 @@ sharing one across the server's worker threads, so no locking is needed.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -372,11 +374,37 @@ _MIGRATIONS: list[str] = [
     ALTER TABLE switch_connection ADD COLUMN admin_password_encrypted TEXT NOT NULL DEFAULT '';
     ALTER TABLE switch_connection ADD COLUMN admin_ssh_port INTEGER NOT NULL DEFAULT 22;
     """,
+    # 14 -> 15: whether the nxray-ports role's port list names the NVE interface
+    # (VXLAN). Like the VLAN interfaces, the switch is expected to take that line only
+    # while its feature (nve) is on, so a role made with it off lacks it until
+    # Update the port list.
+    """
+    ALTER TABLE switch_connection ADD COLUMN role_nve INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 
+def restrict_files(db_path: Path) -> None:
+    """Make the database and its write-ahead log files readable by the owner only.
+
+    They hold stored switch configurations, session ids and encrypted passwords.
+    Files made before this check existed get the same mode; a file the app does
+    not own (a bind mount set up by someone else) is left as it is.
+    """
+    for suffix in ("", "-wal", "-shm"):
+        with contextlib.suppress(OSError):
+            Path(f"{db_path}{suffix}").chmod(0o600)
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
-    """Open the database with rows readable by column name."""
+    """Open the database with rows readable by column name.
+
+    A new database file is created mode 600 (SQLite gives its -wal and -shm
+    files the same mode), so it is never readable by others, not even briefly.
+    """
+    if not db_path.exists():
+        with contextlib.suppress(FileExistsError):
+            os.close(os.open(db_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
     conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -421,4 +449,6 @@ def migrate(conn: sqlite3.Connection) -> int:
 def init_db(db_path: Path) -> int:
     """Create or upgrade the database file. Returns the schema version."""
     with open_db(db_path) as conn:
-        return migrate(conn)
+        version = migrate(conn)
+    restrict_files(db_path)
+    return version

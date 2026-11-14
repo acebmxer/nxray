@@ -23,7 +23,7 @@ from app.nxapi import (
     validate_vlan_id,
 )
 from app.ports import PORTS_COMMANDS, Port, parse_ports, port_sort_key
-from app.switch import rows
+from app.switch import int_or, rows
 
 VLAN_COMMANDS = ("show vlan brief", "show interface switchport")
 # The VLANs page also reads which VLANs have a VLAN interface.
@@ -104,18 +104,11 @@ class VlanView:
         return sorted(names, key=port_sort_key)
 
 
-def _int(value: Any, default: int = 0) -> int:
-    try:
-        return int(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-
-
 def parse_vlans(body: dict[str, Any]) -> list[Vlan]:
     """Every VLAN in ``show vlan brief``, lowest number first."""
     vlans = []
     for row in rows(body, "TABLE_vlanbriefxbrief", "ROW_vlanbriefxbrief"):
-        vlan_id = _int(row.get("vlanshowbr-vlanid"))
+        vlan_id = int_or(row.get("vlanshowbr-vlanid"))
         if vlan_id < 1:
             continue
         state = str(row.get("vlanshowbr-vlanstate", "")).strip()
@@ -145,8 +138,8 @@ def parse_switchports(body: dict[str, Any]) -> dict[str, PortVlans]:
             name=name,
             switchport=str(row.get("switchport", "")).strip().lower() == "enabled",
             mode=str(row.get("oper_mode", "")).strip().lower(),
-            access_vlan=_int(row.get("access_vlan"), 1),
-            native_vlan=_int(row.get("native_vlan"), 1),
+            access_vlan=int_or(row.get("access_vlan"), 1),
+            native_vlan=int_or(row.get("native_vlan"), 1),
             allowed=_allowed(row.get("trunk_vlans", "1-4094")),
         )
     return found
