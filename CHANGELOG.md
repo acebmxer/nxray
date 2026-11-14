@@ -554,6 +554,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   `null` is now treated like "not advertised": the cell is empty, or the
   chassis ID or port ID is shown, as it already was for a missing name.
 
+- **The release and beta workflows pin their Docker actions to commit SHAs
+  (#46).** `release.yml` and `beta.yml` used moving tags for `setup-buildx`,
+  `login`, `metadata` and `build-push` while `ci.yml` was already pinned; the
+  version stays in a comment beside each SHA.
+
 - **The container health check reads `NXRAY_ENABLE_HTTPS` the way the app does
   (#54).** It had its own looser copy, so a value the app refuses to start with
   (such as `maybe`) was read as "HTTPS off". It now uses `env_bool` from
