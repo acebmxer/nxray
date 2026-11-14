@@ -309,7 +309,9 @@ default: *(built)*.
     gRPC, NETCONF and NX-SDK settings, and the state of RESTCONF, Container Tracker and
     OpenFlow. *(built; needs the broad role or a stored admin login; OpenFlow shown only: the
     Nexus 9200 needs a restart to carve its TCAM)*
-    **TWAMP server**: its state, port, idle time and responder line. *(built; needs the
+    **Switch-wide settings**: the logging source interface, DNS and HTTP source interfaces,
+    TCP settings, XML server limits and the ACL log level. *(built; needs the broad role or a
+    stored admin login; every line tried on a switch)* **TWAMP server**: its state, port, idle time and responder line. *(built; needs the
     broad role or a stored admin login; the lines tried on a switch)* **RMON**: events and
     alarms, made and deleted. *(built; needs the broad role or a stored admin login; tried on
     a switch with throwaway events and alarms)* **Flow analytics**: the exporters, records,

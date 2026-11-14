@@ -659,6 +659,9 @@ class FakeSwitch:
     # Stage E6: gRPC, NETCONF, NX-SDK, Smart Licensing and LDAP lines, as paths like
     # ``l2_lines``; ``nxsdk_apps`` are the NX-SDK application services the switch has.
     mgmt_lines: list[str] = field(default_factory=list)
+    # The Switch-wide settings page (logging source, TCP, DNS, HTTP, XML server, ACL log level):
+    # the lines as show running-config prints them, at the top level.
+    sys_lines: list[str] = field(default_factory=list)
     nxsdk_apps: set[str] = field(default_factory=set)
     # Stage E7: the TWAMP server, flow analytics and maintenance mode settings as paths like
     # ``mgmt_lines`` ("ip sla server twamp ; port 1000", "flow exporter e1 ; dscp 46",
@@ -1487,6 +1490,7 @@ class FakeSwitch:
         out += _nested(self.mcast_lines)
         out += _nested(self.l2_lines)
         out += _nested(self.mgmt_lines)
+        out += self.sys_lines
         out += self.te_config()
         out += _nested(self.ngoam_lines)
         out += _nested(
@@ -1661,6 +1665,45 @@ class FakeSwitch:
             lines[:] = [kept for kept in lines if not kept.startswith("ip address ")]
         lines.append(cmd)
         return _ok(ident, None), context
+
+    # The Switch-wide settings lines, as tried on cisco-25gb: what a line sets (its key), and
+    # whether its ``no`` form takes the value back.
+    _SYS_SETTINGS = (
+        (r"logging source-interface \S+", "logging source-interface", False),
+        (r"ip dns source-interface \S+", "ip dns source-interface", True),
+        (r"ip http source-interface \S+", "ip http source-interface", True),
+        (r"ip tcp path-mtu-discovery", "ip tcp path-mtu-discovery", False),
+        (r"ip tcp mss \d+", "ip tcp mss", False),
+        (r"ip tcp synwait-time \d+", "ip tcp synwait-time", False),
+        (r"xml server max-session \d+", "xml server max-session", True),
+        (r"xml server validate all", "xml server validate all", False),
+        (r"acllog match-log-level \d+", "acllog match-log-level", True),
+    )
+
+    def _sys_setting(
+        self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
+    ) -> tuple[dict[str, Any], tuple[str, str] | None] | None:
+        """The Switch-wide settings lines and their ``no`` forms, or None."""
+        negated = cmd.startswith("no ")
+        bare = cmd.removeprefix("no ")
+        for pattern, key, needs_value in self._SYS_SETTINGS:
+            if negated and not needs_value and bare == key:
+                found = True
+            elif re.fullmatch(pattern, bare):
+                found = True
+            else:
+                found = False
+            if not found:
+                continue
+            if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
+                return _error(ident, "% Permission denied for the role\n"), context
+            if negated and needs_value and bare == key:
+                return _error(ident, "Syntax error while parsing\n"), context
+            self.sys_lines[:] = [i for i in self.sys_lines if not i.startswith(key)]
+            if not negated:
+                self.sys_lines.append(bare)
+            return _ok(ident, None), context
+        return None
 
     def _mpls_set(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
@@ -3650,6 +3693,8 @@ class FakeSwitch:
             return automation_reply
         if mpls_reply := self._mpls_set(user, is_admin, cmd, ident, context):
             return mpls_reply
+        if sys_reply := self._sys_setting(user, is_admin, cmd, ident, context):
+            return sys_reply
         if match := re.fullmatch(r"(no |clear )?itd statistics (\S+)", cmd):
             # Typed outside configuration mode, so a role needs a rule naming it as is.
             if not self._feature_on("itd"):

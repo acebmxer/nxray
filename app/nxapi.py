@@ -2222,6 +2222,26 @@ class NxapiClient:
         change = build_twamp_change(scope, setting, action, ident, values)
         self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
 
+    def configure_system_settings(
+        self,
+        scope: str,
+        setting: str,
+        action: str,
+        ident: dict[str, str],
+        values: dict[str, str],
+    ) -> None:
+        """One change on the Switch-wide settings page: a logging, TCP, DNS, HTTP, XML server
+        or ACL log line, set or removed.
+
+        The lines are built from the page's description and the checked values
+        (``system_settings.build_system_settings_change``), as for the Monitor sessions page.
+        """
+        # Imported here: the page's description uses this module's checks.
+        from app.system_settings import build_system_settings_change
+
+        change = build_system_settings_change(scope, setting, action, ident, values)
+        self._send(list(change.lines), list(change.labels), self._target.timeout, allow_text=True)
+
     def configure_rmon(
         self,
         scope: str,

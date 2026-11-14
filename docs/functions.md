@@ -78,6 +78,7 @@ prose columns; those are a reviewer's job.
 | Read AAA (sign-in and accounting methods, the RADIUS, TACACS+ and LDAP servers and groups) or change it, with the stored admin login and as an NXray admin: sign-in through server groups or local accounts, the fallback, accounting, TACACS+ command authorization, a server, a switch-wide key, timeout, tries or dead time, a server group's servers, VRF and dead time, an LDAP server's TLS, port, wait and bind account, an LDAP group's search map and certificate DN match, an LDAP search map | `app/aaa.py` (`load_aaa_page`, `build_aaa_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_aaa` |
 | Read the licence features, whether the switch is registered with Cisco and its identity, or reserve licences | `app/licensing.py` (`load_licensing_page`, `build_licensing_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_licensing` |
 | Read which of gRPC, NETCONF, RESTCONF, NX-SDK, Container Tracker and OpenFlow are on and what the switch says of them, or change gRPC's port, calls at once and certificate, NETCONF's sessions and idle time and an NX-SDK service | `app/programmability.py` (`load_programmability_page`, `build_programmability_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_programmability` |
+| Read or change the switch-wide settings (logging source, TCP, DNS, HTTP, XML server, ACL log level) | `app/system_settings.py` (`load_system_settings_page`, `build_system_settings_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_system_settings` |
 | Read the TWAMP server (its state, port and idle time, the responder line) or change it | `app/twamp.py` (`load_twamp_page`, `build_twamp_change`), on the same parts as the protocol pages (`app/protocols.py`); command from `NxapiClient.configure_twamp` |
 | Read RMON (events, alarms, high-capacity alarms) or make and delete them | `app/rmon.py` (`load_rmon_page`, `build_rmon_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_rmon` |
 | Read flow analytics (the exporters, records, monitors, profiles, filters and events, the system settings) or change them | `app/analytics.py` (`load_analytics_page`, `build_analytics_change`), on the same parts as the protocol pages; command from `NxapiClient.configure_analytics` |
@@ -826,6 +827,9 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `render_programmability_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Programmability page, with a message | `programmability_page`, `switch_save` | v0.3.0 |
 | `programmability_page` | `(request, username) -> Response` | `GET /programmability`: the interfaces, read live; every role looks, operators and admins change | router | v0.3.0 |
 | `programmability_change` | `(request, username, form) -> Response` | `POST /programmability/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
+| `render_system_settings_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the Switch-wide settings page, with a message | `system_settings_page`, `switch_save` | v0.3.0 |
+| `system_settings_page` | `(request, username) -> Response` | `GET /system-settings`: read live; every role looks, operators and admins change | router | v0.3.0 |
+| `system_settings_change` | `(request, username, form) -> Response` | `POST /system-settings/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
 | `render_twamp_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch fresh and shows the TWAMP server page, with a message | `twamp_page`, `switch_save` | v0.3.0 |
 | `twamp_page` | `(request, username) -> Response` | `GET /twamp`: read live; every role looks, operators and admins change | router | v0.3.0 |
 | `twamp_change` | `(request, username, form) -> Response` | `POST /twamp/change`: one change, after a confirm page; needs the broad role or a stored admin login (sent with that login in the stored mode) | router | v0.3.0 |
@@ -1841,6 +1845,16 @@ pages (`app/protocols_fhrp.py`) and the EEM page, whose fields name an object by
 | `load_programmability_page` | `(client) -> ProgrammabilityPage` | `show feature`; for each feature that is on, the configuration text and its own show command as text | `routes/programmability` | v0.3.0 |
 | `check_programmability_place` | `(page, ident) -> None` | Nothing to check: every scope is the whole switch | the Programmability `ProtocolSite` | v0.3.0 |
 | `build_programmability_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_programmability`, `routes/programmability` | v0.3.0 |
+
+## `app/system_settings.py` — the switch-wide settings
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `parse_system_config` | `(config) -> dict` | The page's lines (logging source, DNS and HTTP source, TCP, XML server, ACL log level) from `show running-config` text, as setting values; indented lines are left alone | `parse_system_settings` | v0.3.0 |
+| `parse_system_settings` | `(config) -> ProtocolView` | The page from the configuration text (None: not read, with a note) | `SYSTEM_SETTINGS.parse`, `load_system_settings_page` | v0.3.0 |
+| `load_system_settings_page` | `(client) -> SystemSettingsPage` | `show running-config` as text | `routes/system_settings` | v0.3.0 |
+| `check_system_settings_place` | `(page, ident) -> None` | Nothing to check: the one scope is the whole switch | the page's `ProtocolSite` | v0.3.0 |
+| `build_system_settings_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the page | `NxapiClient.configure_system_settings`, `routes/system_settings` | v0.3.0 |
 
 ## `app/twamp.py` — the TWAMP server
 

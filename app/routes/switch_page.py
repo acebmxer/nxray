@@ -74,6 +74,7 @@ from app.routes.scheduler import render_scheduler_page
 from app.routes.security import render_acls_page, render_dhcp_page, render_port_security_page
 from app.routes.spanning_tree import render_spanning_tree_page
 from app.routes.switch_admin import render_switch_admin_page
+from app.routes.system_settings import render_system_settings_page
 from app.routes.telemetry import render_telemetry_page
 from app.routes.track import render_track_page
 from app.routes.traffic import render_traffic_page
@@ -1126,6 +1127,8 @@ def switch_save(
             return render_programmability_page(request, username, error=error, notice=notice)
         if back == "licensing":
             return render_licensing_page(request, username, error=error, notice=notice)
+        if back == "system-settings":
+            return render_system_settings_page(request, username, error=error, notice=notice)
         if back == "twamp":
             return render_twamp_page(request, username, error=error, notice=notice)
         if back == "rmon":

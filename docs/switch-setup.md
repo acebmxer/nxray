@@ -1387,6 +1387,12 @@ turned on and off again; `nxsdk service-name` is refused unless an application o
 installed, and OpenFlow's switch lines are refused until the TCAM has an OpenFlow region (a
 restart), so NXray only shows OpenFlow.
 
+**Switch-wide settings.** This page needs no rule of its own, so it works with the broad role
+and with a stored admin login, and is off with the limited role. It reads `show running-config`
+as text and types `logging source-interface`, `ip dns source-interface`, `ip http
+source-interface`, `ip tcp path-mtu-discovery|mss|synwait-time`, `xml server
+max-session|validate all` and `acllog match-log-level`, each with its `no` form.
+
 **TWAMP server, RMON, Flow analytics and Maintenance mode.** These pages need no rule of
 their own for their settings, so they work with the broad role and with a stored admin login,
 and are off with the limited role. TWAMP reads `show feature`, `show ip sla twamp session`,

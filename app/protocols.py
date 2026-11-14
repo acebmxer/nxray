@@ -129,8 +129,8 @@ KINDS = (
     "ipv6list",  # one or more IPv6 addresses, written with spaces
     "telpath",  # a telemetry sensor path or condition: printable, no spaces, not starting
     # with a double quote: sys/intf or eq(ethpmPhysIf.operSt,"down")
-    "ifname",  # any interface the switch has, by name, only to read its state: a front
-    # port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
+    "ifname",  # any interface the switch has, by name, to read its state or use its address: a
+    # front port, port-channel, VLAN interface (any VLAN), loopback, mgmt0, nve1 or tunnel
     "urlpath",  # the page an HTTP health probe asks for: index.html or /status/health;
     # letters, digits and . _ ~ % / -, up to 128 characters
     "ipv4any",  # one IPv4 address, or any (also typed 0.0.0.0), sent as 0.0.0.0: an NBM
@@ -325,8 +325,9 @@ _TUNNEL = re.compile(r"(?i)^tunnel\s*([0-9]{1,5})$")
 
 def _ifname(value: str, label: str) -> str:
     """Any interface by the name the switch writes: Ethernet1/5, port-channel10, Vlan300,
-    loopback0, mgmt0, nve1, Tunnel5. Only for lines that read an interface's state (a
-    tracked object), so a VLAN interface above NXray's own range is taken too."""
+    loopback0, mgmt0, nve1, Tunnel5. For lines that read an interface's state (a
+    tracked object) or use its address (a log source), so a VLAN interface above NXray's
+    own range is taken too."""
     if _CHANNEL.fullmatch(value):
         return _channel_name(value, label)
     if match := re.fullmatch(r"(?i)vlan\s*([0-9]{1,4})", value):

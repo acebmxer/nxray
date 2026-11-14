@@ -409,6 +409,13 @@ class SwitchConnection:
         return self.monitor_changes_enabled
 
     @property
+    def system_settings_changes_enabled(self) -> bool:
+        """True when NXray may change the switch-wide settings: the same as for monitor
+        sessions (the broad role or the stored admin login; the limited role has no rules
+        for them)."""
+        return self.monitor_changes_enabled
+
+    @property
     def rmon_changes_enabled(self) -> bool:
         """True when NXray may change RMON events and alarms: the same as for monitor sessions
         (the broad role or the stored admin login; the limited role has no rules for it)."""

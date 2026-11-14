@@ -83,6 +83,7 @@ from app.routes import (
     switch_admin,
     switch_files,
     switch_page,
+    system_settings,
     telemetry,
     track,
     traffic,
@@ -289,6 +290,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(programmability.router)
     app.include_router(licensing.router)
     app.include_router(maintenance.router)
+    app.include_router(system_settings.router)
     app.include_router(twamp.router)
     app.include_router(rmon.router)
     app.include_router(analytics.router)
