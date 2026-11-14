@@ -54,6 +54,9 @@ def _info(command: str | None, group: str, description: str) -> FeatureInfo:
 
 R, G, M, L2, OV, A, S, MON, P, X = GROUPS
 
+# Said on a row whose command the switch answered with a syntax error when tried.
+REFUSED = "Tried on an N9K-C92160YC-X (NX-OS 9.3(16)): the switch refuses the command."
+
 CATALOG: dict[str, FeatureInfo] = {
     # Routing and layer 3
     "bgp": _info(
@@ -182,7 +185,9 @@ CATALOG: dict[str, FeatureInfo] = {
         L2,
         "VM Tracker: learns from VMware vCenter which virtual machines sit behind which port.",
     ),
-    "mvrp": _info(None, L2, "MVRP: shares VLANs between switches with a standard protocol."),
+    "mvrp": _info(
+        None, L2, "MVRP: shares VLANs between switches with a standard protocol." + " " + REFUSED
+    ),
     # VXLAN, MPLS and overlays
     "nve": _info("nv overlay", OV, "VXLAN: carries VLANs across a routed network."),
     "vnseg_vlan": _info("vn-segment-vlan-based", OV, "Ties VLANs to VXLAN segments (VNIs)."),
@@ -194,17 +199,24 @@ CATALOG: dict[str, FeatureInfo] = {
     "segment-routing": _info("mpls segment-routing", OV, "Segment routing over MPLS."),
     "tun_enc_mgr": _info("tunnel-encryption", OV, "Encrypts VXLAN tunnels between sites."),
     "ngoam": _info("ngoam", OV, "Ping and traceroute tools for VXLAN fabrics."),
-    "l2vpn": _info(None, OV, "Layer 2 VPNs over MPLS."),
-    "l3vpn": _info(None, OV, "Layer 3 VPNs over MPLS."),
-    "ldp": _info(None, OV, "LDP: hands out MPLS labels between routers."),
-    "mpls-evpn": _info(None, OV, "EVPN over MPLS."),
-    "mpls_oam": _info(None, OV, "Ping and traceroute for MPLS."),
-    "mpls_static": _info(None, OV, "Static MPLS labels."),
-    "mvpn": _info(None, OV, "Multicast VPNs."),
-    "srte": _info(None, OV, "Segment routing traffic engineering."),
-    "srv6": _info(None, OV, "Segment routing over IPv6."),
-    "vni": _info(None, OV, "VXLAN network identifiers (used by the VXLAN feature)."),
-    "evc": _info(None, OV, "Ethernet virtual circuits."),
+    "l2vpn": _info(None, OV, "Layer 2 VPNs over MPLS." + " " + REFUSED),
+    "l3vpn": _info(None, OV, "Layer 3 VPNs over MPLS. Turned on from the MPLS page."),
+    "ldp": _info(None, OV, "LDP: hands out MPLS labels between routers. " + REFUSED),
+    "mpls-evpn": _info(None, OV, "EVPN over MPLS. " + REFUSED),
+    "mpls_oam": _info(None, OV, "Ping and traceroute for MPLS. " + REFUSED),
+    "mpls_static": _info(None, OV, "Static MPLS labels. Turned on from the MPLS page."),
+    "mvpn": _info(None, OV, "Multicast VPNs. " + REFUSED),
+    "srte": _info(
+        "mpls segment-routing traffic-engineering",
+        OV,
+        "Segment routing traffic engineering: paths through the network chosen by policy. "
+        "Needs segment routing on first.",
+    ),
+    "srv6": _info(None, OV, "Segment routing over IPv6. " + REFUSED),
+    "vni": _info(
+        None, OV, "VXLAN network identifiers (used by the VXLAN feature)." + " " + REFUSED
+    ),
+    "evc": _info(None, OV, "Ethernet virtual circuits." + " " + REFUSED),
     # Management and access
     "nxapi": _info("nxapi", A, "NX-API: the web API NXray talks to the switch through."),
     "sshServer": _info("ssh", A, "SSH server: signing in to the switch's command line over SSH."),
@@ -259,8 +271,12 @@ CATALOG: dict[str, FeatureInfo] = {
         S,
         "Port security: limits which device addresses a port accepts.",
     ),
-    "macsec": _info(None, S, "MACsec: encrypts the traffic on a link."),
-    "privilege": _info(None, S, "Privilege levels for switch accounts."),
+    "macsec": _info(None, S, "MACsec: encrypts the traffic on a link. " + REFUSED),
+    "privilege": _info(
+        "privilege",
+        S,
+        "Privilege levels for switch accounts (Cisco marks this as deprecated; roles replace it).",
+    ),
     # Monitoring
     "sflow": _info(
         "sflow",
@@ -295,38 +311,66 @@ CATALOG: dict[str, FeatureInfo] = {
         "Container Tracker: learns about Kubernetes containers on connected servers.",
     ),
     "imp": _info("imp", MON, "IMP (the switch's own help gives no more than the name)."),
-    "hardware-telemetry": _info(None, MON, "Telemetry from the switch's hardware."),
-    "bulkstat": _info(None, MON, "Bulk statistics collection."),
+    "hardware-telemetry": _info(None, MON, "Telemetry from the switch's hardware. " + REFUSED),
+    "bulkstat": _info(None, MON, "Bulk statistics collection." + " " + REFUSED),
     "icam": _info(
         None,
         MON,
         "iCAM: the switch's own monitor of its resources and traffic, kept on by NX-OS.",
     ),
-    "bluez": _info(None, X, "Bluetooth support, for a Bluetooth console on some Nexus models."),
-    "cable-management": _info(None, X, "Checks the cabling against a cable plan."),
-    "catena": _info(None, X, "Catena: chains traffic through a series of service devices."),
-    "enm": _info(None, X, "A switch-internal service; the switch gives no description."),
-    "fabric-access": _info(None, X, "A switch-internal service; the switch gives no description."),
-    "fport-channel-trunk": _info(None, X, "Fibre Channel port-channel trunking."),
-    "fsync_mgr": _info(None, X, "Frequency synchronisation (SyncE)."),
-    "intersight": _info(None, X, "The connector for Cisco Intersight cloud management."),
+    "bluez": _info(
+        None, X, "Bluetooth support, for a Bluetooth console on some Nexus models." + " " + REFUSED
+    ),
+    "cable-management": _info(None, X, "Checks the cabling against a cable plan." + " " + REFUSED),
+    "catena": _info(
+        None, X, "Catena: chains traffic through a series of service devices." + " " + REFUSED
+    ),
+    "enm": _info(
+        None, X, "A switch-internal service; the switch gives no description." + " " + REFUSED
+    ),
+    "fabric-access": _info(
+        None, X, "A switch-internal service; the switch gives no description." + " " + REFUSED
+    ),
+    "fport-channel-trunk": _info(None, X, "Fibre Channel port-channel trunking." + " " + REFUSED),
+    "fsync_mgr": _info(None, X, "Frequency synchronisation (SyncE). " + REFUSED),
+    "intersight": _info(
+        None, X, "The connector for Cisco Intersight cloud management." + " " + REFUSED
+    ),
     "license-smart-res": _info(
-        None, X, "Smart Licensing reservation: licences without a link to Cisco."
+        None, X, "Smart Licensing reservation: licences without a link to Cisco." + " " + REFUSED
     ),
-    "npiv": _info(None, X, "NPIV: several Fibre Channel logins over one port."),
-    "ofm": _info(None, X, "Overlay forwarding manager, used by VXLAN."),
-    "plb": _info(None, X, "Pervasive load balancing across a fabric."),
-    "poe": _info(None, X, "Power over Ethernet; this model has none."),
-    "rise": _info(None, X, "RISE: ties load balancers to the switch as service modules."),
+    "npiv": _info(None, X, "NPIV: several Fibre Channel logins over one port." + " " + REFUSED),
+    "ofm": _info(None, X, "Overlay forwarding manager, used by VXLAN. " + REFUSED),
+    "plb": _info(None, X, "Pervasive load balancing across a fabric." + " " + REFUSED),
+    "poe": _info(None, X, "Power over Ethernet; this model has none. " + REFUSED),
+    "rise": _info(
+        None, X, "RISE: ties load balancers to the switch as service modules." + " " + REFUSED
+    ),
     "smart-channel": _info(
-        None, X, "Smart Channel: spreads traffic over service appliances in hardware."
+        None,
+        X,
+        "Smart Channel: spreads traffic over service appliances in hardware." + " " + REFUSED,
     ),
-    "vmfex": _info(None, X, "VM-FEX: extends the switch to virtual machines' network cards."),
+    "vmfex": _info(
+        None, X, "VM-FEX: extends the switch to virtual machines' network cards." + " " + REFUSED
+    ),
+    # Not in show feature (the switch never says whether they are on)
+    "ntp": _info("ntp", MON, "NTP: sets the switch's clock from a time server."),
+    "signature-verification": _info(
+        "signature-verification",
+        A,
+        "Checks the digital signature of every software image before it installs.",
+    ),
     # Programmability
     "nxsdk_mgr": _info("nxsdk", P, "NX-SDK: runs your own apps on the switch."),
     "openflow": _info("openflow", P, "OpenFlow agent: lets an SDN controller program the switch."),
-    "onep": _info(None, P, "onePK, Cisco's older programming kit."),
+    "onep": _info(None, P, "onePK, Cisco's older programming kit." + " " + REFUSED),
 }
+
+# Features the switch accepts but ``show feature`` does not list, so their state is unknown:
+# shown with both Turn on and Turn off. (``pnp``, ``netflow`` and ``pong`` are refused by
+# this model.)
+UNLISTED = ("ntp", "signature-verification")
 
 # NX-SDK app slots: shown as one line, not 32.
 NXSDK_APP = re.compile(r"^nxsdk_app\d+$")
@@ -359,6 +403,13 @@ ON_WARNINGS = {
     "dot1x": "Nothing changes until ports are set up for 802.1X, but then devices must sign in.",
 }
 
+# Extra warnings for turning a feature off.
+OFF_WARNINGS = {
+    "signature-verification": (
+        "The switch will install software images without checking their digital signature."
+    ),
+}
+
 OFF_WARNING = (
     "Turning a feature off deletes all of its settings from the switch's running "
     "configuration. NXray cannot read the running configuration with its account, so "
@@ -372,7 +423,7 @@ class Feature:
     command: str | None
     group: str
     description: str
-    enabled: bool
+    enabled: bool | None  # None: the switch does not say (UNLISTED)
     # Things on the switch that use it (refuses turning it off).
     used_by: tuple[str, ...] = ()
 
@@ -490,6 +541,18 @@ def parse_features(
             used_by=used.get(name, ()) if enabled else (),
         )
         features.append(feature)
+    for name in UNLISTED:
+        if name not in states:
+            info = CATALOG[name]
+            features.append(
+                Feature(
+                    name=name,
+                    command=info.command,
+                    group=info.group,
+                    description=info.description,
+                    enabled=None,
+                )
+            )
     if apps:
         features.append(
             Feature(

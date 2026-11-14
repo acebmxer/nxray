@@ -142,21 +142,24 @@ SFLOW_DEFAULT_PORT = 6343
 # What may follow "feature": the commands ``feature ?`` lists on an
 # N9K-C92160YC-X with NX-OS 9.3(16), with the two-word ones written out
 # (``feature nv ?`` gives overlay). Left out: ``password`` (not a feature),
-# ``license`` alone, and ``ntp``, ``netflow``, ``pnp`` and
-# ``signature-verification``, which ``show feature`` does not list, so NXray
-# cannot show whether they are on.
+# ``license`` alone. ``ntp`` and ``signature-verification`` are accepted but
+# ``show feature`` does not list them, so NXray cannot show whether they are on.
+# ``show cli list`` also lists commands this model then refuses with a syntax
+# error (poe, ofm, macsec, srv6, hardware-telemetry, frequency-synchronization,
+# pong, mvpn, mpls ldp/evpn/oam) or "not supported" (pnp, netflow); tried one by one
+# on cisco-25gb, 2026-11-13.
 FEATURE_COMMANDS = frozenset(
     {
-        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x",
-        "eigrp", "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp",
-        "imp", "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
-        "mpls segment-routing", "msdp", "nat", "nbm", "netconf", "ngmvpn", "ngoam",
-        "nv overlay", "nxapi", "nxsdk", "openflow", "ospf", "ospfv3", "pbr", "pim", "pim6",
-        "port-security", "private-vlan", "ptp", "restconf", "rip", "scheduler",
-        "scp-server", "sflow", "sftp-server", "sla responder", "sla sender",
-        "sla twamp-server", "ssh", "tacacs+", "telemetry", "telnet", "tunnel",
-        "tunnel-encryption", "udld", "vmtracker", "vn-segment-vlan-based", "vpc", "vrrp",
-        "vrrpv3", "vtp",
+        "analytics", "bash-shell", "bfd", "bgp", "container-tracker", "dhcp", "dot1x", "eigrp",
+        "epbr", "evb", "evmed", "fabric forwarding", "flexlink", "grpc", "hsrp", "imp",
+        "interface-vlan", "isis", "itd", "lacp", "ldap", "license smart", "lldp",
+        "mpls segment-routing", "mpls segment-routing traffic-engineering", "msdp", "nat",
+        "nbm", "netconf", "ngmvpn", "ngoam", "ntp", "nv overlay", "nxapi", "nxsdk", "openflow",
+        "ospf", "ospfv3", "pbr", "pim", "pim6", "port-security", "privilege", "private-vlan", "ptp",
+        "restconf", "rip", "scheduler", "scp-server", "sflow", "sftp-server",
+        "signature-verification", "sla responder", "sla sender", "sla twamp-server", "ssh",
+        "tacacs+", "telemetry", "telnet", "tunnel", "tunnel-encryption", "udld", "vmtracker",
+        "vn-segment-vlan-based", "vpc", "vrrp", "vrrpv3", "vtp",
     }
 )  # fmt: skip
 
@@ -1190,8 +1193,12 @@ class NxapiClient:
         if not enabled and command in NEEDED_FEATURES:
             raise ValueError(f"NXray does not turn off {command}: it needs it")
         line = f"feature {command}" if enabled else f"no feature {command}"
+        lines = [line]
+        if enabled and command.startswith("mpls "):
+            # The MPLS commands exist only once the MPLS feature set is installed and on.
+            lines = ["install feature-set mpls", "feature-set mpls", line]
         timeout = max(self._target.timeout, FEATURE_TIMEOUT)
-        self._send([line], [line], timeout, allow_text=True)
+        self._send(lines, lines, timeout, allow_text=True)
 
     def set_port_discovery(
         self,

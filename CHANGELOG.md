@@ -11,6 +11,16 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **Finish the Features page (#101).** Privilege levels, segment routing traffic engineering, NTP and image
+  signature checking now have Turn on / Turn off (turning on an MPLS feature installs and
+  turns on the MPLS feature set first). The switch does not report NTP or signature checking in
+  `show feature`, so those rows say "unknown" and offer both buttons; turning signature
+  checking off warns that unsigned images would install. Every other feature without a button
+  was tried on the switch one by one and refused (`poe`, `ofm`, `macsec`, `srv6`,
+  `hardware-telemetry`, `frequency-synchronization`, `pong`, `mvpn`, `mpls ldp`, `mpls evpn`,
+  `mpls oam`, `pnp`, `netflow`, `l2vpn`, `vni`, `evc`, `mvrp`, `bulkstat`, `onep` and the
+  switch-internal ones such as `plb`, `rise` and `npiv`); the row now says so, and "not changed from NXray" reads "no
+  feature command on this switch".
 - **Set up the TWAMP server (#95).** The new **TWAMP server** page (under Configure) shows the
   server's state while `feature sla twamp-server` is on (turned on on the Features page),
   sets its port and idle time and puts the responder line in or takes it out. Tried on a

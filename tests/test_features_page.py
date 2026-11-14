@@ -163,7 +163,7 @@ def test_buttons_follow_what_may_change(logged_in: TestClient, enabled: FakeSwit
     assert "in use: remove what uses it first" in text
     assert 'name="name" value="nxapi"' not in html and 'name="name" value="sshServer"' not in html
     assert "kept on: NXray needs it" in text
-    assert 'name="name" value="icam"' not in html and "not changed from NXray" in text
+    assert 'name="name" value="icam"' not in html and "no feature command on this switch" in text
 
 
 # ---- changing ---------------------------------------------------------------

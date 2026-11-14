@@ -39,7 +39,7 @@ def test_every_recorded_feature_is_listed_once() -> None:
     # The 32 NX-SDK app slots are one line.
     assert NXSDK_APPS_NAME in names
     assert not any(name.startswith("nxsdk_app") and name != NXSDK_APPS_NAME for name in names)
-    assert len(names) == 130 - 32 + 1
+    assert len(names) == 130 - 32 + 1 + 2  # plus ntp and signature-verification (UNLISTED)
 
 
 def test_enabled_features_match_the_switch() -> None:
@@ -84,7 +84,7 @@ def test_unknown_feature_lands_in_other() -> None:
             }
         }
     }
-    (feature,) = parse_features(body, {}, {}).features
+    (feature,) = (f for f in parse_features(body, {}, {}).features if f.enabled is not None)
     assert feature.group == "Other" and feature.command is None and feature.enabled
 
 
@@ -255,7 +255,32 @@ def test_set_feature_sends_one_command() -> None:
     assert switch.lldp and switch.feature_state["sla_sender"] is False
 
 
-@pytest.mark.parametrize("command", ["lldp ; reload", "feature-set fex", "password", "ntp", ""])
+def test_turning_on_an_mpls_feature_installs_the_feature_set_first() -> None:
+    switch = FakeSwitch()
+    with _client(switch) as client:
+        client.set_feature("mpls segment-routing", True)
+        client.set_feature("mpls segment-routing", False)
+    assert switch.requests == [
+        [
+            "install feature-set mpls",
+            "feature-set mpls",
+            "feature mpls segment-routing",
+        ],
+        ["no feature mpls segment-routing"],
+    ]
+
+
+def test_features_show_feature_does_not_list_get_both_buttons() -> None:
+    view = _view()
+    for name in ("ntp", "signature-verification"):
+        feature = view.get(name)
+        assert feature is not None and feature.enabled is None
+        assert feature.refusal(turn_on=True) is None
+        assert feature.refusal(turn_on=False) is None
+    assert "ntp" not in [f.name for f in view.enabled]
+
+
+@pytest.mark.parametrize("command", ["lldp ; reload", "feature-set fex", "password", "pnp", ""])
 def test_set_feature_refuses_anything_else(command: str) -> None:
     switch = FakeSwitch()
     with _client(switch) as client, pytest.raises(ValueError):
