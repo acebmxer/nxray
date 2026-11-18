@@ -4,7 +4,7 @@
 # and only that virtualenv is copied forward. The runtime image carries no
 # pip, setuptools or wheel, so nothing in it can install packages, and pip's
 # vendored bundle stays out of vulnerability scans.
-FROM python:3.14-slim AS build
+FROM python:3.15-slim AS build
 
 # Debian's security point-release fixes for the base OS packages, on every
 # build rather than whenever Docker Hub refreshes the slim tag.
@@ -39,7 +39,7 @@ RUN echo "MAC maker list, refresh ${OUI_REFRESH:-local}" \
         || echo "The IEEE could not be reached; keeping the MAC maker list from the repository")
 
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 # Same upgrade as the build stage; this is the stage that ships. nginx is
 # for built-in HTTPS (NXRAY_ENABLE_HTTPS, off by default): it sits in front of
