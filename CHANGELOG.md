@@ -23,6 +23,11 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Holes in the Dashboard's CPU and memory chart (#108).** The chart was drawn only from the
+  readings taken while a Dashboard was open and in view, so each time the tab was in the
+  background, or no page was open, left a hole in both lines. It now fills that time from the
+  stored samples, one a minute, as the History page's Live window and the traffic cards do, so
+  the lines run through the whole 10 minutes.
 - **Live graphs on the Traffic and History pages (#106).** Both pages now open on a **Live, 40
   minutes** window and move by themselves, at the pace of the Refresh box in the top bar (it shows
   Live there, even for a browser set to Off). The Traffic page's VLAN cards are drawn from the

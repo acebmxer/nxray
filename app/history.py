@@ -14,6 +14,7 @@ against (``app/alerts.py``).
 
 from __future__ import annotations
 
+import bisect
 import logging
 import math
 import sqlite3
@@ -373,6 +374,21 @@ def stitch(older: Sequence[Point], newer: Sequence[Point]) -> list[Point]:
     if not newer:
         return list(older)
     return [point for point in older if point[0] < newer[0][0]] + list(newer)
+
+
+def fill_gaps(older: Sequence[Point], newer: Sequence[Point], reach: float) -> list[Point]:
+    """``newer`` with the points of ``older`` that have no point of ``newer``
+    within ``reach`` seconds, in time order: unlike ``stitch``, the stored
+    samples also fill a hole in the middle of the part kept in memory (the
+    Dashboard's CPU and memory chart, whose page takes no readings while its
+    tab is hidden). Both lists must be in time order."""
+    moments = [moment for moment, _ in newer]
+
+    def covered(moment: float) -> bool:
+        at = bisect.bisect_left(moments, moment - reach)
+        return at < len(moments) and moments[at] <= moment + reach
+
+    return sorted([point for point in older if not covered(point[0])] + list(newer))
 
 
 def bucket_seconds(span: int) -> int:

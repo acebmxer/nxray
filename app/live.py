@@ -24,6 +24,7 @@ has asked for it for a few minutes, and with NXray's restart; the stored history
 from __future__ import annotations
 
 import copy
+import sqlite3
 import statistics
 import threading
 import time
@@ -32,8 +33,19 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from app.charts import Line
-from app.history import LIVE, ChartView, chart_view, percent_text, rate_text
+from app.charts import Line, Point
+from app.history import (
+    CPU,
+    LIVE,
+    MEMORY,
+    MIN_BUCKET_SECONDS,
+    ChartView,
+    chart_view,
+    fill_gaps,
+    percent_text,
+    rate_text,
+    read_series,
+)
 from app.nxapi import NxapiCommandError, NxapiError, NxapiUnreachable
 from app.ports import Port
 
@@ -405,9 +417,32 @@ def health_trail_figures(value: Any) -> HealthFigures:
     )
 
 
-def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor: int) -> ChartView:
+def stored_health(
+    conn: sqlite3.Connection, switch_id: int, now: float
+) -> tuple[list[Point], list[Point]]:
+    """The stored one-a-minute CPU and memory samples of the window the
+    Dashboard's chart covers, (cpu, memory), for ``health_trail_chart``."""
+    start = now - TRAIL_CHART_SECONDS
+    cpu, memory = (
+        read_series(conn, switch_id, metric, start=start, end=now, bucket=MIN_BUCKET_SECONDS).get(
+            "", []
+        )
+        for metric in (CPU, MEMORY)
+    )
+    return cpu, memory
+
+
+def health_trail_chart(
+    trail: Sequence[tuple[float, Any]],
+    *,
+    now: float,
+    floor: int,
+    stored: tuple[Sequence[Point], Sequence[Point]] = ((), ()),
+) -> ChartView:
     """The switch's CPU and memory over the last few minutes, from the trail
-    of (cpu percent, memory percent) pairs; a figure the switch did not give
+    of (cpu percent, memory percent) pairs, with the ``stored`` one-a-minute
+    samples (``stored_health``) wherever the trail has no reading, so the time
+    nobody had the page open is not a hole; a figure the switch did not give
     leaves a gap."""
     cpu, memory = [], []
     for moment, figures in _chart_trail(trail, now):
@@ -419,17 +454,26 @@ def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor:
             cpu.append((moment, float(figures[0])))
         if figures[1] is not None:
             memory.append((moment, float(figures[1])))
+    bucket = trail_spacing(trail, floor)
+    if any(stored):
+        # A stored sample stands for its whole minute: it fills a hole only where
+        # no reading falls within half a minute of it, and the line runs on across
+        # the minute between two of them.
+        reach = MIN_BUCKET_SECONDS / 2
+        cpu = fill_gaps(stored[0], cpu, reach)
+        memory = fill_gaps(stored[1], memory, reach)
+        bucket = max(bucket, MIN_BUCKET_SECONDS)
     return chart_view(
         f"CPU and memory, last {_trail_minutes()} minutes",
         [Line("CPU", cpu), Line("Memory", memory)],
         start=now - TRAIL_CHART_SECONDS,
         end=now,
-        bucket=trail_spacing(trail, floor),
+        bucket=bucket,
         fmt=percent_text,
         y_max=100,
         note=(
-            "At each reading of the live refresh. Kept in memory only, not in the history; "
-            "the History page has the last 30 days. Times are UTC."
+            "At each reading of the live refresh; where there was none (no page open), the "
+            "stored one-a-minute samples. The History page has the last 30 days. Times are UTC."
         ),
         empty=HEALTH_TRAIL_EMPTY.format(minutes=_trail_minutes()),
         anchor="live-trail",

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app import history
 from app.db import init_db, open_db
-from app.history import LIVE, LIVE_SPAN, page_range_key, range_seconds, stitch
+from app.history import LIVE, LIVE_SPAN, fill_gaps, page_range_key, range_seconds, stitch
 from app.live import HealthFigures, PortFigures
 from app.live_history import live_system_charts, live_vlan_charts
 from app.sflow import (
@@ -74,6 +74,20 @@ def test_the_stored_part_ends_where_the_live_part_begins() -> None:
     ]
     assert stitch(older, []) == older
     assert stitch([], [(1.0, 1.0)]) == [(1.0, 1.0)]
+
+
+def test_the_stored_part_fills_only_the_holes_of_the_live_part() -> None:
+    older = [(30.0, 1.0), (90.0, 2.0), (150.0, 3.0), (210.0, 4.0)]
+    newer = [(0.0, 9.0), (10.0, 9.0), (200.0, 8.0)]
+    assert fill_gaps(older, newer, 30) == [
+        (0.0, 9.0),
+        (10.0, 9.0),
+        (90.0, 2.0),
+        (150.0, 3.0),
+        (200.0, 8.0),
+    ]
+    assert fill_gaps(older, [], 30) == older
+    assert fill_gaps([], newer, 30) == newer
 
 
 # ---- the collector's recent view ----------------------------------------------

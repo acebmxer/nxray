@@ -201,6 +201,25 @@ def test_the_health_chart_is_in_percent() -> None:
     assert health_trail_chart((), now=1010.0, floor=2).svg is None
 
 
+def test_the_health_chart_fills_its_holes_from_the_stored_minutes() -> None:
+    # Readings every 10 s, then the tab was hidden for three minutes (#108).
+    trail = [(at, (10.0, 50.0)) for at in (1000.0, 1010.0, 1020.0, 1210.0, 1220.0)]
+    holed = health_trail_chart(trail, now=1230.0, floor=2)
+    assert str(holed.svg).count("chart-line") == 4  # two pieces of each line
+    stored = (
+        [(1030.0, 30.0), (1090.0, 40.0), (1150.0, 35.0), (1210.0, 99.0)],
+        [(1030.0, 60.0), (1090.0, 61.0), (1150.0, 62.0), (1210.0, 99.0)],
+    )
+    filled = health_trail_chart(trail, now=1230.0, floor=2, stored=stored)
+    assert str(filled.svg).count("chart-line") == 2 and "chart-dot" not in str(filled.svg)
+    # A stored minute with a reading of its own is left out: the reading wins.
+    assert filled.legend[0].summary == "now 10%, highest 40%"
+    assert filled.legend[1].summary == "now 50%, highest 62%"
+    assert "stored one-a-minute samples" in filled.note
+    # The stored minutes alone (the page was just opened) draw the chart too.
+    assert health_trail_chart((), now=1230.0, floor=2, stored=stored).svg is not None
+
+
 # ---- the pages -------------------------------------------------------------------
 
 

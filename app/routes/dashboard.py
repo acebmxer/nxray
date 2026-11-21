@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import login_required, stored_switch, templates
-from app.live import HEALTH, PORTS, health_trail_chart
+from app.live import HEALTH, PORTS, health_trail_chart, stored_health
 from app.routes.live import dashboard_traffic, read_port_channels
 from app.switch import Dashboard, health_problems
 from app.switch_connection import set_switch_identity
@@ -40,9 +40,13 @@ def dashboard(request: Request, username: str = Depends(login_required)) -> Resp
 
     cache = request.app.state.live_cache
     now = time.time()
-    trail = cache.trail(connection.id, HEALTH) if connection is not None else ()
+    trail, stored = (), ((), ())
+    if connection is not None:
+        trail = cache.trail(connection.id, HEALTH)
+        with open_db(request.app.state.settings.db_path) as conn:
+            stored = stored_health(conn, connection.id, now)
     trail_chart = health_trail_chart(
-        trail, now=now, floor=request.app.state.settings.live_min_interval
+        trail, now=now, floor=request.app.state.settings.live_min_interval, stored=stored
     )
     cards = []
     if connection is not None and target is not None and data is not None:

@@ -30,6 +30,7 @@ from app.live import (
     measure_rates,
     port_figures,
     port_trail_chart,
+    stored_health,
 )
 from app.live_history import live_system_charts, live_vlan_charts
 from app.neighbors import (
@@ -149,6 +150,8 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
     answer = read_health(request, connection.id, target, health_floor)
     status, data = answer.value if answer.value else (None, None)
     now = time.time()
+    with open_db(request.app.state.settings.db_path) as conn:
+        stored = stored_health(conn, connection.id, now)
     return no_cache(
         templates.TemplateResponse(
             request,
@@ -159,7 +162,9 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
                 "problems": health_problems(data) if data else [],
                 "live_at": int(max(answer.read_at, ports.read_at)),
                 "live_problem": live_problem_message(answer) or live_problem_message(ports),
-                "trail_chart": health_trail_chart(answer.trail, now=now, floor=floor),
+                "trail_chart": health_trail_chart(
+                    answer.trail, now=now, floor=floor, stored=stored
+                ),
                 "traffic_cards": dashboard_traffic(
                     request, connection.id, ports.trail, ports.value, channels, now
                 ),

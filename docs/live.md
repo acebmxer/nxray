@@ -167,8 +167,10 @@ stored history stays one sample every `NXRAY_HISTORY_INTERVAL`. NXray keeps the
 last 10 minutes of each switch's readings for as long as someone has a page
 with a refresh open, and drops them five minutes after the last one closes, or
 when NXray restarts. A page opened meanwhile draws what is already kept, so a
-second browser sees the same chart at once. A gap in a line means nobody was
-watching, the port was down or the switch did not answer. Times are UTC, as on
-the History page.
+second browser sees the same chart at once. On the port chart a gap in a line
+means nobody was watching, the port was down or the switch did not answer. The
+dashboard chart fills the time with no reading (no page open, or its tab in the
+background) from the stored samples, one a minute, so its lines run through the
+whole 10 minutes. Times are UTC, as on the History page.
 
 The refresh is read-only; nothing in it changes a switch.
