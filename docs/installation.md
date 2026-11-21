@@ -303,9 +303,10 @@ the dashboard and the Ports page run when they open: `show environment`, `show s
 and memory use, the traffic of every port that is up and each port's new
 errors and discards, each VLAN's traffic estimated from its access ports (see
 [Traffic per VLAN and per device](traffic.md)), and deletes anything older than 30 days. The History page
-draws them for the last hour, 6 hours, 24 hours, 7 days or 30 days, and each
+draws them for the last 40 minutes (live), 1 hour, 6 hours, 24 hours, 7 days or 30 days, and each
 port's page draws its own traffic and errors. Times are UTC. Opening the pages
-never contacts the switch.
+for 1 hour or longer never contacts the switch; the live window reads it while the page is
+open, through the same shared readings as the other live pages (see [Live figures](live.md)).
 
 The numbers live in NXray's database on the data volume and take space with
 the number of ports that are up (and, a little, with the number of VLANs that have an access port up): roughly 7 MB a day with a dozen up, so about

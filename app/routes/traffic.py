@@ -26,7 +26,8 @@ from app.dependencies import (
     stored_switch,
     templates,
 )
-from app.history import RANGE_LABELS, RANGES, range_key
+from app.history import PAGE_RANGE_LABELS, page_range_key, range_seconds
+from app.live import live_window_context
 from app.neighbors import NeighborView, try_load_neighbors
 from app.nxapi import SFLOW_SAMPLING_RATES, NxapiClient, NxapiError
 from app.oui import mac_maker, normalize_mac
@@ -144,16 +145,16 @@ def _render(
     settings = request.app.state.settings
     collector = request.app.state.sflow_collector
     switch_id = selected_switch_id(request)
-    period = range_key(request.query_params.get("range"))
+    period = page_range_key(request.query_params.get("range"))
     mac_param = normalize_mac(request.query_params.get("mac", "") or "")
     mac = ":".join(mac_param[i : i + 2] for i in range(0, 12, 2)) if mac_param else ""
     now = time.time()
-    start = now - RANGES[period]
+    start = now - range_seconds(period)
     charts, vlan_chart_cards, vlans, devices, newest = [], [], [], [], None
     if connection is not None:
         with open_db(settings.db_path) as conn:
             charts = sflow_charts(conn, switch_id, period, now, mac=mac)
-            vlan_chart_cards = vlan_cards(conn, switch_id, period, now)
+            vlan_chart_cards = vlan_cards(conn, switch_id, period, now, collector)
             vlans = top_items(conn, switch_id, VLAN, start=start, end=now, limit=30)
             devices = device_rows(
                 top_items(conn, switch_id, MAC_SENDS, start=start, end=now, limit=DEVICE_ROWS),
@@ -199,7 +200,8 @@ def _render(
             "device_label": device_label,
             "mac": mac,
             "range": period,
-            "ranges": RANGE_LABELS,
+            "ranges": PAGE_RANGE_LABELS,
+            **live_window_context(request, period, "/live/traffic"),
             "rates": SFLOW_SAMPLING_RATES,
             "scopes": SCOPES,
             "now": now,

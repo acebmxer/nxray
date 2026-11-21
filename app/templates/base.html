@@ -177,9 +177,11 @@
         <span class="live-stamp" data-live-stamp aria-live="off"></span>
         <button type="button" class="btn btn-quiet live-pause" data-live-pause hidden>Pause</button>
         <label for="live_choice" class="live-label">Refresh</label>
+        {#- The Live window of Traffic and History moves on its own: a browser set to Off sees Live there. -#}
+        {% set live_shown = live_default if (live_default is defined and live_default and prefs.live == "off") else prefs.live %}
         <select id="live_choice" name="live">
           {% for key, words in live_choices.items() %}
-          <option value="{{ key }}"{% if prefs.live == key %} selected{% endif %}>{{ words }}</option>
+          <option value="{{ key }}"{% if live_shown == key %} selected{% endif %}>{{ words }}</option>
           {% endfor %}
         </select>
         <button type="submit" class="btn btn-quiet live-set">Set</button>

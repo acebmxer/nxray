@@ -84,6 +84,13 @@ RANGE_LABELS = {
     "30d": "30 days",
 }
 DEFAULT_RANGE = "24h"
+# The Live window of the Traffic and History pages: the last 40 minutes, drawn
+# from what NXray keeps in memory (app/live.py, app/sflow.py) and, for the part
+# before NXray had it, from the stored samples. It is not a stored range, so it
+# is not in RANGES: the port page and the other users of RANGES never offer it.
+LIVE = "live"
+LIVE_SPAN = 2400
+PAGE_RANGE_LABELS = {LIVE: "Live, 40 minutes", **RANGE_LABELS}
 # One chart point is never narrower than a sample, and a chart never has more
 # than this many, so 30 days of rows are averaged into buckets.
 MIN_BUCKET_SECONDS = 60
@@ -347,6 +354,27 @@ def range_key(value: str | None) -> str:
     return value if value in RANGES else DEFAULT_RANGE
 
 
+def page_range_key(value: str | None) -> str:
+    """The ?range= of the Traffic and History pages: the Live window when none
+    is given, otherwise as ``range_key`` (which never returns the Live window)."""
+    if not value or value == LIVE:
+        return LIVE
+    return range_key(value)
+
+
+def range_seconds(key: str) -> int:
+    """How many seconds back the range named ``key`` reaches (``LIVE`` included)."""
+    return LIVE_SPAN if key == LIVE else RANGES[key]
+
+
+def stitch(older: Sequence[Point], newer: Sequence[Point]) -> list[Point]:
+    """``older`` up to where ``newer`` begins, then ``newer``: the Live window's
+    part from the stored samples followed by the part kept in memory."""
+    if not newer:
+        return list(older)
+    return [point for point in older if point[0] < newer[0][0]] + list(newer)
+
+
 def bucket_seconds(span: int) -> int:
     """How wide one chart point is for a chart covering ``span`` seconds."""
     return max(MIN_BUCKET_SECONDS, math.ceil(span / MAX_POINTS))
@@ -477,6 +505,11 @@ def _watts(value: float) -> str:
     return f"{_short(value)} W"
 
 
+# The same formatters under public names, for the Live window's charts (app/live_history.py).
+degrees_text = _degrees
+watts_text = _watts
+
+
 def rate_text(value: float) -> str:
     """ "500.0 Mb/s" -> "500 Mb/s"."""
     return human_rate(int(value)).replace(".0 ", " ")
@@ -490,7 +523,7 @@ def system_charts(
     conn: sqlite3.Connection, switch_id: int, key: str, now: float
 ) -> list[ChartView]:
     """The History page's charts of a switch for the range named ``key``."""
-    span = RANGES[key]
+    span = range_seconds(key)
     start, end, bucket = now - span, now, bucket_seconds(span)
 
     def read(metric: str) -> dict[str, list[Point]]:
@@ -531,7 +564,7 @@ def port_charts(
     conn: sqlite3.Connection, switch_id: int, port: str, key: str, now: float
 ) -> list[ChartView]:
     """One port's traffic and errors on a switch for the range named ``key``."""
-    span = RANGES[key]
+    span = range_seconds(key)
     start, end, bucket = now - span, now, bucket_seconds(span)
     common = {"start": start, "end": end, "bucket": bucket}
 
@@ -583,13 +616,22 @@ def vlan_charts(conn: sqlite3.Connection, switch_id: int, key: str, now: float) 
     """Each VLAN's estimated traffic on a switch for the range named ``key``,
     in both directions: the busiest ``MAX_VLAN_LINES`` VLANs, in the same
     colours on both charts."""
-    span = RANGES[key]
+    span = range_seconds(key)
     start, end, bucket = now - span, now, bucket_seconds(span)
     common = {"start": start, "end": end, "bucket": bucket}
     found = {
         metric: read_series(conn, switch_id, metric, start=start, end=end, bucket=bucket)
         for metric in (VLAN_IN, VLAN_OUT)
     }
+    return vlan_chart_views(found, common)
+
+
+def vlan_chart_views(
+    found: dict[str, dict[str, list[Point]]], common: dict[str, Any]
+) -> list[ChartView]:
+    """The two "Traffic per VLAN" charts from each VLAN's points, ``found``
+    by metric (``VLAN_IN``, ``VLAN_OUT``) and VLAN number; ``common`` is the
+    start, end and bucket of the charts. Also used by the Live window."""
     items = set(found[VLAN_IN]) | set(found[VLAN_OUT])
     ranked = sorted(
         items,

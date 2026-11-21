@@ -43,7 +43,16 @@ from pathlib import Path
 
 from app.charts import SERIES_COLOURS, Line, area_chart
 from app.db import open_db
-from app.history import RANGES, ChartView, bucket_seconds, chart_view, rate_text
+from app.history import (
+    LIVE,
+    LIVE_SPAN,
+    ChartView,
+    bucket_seconds,
+    chart_view,
+    range_seconds,
+    rate_text,
+    stitch,
+)
 from app.oui import is_group_mac
 
 log = logging.getLogger("nxray.sflow")
@@ -73,6 +82,13 @@ MAX_RECORDS = 64
 FLUSH_SECONDS = 10
 AGENTS_SECONDS = 30
 PURGE_SECONDS = 3600
+# The Traffic page's Live window is drawn from what the collector still has in
+# memory: each VLAN's bytes per 10-second slot for the last 45 minutes, each point
+# the average of the last 30 seconds (one sampled frame stands for thousands, so
+# a shorter average makes a quiet VLAN jump from nothing to a spike).
+RECENT_STEP_SECONDS = 10
+RECENT_KEEP_SECONDS = 2700
+RECENT_SMOOTH_SECONDS = 30
 
 _FLOW_SAMPLE = 1
 _COUNTER_SAMPLE = 2
@@ -331,6 +347,15 @@ def _sender_text(sender: str) -> str:
     return str(mapped or address)
 
 
+@dataclass(frozen=True)
+class RecentVlans:
+    """The collector's recent view: ``series`` by VLAN item, each a list of
+    (time, bits per second); ``since`` is the time of the first point."""
+
+    since: float
+    series: dict[str, list[tuple[float, float]]]
+
+
 class SflowCollector:
     """sFlow samples added up in memory per switch, minute, VLAN and device,
     until ``drain`` hands the minutes that are over to the database."""
@@ -343,6 +368,8 @@ class SflowCollector:
         # Per switch: SNMP ifIndex -> the VLAN a frame without a tag belongs to.
         self._port_vlans: dict[int, dict[int, int]] = {}
         self._minutes: dict[tuple[int, int], _Minute] = {}
+        # Per switch: slot start -> VLAN item -> bytes; the Live window's source.
+        self._recent: dict[int, dict[int, dict[str, int]]] = {}
         self._status: dict[int, AgentStatus] = {}
         self._unknown: dict[str, float] = {}
         self.malformed = 0
@@ -395,12 +422,58 @@ class SflowCollector:
                 size = sample.estimated_bytes
                 # A frame without a tag belongs to the VLAN of the port it came in on.
                 vlan = sample.vlan or port_vlans.get(sample.input_index, 0)
-                self._add(bucket, VLAN, str(vlan) if vlan else UNKNOWN_VLAN, size)
+                item = str(vlan) if vlan else UNKNOWN_VLAN
+                self._add(bucket, VLAN, item, size)
+                self._add_recent(switch_id, moment, item, size)
                 if sample.src_mac and not is_group_mac(sample.src_mac):
                     self._add(bucket, MAC_SENDS, sample.src_mac, size)
                 if sample.dst_mac and not is_group_mac(sample.dst_mac):
                     self._add(bucket, MAC_RECEIVES, sample.dst_mac, size)
             return len(datagram.samples)
+
+    def _add_recent(self, switch_id: int, moment: float, item: str, size: int) -> None:
+        """Count ``size`` bytes of a VLAN in the 10-second slot of ``moment``
+        (the caller holds the lock) and forget the slots too old to draw."""
+        slot = int(moment // RECENT_STEP_SECONDS) * RECENT_STEP_SECONDS
+        slots = self._recent.setdefault(switch_id, {})
+        if slot not in slots:
+            for old in [s for s in slots if s < moment - RECENT_KEEP_SECONDS]:
+                del slots[old]
+            slots[slot] = {}
+        slots[slot][item] = slots[slot].get(item, 0) + size
+
+    def recent_vlans(self, switch_id: int, now: float | None = None) -> RecentVlans:
+        """Each VLAN's bits per second at 10-second steps over the last 40
+        minutes, from the slots that are over, each point the average of the
+        30 seconds up to it. ``since`` is when the first point is; empty
+        (and 0) before NXray has heard a sample."""
+        moment = self._clock() if now is None else now
+        open_slot = int(moment // RECENT_STEP_SECONDS) * RECENT_STEP_SECONDS
+        with self._lock:
+            slots = {
+                slot: dict(items)
+                for slot, items in self._recent.get(switch_id, {}).items()
+                if open_slot - LIVE_SPAN <= slot < open_slot
+            }
+        width = RECENT_SMOOTH_SECONDS // RECENT_STEP_SECONDS
+        if not slots:
+            return RecentVlans(0.0, {})
+        first = min(slots) + (width - 1) * RECENT_STEP_SECONDS
+        series: dict[str, list[tuple[float, float]]] = {}
+        seen_from: dict[str, int] = {}
+        for slot in sorted(slots):
+            for item in slots[slot]:
+                seen_from.setdefault(item, slot)
+        for item, begins in seen_from.items():
+            points = []
+            for slot in range(max(first, begins), open_slot, RECENT_STEP_SECONDS):
+                total = sum(
+                    slots.get(slot - step * RECENT_STEP_SECONDS, {}).get(item, 0)
+                    for step in range(width)
+                )
+                points.append((slot + RECENT_STEP_SECONDS, total * 8 / RECENT_SMOOTH_SECONDS))
+            series[item] = points
+        return RecentVlans(first + RECENT_STEP_SECONDS, series)
 
     @staticmethod
     def _add(bucket: _Minute, kind: str, item: str, size: int) -> None:
@@ -597,12 +670,71 @@ class VlanCard:
     svg: object
 
 
-def vlan_cards(conn: sqlite3.Connection, switch_id: int, key: str, now: float) -> list[VlanCard]:
+def _live_vlan_cards(
+    conn: sqlite3.Connection,
+    switch_id: int,
+    now: float,
+    collector: SflowCollector | None,
+) -> list[VlanCard]:
+    """The Live window's cards: the busiest VLANs of the last 40 minutes, each
+    drawn from the collector's 10-second points, with the stored minutes before
+    them for the part NXray has not had in memory (after a restart, say)."""
+    start = now - LIVE_SPAN
+    recent = collector.recent_vlans(switch_id, now) if collector else RecentVlans(0.0, {})
+    seed_end = recent.since if recent.series else now
+    seeded = [
+        top.item
+        for top in top_items(conn, switch_id, VLAN, start=start, end=seed_end, limit=SERIES_COLOURS)
+    ]
+    items = list(dict.fromkeys([*seeded, *recent.series]))
+    older = item_series(conn, switch_id, VLAN, items, start=start, end=seed_end, bucket=60)
+    series = {item: stitch(older.get(item, []), recent.series.get(item, [])) for item in items}
+
+    def average(points: list[tuple[float, float]]) -> float:
+        return sum(value for _, value in points) / len(points)
+
+    busiest = sorted(
+        (item for item in items if series[item]), key=lambda item: -average(series[item])
+    )[:SERIES_COLOURS]
+    cards = []
+    for number, item in enumerate(busiest):
+        points = series[item]
+        label = vlan_label(item)
+        cards.append(
+            VlanCard(
+                label=label,
+                now=rate_text(points[-1][1]),
+                highest=rate_text(max(value for _, value in points)),
+                average=rate_text(average(points)),
+                svg=area_chart(
+                    points,
+                    start=start,
+                    end=now,
+                    bucket=60,
+                    fmt=rate_text,
+                    colour=number,
+                    label=f"{label}: traffic over time",
+                ),
+            )
+        )
+    return cards
+
+
+def vlan_cards(
+    conn: sqlite3.Connection,
+    switch_id: int,
+    key: str,
+    now: float,
+    collector: SflowCollector | None = None,
+) -> list[VlanCard]:
     """A card for each of the busiest VLANs over the range named ``key``, busiest
     first: the latest figure large, the highest and the average beside it, and
     the traffic drawn as a filled area. sFlow counts each frame once, on the
-    port it came in on, so there is one figure per VLAN, not an in and an out."""
-    span = RANGES[key]
+    port it came in on, so there is one figure per VLAN, not an in and an out.
+    The Live window (``LIVE``) is drawn from ``collector``'s recent points."""
+    if key == LIVE:
+        return _live_vlan_cards(conn, switch_id, now, collector)
+    span = range_seconds(key)
     start, end, bucket = now - span, now, bucket_seconds(span)
     tops = top_items(conn, switch_id, VLAN, start=start, end=end, limit=SERIES_COLOURS)
     found = item_series(
@@ -639,7 +771,7 @@ def sflow_charts(
 ) -> list[ChartView]:
     """The Traffic page's chart of one device's sends and receives when ``mac``
     names one; none otherwise (the VLANs are cards, see ``vlan_cards``)."""
-    span = RANGES[key]
+    span = range_seconds(key)
     start, end, bucket = now - span, now, bucket_seconds(span)
     common = {"start": start, "end": end, "bucket": bucket, "fmt": rate_text}
     charts: list[ChartView] = []

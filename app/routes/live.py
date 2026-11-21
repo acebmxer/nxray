@@ -16,26 +16,30 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import live_login_required, may_change, stored_switch, templates
 from app.face import color_mode, draw_face, short_device_name, speed_class
+from app.history import LIVE
 from app.live import (
     CLIENTS,
     HEALTH,
     PORTS,
     LiveAnswer,
     PortReading,
-    health_figures,
     health_trail_chart,
+    health_trail_figures,
     measure_rates,
     port_figures,
     port_trail_chart,
 )
+from app.live_history import live_system_charts, live_vlan_charts
 from app.neighbors import NeighborView, filter_macs, try_load_neighbors
 from app.nxapi import SwitchTarget
 from app.port_labels import get_labels
 from app.ports import COUNTER_LABELS, ERROR_KEYS, load_ports
 from app.routes.neighbors import QUERY_MAX
 from app.routes.ports import FILTERS, ports_link, ports_summary
+from app.sflow import vlan_cards
 from app.switch import health_problems
 from app.switch_choice import selected_switch_id
+from app.switch_connection import SwitchConnection
 from app.switch_setup import load_dashboard_status, read_switch
 from app.traffic import busiest_devices, device_traffic, port_device
 
@@ -56,22 +60,29 @@ def no_cache(response: Response) -> Response:
     return response
 
 
-@router.get("/live/dashboard", response_class=HTMLResponse)
-def live_dashboard(request: Request, username: str = Depends(live_login_required)) -> Response:
-    connection, target, error = stored_switch(request)
-    if connection is None or target is None:
-        # Nothing to read; the page shows why when it is reloaded.
-        return Response(status_code=204)
+def read_health(request: Request, switch_id: int, target: SwitchTarget, floor: int) -> LiveAnswer:
+    """The newest dashboard reading of a switch (CPU, memory, temperatures, fans,
+    power), through the cache: the Dashboard and the History page's Live window
+    share it, so open pages of either cost the switch the same."""
     transport = request.app.state.nxapi_transport
 
     def reader(_previous: object) -> tuple[object, str]:
         status, data = load_dashboard_status(target, transport=transport)
         return ((status, data), "") if data is not None else (None, status.message)
 
-    floor = request.app.state.settings.live_min_interval
-    answer = request.app.state.live_cache.get(
-        connection.id, HEALTH, floor, reader, figures=health_figures
+    return request.app.state.live_cache.get(
+        switch_id, HEALTH, floor, reader, figures=health_trail_figures
     )
+
+
+@router.get("/live/dashboard", response_class=HTMLResponse)
+def live_dashboard(request: Request, username: str = Depends(live_login_required)) -> Response:
+    connection, target, error = stored_switch(request)
+    if connection is None or target is None:
+        # Nothing to read; the page shows why when it is reloaded.
+        return Response(status_code=204)
+    floor = request.app.state.settings.live_min_interval
+    answer = read_health(request, connection.id, target, floor)
     status, data = answer.value if answer.value else (None, None)
     return no_cache(
         templates.TemplateResponse(
@@ -89,6 +100,25 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
     )
 
 
+def read_port_answer(
+    request: Request, switch_id: int, target: SwitchTarget, floor: int
+) -> LiveAnswer:
+    """The newest reading of every port of a switch, with rates measured from
+    the byte counters between two readings, through the cache (see
+    ``shared_readings``; the History page's Live window reads the ports alone)."""
+    transport = request.app.state.nxapi_transport
+
+    def read_ports(previous: PortReading | None) -> tuple[object, str]:
+        status, ports = read_switch(target, load_ports, transport)
+        if ports is None:
+            return None, status.message
+        return measure_rates(previous, ports, time.time()), ""
+
+    return request.app.state.live_cache.get(
+        switch_id, PORTS, floor, read_ports, figures=port_figures
+    )
+
+
 def shared_readings(
     request: Request, switch_id: int, target: SwitchTarget, ports_floor: int | None = None
 ) -> tuple[LiveAnswer, NeighborView | None]:
@@ -101,18 +131,12 @@ def shared_readings(
     transport = request.app.state.nxapi_transport
     cache = request.app.state.live_cache
 
-    def read_ports(previous: PortReading | None) -> tuple[object, str]:
-        status, ports = read_switch(target, load_ports, transport)
-        if ports is None:
-            return None, status.message
-        return measure_rates(previous, ports, time.time()), ""
-
     def read_neighbors(_previous: object) -> tuple[object, str]:
         status, found = read_switch(target, try_load_neighbors, transport)
         return (found, "") if status.ok else (None, status.message)
 
     floor = max(settings.live_min_interval, ports_floor or 0)
-    answer = cache.get(switch_id, PORTS, floor, read_ports, figures=port_figures)
+    answer = read_port_answer(request, switch_id, target, floor)
     neighbors = cache.get(
         switch_id, CLIENTS, settings.live_clients_min_interval, read_neighbors
     ).value
@@ -296,5 +320,67 @@ def live_neighbors(
                 "live_at": int(answer.read_at),
                 "live_problem": live_problem_message(answer),
             },
+        )
+    )
+
+
+# The dashboard reading (temperatures, fans, power, CPU, memory) changes slowly and
+# costs the switch several commands, so the History page's Live window takes it
+# this often at most; the ports (the traffic charts) at the usual floor.
+HISTORY_HEALTH_SECONDS = 10
+
+
+def history_live_view(
+    request: Request, connection: SwitchConnection, target: SwitchTarget, now: float
+) -> dict[str, object]:
+    """What the History page's Live window shows: its charts, when the switch was
+    last read and, if the newest read failed, why. The switch is read first,
+    through the cache and outside any database block."""
+    settings = request.app.state.settings
+    health = read_health(
+        request, connection.id, target, max(settings.live_min_interval, HISTORY_HEALTH_SECONDS)
+    )
+    ports = read_port_answer(request, connection.id, target, settings.live_min_interval)
+    with open_db(settings.db_path) as conn:
+        charts = live_system_charts(conn, connection.id, health.trail, ports.trail, now)
+        charts += live_vlan_charts(conn, connection.id, ports.trail, now)
+    return {
+        "charts": charts,
+        "live_at": int(max(health.read_at, ports.read_at) or now),
+        "live_problem": live_problem_message(ports) or live_problem_message(health),
+    }
+
+
+@router.get("/live/history", response_class=HTMLResponse)
+def live_history(request: Request, username: str = Depends(live_login_required)) -> Response:
+    """The History page's Live window charts, alone (``_history_live.html``)."""
+    connection, target, _error = stored_switch(request)
+    if connection is None or target is None:
+        return Response(status_code=204)
+    return no_cache(
+        templates.TemplateResponse(
+            request,
+            "_history_live.html",
+            {"range": LIVE, **history_live_view(request, connection, target, time.time())},
+        )
+    )
+
+
+@router.get("/live/traffic", response_class=HTMLResponse)
+def live_traffic(request: Request, username: str = Depends(live_login_required)) -> Response:
+    """The Traffic page's VLAN cards for the Live window, alone (``_vlan_cards.html``).
+
+    Drawn from what the sFlow collector holds in memory and the stored minutes:
+    the switch is not asked at all."""
+    settings = request.app.state.settings
+    switch_id = selected_switch_id(request)
+    now = time.time()
+    with open_db(settings.db_path) as conn:
+        cards = vlan_cards(conn, switch_id, LIVE, now, request.app.state.sflow_collector)
+    return no_cache(
+        templates.TemplateResponse(
+            request,
+            "_vlan_cards.html",
+            {"range": LIVE, "vlan_cards": cards, "live_at": int(now)},
         )
     )

@@ -111,9 +111,33 @@ average.
 - The VLAN colours of the front panel: they need the VLAN tables, so with that
   colouring the panel stays until you reload (the rows still refresh).
 - The filter counts above the port table, and anything in the side panel.
-- The History charts, which come from the stored samples
-  (`NXRAY_HISTORY_INTERVAL`), not from live readings. The small charts of the
-  last few minutes below are the live ones.
+- The History charts for 1 hour to 30 days, which come from the stored samples
+  (`NXRAY_HISTORY_INTERVAL`), not from live readings. The **Live, 40 minutes**
+  window of the History and Traffic pages (below) and the small charts of the
+  last few minutes are the live ones.
+
+## The Live window of Traffic and History
+
+The Traffic and History pages open on **Live, 40 minutes**, the first of their
+range links, and their charts move by themselves (the Refresh box shows **Live**
+there, even for a browser set to **Off**; pick another time to slow it, or a
+longer range to go back to the stored samples).
+
+- **Traffic**, *Traffic per VLAN, measured*: each card is drawn from the sFlow
+  samples NXray has in memory, a point every 10 seconds, each the average of the
+  last 30 seconds (one sampled frame stands for thousands, so a shorter average
+  would jump from nothing to a spike on a quiet VLAN). The newest point is at
+  most 10 seconds old. This asks the switch for nothing.
+- **History**: the part of the 40 minutes NXray has readings for is drawn from
+  them: the ports' In and Out measured from the byte counters, and the dashboard
+  reading's temperatures, fans, power, CPU and memory (read at most every 10
+  seconds). Before that it is the stored samples, one a minute, so a chart is
+  not empty just after NXray starts. Traffic per VLAN is each VLAN's access
+  ports added up, as in the stored samples.
+
+These are kept in memory only (the last 40 minutes, and only while a page with a
+refresh is open), like the small charts below. A longer range is drawn from the
+database, as before, and refreshes the whole page.
 
 ## The last few minutes, drawn
 

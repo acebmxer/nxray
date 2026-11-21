@@ -180,7 +180,7 @@ trunks and ports with several devices included**, on the **Traffic** page
    the page shows its words; the lines before it have already taken effect,
    and the switch is marked as having unsaved changes.
 
-**What the page shows,** for 1 hour to 30 days (as much as is kept):
+**What the page shows,** for the last 40 minutes (live) or 1 hour to 30 days (as much as is kept):
 
 - **Busiest VLANs**: each VLAN's average, its share and how many samples it
   rests on. A frame that came in without a VLAN tag (on an access port, or on
@@ -191,7 +191,10 @@ trunks and ports with several devices included**, on the **Traffic** page
   VLANs: its latest figure in large type with the highest and the average
   beside it, and a short chart of the traffic as a filled area, the scale on
   the right. There is one figure per VLAN, not an in and an out: the switch
-  counts each sampled frame once, on the port it came in on.
+  counts each sampled frame once, on the port it came in on. The page opens on
+  **Live, 40 minutes**, where the cards move by themselves (see
+  [Live figures](live.md#the-live-window-of-traffic-and-history)); the other
+  ranges are one point a minute.
 - **Busiest devices**: by MAC address, what each sent into the switch
   (**sends**) and what was sent to it (**receives**), with its maker, IP
   addresses and port from the switch's MAC address and ARP tables now.

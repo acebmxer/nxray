@@ -14,10 +14,11 @@ answer is kept and the next read waits longer each time, so a struggling
 NX-API is left alone.
 
 Each entry also keeps a short trail: a few figures from every fresh reading of
-the last ``TRAIL_SECONDS``, in memory only, so a page can draw a small chart
-of the last few minutes without writing every reading to the database. The
-trail goes with its entry when nobody has asked for it for a few minutes, and
-with NXray's restart; the stored history (app/history.py) is separate.
+the last ``TRAIL_SECONDS``, in memory only, so a page can draw a chart
+of the last few minutes (``TRAIL_CHART_SECONDS`` for the small ones) without
+writing every reading to the database. The trail goes with its entry when nobody
+has asked for it for a few minutes, and with NXray's restart; the stored history
+(app/history.py) is separate.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from app.charts import Line
-from app.history import ChartView, chart_view, percent_text, rate_text
+from app.history import LIVE, ChartView, chart_view, percent_text, rate_text
 from app.nxapi import NxapiCommandError, NxapiError, NxapiUnreachable
 from app.ports import Port
 
@@ -59,8 +60,11 @@ CLIENTS = "clients"  # MAC table, ARP, neighbours
 KEEP_UNWATCHED_SECONDS = 300
 # The most the wait after failures grows to.
 MAX_BACKOFF_SECONDS = 60
-# How far back each entry's trail of figures reaches, for the live charts.
-TRAIL_SECONDS = 600
+# How far back each entry's trail of figures reaches: the 40 minutes the Live
+# window of the Traffic and History pages shows.
+TRAIL_SECONDS = 2400
+# How much of the trail the Dashboard's and the port page's small charts draw.
+TRAIL_CHART_SECONDS = 600
 
 
 @dataclass
@@ -238,17 +242,19 @@ def measure_rates(previous: PortReading | None, ports: list[Port], now: float) -
 # ---- the trail: figures of the last few minutes ----------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortFigures:
     """What the trail keeps of one port per reading: its In and Out as the
     switch averages them, and as measured from the byte counters (None when
-    that reading had no earlier one to measure from)."""
+    that reading had no earlier one to measure from), and the VLAN of an
+    access port (None for any other kind of port)."""
 
     up: bool
     in_average: int
     out_average: int
     in_measured: int | None = None
     out_measured: int | None = None
+    vlan: int | None = None
 
 
 def port_figures(reading: PortReading) -> dict[str, PortFigures]:
@@ -263,6 +269,7 @@ def port_figures(reading: PortReading) -> dict[str, PortFigures]:
             out_average=port.out_bits_per_second,
             in_measured=live.in_bits_per_second if live is not None else None,
             out_measured=live.out_bits_per_second if live is not None else None,
+            vlan=int(port.vlan) if port.mode == "access" and port.vlan.isdigit() else None,
         )
     return found
 
@@ -283,7 +290,12 @@ TRAIL_EMPTY = (
 
 
 def _trail_minutes() -> int:
-    return TRAIL_SECONDS // 60
+    return TRAIL_CHART_SECONDS // 60
+
+
+def _chart_trail(trail: Sequence[tuple[float, Any]], now: float) -> list[tuple[float, Any]]:
+    """The part of the trail the small charts draw (the last ``TRAIL_CHART_SECONDS``)."""
+    return [item for item in trail if item[0] >= now - TRAIL_CHART_SECONDS]
 
 
 def port_trail_chart(
@@ -296,7 +308,7 @@ def port_trail_chart(
     or (measured) had nothing to measure from, leaves a gap.
     """
     in_points, out_points = [], []
-    for moment, figures in trail:
+    for moment, figures in _chart_trail(trail, now):
         port = figures.get(name) if isinstance(figures, dict) else None
         if port is None or not port.up:
             continue
@@ -316,7 +328,7 @@ def port_trail_chart(
     return chart_view(
         f"Last {_trail_minutes()} minutes",
         [Line("In", in_points), Line("Out", out_points)],
-        start=now - TRAIL_SECONDS,
+        start=now - TRAIL_CHART_SECONDS,
         end=now,
         bucket=trail_spacing(trail, floor),
         fmt=rate_text,
@@ -340,12 +352,50 @@ def health_figures(value: Any) -> tuple[float | None, float | None]:
     return resources.cpu_used_percent, resources.memory_used_percent
 
 
+@dataclass(frozen=True, slots=True)
+class HealthFigures:
+    """What the trail keeps of a dashboard reading for the History page's Live
+    window: the CPU and memory in use (percent), the power drawn (watts), the
+    fan speed (percent) and each temperature sensor (degrees C). A figure the
+    switch did not give is None, or missing from ``temperatures``."""
+
+    cpu: float | None
+    memory: float | None
+    power: float | None
+    fan: float | None
+    temperatures: tuple[tuple[str, float], ...]
+
+
+def health_trail_figures(value: Any) -> HealthFigures:
+    """The trail's figures of a dashboard reading: ``health_figures`` plus the
+    power, fans and temperatures (deliberately not a change to ``health_figures``,
+    whose two numbers the Dashboard's own chart and its tests rely on)."""
+    cpu, memory = health_figures(value)
+    data = value[1] if isinstance(value, tuple) and len(value) == 2 else None
+    environment = getattr(data, "environment", None)
+    if environment is None:
+        return HealthFigures(cpu, memory, None, None, ())
+    return HealthFigures(
+        cpu,
+        memory,
+        None if environment.total_draw_w is None else float(environment.total_draw_w),
+        None if environment.fan_speed_percent is None else float(environment.fan_speed_percent),
+        tuple(
+            (sensor.name, float(sensor.current_c))
+            for sensor in environment.temperatures
+            if sensor.current_c is not None
+        ),
+    )
+
+
 def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor: int) -> ChartView:
     """The switch's CPU and memory over the last few minutes, from the trail
     of (cpu percent, memory percent) pairs; a figure the switch did not give
     leaves a gap."""
     cpu, memory = [], []
-    for moment, figures in trail:
+    for moment, figures in _chart_trail(trail, now):
+        if isinstance(figures, HealthFigures):
+            figures = (figures.cpu, figures.memory)
         if not isinstance(figures, tuple) or len(figures) != 2:
             continue
         if figures[0] is not None:
@@ -355,7 +405,7 @@ def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor:
     return chart_view(
         f"CPU and memory, last {_trail_minutes()} minutes",
         [Line("CPU", cpu), Line("Memory", memory)],
-        start=now - TRAIL_SECONDS,
+        start=now - TRAIL_CHART_SECONDS,
         end=now,
         bucket=trail_spacing(trail, floor),
         fmt=percent_text,
@@ -387,6 +437,23 @@ WHOLE_PAGE_PATHS = (
     "/config",
     "/switch",
 )
+
+
+def live_window_context(request: Any, period: str, url: str) -> dict[str, Any]:
+    """What the page template needs for the Live window of the Traffic and
+    History pages: the page answers a small ``url`` of its own (only its charts
+    are read again, never the whole page), and the Refresh box shows Live for a
+    browser that has chosen Off, so the window moves without a second choice.
+    Nothing for another range, or for a page shown after a form (a result
+    never refreshes)."""
+    if period != LIVE or request.method != "GET":
+        return {}
+    return {
+        "live_page": "window",
+        "live_url": url,
+        "live_default": "live",
+        "live_at": int(time.time()),
+    }
 
 
 def refreshes_whole_page(method: str, path: str) -> bool:

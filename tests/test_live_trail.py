@@ -90,12 +90,14 @@ def test_no_figures_means_no_trail() -> None:
 def test_the_trail_keeps_only_the_last_minutes() -> None:
     clock = Clock()
     cache = LiveCache(clock)
-    for _ in range(4):
+    # Reads no further apart than the cache keeps an unwatched entry, over longer than the trail.
+    step = KEEP_UNWATCHED_SECONDS
+    for _ in range(TRAIL_SECONDS // step + 4):
         cache.get(1, "health", 2, _counting(), figures=lambda v: v)
-        clock.now += TRAIL_SECONDS / 2
+        clock.now += step
     answer = cache.get(1, "health", 2, _counting(), figures=lambda v: v)
     assert all(at >= clock.now - TRAIL_SECONDS for at, _ in answer.trail)
-    assert len(answer.trail) == 3
+    assert len(answer.trail) == TRAIL_SECONDS // step + 1
 
 
 def test_peeking_at_the_trail_reads_nothing_and_goes_with_its_entry() -> None:

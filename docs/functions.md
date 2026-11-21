@@ -122,7 +122,7 @@ prose columns; those are a reviewer's job.
 | Read the VRFs, make or delete one, or move an interface into another | `app/routing.py` (`load_routing`, `plan_create_vrf`, `plan_delete_vrf`, `plan_interface_vrf`); commands from `NxapiClient.create_vrf`, `delete_vrf`, `set_interface_vrf` |
 | List the switch's features, or turn one on or off | `app/features.py`, `load_features` and `Feature.refusal`; the command from `NxapiClient.set_feature` |
 | Read or set a port's label (NXray only, never the switch) | `app/port_labels.py` |
-| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`, `vlan_charts`); the SVG itself is `app/charts.py`, `line_chart` |
+| Record or draw history | `app/history.py` (`Sampler`, `system_charts`, `port_charts`, `vlan_charts`); the Live window's charts `app/live_history.py`; the SVG itself is `app/charts.py`, `line_chart` |
 | Estimate a device's or a VLAN's traffic from the ports' | `app/traffic.py` (`device_traffic`, `port_device`, `vlan_traffic`); each VLAN's over time is stored by `history.build_rows` |
 | Check for a newer image, or replace this container with it | `app/update.py`, `check_for_updates` / `apply_update` |
 | Rank NXray versions, or pick between the `:beta` and `:latest` tags | `app/update.py`, `parse_version` / `pick_target` |
@@ -1088,10 +1088,12 @@ times, so out of step is worked out without one.
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
 | `health_figures` | `(value) -> (cpu, memory)` | What the trail keeps of a dashboard reading: CPU and memory in use, in percent (None when not given) | `routes/live.live_dashboard` | v0.2.0 |
-| `health_trail_chart` | `(trail, *, now, floor) -> ChartView` | The dashboard's CPU and memory chart of the last `TRAIL_SECONDS`, from the trail; says how to fill it when empty | `routes/dashboard`, `routes/live.live_dashboard` | v0.2.0 |
+| `health_trail_chart` | `(trail, *, now, floor) -> ChartView` | The dashboard's CPU and memory chart of the last `TRAIL_CHART_SECONDS` (10 minutes), from the trail; says how to fill it when empty | `routes/dashboard`, `routes/live.live_dashboard` | v0.2.0 |
+| `health_trail_figures` | `(value) -> HealthFigures` | What the trail keeps of a dashboard reading for the History page's Live window: `health_figures` plus the power, fan speed and each temperature (deliberately not a change to `health_figures`, whose two numbers the Dashboard's chart and its tests use) | `routes/live.read_health` | v0.3.1 |
+| `live_window_context` | `(request, period, url) -> dict` | The template variables of the Live window of the Traffic and History pages: the small answer to ask, and Refresh shown as Live for a browser set to Off; nothing for another range or a page shown after a form | `routes/traffic._render`, `routes/history.history_page` | v0.3.1 |
 | `measure_rates` | `(previous, ports, now) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over 120 s | `routes/live.shared_readings` | v0.2.0 |
 | `port_figures` | `(reading) -> dict[str, PortFigures]` | What the trail keeps of one port reading: each port's state, the switch's averages and the measured rates (None without an earlier reading) | `routes/live.shared_readings` | v0.2.0 |
-| `port_trail_chart` | `(trail, name, *, measured, now, floor) -> ChartView` | One port's In and Out over the last `TRAIL_SECONDS` from the trail, measured (Live) or the switch's averages; a down port or an unmeasured reading leaves a gap | `routes/ports._render_port`, `routes/live.live_port` | v0.2.0 |
+| `port_trail_chart` | `(trail, name, *, measured, now, floor) -> ChartView` | One port's In and Out over the last `TRAIL_CHART_SECONDS` (10 minutes) from the trail, measured (Live) or the switch's averages; a down port or an unmeasured reading leaves a gap | `routes/ports._render_port`, `routes/live.live_port` | v0.2.0 |
 | `refreshes_whole_page` | `(method, path) -> bool` | True for a page shown by GET that reads the switch and nothing else changes on (VLANs, Traffic, Routing, Switch ...), which the Refresh box re-reads as a whole; a template global | `base.html`, `dependencies.share_switch_reads` | v0.2.0 |
 | `shared_show_reads` | `(cache, floor, text_floor) -> share` | The function `nxapi.shared_reads` holds for one whole-page refresh: each switch, account and command is read at most once per floor (`text_floor` for printed text), a rejected command is remembered as rejected, and each caller gets its own copy | `dependencies.share_switch_reads` | v0.2.0 |
 | `pick_interval` | `(choice, floor) -> int` | Seconds between refreshes for a picked choice, never below the floor; 0 for Off or anything unknown | tests; `live.js` repeats the rule in the browser | v0.2.0 |
@@ -1119,6 +1121,11 @@ list shown in the top bar. Held in `app.state.live_cache`.
 | `live_ports` | `(request, username, show, color, port, rates) -> Response` | `GET /live/ports`: the Ports page's counts, front panel and port rows (no VLAN colouring) | router, `live.js` | v0.2.0 |
 | `live_dashboard` | `(request, username) -> Response` | `GET /live/dashboard`: the dashboard's figures alone, read through the cache; 204 with no switch | router, `live.js` | v0.2.0 |
 | `live_problem_message` | `(answer) -> str` | The banner for a failed read, saying the figures shown are older and when NXray tries again | `live_dashboard` | v0.2.0 |
+| `read_health` | `(request, switch_id, target, floor) -> LiveAnswer` | The newest dashboard reading (CPU, memory, temperatures, fans, power) through the cache, shared by the Dashboard and the History page's Live window | `live_dashboard`, `history_live_view` | v0.3.1 |
+| `read_port_answer` | `(request, switch_id, target, floor) -> LiveAnswer` | The newest reading of every port, with rates measured from the byte counters, through the cache | `shared_readings`, `history_live_view` | v0.3.1 |
+| `history_live_view` | `(request, connection, target, now) -> dict` | The History page's Live window: its charts (the trails plus the stored minutes before them), when the switch was last read and why the newest read failed | `routes/history.history_page`, `live_history` | v0.3.1 |
+| `live_history` | `(request, username) -> Response` | `GET /live/history`: the History page's Live window charts alone; 204 with no switch | router, `live.js` | v0.3.1 |
+| `live_traffic` | `(request, username) -> Response` | `GET /live/traffic`: the Traffic page's VLAN cards for the Live window, from the sFlow collector's memory and the stored minutes; the switch is not asked | router, `live.js` | v0.3.1 |
 | `shared_readings` | `(request, switch_id, target, ports_floor=None) -> (LiveAnswer, NeighborView \| None)` | The newest port reading and neighbour/MAC reading through the cache, shared by every live page; `ports_floor` slows the port read for pages that need it less often | `live_ports`, `live_port`, `live_neighbors` | v0.2.0 |
 | `no_cache` | `(response) -> Response` | Marks a response not to be stored by the browser | `live_dashboard` | v0.2.0 |
 
@@ -1145,6 +1152,10 @@ list shown in the top bar. Held in `app.state.live_cache`.
 | `purge` | `(conn, now, keep_days=30) -> int` | Deletes every switch's rows older than the retention; how many went | `start_sampler` | v0.1.0 |
 | `rate_text` | `(value: float) -> str` | An axis rate: `500000000` -> `500 Mb/s` | the charts | v0.2.0 |
 | `range_key` | `(value) -> str` | A valid `?range=` name; the default for anything else | `routes/history`, `routes/ports` | v0.1.0 |
+| `page_range_key` | `(value) -> str` | The `?range=` of the Traffic and History pages: the Live window when none is given, otherwise as `range_key` | `routes/history`, `routes/traffic` | v0.3.1 |
+| `range_seconds` | `(key) -> int` | How many seconds back a range reaches, the Live window (40 minutes) included | `system_charts`, `port_charts`, `vlan_charts`, `sflow.vlan_cards` | v0.3.1 |
+| `stitch` | `(older, newer) -> list[Point]` | `older` up to where `newer` begins, then `newer`: the Live window's stored part followed by its in-memory part | `live_history`, `sflow.vlan_cards` | v0.3.1 |
+| `vlan_chart_views` | `(found, common) -> list[ChartView]` | The two Traffic per VLAN charts from each VLAN's points by metric, the busiest in the same colours on both | `vlan_charts`, `live_history.live_vlan_charts` | v0.3.1 |
 | `read_series` | `(conn, switch_id, metric, *, start, end, bucket, item=None, total=False) -> dict` | A switch's rows of a metric averaged (or added up) into buckets, by item | `system_charts`, `port_charts` | v0.1.0 |
 | `record` | `(conn, switch_id, moment, rows) -> None` | Stores one sample's rows for a switch | `Sampler.sample_switch` | v0.1.0 |
 | `start_sampler` | `(settings, transport, alert_transport=lambda: None) -> Event \| None` | Samples on a thread every `NXRAY_HISTORY_INTERVAL` seconds, checking the alerts against each sample and purging hourly; `None` when history is off | `main.lifespan` | v0.1.0 |
@@ -1189,7 +1200,7 @@ from the device's side (it *sends* what comes in on the port).
 | `start_collector` | `(port, collector, db_path, keep_days) -> Event \| None` | Listens on UDP `port` on a thread; None when the port is 0 or cannot be opened (logged) | `main.lifespan` | v0.2.0 |
 | `store_rows` | `(conn, rows) -> None` | Adds rows to `sflow_traffic`; a minute written twice adds up | `run_collector` | v0.2.0 |
 | `top_items` | `(conn, switch_id, kind, *, start, end, limit=20) -> list[TopItem]` | The busiest VLANs or devices over a range, with their average in bits per second | `sflow_charts`, `vlan_cards`, `routes/traffic` | v0.2.0 |
-| `vlan_cards` | `(conn, switch_id, key, now) -> list[VlanCard]` | A card per busiest VLAN over a range, busiest first: latest, highest and average figures and a filled-area chart | `routes/traffic` | v0.2.0 |
+| `vlan_cards` | `(conn, switch_id, key, now, collector=None) -> list[VlanCard]` | A card per busiest VLAN over a range, busiest first: latest, highest and average figures and a filled-area chart; the Live window is drawn from `collector.recent_vlans` with the stored minutes before it | `routes/traffic`, `routes/live.live_traffic` | v0.2.0 |
 | `vlan_label` | `(item) -> str` | `VLAN 10`, or `VLAN not given` | the Traffic page, `vlan_cards` | v0.2.0 |
 
 `SflowCollector` (class, `app.state.sflow_collector`) adds samples up in memory
@@ -1198,6 +1209,11 @@ agent address is one of NXray's switches (`set_agents`), else notes the address
 (`unknown_agents()`); `drain(now, everything=False)` hands out the minutes that
 are over; `status(switch_id)` is what was heard since NXray started. Kinds are
 `VLAN` (`vlan`), `MAC_SENDS` (`mac_out`) and `MAC_RECEIVES` (`mac_in`).
+
+It also keeps each VLAN's bytes per 10-second slot for the last 45 minutes (the
+Traffic page's Live window): `recent_vlans(switch_id, now=None)` returns each
+VLAN's bits per second at 10-second steps, every point the average of the 30
+seconds up to it, as `RecentVlans(since, series)`.
 
 ## `app/sflow_ports.py` — which VLAN an untagged frame belongs to
 
@@ -2133,8 +2149,15 @@ The list lives in `app/oui.tsv.gz` and is read once, on first use.
 `scripts/update_oui.py` downloads it from the IEEE; the image build runs it,
 and keeps the committed copy when the IEEE cannot be reached.
 
+## `app/live_history.py` — the History page's Live window
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `live_system_charts` | `(conn, switch_id, health, ports, now) -> list[ChartView]` | Temperatures, CPU and memory, power, fans and traffic through all ports for the last 40 minutes: the live trails for the newest part, the stored samples before them | `routes/live.history_live_view` | v0.3.1 |
+| `live_vlan_charts` | `(conn, switch_id, ports, now) -> list[ChartView]` | The two Traffic per VLAN charts for the last 40 minutes, each VLAN's access ports added up from the ports trail (measured rates), the stored samples before it | `routes/live.history_live_view` | v0.3.1 |
+
 ## `app/routes/history.py` — the History page
 
 | Function | Signature | Does | Used by | Since |
 | --- | --- | --- | --- | --- |
-| `history_page` | `(request, username, period) -> Response` | `GET /history`: the charts for the chosen range, from the database only | the router | v0.1.0 |
+| `history_page` | `(request, username, period) -> Response` | `GET /history`: the charts for the chosen range, from the database; the Live window (the default) also reads the switch through the live cache | the router | v0.1.0 |

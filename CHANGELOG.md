@@ -9,6 +9,17 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Live graphs on the Traffic and History pages (#106).** Both pages now open on a **Live, 40
+  minutes** window and move by themselves, at the pace of the Refresh box in the top bar (it shows
+  Live there, even for a browser set to Off). The Traffic page's VLAN cards are drawn from the
+  sFlow samples NXray holds in memory, a point every 10 seconds, so a burst shows as it happens and
+  the switch is not asked at all. The History page's charts take the newest part from the live
+  readings (ports measured from the byte counters, temperatures, fans, power, CPU and memory) and
+  the part before it from the stored samples. 1 hour to 30 days stay as they were, one point a
+  minute. Live readings are kept in memory only, and only while a page is open.
+
 ## [0.3.0] - 2026-11-14
 
 ### Added

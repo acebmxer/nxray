@@ -296,7 +296,7 @@ def test_the_range_links_pick_the_range_and_a_bad_one_is_ignored(
 def test_a_range_with_no_rows_says_there_is_no_data(
     logged_in: TestClient, switch: FakeSwitch
 ) -> None:
-    body = logged_in.get("/history").text
+    body = logged_in.get("/history?range=24h").text
     assert "No data in this range yet." in body
     assert '<svg class="chart"' not in body
 

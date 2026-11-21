@@ -1,0 +1,12 @@
+{#- The History page's charts for the Live window: drawn with the page and again, alone, by /live/history. -#}
+{% from "_chart.html" import chart %}
+<div data-live-region="history-live" data-live-at="{{ live_at }}"{% if live_problem %} data-live-problem="1"{% endif %}>
+{% if live_problem %}
+<p class="alert alert-error" role="alert">{{ live_problem }}</p>
+{% endif %}
+<div class="card-grid">
+{% for view in charts %}
+{{ chart(view) }}
+{% endfor %}
+</div>
+</div>

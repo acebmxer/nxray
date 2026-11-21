@@ -21,11 +21,18 @@
 <p class="alert alert-error" role="alert">History is turned off (NXRAY_HISTORY_INTERVAL is 0), so nothing new is being recorded.</p>
 {% endif %}
 {{ range_links("/history", range, ranges) }}
+{% if range == "live" %}
+{% include "_history_live.html" %}
+<p class="note">
+  The last 40 minutes. The newest part is read from the switch while this page is open, every {{ live_floor }} seconds for the ports and about every 10 seconds for temperatures, fans, power, CPU and memory; the part before that is the stored samples, one a minute. NXray keeps it in memory only while someone has a page open. Traffic through all ports and per VLAN is measured from the ports' byte counters between two readings. Times are UTC.
+</p>
+{% else %}
 <div class="card-grid">
 {% for view in charts %}
 {{ chart(view) }}
 {% endfor %}
 </div>
+{% endif %}
 <p class="note">
   {% if interval %}NXray reads the switch every {{ interval }} seconds{% else %}NXray is not reading the switch{% endif %}
   and keeps {{ keep_days }} days.
