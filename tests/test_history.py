@@ -490,3 +490,52 @@ def test_the_sampler_tells_the_sflow_collector_each_ports_vlan(
     collector.listening_port = 6343
     assert sampler.sample_once() is None
     assert collector._port_vlans[1]  # ifIndex -> VLAN for the switch's ports
+
+
+def _counted(in_bytes: int, out_bytes: int):
+    """A sample's figures with Ethernet1/3 up, its byte counters at the given
+    totals and the switch's own 30-second averages at 8 and 2 Mb/s."""
+    environment, resources, ports = _parsed()
+    return (
+        environment,
+        resources,
+        [
+            dataclasses.replace(port, in_bytes=in_bytes, out_bytes=out_bytes)
+            if port.name == "Ethernet1/3"
+            else port
+            for port in ports
+        ],
+    )
+
+
+def _stored_port(settings: Settings, metric: str) -> list[float]:
+    with open_db(settings.db_path) as conn:
+        return [
+            row["value"]
+            for row in conn.execute(
+                "SELECT value FROM history WHERE metric = ? AND item = 'Ethernet1/3' ORDER BY ts",
+                (metric,),
+            )
+        ]
+
+
+def test_a_stored_minute_counts_every_byte_since_the_sample_before(
+    settings: Settings, switch: FakeSwitch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The switch's 30-second average misses a burst that ended more than 30
+    # seconds before the sample; the byte counters do not (issue #109).
+    readings = iter(
+        [
+            _counted(0, 0),
+            _counted(750_000_000, 75_000_000),  # 100 Mb/s in, 10 Mb/s out over 60 s
+            _counted(1_500_000_000, 150_000_000),  # read after a 10-minute pause
+        ]
+    )
+    monkeypatch.setattr(history, "_read", lambda client: next(readings))
+    sampler = history.Sampler(settings, switch.transport)
+    for moment in (1_000.0, 1_060.0, 1_660.0):
+        assert sampler.sample_switch(1, now=moment) is None
+    # First sample: nothing to measure from, so the switch's own figure. After a
+    # pause of more than two intervals, the same.
+    assert _stored_port(settings, history.PORT_IN) == [8_000_000, 100_000_000, 8_000_000]
+    assert _stored_port(settings, history.PORT_OUT) == [2_000_000, 10_000_000, 2_000_000]

@@ -314,7 +314,11 @@ the number of ports that are up (and, a little, with the number of VLANs that ha
 reach the switch or is waiting for it to apply a new role after **Turn on port,
 VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, switch admin, security and config, layer 2 security and traffic measuring changes**; the charts show that as a gap. A port's errors are recorded as the
 increase since the previous sample, so the first sample after NXray starts
-records none.
+records none. A port's traffic is recorded the same way: how far its byte counters
+moved since the previous sample, so every byte in between is counted and a
+short burst is not missed. The first sample after NXray starts, and the first
+after a pause of more than two intervals, record the switch's own figure
+instead, its average over the last 30 seconds only.
 
 ## Alerts
 

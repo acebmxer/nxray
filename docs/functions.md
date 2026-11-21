@@ -1092,7 +1092,7 @@ times, so out of step is worked out without one.
 | `stored_health` | `(conn, switch_id, now) -> (cpu, memory)` | The stored one-a-minute CPU and memory samples of the dashboard chart's 10 minutes, for `health_trail_chart` | `routes/dashboard`, `routes/live.live_dashboard` | v0.4.0 |
 | `health_trail_figures` | `(value) -> HealthFigures` | What the trail keeps of a dashboard reading for the History page's Live window: `health_figures` plus the power, fan speed and each temperature (deliberately not a change to `health_figures`, whose two numbers the Dashboard's chart and its tests use) | `routes/live.read_health` | v0.4.0 |
 | `live_window_context` | `(request, period, url) -> dict` | The template variables of the Live window of the Traffic and History pages: the small answer to ask, and Refresh shown as Live for a browser set to Off; nothing for another range or a page shown after a form | `routes/traffic._render`, `routes/history.history_page` | v0.4.0 |
-| `measure_rates` | `(previous, ports, now) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over 120 s | `routes/live.shared_readings` | v0.2.0 |
+| `measure_rates` | `(previous, ports, now, *, longest=120) -> PortReading` | A reading of every port with In and Out also worked out from how far the byte counters moved since `previous`; a port that was down or whose counters were cleared keeps the switch's figure; no rate after a gap of over `longest` seconds | `routes/live.shared_readings`, `history.Sampler` | v0.2.0 |
 | `port_figures` | `(reading) -> dict[str, PortFigures]` | What the trail keeps of one port reading: each port's state, the switch's averages and the measured rates (None without an earlier reading) | `routes/live.shared_readings` | v0.2.0 |
 | `port_trail_chart` | `(trail, name, *, measured, now, floor) -> ChartView` | One port's In and Out over the last `TRAIL_CHART_SECONDS` (10 minutes) from the trail, measured (Live) or the switch's averages; a down port or an unmeasured reading leaves a gap | `routes/ports._render_port`, `routes/live.live_port` | v0.2.0 |
 | `refreshes_whole_page` | `(method, path) -> bool` | True for a page shown by GET that reads the switch and nothing else changes on (VLANs, Traffic, Routing, Switch ...), which the Refresh box re-reads as a whole; a template global | `base.html`, `dependencies.share_switch_reads` | v0.2.0 |
@@ -1170,7 +1170,10 @@ list shown in the top bar. Held in `app.state.live_cache`.
 `Sampler` (class) samples every switch in turn: `sample_once(now=None)` reads
 each one and returns what failed in words (None when all went well), and
 `sample_switch(switch_id, now=None)` reads one. It keeps each switch's error
-totals and `alerts.AlertMonitor` apart.
+totals, its previous port reading and `alerts.AlertMonitor` apart: each port's
+stored In and Out are what its byte counters moved since the previous sample
+(`measure_rates`), the switch's 30-second average only when there is no
+usable previous sample.
 
 ## `app/traffic.py` — traffic per device and per VLAN, estimated
 

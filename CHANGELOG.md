@@ -23,6 +23,12 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Traffic bursts missing from the stored history (#109).** Each stored minute of a port's In
+  and Out was the switch's average over the 30 seconds before the sample, so the other half of
+  every minute was never counted: a burst of a few seconds at 25 Gb/s could show as a fraction of
+  that, or not at all, on the Dashboard's traffic cards and the History page. Each minute now
+  stores what the port's byte counters moved since the previous sample, so every byte is counted.
+  The first sample after NXray starts still stores the switch's own figure.
 - **Holes in the Dashboard's CPU and memory chart (#108).** The chart was drawn only from the
   readings taken while a Dashboard was open and in view, so each time the tab was in the
   background, or no page was open, left a hole in both lines. It now fills that time from the

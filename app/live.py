@@ -230,14 +230,21 @@ class PortReading:
     at: float
 
 
-def measure_rates(previous: PortReading | None, ports: list[Port], now: float) -> PortReading:
+def measure_rates(
+    previous: PortReading | None,
+    ports: list[Port],
+    now: float,
+    *,
+    longest: float = MAX_RATE_WINDOW_SECONDS,
+) -> PortReading:
     """The reading for ``ports`` taken at ``now``, with rates from the change
-    since ``previous``. A port that was down before, or whose counters went
-    backwards (cleared), keeps the switch's own figure."""
+    since ``previous``, when that was at most ``longest`` seconds before. A
+    port that was down before, or whose counters went backwards (cleared),
+    keeps the switch's own figure."""
     if previous is None:
         return PortReading(ports, ports, 0.0, now)
     window = now - previous.at
-    if not MIN_RATE_WINDOW_SECONDS <= window <= MAX_RATE_WINDOW_SECONDS:
+    if not MIN_RATE_WINDOW_SECONDS <= window <= longest:
         return PortReading(ports, ports, 0.0, now)
     before = {port.name: port for port in previous.ports}
     live = []

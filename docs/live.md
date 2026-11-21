@@ -103,8 +103,9 @@ The 30 seconds are the switch's own setting, per port (`load-interval counter
 1`). With traffic measuring changes on, a port's page has a **Rate average**
 card that sets it to 5, 10 or 15 seconds, 1, 2 or 5 minutes, or back to the
 default; see [Switch setup](switch-setup.md#port-changes). The switch's In and
-Out then follow that average everywhere NXray shows them (pages, history,
-alerts), and a port's page names it. It changes only the figures, never the
+Out then follow that average on the pages and in the alerts (history stores
+what the byte counters moved between its samples, see
+[History](installation.md#history)), and a port's page names it. It changes only the figures, never the
 traffic. **Live** keeps measuring from the byte counters, whatever the
 average.
 

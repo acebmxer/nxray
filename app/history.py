@@ -195,6 +195,24 @@ class Sampler:
         # Per switch id.
         self._errors: dict[int, dict[str, int]] = {}
         self._monitors: dict[int, AlertMonitor] = {}
+        # Each switch's previous reading of its ports (an ``app.live.PortReading``),
+        # to store each port's traffic since then rather than the switch's average.
+        self._port_readings: dict[int, Any] = {}
+
+    def _measured_ports(self, switch_id: int, ports: list[Port], moment: float) -> list[Port]:
+        """``ports`` with In and Out worked out from how far the byte counters
+        moved since the previous sample, so every byte between two samples is
+        counted. The switch's own figure (its average over the last 30 seconds
+        only) is kept for the first sample after NXray starts, after a gap of
+        more than two sample intervals, and for a port that was down or whose
+        counters were cleared."""
+        # Imported here: app.live imports this module.
+        from app.live import MAX_RATE_WINDOW_SECONDS, measure_rates
+
+        longest = max(MAX_RATE_WINDOW_SECONDS, 2 * self._settings.history_interval)
+        reading = measure_rates(self._port_readings.get(switch_id), ports, moment, longest=longest)
+        self._port_readings[switch_id] = reading
+        return reading.live
 
     def _alert(
         self,
@@ -254,7 +272,13 @@ class Sampler:
         if data is None:
             self._alert(connection, moment, failure=status.message)
             return status.message
-        rows, self._errors[switch_id] = build_rows(*data, self._errors.get(switch_id, {}))
+        environment, resources, ports = data
+        rows, self._errors[switch_id] = build_rows(
+            environment,
+            resources,
+            self._measured_ports(switch_id, ports, moment),
+            self._errors.get(switch_id, {}),
+        )
         with open_db(self._settings.db_path) as conn:
             record(conn, switch_id, moment, rows)
         self._alert(connection, moment, reading=data, rows=rows)
