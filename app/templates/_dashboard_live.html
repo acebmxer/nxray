@@ -5,7 +5,6 @@
 <p class="alert alert-error" role="alert">{{ live_problem }}</p>
 {% endif %}
 {% if data %}
-{% set env = data.environment %}
 {% if problems %}
 <div class="alert alert-error" role="alert">
   <strong>Needs attention</strong>
@@ -16,6 +15,10 @@
 {% else %}
 <p class="alert alert-ok">{{ status.message }} Temperatures, fans and power supplies are all OK.</p>
 {% endif %}
+{% endif %}
+{% include "_traffic_cards.html" %}
+{% if data %}
+{% set env = data.environment %}
 
 <div class="grid">
   <section class="card">
@@ -126,5 +129,5 @@
 </section>
 {% if trail_chart %}{{ chart(trail_chart) }}{% endif %}
 {% endif %}
-<p class="note">Choose Live or an interval in the top bar to refresh these figures by themselves, or reload the page.</p>
+<p class="note">These figures refresh by themselves at the pace of the Refresh box in the top bar (Live unless you pick another interval). Pause there to hold them.</p>
 </div>

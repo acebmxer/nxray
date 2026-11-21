@@ -1,0 +1,33 @@
+{#- The Dashboard's traffic cards (app/dashboard_traffic.py), inside its live region. -#}
+<section class="traffic-section" aria-labelledby="traffic-heading">
+<h2 class="vlan-heading" id="traffic-heading">Traffic, last 40 minutes</h2>
+{% if traffic_cards %}
+<div class="vlan-cards">
+  {% for card in traffic_cards %}
+  <section class="card traffic-card">
+    <div class="traffic-figures">
+      <h3 class="traffic-name">{% if card.is_channel %}<a href="/port-channels">{{ card.name }}</a>{% else %}<a href="/ports/detail?name={{ card.name|urlencode }}">{{ card.name }}</a>{% endif %}</h3>
+      {% if card.note %}<p class="note traffic-note">{{ card.note }}</p>{% endif %}
+      <dl class="traffic-now">
+        <dt>In:</dt><dd>{{ card.now_in }}</dd>
+        <dt>Out:</dt><dd>{{ card.now_out }}</dd>
+      </dl>
+      {% if card.up is not none %}
+      <p class="traffic-link"><span class="badge {{ 'badge-ok' if card.up else 'badge-crit' }}">{{ "Link up" if card.up else "Link down" }}</span></p>
+      {% endif %}
+    </div>
+    <div class="traffic-chart">
+      <ul class="legend traffic-legend">
+        <li><span class="swatch s0"></span>In</li>
+        <li><span class="swatch s1"></span>Out</li>
+      </ul>
+      {{ card.svg }}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+<p class="note">The busiest {{ traffic_cards|length }} ports and port-channels. In is drawn above the line and Out below it, measured from the byte counters at each refresh; the part from before NXray had those readings is the stored samples, one a minute. A port-channel adds up its member ports. Times are UTC.</p>
+{% else %}
+<p class="lead">No traffic to draw yet. The cards fill in from the readings of the ports while this page is open, and from the stored samples of the last 40 minutes.</p>
+{% endif %}
+</section>

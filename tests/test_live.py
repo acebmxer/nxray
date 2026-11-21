@@ -149,13 +149,13 @@ def _csrf(client: TestClient) -> str:
 def test_the_picker_remembers_the_interval_and_starts_off(
     logged_in: TestClient, switch: FakeSwitch
 ) -> None:
-    page = logged_in.get("/").text
-    assert 'data-live-picker data-live-url="/live/dashboard"' in page
+    page = logged_in.get("/ports").text
+    assert 'data-live-picker data-live-url="/live/ports?' in page
     assert '<option value="off" selected>' in page
     assert "/static/live.js" in page
     logged_in.post("/preferences", data={"csrf": _csrf(logged_in), "live": "5"})
     assert logged_in.cookies.get(LIVE_COOKIE) == "5"
-    assert '<option value="5" selected>' in logged_in.get("/").text
+    assert '<option value="5" selected>' in logged_in.get("/ports").text
     logged_in.post("/preferences", data={"csrf": _csrf(logged_in), "live": "7"})
     assert logged_in.cookies.get(LIVE_COOKIE) == "5"
 
@@ -178,8 +178,9 @@ def test_the_dashboard_answer_is_the_figures_alone(
 def test_many_asks_cost_the_switch_one_read(logged_in: TestClient, switch: FakeSwitch) -> None:
     for _ in range(6):
         assert logged_in.get("/live/dashboard").status_code == 200
-    assert len(switch.requests) == 1
-    assert all(cmd.startswith("show") for cmd in switch.requests[0])
+    # One read each of the ports, the port-channels and the dashboard figures.
+    assert len(switch.requests) == 3
+    assert all(cmd.startswith("show") for request in switch.requests for cmd in request)
 
 
 def test_a_silent_switch_keeps_the_old_figures_and_says_so(

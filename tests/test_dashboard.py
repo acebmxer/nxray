@@ -61,7 +61,9 @@ def test_everything_comes_from_one_request_with_the_nxray_account(
             "show environment",
             "show system resources",
             "show interface brief",
-        ]
+        ],
+        # For the traffic cards: which ports make up each port-channel.
+        ["show port-channel summary"],
     ]
 
 

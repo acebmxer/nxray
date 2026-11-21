@@ -306,6 +306,8 @@ def test_the_dashboard_still_reads_what_changes_every_time(
 ) -> None:
     reusing.get("/")
     reusing.get("/")
-    assert len(switch.requests) == 2
-    assert all("show system resources" in request for request in switch.requests)
-    assert "show interface brief" not in switch.requests[1]
+    # The traffic cards' port-channel list is asked for once, apart from the figures.
+    figures = [request for request in switch.requests if request != ["show port-channel summary"]]
+    assert len(figures) == 2
+    assert all("show system resources" in request for request in figures)
+    assert "show interface brief" not in figures[1]

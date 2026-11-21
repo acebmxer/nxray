@@ -55,6 +55,7 @@ DEFAULT_CHOICE = "off"
 HEALTH = "health"  # CPU, memory, temperatures, fans, power
 PORTS = "ports"  # state, rates, errors
 CLIENTS = "clients"  # MAC table, ARP, neighbours
+CHANNELS = "channels"  # which ports make up each port-channel (the Dashboard's traffic cards)
 
 # Seconds an unread answer is kept before it is dropped.
 KEEP_UNWATCHED_SECONDS = 300
@@ -165,6 +166,16 @@ class LiveCache:
             if entry is None or now - entry.last_asked > KEEP_UNWATCHED_SECONDS:
                 return ()
             return tuple(item for item in entry.trail if item[0] >= now - TRAIL_SECONDS)
+
+    def latest(self, switch_id: int, kind: str) -> Any:
+        """The newest good value kept for this switch and kind, without reading the
+        switch and without counting as someone watching; None when there is none."""
+        now = self._clock()
+        with self._guard:
+            entry = self._entries.get((switch_id, kind))
+            if entry is None or now - entry.last_asked > KEEP_UNWATCHED_SECONDS:
+                return None
+            return entry.value
 
     def clear(self) -> None:
         """Forget every answer (tests, and a switch whose login changed)."""
@@ -286,6 +297,12 @@ TRAIL_EMPTY = (
     "Nothing to draw yet. NXray keeps the last {minutes} minutes in memory only while a "
     "page with a refresh on is open for this switch: choose Live or an interval in the "
     "top bar, and this chart fills in as the figures come."
+)
+# The Dashboard refreshes by itself, so there is nothing to choose.
+HEALTH_TRAIL_EMPTY = (
+    "Nothing to draw yet. NXray keeps the last {minutes} minutes in memory only while a "
+    "page with a refresh on is open for this switch; this chart fills in at each refresh "
+    "of this page."
 )
 
 
@@ -414,7 +431,7 @@ def health_trail_chart(trail: Sequence[tuple[float, Any]], *, now: float, floor:
             "At each reading of the live refresh. Kept in memory only, not in the history; "
             "the History page has the last 30 days. Times are UTC."
         ),
-        empty=TRAIL_EMPTY.format(minutes=_trail_minutes()),
+        empty=HEALTH_TRAIL_EMPTY.format(minutes=_trail_minutes()),
         anchor="live-trail",
     )
 

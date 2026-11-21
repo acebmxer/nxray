@@ -430,6 +430,13 @@ def load_neighbors(client: NxapiClient) -> NeighborView:
     )
 
 
+def load_port_channels(client: NxapiClient) -> list[PortChannel]:
+    """Only the port-channels and their member ports, from one command: for the
+    Dashboard's traffic cards, which need nothing else of ``load_neighbors``."""
+    (channels,) = client.show("show port-channel summary")
+    return parse_port_channels(channels)
+
+
 def try_load_neighbors(client: NxapiClient) -> NeighborView | None:
     """Like load_neighbors, but None when the switch refuses one of the commands.
 

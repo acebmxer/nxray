@@ -696,6 +696,30 @@ meter { width: 8rem; height: 8px; vertical-align: middle; margin-right: 6px; }
 .vlan-name { margin: 0 0 4px; font-size: 14px; font-weight: 650; color: var(--text); }
 .vlan-figures .note { margin: 4px 0 0; }
 .vlan-now { margin: 0; font-size: 22px; font-weight: 600; color: var(--text); }
+/* The Dashboard's traffic cards: a port's name, In and Out and its link on the
+   left; In above the zero line and Out below it on the right (app/charts.py,
+   in_out_chart). Laid out in the .vlan-cards grid. */
+.traffic-section { margin-top: 14px; }
+.traffic-card { display: flex; align-items: center; gap: 12px; }
+.traffic-figures { flex: 0 0 auto; min-width: 150px; }
+.card .traffic-name { margin: 0; font-size: 18px; font-weight: 650; }
+.traffic-name a { color: var(--text); text-decoration: none; }
+.traffic-name a:hover { text-decoration: underline; }
+.traffic-figures .traffic-note { margin: 2px 0 0; max-width: 180px; overflow-wrap: anywhere; }
+.traffic-now {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  gap: 2px 8px;
+  margin: 10px 0 0;
+  font-size: 16px;
+}
+.traffic-now dt { color: var(--text-2); font-weight: 600; text-align: right; }
+.traffic-now dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+.traffic-link { margin: 10px 0 0; font-size: 11px; }
+.traffic-chart { flex: 1 1 auto; min-width: 0; }
+.traffic-chart .chart { max-width: none; }
+.traffic-legend { justify-content: flex-end; margin: 0 0 2px; }
+.chart-zero { stroke: var(--line); }
 
 .legend {
   list-style: none;

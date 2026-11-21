@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml.example)
-[![Tests](https://img.shields.io/badge/tests-4148%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-4180%20unit-informational)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Ruff](https://img.shields.io/badge/ruff-clean-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 [![Trivy](https://img.shields.io/badge/trivy-scanned-brightgreen)](https://github.com/acebmxer/nxray/actions/workflows/ci.yml)
 
@@ -148,7 +148,8 @@ along the way that no stage below covers is added to the stage it fits best.
    be reached or refuses the login; a "Test connection" button. *(built)*
 3. **Dashboard**: hostname, model, NX-OS version, uptime, temperatures against
    their limits, fans, power supplies and power draw, CPU and memory, port
-   counts. *(built)*
+   counts, and live In and Out cards for the busiest ports and port-channels
+   over the last 40 minutes. *(built)*
 4. **Ports page**: every port's state, speed, VLAN, description, transceiver,
    traffic and error counters. Read-only. *(built)*
 5. **Port changes**: turn a port on or off and edit its description, with a

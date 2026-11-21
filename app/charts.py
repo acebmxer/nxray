@@ -241,6 +241,22 @@ def area_chart(
             f'<text class="chart-text" x="{x_of(moment):.1f}" y="{AREA_HEIGHT - 6}" '
             f'text-anchor="middle">{html.escape(time_label(moment, step))}</text>'
         )
+    parts.extend(_filled_segments(points, bucket, x_of, y_of, base, class_colour))
+    parts.append("</svg>")
+    return Markup("".join(parts))  # noqa: S704 - every label above went through html.escape
+
+
+def _filled_segments(
+    points: Sequence[Point],
+    bucket: float,
+    x_of: Callable[[float], float],
+    y_of: Callable[[float], float],
+    base: float,
+    class_colour: str,
+) -> list[str]:
+    """The SVG of one series filled between its line and ``base`` (a y position),
+    broken where samples are missing; a lone sample is a dot."""
+    parts = []
     for segment in _segments(points, bucket):
         if len(segment) == 1:
             moment, value = segment[0]
@@ -260,5 +276,75 @@ def area_chart(
             for index, (m, v) in enumerate(segment)
         )
         parts.append(f'<path class="chart-line {class_colour}" d="{line}"/>')
+    return parts
+
+
+# The Dashboard's traffic cards: In above the zero line and Out below it, as a
+# network interface is drawn in TrueNAS. Narrower than ``area_chart`` (a card
+# shows it about 360px wide, so its text stays readable) and a little taller,
+# for the two sides.
+IN_OUT_WIDTH = 420
+IN_OUT_HEIGHT = 170
+
+
+def in_out_chart(
+    ins: Sequence[Point],
+    outs: Sequence[Point],
+    *,
+    start: float,
+    end: float,
+    bucket: float,
+    fmt: Callable[[float], str],
+    label: str = "",
+) -> Markup:
+    """The SVG of In as a filled area above the zero line and Out as one below it.
+
+    One scale for both sides, so the larger reaches further; the value axis on
+    the right writes both sides without a minus sign. In takes the first
+    series colour and Out the second, the colours of the legend beside it.
+    Gaps break the areas as in ``area_chart``.
+    """
+    in_high = max((value for _, value in ins), default=0.0)
+    out_high = max((value for _, value in outs), default=0.0)
+    if in_high <= 0 and out_high <= 0:
+        in_high = 1.0
+    ticks = nice_ticks(-out_high, in_high, target=4)
+    top_value, bottom_value = max(ticks[-1], 0.0), min(ticks[0], 0.0)
+    plot_width = IN_OUT_WIDTH - _AREA_LEFT - _AREA_RIGHT
+    plot_height = IN_OUT_HEIGHT - _AREA_TOP - _AREA_BOTTOM
+
+    def x_of(moment: float) -> float:
+        return _AREA_LEFT + (moment - start) / (end - start) * plot_width
+
+    def y_of(value: float) -> float:
+        return _AREA_TOP + (top_value - value) / (top_value - bottom_value) * plot_height
+
+    def y_below(value: float) -> float:
+        return y_of(-value)
+
+    parts = [
+        f'<svg class="chart chart-area-svg" viewBox="0 0 {IN_OUT_WIDTH} {IN_OUT_HEIGHT}" '
+        f'role="img" aria-label="{html.escape(label)}" xmlns="http://www.w3.org/2000/svg">'
+    ]
+    right_edge = _AREA_LEFT + plot_width
+    for tick in ticks:
+        y = y_of(tick)
+        kind = "chart-grid chart-zero" if tick == 0 else "chart-grid"
+        parts.append(
+            f'<line class="{kind}" x1="{_AREA_LEFT}" x2="{right_edge}" y1="{y:.1f}" y2="{y:.1f}"/>'
+        )
+        parts.append(
+            f'<text class="chart-text" x="{right_edge + 6}" y="{y + 4:.1f}" '
+            f'text-anchor="start">{html.escape(fmt(abs(tick)))}</text>'
+        )
+    moments, step = time_ticks(start, end)
+    for moment in moments:
+        parts.append(
+            f'<text class="chart-text" x="{x_of(moment):.1f}" y="{IN_OUT_HEIGHT - 6}" '
+            f'text-anchor="middle">{html.escape(time_label(moment, step))}</text>'
+        )
+    zero = y_of(0.0)
+    parts.extend(_filled_segments(ins, bucket, x_of, y_of, zero, "s0"))
+    parts.extend(_filled_segments(outs, bucket, x_of, y_below, zero, "s1"))
     parts.append("</svg>")
     return Markup("".join(parts))  # noqa: S704 - every label above went through html.escape

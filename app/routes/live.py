@@ -13,11 +13,13 @@ import time
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.dashboard_traffic import TrafficCard, traffic_cards
 from app.db import open_db
 from app.dependencies import live_login_required, may_change, stored_switch, templates
 from app.face import color_mode, draw_face, short_device_name, speed_class
 from app.history import LIVE
 from app.live import (
+    CHANNELS,
     CLIENTS,
     HEALTH,
     PORTS,
@@ -30,10 +32,17 @@ from app.live import (
     port_trail_chart,
 )
 from app.live_history import live_system_charts, live_vlan_charts
-from app.neighbors import NeighborView, filter_macs, try_load_neighbors
+from app.neighbors import (
+    NeighborView,
+    PortChannel,
+    filter_macs,
+    load_port_channels,
+    try_load_neighbors,
+)
 from app.nxapi import SwitchTarget
 from app.port_labels import get_labels
 from app.ports import COUNTER_LABELS, ERROR_KEYS, load_ports
+from app.preferences import ui_preferences
 from app.routes.neighbors import QUERY_MAX
 from app.routes.ports import FILTERS, ports_link, ports_summary
 from app.sflow import vlan_cards
@@ -75,15 +84,71 @@ def read_health(request: Request, switch_id: int, target: SwitchTarget, floor: i
     )
 
 
+# The dashboard reading (temperatures, fans, power, CPU, memory) changes slowly and
+# costs the switch several commands, so a page that refreshes on its own without
+# the browser having asked for it (the History page's Live window, the Dashboard
+# for a browser set to Off) takes it this often at most; the ports (the traffic
+# charts) at the usual floor.
+HISTORY_HEALTH_SECONDS = 10
+# Which ports make up each port-channel hardly ever changes: the Dashboard's
+# traffic cards ask for it this often at most.
+CHANNELS_SECONDS = 60
+
+
+def read_port_channels(request: Request, switch_id: int, target: SwitchTarget) -> list[PortChannel]:
+    """The switch's port-channels and their member ports, through the cache; empty
+    when the switch did not give them (each member port then has its own card)."""
+    transport = request.app.state.nxapi_transport
+
+    def reader(_previous: object) -> tuple[object, str]:
+        status, found = read_switch(target, load_port_channels, transport)
+        return (found, "") if found is not None else (None, status.message)
+
+    answer = request.app.state.live_cache.get(switch_id, CHANNELS, CHANNELS_SECONDS, reader)
+    return list(answer.value or [])
+
+
+def dashboard_traffic(
+    request: Request,
+    switch_id: int,
+    trail: tuple[tuple[float, object], ...],
+    reading: PortReading | None,
+    channels: list[PortChannel],
+    now: float,
+) -> list[TrafficCard]:
+    """The Dashboard's traffic cards from the port reading's ``trail`` and the
+    stored minutes; ``reading`` (the newest, None when there is none) gives each
+    port's description, which NXray's own label for the port replaces."""
+    notes = {port.name: port.description for port in reading.ports} if reading else {}
+    with open_db(request.app.state.settings.db_path) as conn:
+        notes.update(get_labels(conn, switch_id))
+        return traffic_cards(
+            conn,
+            switch_id,
+            trail,
+            channels=channels,
+            notes={name: text for name, text in notes.items() if text},
+            now=now,
+        )
+
+
 @router.get("/live/dashboard", response_class=HTMLResponse)
 def live_dashboard(request: Request, username: str = Depends(live_login_required)) -> Response:
+    """The dashboard's figures and its traffic cards. The Dashboard refreshes by
+    itself even for a browser set to Off, for its traffic cards; the slower
+    dashboard reading is then taken at most every ``HISTORY_HEALTH_SECONDS``."""
     connection, target, error = stored_switch(request)
     if connection is None or target is None:
         # Nothing to read; the page shows why when it is reloaded.
         return Response(status_code=204)
     floor = request.app.state.settings.live_min_interval
-    answer = read_health(request, connection.id, target, floor)
+    ports = read_port_answer(request, connection.id, target, floor)
+    channels = read_port_channels(request, connection.id, target)
+    chosen = ui_preferences(request).live != "off"
+    health_floor = floor if chosen else max(floor, HISTORY_HEALTH_SECONDS)
+    answer = read_health(request, connection.id, target, health_floor)
     status, data = answer.value if answer.value else (None, None)
+    now = time.time()
     return no_cache(
         templates.TemplateResponse(
             request,
@@ -92,9 +157,12 @@ def live_dashboard(request: Request, username: str = Depends(live_login_required
                 "status": status,
                 "data": data,
                 "problems": health_problems(data) if data else [],
-                "live_at": int(answer.read_at),
-                "live_problem": live_problem_message(answer),
-                "trail_chart": health_trail_chart(answer.trail, now=time.time(), floor=floor),
+                "live_at": int(max(answer.read_at, ports.read_at)),
+                "live_problem": live_problem_message(answer) or live_problem_message(ports),
+                "trail_chart": health_trail_chart(answer.trail, now=now, floor=floor),
+                "traffic_cards": dashboard_traffic(
+                    request, connection.id, ports.trail, ports.value, channels, now
+                ),
             },
         )
     )
@@ -322,12 +390,6 @@ def live_neighbors(
             },
         )
     )
-
-
-# The dashboard reading (temperatures, fans, power, CPU, memory) changes slowly and
-# costs the switch several commands, so the History page's Live window takes it
-# this often at most; the ports (the traffic charts) at the usual floor.
-HISTORY_HEALTH_SECONDS = 10
 
 
 def history_live_view(

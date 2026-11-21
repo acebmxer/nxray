@@ -9,6 +9,18 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ## [Unreleased]
 
+### Added
+
+- **Live traffic cards on the Dashboard (#107).** The Dashboard now opens with **Traffic, last 40
+  minutes**: a card for each of the eight busiest ports and port-channels, drawn like TrueNAS's
+  network interface cards, with the name, the newest In and Out, whether the link is up, and a
+  chart with In as a filled area above the line and Out below it. A port-channel's card adds up
+  its member ports. The newest part is measured from the byte counters at each refresh (every 2
+  seconds on Live) and the part before it comes from the stored one-minute samples, so the cards
+  are full as soon as the page opens. The Dashboard refreshes by itself (the Refresh box shows
+  Live there, even for a browser set to Off); the health figures are then read at most every 10
+  seconds, and the list of port-channels once a minute.
+
 ### Fixed
 
 - **Live graphs on the Traffic and History pages (#106).** Both pages now open on a **Live, 40

@@ -1,7 +1,11 @@
 """The landing page after logging in: the switch's health at a glance.
 
-Everything comes from one NX-API request made with NXray's own read-only
-account each time the page opens.
+The figures come from one NX-API request made with NXray's own read-only
+account each time the page opens. The traffic cards are drawn from what the
+live refresh has already kept and the stored minutes; only the list of
+port-channels is asked for, at most once a minute, so a port-channel's card
+is there from the start. The page then refreshes by itself
+(``/live/dashboard``), even for a browser set to Off, so the cards move.
 """
 
 from __future__ import annotations
@@ -13,7 +17,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import login_required, stored_switch, templates
-from app.live import HEALTH, health_trail_chart
+from app.live import HEALTH, PORTS, health_trail_chart
+from app.routes.live import dashboard_traffic, read_port_channels
 from app.switch import Dashboard, health_problems
 from app.switch_connection import set_switch_identity
 from app.switch_setup import ConnectionStatus, load_dashboard_status
@@ -34,10 +39,21 @@ def dashboard(request: Request, username: str = Depends(login_required)) -> Resp
             set_switch_identity(conn, connection, data.system)
 
     cache = request.app.state.live_cache
+    now = time.time()
     trail = cache.trail(connection.id, HEALTH) if connection is not None else ()
     trail_chart = health_trail_chart(
-        trail, now=time.time(), floor=request.app.state.settings.live_min_interval
+        trail, now=now, floor=request.app.state.settings.live_min_interval
     )
+    cards = []
+    if connection is not None and target is not None and data is not None:
+        cards = dashboard_traffic(
+            request,
+            connection.id,
+            cache.trail(connection.id, PORTS),
+            cache.latest(connection.id, PORTS),
+            read_port_channels(request, connection.id, target),
+            now,
+        )
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -49,8 +65,10 @@ def dashboard(request: Request, username: str = Depends(login_required)) -> Resp
             "problems": health_problems(data) if data else [],
             "live_page": HEALTH,
             "live_url": "/live/dashboard",
-            "live_at": int(time.time()),
+            "live_default": "live",
+            "live_at": int(now),
             "live_problem": "",
             "trail_chart": trail_chart,
+            "traffic_cards": cards,
         },
     )

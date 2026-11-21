@@ -4,7 +4,8 @@
 
 Every page has the **Refresh** control in the top bar, and every page that
 shows figures from the switch can refresh them by themselves, so you do not
-reload. It is off until you ask for it.
+reload. It is off until you ask for it, except on the Dashboard and the Live
+window of the Traffic and History pages, which move by themselves (see below).
 
 ## Turning it on
 
@@ -54,6 +55,7 @@ older than a floor:
 | --- | --- | --- |
 | Switch health (CPU, memory, temperatures, fans, power), ports (state, rates, errors) | 2 s | `NXRAY_LIVE_MIN_INTERVAL` |
 | MAC address table, ARP, neighbours | 10 s | `NXRAY_LIVE_CLIENTS_MIN_INTERVAL` |
+| Which ports make up each port-channel (the Dashboard's traffic cards) | 60 s | |
 
 A page that refreshes whole reads the switch through the same kind of shared
 reading: each command is kept per switch and read again only after the floor
@@ -117,6 +119,19 @@ average.
   last few minutes are the live ones.
 
 ## The Live window of Traffic and History
+
+The **Dashboard** opens with **Traffic, last 40 minutes**: a card for each of the
+eight busiest ports and port-channels, drawn like a network interface in
+TrueNAS. Each card has the name, the newest **In** and **Out**, whether the link
+is up, and the last 40 minutes with In as a filled area above the line and Out
+below it, on one scale. A port-channel's card adds up its member ports, which
+then get no card of their own. The newest part is measured from the byte
+counters at each refresh (every 2 seconds on Live); the part before NXray had
+those readings is the stored samples, one a minute, so the cards are full as
+soon as the page opens. The Dashboard refreshes by itself: the Refresh box shows
+**Live** there, even for a browser set to **Off**, and then the health figures
+(CPU, memory, temperatures, fans, power) are read at most every 10 seconds while
+the ports are read every 2. Pick another interval to slow it, or **Pause**.
 
 The Traffic and History pages open on **Live, 40 minutes**, the first of their
 range links, and their charts move by themselves (the Refresh box shows **Live**
