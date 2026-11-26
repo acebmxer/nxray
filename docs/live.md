@@ -172,6 +172,6 @@ second browser sees the same chart at once. On the port chart a gap in a line
 means nobody was watching, the port was down or the switch did not answer. The
 dashboard chart fills the time with no reading (no page open, or its tab in the
 background) from the stored samples, one a minute, so its lines run through the
-whole 10 minutes. Times are UTC, as on the History page.
+whole 10 minutes. Times are in the chosen time zone, as on the History page.
 
 The refresh is read-only; nothing in it changes a switch.

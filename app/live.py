@@ -34,6 +34,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from app.charts import Line, Point
+from app.display_time import zone_name
 from app.history import (
     CPU,
     LIVE,
@@ -371,7 +372,7 @@ def port_trail_chart(
         note=(
             f"In and Out {kind}, at each reading of the live refresh. Kept in memory only, "
             "not in the history: a gap means nobody was watching, the port was down or the "
-            "switch did not answer. Times are UTC."
+            f"switch did not answer. Times are {zone_name()}."
         ),
         empty=TRAIL_EMPTY.format(minutes=_trail_minutes()),
         anchor="live-trail",
@@ -480,7 +481,8 @@ def health_trail_chart(
         y_max=100,
         note=(
             "At each reading of the live refresh; where there was none (no page open), the "
-            "stored one-a-minute samples. The History page has the last 30 days. Times are UTC."
+            "stored one-a-minute samples. The History page has the last 30 days. "
+            f"Times are {zone_name()}."
         ),
         empty=HEALTH_TRAIL_EMPTY.format(minutes=_trail_minutes()),
         anchor="live-trail",

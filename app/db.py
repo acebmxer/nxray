@@ -381,6 +381,16 @@ _MIGRATIONS: list[str] = [
     """
     ALTER TABLE switch_connection ADD COLUMN role_nve INTEGER NOT NULL DEFAULT 0;
     """,
+    # 15 -> 16: how NXray shows things for the whole install (app/display_time.py).
+    # One row (id = 1). time_zone is the zone times are shown in: UTC, or a name such
+    # as America/New_York (issue #110).
+    """
+    CREATE TABLE display_settings (
+        id        INTEGER PRIMARY KEY CHECK (id = 1),
+        time_zone TEXT NOT NULL DEFAULT 'UTC'
+    );
+    INSERT INTO display_settings (id) VALUES (1);
+    """,
 ]
 
 

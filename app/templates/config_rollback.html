@@ -7,7 +7,7 @@
 
 <section class="card">
   {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
-  <p class="lead confirm-summary">The switch makes its running configuration the one it kept as {{ backup.checkpoint }}{% if backup.note %} ({{ backup.note }}){% endif %}, taken {{ backup.created_at|utc }} by {{ backup.created_by }}.</p>
+  <p class="lead confirm-summary">The switch makes its running configuration the one it kept as {{ backup.checkpoint }}{% if backup.note %} ({{ backup.note }}){% endif %}, taken {{ backup.created_at|local_time }} by {{ backup.created_by }}.</p>
   <p class="warning">{{ warning }}</p>
   {% if diff %}
   <p>What changes: {{ counts[0] }} line{{ "" if counts[0] == 1 else "s" }} of the running configuration go (-), {{ counts[1] }} come back (+).</p>

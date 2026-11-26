@@ -14,9 +14,10 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import __version__
-from app.activity import record_activity, utc_time
+from app.activity import record_activity
 from app.alerts import notify_change, switch_label
 from app.db import open_db
+from app.display_time import local_time, zone_name
 from app.features import feature_anchor
 from app.live import LIVE_CHOICES, refreshes_whole_page, shared_show_reads
 from app.nxapi import SwitchTarget, page_reads, shared_reads
@@ -44,7 +45,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["app_version"] = __version__
 templates.env.filters["bytes"] = human_bytes
 templates.env.filters["rate"] = human_rate
-templates.env.filters["utc"] = utc_time
+templates.env.filters["local_time"] = local_time
+templates.env.globals["time_zone_name"] = zone_name
 
 # Sent on every response. The pages use no inline script, no inline style and
 # nothing from another site, so the policy can be strict. frame-ancestors and

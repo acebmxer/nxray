@@ -93,8 +93,8 @@
     {% endif %}
     <dl class="facts">
       <dt>From this switch</dt>
-      <dd>{% if heard %}{{ "{:,}".format(heard.samples) }} samples in {{ "{:,}".format(heard.datagrams) }} datagrams since NXray started; the last at {{ heard.last_at|utc }}{% if heard.sampling_rate %}, one frame in {{ heard.sampling_rate }}{% endif %}{% else %}nothing since NXray started{% endif %}</dd>
-      <dt>Newest stored minute</dt><dd>{% if newest %}{{ newest|utc }}{% else %}none yet{% endif %}</dd>
+      <dd>{% if heard %}{{ "{:,}".format(heard.samples) }} samples in {{ "{:,}".format(heard.datagrams) }} datagrams since NXray started; the last at {{ heard.last_at|local_time }}{% if heard.sampling_rate %}, one frame in {{ heard.sampling_rate }}{% endif %}{% else %}nothing since NXray started{% endif %}</dd>
+      <dt>Newest stored minute</dt><dd>{% if newest %}{{ newest|local_time }}{% else %}none yet{% endif %}</dd>
     </dl>
     {% if unknown_agents %}
     <p class="warning">sFlow also came from {% for address, at in unknown_agents[:5] %}{{ address }}{% if not loop.last %}, {% endif %}{% endfor %}, which {{ "is" if unknown_agents|length == 1 else "are" }} not one of NXray's switches, so it was not counted. If it is this switch, its agent address differs from what NXray knows: set it below.</p>
@@ -180,7 +180,7 @@
 {% if view.anchor == "device" %}{{ chart(view) }}{% endif %}
 {% endfor %}
 
-<p class="note">An estimate from samples: the more frames, the closer. Each minute keeps every VLAN and the 100 busiest devices each way. Times are UTC.</p>
+<p class="note">An estimate from samples: the more frames, the closer. Each minute keeps every VLAN and the 100 busiest devices each way. Times are {{ time_zone_name() }}.</p>
 
 {% if not setup_first %}{{ setup_card() }}{% endif %}
 {% endif %}

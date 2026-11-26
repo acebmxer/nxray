@@ -8,9 +8,10 @@ import sqlite3
 
 from fastapi.testclient import TestClient
 
-from app.activity import KEEP_DAYS, activity_csv, list_activity, record_activity, utc_time
+from app.activity import KEEP_DAYS, activity_csv, list_activity, record_activity
 from app.config import Settings
 from app.db import init_db, open_db
+from app.display_time import local_time
 
 
 def _text(page: str) -> str:
@@ -45,7 +46,7 @@ def test_csv_neutralises_formulas() -> None:
 
     out = activity_csv([Activity(1, 0.0, "=evil", "Ports", "+1", "")])
     assert out.splitlines()[1] == "1970-01-01T00:00:00Z,'=evil,Ports,,'+1"
-    assert utc_time(0.0) == "1970-01-01 00:00:00 UTC"
+    assert local_time(0.0) == "1970-01-01 00:00:00 UTC"
 
 
 def test_page_is_for_admins_only(logged_in: TestClient, settings: Settings) -> None:

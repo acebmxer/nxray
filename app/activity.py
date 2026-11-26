@@ -93,11 +93,6 @@ def activity_choices(conn: sqlite3.Connection) -> tuple[list[str], list[str]]:
     return users, areas
 
 
-def utc_time(at: float) -> str:
-    """A stored time as the pages show it: ``2026-11-01 14:30:05 UTC``."""
-    return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(at))
-
-
 def activity_csv(entries: list[Activity]) -> str:
     """The entries as CSV: time (UTC, ISO 8601), account, area, switch, change."""
     out = io.StringIO()

@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.display_time import set_zone
 from app.main import create_app
 from app.security import hash_password
 
@@ -44,6 +45,14 @@ def inventory_body(description: str, product_id: str) -> dict[str, Any]:
             }
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def _times_in_utc() -> Iterator[None]:
+    """The shown time zone is held in the process; every test starts and ends on UTC."""
+    set_zone("UTC")
+    yield
+    set_zone("UTC")
 
 
 @pytest.fixture

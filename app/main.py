@@ -25,6 +25,7 @@ from app.dependencies import (
     share_switch_reads,
     templates,
 )
+from app.display_time import load_zone
 from app.history import start_sampler
 from app.live import LiveCache
 from app.logging_conf import configure_logging
@@ -136,15 +137,18 @@ async def lifespan(app: FastAPI):
         # An update still marked in progress means this is the container the
         # update just created; see app/update.py.
         finish_pending_update(conn)
+        zone = load_zone(conn)
         sessions = purge_expired_sessions(conn)
         attempts = purge_old_login_attempts(conn, settings.login_lockout_minutes)
     log.info(
-        "NXray %s started (data=%s, schema v%d, purged %d sessions, %d login attempts)",
+        "NXray %s started (data=%s, schema v%d, purged %d sessions, %d login attempts, "
+        "times in %s)",
         __version__,
         settings.data_dir,
         schema,
         sessions,
         attempts,
+        zone,
     )
 
     start_background_checker(settings)

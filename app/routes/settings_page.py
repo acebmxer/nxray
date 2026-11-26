@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-import time
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
 from app.db import open_db
 from app.dependencies import admin_required, note_activity, require_csrf, templates
+from app.display_time import DEFAULT_ZONE, local_time, save_zone, zone_choices, zone_name
 from app.security import csrf_token
 from app.tls import MAX_PEM_BYTES, CertificateError, current_certificate, install_certificate
 from app.update import (
@@ -51,7 +51,7 @@ def _render(
             reap_stalled_update(conn)
             update = current_state(conn)
         if update.latest_checked_at:
-            checked_at = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(update.latest_checked_at))
+            checked_at = local_time(update.latest_checked_at, seconds=False)
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -62,6 +62,8 @@ def _render(
             "update": update,
             "update_checked_at": checked_at,
             "running_beta": is_beta(running_version()),
+            "time_zone": zone_name(),
+            "time_zone_choices": zone_choices(),
             "enable_https": settings.enable_https,
             "https_port": settings.https_port,
             "certificate": current_certificate(settings.tls_dir) if settings.enable_https else None,
@@ -76,6 +78,27 @@ def _render(
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request, username: str = Depends(admin_required)) -> Response:
     return _render(request, username)
+
+
+@router.post("/settings/time-zone", response_class=HTMLResponse)
+def settings_time_zone(
+    request: Request,
+    username: str = Depends(admin_required),
+    csrf: str = Form(""),
+    time_zone: str = Form(DEFAULT_ZONE),
+) -> Response:
+    """Choose the time zone every page, graph and alert message shows times in."""
+    require_csrf(request, csrf)
+    settings = request.app.state.settings
+    if time_zone not in zone_choices():
+        return _render(
+            request, username, error="Choose a time zone from the list.", status_code=400
+        )
+    with open_db(settings.db_path) as conn:
+        save_zone(conn, time_zone)
+    log.info("%s set the time zone to %s", username, time_zone)
+    note_activity(request, username, "Settings", f"Set the time zone to {time_zone}")
+    return _render(request, username, notice=f"Times are now shown in {time_zone}.")
 
 
 @router.post("/settings/certificate", response_class=HTMLResponse)

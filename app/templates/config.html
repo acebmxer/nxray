@@ -61,7 +61,7 @@
       {% set on_switch = configs is not none and configs.checkpoints is not none and bk.checkpoint and bk.checkpoint in configs.checkpoints %}
       <tr>
         <td>{{ bk.id }}</td>
-        <td class="mono">{{ bk.created_at|utc }}</td>
+        <td class="mono">{{ bk.created_at|local_time }}</td>
         <td>{{ bk.created_by }}</td>
         <td>{{ bk.switch }}</td>
         <td class="wrap">{{ bk.note or "—" }}</td>

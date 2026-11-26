@@ -47,6 +47,7 @@ from app import __version__
 from app.config import Settings
 from app.crypto import DecryptionError, decrypt, encrypt
 from app.db import open_db
+from app.display_time import local_time
 from app.ports import Port
 from app.switch import Environment, Resources
 from app.switch_connection import SwitchConnection
@@ -747,7 +748,7 @@ def compose(events: Sequence[AlertEvent], switch: str, now: float) -> tuple[str,
         subject = f"[NXray]{where} " + ", ".join(counts)
     if len(subject) > 200:
         subject = subject[:199] + "…"
-    stamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(now))
+    stamp = local_time(now)
     head = f"NXray{f', switch {switch}' if switch else ''}, {stamp}"
     text = "\n".join([head, "", *(event_line(event, now) for event in events)])
     return subject, text

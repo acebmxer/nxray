@@ -21,6 +21,8 @@ dependencies = [
     "paramiko>=4",
     # QR code on the two-factor setup page (app/totp.py); pure Python.
     "segno>=1.6",
+    # The time zone database (app/display_time.py): the slim image has none of its own.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

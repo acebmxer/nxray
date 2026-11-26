@@ -12,7 +12,7 @@
 <section class="card">
   <h2 class="card-title">The last one collected</h2>
   {% if tech %}
-  <dl class="facts"><dt>Collected</dt><dd class="mono">{{ tech.made|utc }}</dd><dt>Size (gzipped)</dt><dd>{{ tech.size|bytes }}</dd></dl>
+  <dl class="facts"><dt>Collected</dt><dd class="mono">{{ tech.made|local_time }}</dd><dt>Size (gzipped)</dt><dd>{{ tech.size|bytes }}</dd></dl>
   {% if can_change %}
   <div class="row-actions">
     <a class="btn btn-quiet" href="/tech-support/download">Download</a>

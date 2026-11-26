@@ -26,7 +26,7 @@
   </section>
   {% endfor %}
 </div>
-<p class="note">The busiest {{ traffic_cards|length }} ports and port-channels. In is drawn above the line and Out below it, measured from the byte counters at each refresh; the part from before NXray had those readings is the stored samples, one a minute. A port-channel adds up its member ports. Times are UTC.</p>
+<p class="note">The busiest {{ traffic_cards|length }} ports and port-channels. In is drawn above the line and Out below it, measured from the byte counters at each refresh; the part from before NXray had those readings is the stored samples, one a minute. A port-channel adds up its member ports. Times are {{ time_zone_name() }}.</p>
 {% else %}
 <p class="lead">No traffic to draw yet. The cards fill in from the readings of the ports while this page is open, and from the stored samples of the last 40 minutes.</p>
 {% endif %}

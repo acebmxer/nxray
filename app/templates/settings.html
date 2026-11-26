@@ -16,6 +16,23 @@
 {% endif %}
 
 <section class="card">
+  <h2 class="card-title">Time zone</h2>
+  <p>NXray shows every time in <strong>{{ time_zone }}</strong>: the graphs, the activity
+  log, the alert history and the times in alert messages. It does not change the switch's
+  clock (that is on the Switch page). Summer time follows the zone by itself.</p>
+  <form method="post" action="/settings/time-zone" class="stack form-narrow">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label for="time_zone">Show times in</label>
+    <select id="time_zone" name="time_zone">
+      {% for name in time_zone_choices %}
+      <option value="{{ name }}"{% if name == time_zone %} selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">Save time zone</button>
+  </form>
+</section>
+
+<section class="card">
   <h2 class="card-title">HTTPS</h2>
   {% if enable_https %}
   <p><span class="badge badge-ok">on</span> NXray serves its pages over HTTPS on

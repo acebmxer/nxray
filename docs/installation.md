@@ -230,6 +230,15 @@ The certificate and its key are kept in `/data/tls` on the data volume. To
 go back to plain HTTP, set `NXRAY_ENABLE_HTTPS=false` and run `docker compose
 up -d` again.
 
+## Time zone
+
+NXray shows every time in UTC until an admin picks a zone: **Settings**, **Time zone**, choose
+the zone from the list (`America/New_York`, `Europe/Berlin` and so on; summer time follows
+by itself) and **Save time zone**. It applies to everyone, to the graph labels, the activity log,
+the alert history, the times in alert e-mails and messages, and the other times the pages show;
+it does not change the switch's own clock (that is on the Switch page). The activity CSV's
+`time_utc` column and the alert webhooks' times stay UTC.
+
 ## Self-update
 
 Off by default. With it on, an admin presses **Update now** on the Settings
@@ -304,7 +313,7 @@ and memory use, the traffic of every port that is up and each port's new
 errors and discards, each VLAN's traffic estimated from its access ports (see
 [Traffic per VLAN and per device](traffic.md)), and deletes anything older than 30 days. The History page
 draws them for the last 40 minutes (live), 1 hour, 6 hours, 24 hours, 7 days or 30 days, and each
-port's page draws its own traffic and errors. Times are UTC. Opening the pages
+port's page draws its own traffic and errors. Times are in the time zone chosen on the **Settings** page (UTC until an admin picks one). Opening the pages
 for 1 hour or longer never contacts the switch; the live window reads it while the page is
 open, through the same shared readings as the other live pages (see [Live figures](live.md)).
 

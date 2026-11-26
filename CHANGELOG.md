@@ -11,6 +11,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Added
 
+- **A time zone for the times NXray shows (#110).** Every time was in UTC with no way to
+  change it, so graph labels, the activity log and alert times were hours off for anyone not on
+  UTC. **Settings** now has a **Time zone** card: an admin picks a zone from the list and the
+  graph labels, the activity log, the alert history, the times in alert e-mails and messages, the
+  backups, the Traffic page and the update check all show that zone's clock, with its summer
+  time. UTC stays the default. The notes under the graphs name the zone, and the activity CSV
+  (`time_utc`) and the webhook times stay UTC. The switch's own clock is not changed.
 - **Live traffic cards on the Dashboard (#107).** The Dashboard now opens with **Traffic, last 40
   minutes**: a card for each of the eight busiest ports and port-channels, drawn like TrueNAS's
   network interface cards, with the name, the newest In and Out, whether the link is up, and a

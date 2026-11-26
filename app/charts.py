@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import html
 import math
-import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from markupsafe import Markup
+
+from app.display_time import clock, local_seconds, moment_of
 
 WIDTH = 720
 HEIGHT = 240
@@ -68,27 +69,28 @@ _MAX_TIME_LABELS = 7
 
 
 def time_ticks(start: float, end: float) -> tuple[list[float], int]:
-    """Round clock times (UTC) to label an axis, and the gap between them in seconds.
+    """Round clock times (in the zone NXray shows, app/display_time.py) to label an axis,
+    and the gap between them in seconds.
 
     The smallest step that gives at most seven labels, each on a multiple of
     the step, so a day chart reads 04:00, 08:00, 12:00 and a week chart
     labels each midnight.
     """
+    local_start = local_seconds(start)
+    local_end = local_seconds(end)
     for step in _TIME_STEPS:
-        first = math.ceil(start / step)
-        last = math.floor(end / step)
+        first = math.ceil(local_start / step)
+        last = math.floor(local_end / step)
         if last - first + 1 <= _MAX_TIME_LABELS:
             break
-    return [index * step for index in range(first, last + 1)], step
+    return [moment_of(index * step) for index in range(first, last + 1)], step
 
 
 def time_label(moment: float, step: int) -> str:
-    """A clock time, or the date when the labels are a day or more apart or at midnight (UTC)."""
-    if step >= 86400 or moment % 86400 == 0:
-        pattern = "%b %d"
-    else:
-        pattern = "%H:%M"
-    return time.strftime(pattern, time.gmtime(moment))
+    """A clock time, or the date when the labels are a day or more apart or at midnight."""
+    if step >= 86400 or local_seconds(moment) % 86400 == 0:
+        return clock(moment, "%b %d")
+    return clock(moment, "%H:%M")
 
 
 def _segments(points: Sequence[Point], bucket: float) -> list[list[Point]]:

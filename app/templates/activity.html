@@ -27,7 +27,7 @@
     <tbody>
       {% for e in entries %}
       <tr>
-        <td class="mono">{{ e.at|utc }}</td>
+        <td class="mono">{{ e.at|local_time }}</td>
         <td>{{ e.username }}</td>
         <td>{{ e.area }}</td>
         <td class="wrap">{{ e.what }}</td>

@@ -28,6 +28,7 @@ prose columns; those are a reviewer's job.
 | Limit a route to a role | `app/dependencies.py`, `operator_required` / `admin_required` |
 | Create, read or end a session | `app/security.py` |
 | Throttle or count login failures | `app/security.py` |
+| Show a time, or draw a time axis, in the time zone an admin chose (Settings) | `app/display_time.py` (`local_time`, `clock`, `zone_name`); the `local_time` template filter and `time_zone_name()` global; never `time.gmtime` for a time people read |
 | Reuse a switch answer read a few seconds ago, or stop doing so | `app/page_reads.py` (`PageReads`, `lifetime`); the middleware is `dependencies.reuse_page_reads`, the setting `NXRAY_PAGE_READ_SECONDS` |
 | Two-factor sign-in codes, backup codes, the setup QR code | `app/totp.py`; per account in `app/users.py` |
 | Built-in HTTPS: the certificate and nginx's config | `app/tls.py`; started by `docker/entrypoint.sh` |
@@ -445,6 +446,22 @@ expected to take only while the nve feature is on.
 | `remember_preferences` | `(request, response, *, theme="", menu="", live="") -> Response` | Sets the `nxray_theme` / `nxray_menu` / `nxray_live` cookie for whichever value is known; ignores anything else | `routes/preferences.preferences` | v0.1.0 |
 | `ui_preferences` | `(request) -> UiPreferences` | The theme (`system`, `light`, `dark`), menu width (`wide`, `narrow`) and refresh interval (`LIVE_CHOICES`, default `off`) this browser picked; the defaults for anything unknown | `base.html` (template global) | v0.1.0 |
 
+## `app/display_time.py` — the time zone times are shown in
+
+| Function | Signature | Does | Used by | Since |
+| --- | --- | --- | --- | --- |
+| `abbreviation` | `(moment) -> str` | The zone's short name at that moment (`UTC`, `EST`, `CEST`) | `local_time` | v0.4.0 |
+| `clock` | `(moment, pattern) -> str` | A Unix time written with a strftime pattern on the zone's clock | `local_time`, `charts.time_label` | v0.4.0 |
+| `load_zone` | `(conn) -> str` | Takes the stored choice into use at start; a name this machine lacks falls back to UTC | `main.lifespan` | v0.4.0 |
+| `local_seconds` | `(moment) -> float` | A Unix time shifted so reading it as UTC gives the zone's clock | `clock`, `charts.time_ticks`, `charts.time_label` | v0.4.0 |
+| `local_time` | `(at, *, seconds=True) -> str` | A stored time as the pages show it, `2026-11-01 14:30:05 EST`; the `local_time` template filter | `dependencies` (the filter), `alerts.compose`, `settings_page` | v0.4.0 |
+| `moment_of` | `(local) -> float` | The Unix time at which the zone's clock read `local` (the reverse of `local_seconds`) | `charts.time_ticks` | v0.4.0 |
+| `offset_at` | `(moment) -> int` | Seconds the zone is ahead of UTC at that moment, summer time included | `local_seconds`, `moment_of` | v0.4.0 |
+| `save_zone` | `(conn, name) -> None` | Stores the choice and uses it; `ValueError` for an unknown name | `settings_page.settings_time_zone` | v0.4.0 |
+| `set_zone` | `(name) -> None` | Uses a zone from now on; `ValueError` for an unknown name | `save_zone`, `load_zone` | v0.4.0 |
+| `zone_choices` | `() -> list[str]` | The names for the pick list, UTC first | `settings_page` | v0.4.0 |
+| `zone_name` | `() -> str` | The zone in use; the `time_zone_name()` template global, used in the notes under the graphs | `live`, templates, `settings_page` | v0.4.0 |
+
 ## `app/switch_setup.py` — creating NXray's account
 
 | Function | Signature | Does | Used by | Since |
@@ -630,6 +647,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `healthz` | `() -> dict[str, str]` | `GET /healthz`, unauthenticated liveness | router, container healthcheck | v0.1.0 |
 | `settings_certificate` | `(request, username, csrf, cert_file, key_file) -> Response` | `POST /settings/certificate`: checks and installs an uploaded certificate, admin only | router | v0.1.0 |
 | `settings_page` | `(request, username) -> Response` | `GET /settings`, built-in HTTPS, its certificate and self-update, admin only | router | v0.1.0 |
+| `settings_time_zone` | `(request, username, csrf, time_zone) -> Response` | `POST /settings/time-zone`: stores the time zone every page, graph and alert message shows times in | router | v0.4.0 |
 | `settings_update_beta` | `(request, username, csrf, include_beta) -> Response` | `POST /settings/update/beta`: stores **Include beta versions** and checks again; refused while an update runs | router | v0.2.0 |
 | `settings_update_apply` | `(request, username, csrf) -> Response` | `POST /settings/update/apply`: refuses unless an update is waiting and none is running, then starts it | router | v0.1.0 |
 | `settings_update_check` | `(request, username, csrf) -> Response` | `POST /settings/update/check`: compares ghcr.io with this container now | router | v0.1.0 |
@@ -1247,8 +1265,8 @@ seconds up to it, as `RecentVlans(since, series)`.
 | `in_out_chart` | `(ins, outs, *, start, end, bucket, fmt, label="") -> Markup` | In as a filled area above the zero line and Out below it on one scale, the value axis on the right without minus signs, breaking at gaps (TrueNAS's network interface graphs) | `dashboard_traffic.traffic_cards` | v0.4.0 |
 | `line_chart` | `(lines, *, start, end, bucket, fmt, zero_based=True, y_max=None, label="") -> Markup` | Draws lines over a time range as inline SVG, breaking a line where samples are missing | `history._chart` | v0.1.0 |
 | `nice_ticks` | `(low, high, target=5) -> list[float]` | Round axis values covering a range | `line_chart` | v0.1.0 |
-| `time_label` | `(moment, step) -> str` | An axis label: the clock time, or the date for a midnight or labels a day apart (UTC) | `line_chart` | v0.1.0 |
-| `time_ticks` | `(start, end) -> (list[float], int)` | Round UTC times to label an axis (at most seven) and the step between them | `line_chart` | v0.1.0 |
+| `time_label` | `(moment, step) -> str` | An axis label in the shown time zone: the clock time, or the date for a midnight or labels a day apart | `line_chart` | v0.1.0 |
+| `time_ticks` | `(start, end) -> (list[float], int)` | Round times on the shown zone's clock to label an axis (at most seven) and the step between them | `line_chart` | v0.1.0 |
 
 ## `app/face.py` — the front-panel picture
 
@@ -2065,7 +2083,6 @@ and deleted from the page).
 | `record_activity` | `(conn, username, area, what, switch="", now=None) -> None` | Records one change and deletes lines older than `KEEP_DAYS` | `dependencies.note_activity` | v0.1.0 |
 | `list_activity` | `(conn, *, username="", area="", search="", limit=500) -> list[Activity]` | The changes newest first, filtered by account, area and text (taken literally) | `routes/activity` | v0.1.0 |
 | `activity_choices` | `(conn) -> tuple[list[str], list[str]]` | The accounts and areas in the log, for the filters | `routes/activity` | v0.1.0 |
-| `utc_time` | `(at) -> str` | A stored time as `2026-11-01 14:30:05 UTC`; the `utc` template filter | `dependencies` (the filter) | v0.1.0 |
 | `activity_csv` | `(entries) -> str` | The entries as CSV, with cells that start like a formula made inert | `routes/activity` | v0.1.0 |
 
 ## `app/alerts.py` — alerts by e-mail and webhook
