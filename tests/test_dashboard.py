@@ -92,6 +92,27 @@ def test_dashboard_shows_the_recorded_switch(logged_in: TestClient, switch: Fake
     assert "Needs attention" not in text
 
 
+def test_back_to_front_fans_explain_intake_and_exhaust(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    text = _text(logged_in.get("/").text)
+    assert "Intake and Exhaust are the switch's own names for where two sensors sit" in text
+    assert "blow back-to-front" in text
+    assert "Exhaust can read a degree or two below Intake" in text
+
+
+def test_the_intake_note_is_left_out_for_front_to_back_fans(
+    logged_in: TestClient, switch: FakeSwitch
+) -> None:
+    body = _environment()
+    for row in body["fandetails"]["TABLE_faninfo"]["ROW_faninfo"]:
+        row["fandir"] = "front-to-back"
+    switch.bodies["show environment"] = body
+    text = _text(logged_in.get("/").text)
+    assert "Fan1(sys_fan1) NXA-FAN-30CFM-F front-to-back OK" in text
+    assert "Intake and Exhaust are the switch's own names" not in text
+
+
 def test_hot_sensors_are_flagged(logged_in: TestClient, switch: FakeSwitch) -> None:
     switch.bodies["show environment"] = _environment(
         Exhaust={"curtemp": "55"},  # minor 50

@@ -106,6 +106,9 @@
       {% endfor %}
     </tbody>
   </table>
+  {% if env.fans|selectattr("direction", "equalto", "back-to-front")|list %}
+  <p class="note">Intake and Exhaust are the switch's own names for where two sensors sit in the chassis. This switch's fans blow back-to-front (see Fans below): air goes in at the power supplies and out at the ports, so Exhaust can read a degree or two below Intake. That is not a fault.</p>
+  {% endif %}
 </section>
 
 <section class="card">

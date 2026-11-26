@@ -28,6 +28,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   Live there, even for a browser set to Off); the health figures are then read at most every 10
   seconds, and the list of port-channels once a minute.
 
+### Changed
+
+- **The Dashboard explains Intake and Exhaust (#111).** With the fans blowing back-to-front, the
+  Exhaust sensor can read a degree or two below Intake, which looked like a fault. When the
+  switch reports its fans as back-to-front, a note under **Temperatures** now says that Intake
+  and Exhaust are the switch's names for where the sensors sit, that air goes in at the power
+  supplies and out at the ports, and that a colder Exhaust is not a fault.
+
 ### Fixed
 
 - **Traffic bursts missing from the stored history (#109).** Each stored minute of a port's In
