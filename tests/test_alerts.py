@@ -297,6 +297,8 @@ def test_validate_email_checks_every_field() -> None:
         {"recipients": "not-an-address"},
         {"security": "none"},  # a password over plain text
         {"username": ""},  # a password without a username
+        {"password": "secret\n"},  # a line break at the end is refused like one in the middle
+        {"password": "sec\nret"},
     ):
         with pytest.raises(AlertSettingsError):
             _email(**bad)
@@ -313,6 +315,8 @@ def test_validate_webhook_and_the_url_shown() -> None:
         ("x", "https://example.com/a b", "json", ""),
         ("x", HOOK_URL, "teams", ""),
         ("x", HOOK_URL, "slack", "secret"),  # only JSON is signed
+        ("x", HOOK_URL, "json", "secret\n"),  # a line break at the end of the secret
+        ("x", HOOK_URL, "json", "sec\nret"),
     ):
         with pytest.raises(AlertSettingsError):
             alerts.validate_webhook(*bad)

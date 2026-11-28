@@ -34,12 +34,16 @@ from app.sflow import (
     MAC_RECEIVES,
     MAC_SENDS,
     MAX_DEVICES_PER_MINUTE,
+    MAX_FRAME_LENGTH,
+    MAX_SAMPLING_RATE,
+    MAX_STORED_BYTES,
     OTHER,
     UNKNOWN_VLAN,
     VLAN,
     SflowCollector,
     SflowError,
     SflowRow,
+    _flush,
     agent_addresses,
     decode_datagram,
     item_series,
@@ -215,6 +219,23 @@ def test_a_sample_with_too_many_records_is_refused() -> None:
     body = _u32(7, 5, 4096, 1000, 0, 5, 6, 10_000)
     with pytest.raises(SflowError):
         decode_datagram(_datagram([_u32(1, len(body)) + body]))
+
+
+def _sized(rate: int, length: int) -> bytes:
+    return _datagram([_flow_sample([_raw_header(_frame(), length), _switch_record(10)], rate=rate)])
+
+
+def test_a_sample_larger_than_a_switch_can_send_is_refused() -> None:
+    # One such sample would stand for nearly 1.8e19 bytes, more than the database holds.
+    for rate, length in (
+        (4_294_967_295, 4_294_967_295),
+        (MAX_SAMPLING_RATE + 1, 1500),
+        (4096, 65_536),
+    ):
+        with pytest.raises(SflowError):
+            decode_datagram(_sized(rate, length))
+    largest = decode_datagram(_sized(MAX_SAMPLING_RATE, MAX_FRAME_LENGTH)).samples[0]
+    assert largest.estimated_bytes == MAX_SAMPLING_RATE * MAX_FRAME_LENGTH
 
 
 def test_another_makers_samples_are_skipped() -> None:
@@ -422,6 +443,33 @@ def test_the_listener_counts_stores_and_stops(tmp_path) -> None:
     assert not thread.is_alive()
     with open_db(path) as conn:
         assert top_items(conn, 1, VLAN, start=0, end=time.time() + 60)[0].item == "10"
+
+
+def test_a_figure_too_big_for_the_database_is_stored_capped(db: sqlite3.Connection) -> None:
+    store_rows(db, [SflowRow(1, 60, VLAN, "10", 2**64, 1)])
+    store_rows(db, [SflowRow(1, 60, VLAN, "10", 2**64, 1)])
+    stored = db.execute("SELECT bytes, samples FROM sflow_traffic").fetchone()
+    assert stored[0] == 2 * MAX_STORED_BYTES and stored[1] == 2
+
+
+def test_a_failed_write_is_logged_and_the_next_minute_is_still_stored(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    path = tmp_path / "nxray.db"
+    init_db(path)
+    collector = SflowCollector()
+    collector.set_agents({AGENT: 1})
+    collector.receive(_one(), now=60.0, sender=AGENT)
+    monkeypatch.setattr(
+        "app.sflow.store_rows", lambda *_: (_ for _ in ()).throw(OverflowError("x"))
+    )
+    _flush(collector, path, 200.0, 7, purge=False)  # does not raise, so the listener lives on
+    assert "could not store" in caplog.text
+    monkeypatch.undo()
+    collector.receive(_one(), now=260.0, sender=AGENT)
+    _flush(collector, path, 400.0, 7, purge=False)
+    with open_db(path) as conn:
+        assert top_items(conn, 1, VLAN, start=0, end=1000)[0].item == "10"
 
 
 def test_the_listener_is_off_without_a_port(tmp_path) -> None:

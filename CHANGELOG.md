@@ -38,6 +38,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **One oversized sFlow datagram stopped the sFlow collector for good (#113).** A datagram with an
+  absurd sampling rate and frame length stood for more bytes than the database can hold, so
+  writing the minute failed and ended the collector's thread: nothing more was stored until NXray
+  restarted, while Traffic still said it was listening. A sample claiming a frame over 65,535
+  bytes or a sampling rate over 1 in 1,000,000,000 is now refused as damaged, a stored figure
+  is capped, and a failed write is logged and skipped so the next minute is still stored.
+- **Alerts accepted an e-mail password or webhook secret ending in a line break (#114).** The check
+  that refuses control characters let one through at the very end, so the value stored and used
+  differed from the one meant. It is now refused like one in the middle.
 - **Copying an NX-OS image failed with built-in HTTPS on (#112).** The nginx in front of NXray
   refused any upload over 2 MB with "413 Request Entity Too Large" before NXray saw it, so the
   Files page's **Copy a file to the switch** worked only for small files. Files up to 8 GB are

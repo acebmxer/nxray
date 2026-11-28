@@ -77,6 +77,16 @@ MAX_ITEMS_IN_MEMORY = 5000
 # is refused as damaged.
 MAX_DATAGRAM = 65535
 MAX_RECORDS = 64
+# A sample claiming more than a switch can send is refused as damaged: a frame
+# is at most 65,535 bytes (jumbo frames are 9,216), and NX-OS takes a sampling
+# rate of 1 in 1,000,000,000 at most. Without these, one made-up sample stands
+# for nearly 2e19 bytes, more than the database can hold.
+MAX_FRAME_LENGTH = 65535
+MAX_SAMPLING_RATE = 1_000_000_000
+# What one stored figure may reach (SQLite's integers stop at 9.2e18). Only a
+# flood of refused-size-but-valid samples can get near it; the figure is capped
+# rather than the write failing.
+MAX_STORED_BYTES = 2**61
 # How often the listener writes the minutes that are over, and looks up
 # NXray's switches again.
 FLUSH_SECONDS = 10
@@ -242,6 +252,10 @@ def _flow_sample(reader: _Reader, expanded: bool) -> FlowSample:
             values.setdefault("dst_mac", _mac(record.opaque(6)))
         elif record_format == _EXTENDED_SWITCH:
             switch_vlan = record.u32()
+    if rate > MAX_SAMPLING_RATE:
+        raise SflowError(f"a flow sample says a sampling rate of 1 in {rate}")
+    if frame_length > MAX_FRAME_LENGTH:
+        raise SflowError(f"a flow sample says a frame of {frame_length} bytes")
     header_vlan = int(values.pop("vlan", 0) or 0)  # type: ignore[call-overload]
     vlan = switch_vlan or header_vlan
     return FlowSample(
@@ -554,7 +568,10 @@ def store_rows(conn: sqlite3.Connection, rows: Sequence[SflowRow]) -> None:
         ON CONFLICT (switch_id, minute, kind, item)
         DO UPDATE SET bytes = bytes + excluded.bytes, samples = samples + excluded.samples
         """,
-        [(r.switch_id, r.minute, r.kind, r.item, r.bytes, r.samples) for r in rows],
+        [
+            (r.switch_id, r.minute, r.kind, r.item, min(r.bytes, MAX_STORED_BYTES), r.samples)
+            for r in rows
+        ],
     )
     conn.commit()
 
@@ -868,8 +885,11 @@ def _flush(
                 store_rows(conn, rows)
             if purge:
                 purge_sflow(conn, now, keep_days)
-    except sqlite3.Error as exc:
-        log.warning("sFlow: could not store %d rows: %s", len(rows), exc)
+    except Exception as exc:
+        # Not only sqlite3.Error: an error that escaped here ended the thread
+        # while the collector still said it was listening. These minutes are
+        # lost; the next ones are stored.
+        log.warning("sFlow: could not store %d rows: %s", len(rows), exc, exc_info=True)
 
 
 def start_collector(

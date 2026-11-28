@@ -96,7 +96,9 @@ _HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
 _ADDRESS = re.compile(
     r"^[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
 )
-_PRINTABLE = re.compile(r"^[^\x00-\x1f\x7f]*$")
+# Used with fullmatch: with match, the "$" also accepts a line break at the very
+# end, so a password or secret ending in one was let through.
+_PRINTABLE = re.compile(r"[^\x00-\x1f\x7f]*")
 
 
 class AlertSettingsError(ValueError):
@@ -335,9 +337,9 @@ def validate_email(
     if security not in SECURITY_CHOICES:
         raise AlertSettingsError("Choose the connection's security from the list.")
     username = username.strip()
-    if len(username) > 254 or not _PRINTABLE.match(username):
+    if len(username) > 254 or not _PRINTABLE.fullmatch(username):
         raise AlertSettingsError("The username is too long or holds characters it cannot.")
-    if len(password) > 256 or not _PRINTABLE.match(password):
+    if len(password) > 256 or not _PRINTABLE.fullmatch(password):
         raise AlertSettingsError("The password is too long or holds characters it cannot.")
     has_password = bool(password) or keep_password
     if has_password and not username:
@@ -432,7 +434,7 @@ def validate_webhook(name: str, url: str, fmt: str, secret: str) -> tuple[str, s
         raise AlertSettingsError("The URL must start with https:// (or http://) and name a host.")
     if fmt not in FORMATS:
         raise AlertSettingsError("Choose the webhook's format from the list.")
-    if len(secret) > 256 or not _PRINTABLE.match(secret):
+    if len(secret) > 256 or not _PRINTABLE.fullmatch(secret):
         raise AlertSettingsError("The signing secret is too long or holds characters it cannot.")
     if secret and fmt != "json":
         raise AlertSettingsError("Only NXray's own JSON format is signed; leave the secret empty.")
