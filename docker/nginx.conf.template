@@ -30,7 +30,8 @@ http {
   access_log off;
   server_tokens off;
 
-  # Forms and a certificate upload are small.
+  # Forms and a certificate upload are small. The one place a big body is
+  # expected, the Files page's copy of an NX-OS image, has its own limit below.
   client_max_body_size 2m;
 
   # Plain HTTP only ever redirects, so a bookmark or a typed http:// address
@@ -54,15 +55,27 @@ http {
     ssl_session_cache shared:nxray_tls:1m;
     ssl_session_timeout 1h;
 
+    # Shared by both locations below (a location that sets none of its own
+    # takes these).
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto https;
+    # Replaced, never appended to: the app counts failed sign-ins per
+    # address, and an address a browser made up must not be believed.
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_read_timeout 120s;
+
+    # Copy a file to the switch (Files page): an NX-OS image is up to a few GB.
+    # The request is handed to the app as it arrives; buffering it in nginx's
+    # temp folder as well would need the image's size free there a second time.
+    location = /files/upload {
+      client_max_body_size 8g;
+      proxy_request_buffering off;
+      proxy_pass http://127.0.0.1:8081;
+    }
+
     location / {
       proxy_pass http://127.0.0.1:8081;
-      proxy_http_version 1.1;
-      proxy_set_header Host $http_host;
-      proxy_set_header X-Forwarded-Proto https;
-      # Replaced, never appended to: the app counts failed sign-ins per
-      # address, and an address a browser made up must not be believed.
-      proxy_set_header X-Forwarded-For $remote_addr;
-      proxy_read_timeout 120s;
     }
   }
 }

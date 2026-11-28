@@ -38,6 +38,15 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **Copying an NX-OS image failed with built-in HTTPS on (#112).** The nginx in front of NXray
+  refused any upload over 2 MB with "413 Request Entity Too Large" before NXray saw it, so the
+  Files page's **Copy a file to the switch** worked only for small files. Files up to 8 GB are
+  now let through on that one page, handed on as they arrive instead of being stored by nginx
+  first; every other form keeps the 2 MB limit. With built-in HTTPS off nothing changes.
+- **Settings said an uploaded certificate was "in use" when it was only saved (#115).** If NXray
+  could not tell nginx to load the new certificate, the page still said "Certificate saved and in
+  use" and visitors kept getting the old one. The page now says the certificate is saved but not
+  yet in use, and to restart the container.
 - **Traffic bursts missing from the stored history (#109).** Each stored minute of a port's In
   and Out was the switch's average over the 30 seconds before the sample, so the other half of
   every minute was never counted: a burst of a few seconds at 25 Gb/s could show as a fraction of

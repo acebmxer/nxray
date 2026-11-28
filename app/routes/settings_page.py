@@ -122,13 +122,23 @@ async def settings_certificate(
     cert_pem = await cert_file.read(MAX_PEM_BYTES + 1) if cert_file else b""
     key_pem = await key_file.read(MAX_PEM_BYTES + 1) if key_file else b""
     try:
-        info = install_certificate(settings.tls_dir, cert_pem, key_pem)
+        info, loaded = install_certificate(settings.tls_dir, cert_pem, key_pem)
     except CertificateError as exc:
         return _render(request, username, error=str(exc), status_code=400)
     log.info("%s uploaded a new HTTPS certificate (%s)", username, info.subject)
     note_activity(
         request, username, "Settings", f"Uploaded a new HTTPS certificate ({info.subject})"
     )
+    if not loaded:
+        return _render(
+            request,
+            username,
+            error=(
+                f"Certificate saved ({info.subject}, valid until {info.not_after}), but NXray "
+                "could not tell nginx to load it, so visitors still get the old one. Restart "
+                "the container to start using it."
+            ),
+        )
     return _render(
         request,
         username,

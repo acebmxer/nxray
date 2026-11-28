@@ -980,7 +980,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | --- | --- | --- | --- | --- |
 | `current_certificate` | `(tls_dir) -> CertificateInfo \| None` | The certificate nginx serves, read from disk | `routes/settings_page` | v0.1.0 |
 | `ensure_certificate` | `(tls_dir) -> bool` | Makes a self-signed certificate and key (EC P-256, ten years) unless both exist | `tls.main` | v0.1.0 |
-| `install_certificate` | `(tls_dir, cert_pem, key_pem) -> CertificateInfo` | Checks, stores and loads an uploaded pair; raises `CertificateError` | `routes/settings_page.settings_certificate` | v0.1.0 |
+| `install_certificate` | `(tls_dir, cert_pem, key_pem) -> tuple[CertificateInfo, bool]` | Checks, stores and loads an uploaded pair; the bool is whether nginx was told to load it; raises `CertificateError` | `routes/settings_page.settings_certificate` | v0.1.0 |
 | `main` | `() -> int` | Entrypoint helper: prints `http`, or prepares the certificate and nginx's config and prints `https` | `docker/entrypoint.sh` (`python -m app.tls`) | v0.1.0 |
 | `reload_nginx` | `(pid_file=NGINX_PID_FILE) -> bool` | Sends nginx SIGHUP so it loads the new certificate | `install_certificate` | v0.1.0 |
 | `validate_certificate_pair` | `(cert_pem, key_pem) -> CertificateInfo` | Raises `CertificateError` unless the certificate (chain allowed) and unencrypted key match and are in date | `install_certificate` | v0.1.0 |

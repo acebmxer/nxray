@@ -220,7 +220,11 @@ your own certificate authority, for example) on the **Settings** page, as an
 admin: the certificate file (with its chain, the server's own certificate
 first) and its private key, both PEM, the key without a passphrase. The
 certificate must carry the name or address you type in the browser. NXray
-uses it at once; no restart.
+uses it at once; no restart. If the page says NXray could not tell nginx to
+load it, the pair is saved but not yet in use: restart the container.
+
+With built-in HTTPS on, the **Files** page copies a file of up to 8 GB to the
+switch (an NX-OS image is about 1 to 2 GB); every other form is limited to 2 MB.
 
 If you publish HTTPS on another port (say `"9443:8443"`), also set
 `NXRAY_HTTPS_PORT=9443` in `nxray.env`, so plain-HTTP visits are sent to the

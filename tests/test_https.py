@@ -147,12 +147,23 @@ def test_installing_replaces_both_files_and_tells_nginx(
     monkeypatch.setattr(tls, "reload_nginx", lambda: told.append(True) or True)
     key = _key()
     cert_pem, key_pem = _pem(_cert(key)), _key_pem(key)
-    tls.install_certificate(tmp_path, cert_pem, key_pem)
+    _, loaded = tls.install_certificate(tmp_path, cert_pem, key_pem)
+    assert loaded is True
     assert (tmp_path / "cert.pem").read_bytes() == cert_pem
     assert (tmp_path / "key.pem").read_bytes() == key_pem
     assert stat.S_IMODE((tmp_path / "key.pem").stat().st_mode) == 0o600
     assert told == [True]
     assert sorted(p.name for p in tmp_path.iterdir()) == ["cert.pem", "key.pem"]
+
+
+def test_installing_says_when_nginx_could_not_be_told(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tls, "reload_nginx", lambda: False)
+    key = _key()
+    _, loaded = tls.install_certificate(tmp_path, _pem(_cert(key)), _key_pem(key))
+    assert loaded is False
+    assert (tmp_path / "cert.pem").is_file(), "the pair is still saved"
 
 
 def test_a_refused_upload_leaves_the_old_certificate(
@@ -179,6 +190,20 @@ def test_reload_sends_sighup_to_the_pid_in_the_file(tmp_path: Path) -> None:
 
 
 # ---- nginx's config and the entrypoint helper -----------------------------------------
+
+
+def test_only_the_file_copy_may_be_big(tmp_path: Path) -> None:
+    target = tmp_path / "nginx.conf"
+    tls.write_nginx_config(8443, Path("/data/tls"), TEMPLATE, target)
+    text = re.sub(r"#.*", "", target.read_text())
+    # Everything else keeps the small default; the Files page's copy of an
+    # NX-OS image (hundreds of MB to a few GB) is let through, unbuffered.
+    assert len(re.findall(r"client_max_body_size 2m;", text)) == 1
+    block = re.search(r"location = /files/upload \{(.*?)\n    \}", text, re.S)
+    assert block, "the upload has its own location"
+    assert re.search(r"client_max_body_size \d+g;", block.group(1))
+    assert "proxy_request_buffering off;" in block.group(1)
+    assert "proxy_pass http://127.0.0.1:8081;" in block.group(1)
 
 
 def test_the_nginx_config_gets_the_port_and_the_tls_folder(tmp_path: Path) -> None:
@@ -272,6 +297,19 @@ def _upload(client: TestClient, cert_pem: bytes, key_pem: bytes, csrf: str | Non
             "key_file": ("key.pem", key_pem, "application/x-pem-file"),
         },
     )
+
+
+def test_uploading_says_so_when_nginx_could_not_be_told(
+    https_admin: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tls, "reload_nginx", lambda: False)
+    key = _key()
+    response = _upload(https_admin, _pem(_cert(key)), _key_pem(key))
+    assert response.status_code == 200
+    assert "in use" not in response.text.replace("is not in use", "")
+    assert "Certificate saved (CN=nxray.lab" in response.text
+    assert "Restart the container" in response.text
+    assert (settings.data_dir / "tls" / "cert.pem").is_file()
 
 
 def test_settings_says_how_to_turn_https_on_when_off(logged_in: TestClient) -> None:

@@ -10,7 +10,8 @@ Off unless ``NXRAY_ENABLE_HTTPS=true``. Then the container's entrypoint
 
 An admin can replace the certificate on the Settings page
 (app/routes/settings_page.py); ``install_certificate`` checks it, writes it,
-and tells nginx to load it, with no restart.
+and tells nginx to load it, with no restart. It says whether nginx was told,
+so the page never claims a certificate is in use when it is only saved.
 
 The certificate is made here with ``cryptography`` (already a dependency)
 rather than the openssl command, so the image needs no extra package for it.
@@ -202,12 +203,18 @@ def _write_pair(tls_dir: Path, cert_pem: bytes, key_pem: bytes) -> None:
     os.replace(cert_tmp, tls_dir / CERT_NAME)
 
 
-def install_certificate(tls_dir: Path, cert_pem: bytes, key_pem: bytes) -> CertificateInfo:
-    """Check an uploaded pair, store it, and have nginx load it. Raises CertificateError."""
+def install_certificate(
+    tls_dir: Path, cert_pem: bytes, key_pem: bytes
+) -> tuple[CertificateInfo, bool]:
+    """Check an uploaded pair, store it, and have nginx load it. Raises CertificateError.
+
+    Returns the certificate's details and whether nginx was told to load it.
+    False means the pair is saved but nginx still serves the old one until it
+    restarts.
+    """
     info = validate_certificate_pair(cert_pem, key_pem)
     _write_pair(tls_dir, cert_pem, key_pem)
-    reload_nginx()
-    return info
+    return info, reload_nginx()
 
 
 def reload_nginx(pid_file: Path = NGINX_PID_FILE) -> bool:
