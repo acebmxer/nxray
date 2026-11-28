@@ -38,6 +38,14 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **An NTP server added by name showed "Done" though the switch dropped it (#118).** The switch
+  answers the command and then discards a name it cannot resolve in that VRF, so NXray reported
+  success for a server that was never kept. After adding an NTP server NXray now reads the
+  configuration back and, when the server is not there, shows that the switch did not keep it,
+  what a name needs and to use the IPv4 address, instead of "Done"; nothing is then marked as
+  unsaved. A server that is listed but has not answered (stratum 16, reach 0) now gets a note
+  under the page's title: normal in the first minute; if it stays so, a name may have made the
+  switch pick an IPv6 address, which never answers in a VRF with no IPv6 route.
 - **There was no way to add a DNS server inside a VRF (#119).** The DNS card only added servers
   with `use-vrf`, which answer lookups from the default VRF; on a switch whose only default route
   is in the management VRF, a lookup made inside that VRF (an NTP server by name) found no
@@ -46,6 +54,10 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
   kind answers which lookups. The limited role needs **Update** on the Switch page once (role
   version 22, which uses the last of the 256 rule numbers a role takes); the broad role needs
   nothing.
+- **The NTP servers card said only "type its address" (#120).** It now says the Server box takes
+  an IP address or a name, shows an example of each, and says a name needs a DNS server the
+  switch can reach in the same VRF, and that a name with an IPv6 address can make the switch
+  pick one that never syncs.
 - **"Set the time now" was refused with no way forward (#117).** The switch refuses `clock set`
   while its clock follows NTP or PTP, which is its default even with no NTP server set, and
   NXray only repeated the switch's message. The Switch admin page now says in plain words, above

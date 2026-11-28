@@ -182,6 +182,9 @@ class ProtocolSite:
     build: Callable[[str, str, str, dict[str, str], dict[str, str]], ProtocolChange]
     send: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], str | None]
     after: Callable[[Request, ProtocolChange], None] | None = None
+    verify: Callable[[NxapiClient, ProtocolChange, dict[str, str], dict[str, str]], str] | None = (
+        None
+    )
     links: tuple[tuple[str, str], ...] = ()  # (url, label) of related pages, under the title
     needs: Callable[[SwitchConnection, str, str], str] | None = None
     # A long table keeps a fixed height and scrolls inside its card.
@@ -425,11 +428,15 @@ def site_change(
     try:
         with NxapiClient(sender, transport=request.app.state.nxapi_transport) as client:
             output = site.send(client, change, ident, values)
+            not_kept = site.verify(client, change, ident, values) if site.verify is not None else ""
     except NxapiError as exc:
         refused = change_refused(exc, target)
         refused = scrub_secrets(refused, *_secrets(proto, change.scope, change.setting, values))
         log.warning("%s change refused: %s", proto.name, refused)
         return refuse(refused)
+    if not_kept:
+        log.warning("%s on %s not kept: %s", change.describe, connection.host, not_kept)
+        return render_site_page(request, username, proto, site, error=not_kept, output=output)
     if change.config:
         with open_db(request.app.state.settings.db_path) as conn:
             set_unsaved_changes(conn, selected_switch_id(request), True)

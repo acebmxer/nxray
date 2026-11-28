@@ -311,6 +311,59 @@ def test_ntp_server_added_and_deleted(logged_in: TestClient, enabled: FakeSwitch
     assert enabled.admin_lines == []
 
 
+def test_an_ntp_name_the_switch_drops_is_not_reported_as_done(
+    logged_in: TestClient, enabled: FakeSwitch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The switch answers "ok" and then drops a name it cannot resolve in that VRF (#118)."""
+    monkeypatch.setattr("app.routes.switch_admin._KEEP_PAUSE_SECONDS", 0)
+    named = {"scope": "ntp", "setting": "server", "action": "set",
+             "id_address": "time.google.com", "v_vrf": "management"}  # fmt: skip
+    refused = _change(logged_in, **named)
+    assert refused.status_code == 400
+    text = _text(refused.text)
+    assert "did not keep NTP server time.google.com" in text and "Done" not in text
+    assert "DNS servers set inside a VRF" in text and "IPv4 address" in text
+    assert "ntp server time.google.com" not in enabled.admin_lines
+    # Not a change, so nothing is waiting to be saved.
+    assert "Not saved yet" not in text
+
+
+def test_an_ntp_name_is_kept_once_a_dns_server_is_set_inside_the_vrf(
+    logged_in: TestClient, enabled: FakeSwitch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.routes.switch_admin._KEEP_PAUSE_SECONDS", 0)
+    added = _change(logged_in, scope="dns_context", setting="server", action="set",
+                    id_address="192.0.2.53", id_context="management")  # fmt: skip
+    assert added.status_code == 200, _text(added.text)
+    assert enabled.context_name_servers == [("192.0.2.53", "management")]
+    done = _change(logged_in, scope="ntp", setting="server", action="set",
+                   id_address="time.google.com", v_vrf="management")  # fmt: skip
+    assert done.status_code == 200, _text(done.text)
+    assert "Done" in _text(done.text)
+    assert "ntp server time.google.com use-vrf management" in enabled.admin_lines
+
+
+def test_an_ntp_address_is_kept_without_a_wait(
+    logged_in: TestClient, enabled: FakeSwitch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_sleeping(seconds: float) -> None:
+        raise AssertionError("an address is read back at once")
+
+    monkeypatch.setattr("app.routes.switch_admin.time.sleep", no_sleeping)
+    done = _change(logged_in, scope="ntp", setting="server", action="set",
+                   id_address="192.0.2.123", v_vrf="management")  # fmt: skip
+    assert done.status_code == 200, _text(done.text)
+
+
+def test_the_ntp_card_says_a_name_is_taken_and_what_it_needs(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    text = _text(logged_in.get("/switch-admin").text)
+    assert "type its IP address or its name" in text
+    assert "ntp.example.net" in logged_in.get("/switch-admin").text
+    assert "type its address." not in text
+
+
 def test_a_dns_server_inside_a_vrf_is_added_from_the_page(
     logged_in: TestClient, enabled: FakeSwitch
 ) -> None:

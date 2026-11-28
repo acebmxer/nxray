@@ -9,6 +9,8 @@ setting, action, ``id_<name>``, ``v_<name>``) and a confirm page first.
 
 from __future__ import annotations
 
+import ipaddress
+import time
 from collections.abc import Mapping
 
 from fastapi import APIRouter, Depends, Request
@@ -27,6 +29,7 @@ from app.switch_admin import (
     build_admin_change,
     load_switch_admin_page,
     load_switch_log,
+    ntp_server_kept,
     parse_log,
 )
 from app.switch_choice import selected_switch_id
@@ -93,6 +96,42 @@ def _send(
         raise
 
 
+# How long to wait before reading an NTP server back: the switch drops one it cannot resolve
+# a moment after it took the line.
+_KEEP_PAUSE_SECONDS = 1.0
+
+NTP_NOT_KEPT = (
+    "The switch took the line but did not keep NTP server {address}, so nothing changed. "
+    "A name only works when the switch has a DNS server it can reach in the {vrf} VRF: for "
+    "the management VRF, add one under DNS servers set inside a VRF first. Or use the "
+    "server's IPv4 address."
+)
+
+
+def _is_address(text: str) -> bool:
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _verify(
+    client: NxapiClient, change: ProtocolChange, ident: dict[str, str], values: dict[str, str]
+) -> str:
+    """Read an NTP server back after it was added: the switch says nothing when it drops one
+    (#118). "" when it is there, or when NXray's role may not read the configuration."""
+    if change.scope != "ntp" or change.action != "set":
+        return ""
+    address = ident.get("address", "").strip()
+    vrf = values.get("vrf", "").strip() or DEFAULT_VRF
+    if not _is_address(address):
+        time.sleep(_KEEP_PAUSE_SECONDS)
+    if ntp_server_kept(client, address, vrf) is False:
+        return NTP_NOT_KEPT.format(address=address, vrf=vrf)
+    return ""
+
+
 def _after(request: Request, change: ProtocolChange) -> None:
     """A new hostname is stored too, so the Switch page names the switch right."""
     if change.setting == "hostname" and change.action == "set":
@@ -115,6 +154,7 @@ SITE = ProtocolSite(
     build=build_admin_change,
     send=_send,
     after=_after,
+    verify=_verify,
     needs=admin_needs,
     links=(("/switch-admin/log", "Switch log: the switch's own messages"),),
 )

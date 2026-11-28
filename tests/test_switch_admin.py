@@ -321,6 +321,15 @@ def test_the_role_has_the_rule_for_a_name_server_inside_a_vrf() -> None:
     assert CONTEXT_DNS_RULES[0] in role_lines(["Ethernet1/1"], "nxray")
 
 
+def test_a_peer_that_has_not_answered_is_noted() -> None:
+    view = parse_switch_admin(
+        [{"hostname": "x"}, {}], load_fixture("show_ntp_peer-status_doc"), "hostname x\n"
+    )
+    assert any("192.0.2.124 has not answered" in note and "IPv6" in note for note in view.notes)
+    answered = parse_switch_admin([{"hostname": "x"}, {}], {}, "hostname x\n")
+    assert not any("has not answered" in note for note in answered.notes)
+
+
 def test_clock_source_is_a_configuration_line_with_a_checked_source() -> None:
     change = build_admin_change("system", "clock_source", "set", {}, {"source": "none"})
     assert change.lines == ("clock protocol none vdc 1",) and change.config

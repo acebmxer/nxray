@@ -355,7 +355,16 @@ SYSTEM = Scope(
 NTP_SERVER = Scope(
     "ntp",
     "NTP servers",
-    (Field("address", "Server", "host", placeholder="192.0.2.123"),),
+    (
+        Field(
+            "address",
+            "Server",
+            "host",
+            placeholder="192.0.2.123 or ntp.example.net",
+            hint="An IP address, or a name when the switch has a DNS server it can reach in "
+            "the VRF below",
+        ),
+    ),
     (),
     (
         Setting(
@@ -371,8 +380,11 @@ NTP_SERVER = Scope(
         ),
     ),
     delete=("no ntp server {address}",),
-    help="The servers the switch sets its clock from. To add one, open the form "
-    "below and type its address.",
+    help="The servers the switch sets its clock from. To add one, open the form below and "
+    "type its IP address or its name. A name needs a DNS server the switch can reach in the "
+    "same VRF: for the management VRF, add one under DNS servers set inside a VRF. A name "
+    "that has an IPv6 address can make the switch pick that address, which never syncs when "
+    "the VRF has no IPv6 route; use the IPv4 address then.",
 )
 
 NAME_SERVER = Scope(
@@ -670,6 +682,22 @@ def parse_ntp_status(body: dict[str, Any]) -> list[NtpPeer]:
     return found
 
 
+def ntp_server_kept(client: NxapiClient, address: str, vrf: str) -> bool | None:
+    """Whether the switch's configuration now holds ``ntp server <address>`` in ``vrf``
+    ("" or default: the default VRF). The switch answers the command and then drops an NTP
+    server it cannot use (a name it cannot resolve in that VRF), so the answer proves
+    nothing (#118). None when NXray's role may not read the configuration."""
+    try:
+        config = parse_admin_config(client.show_text(CONFIG_COMMAND))
+    except NxapiCommandError:
+        return None
+    wanted = "" if vrf == DEFAULT_VRF else vrf
+    return any(
+        server["address"].lower() == address.lower() and server["vrf"] == wanted
+        for server in config.ntp_servers
+    )
+
+
 def clock_text(body: dict[str, Any]) -> tuple[str, str]:
     """``show clock``: (the time as the switch writes it, where it gets it from)."""
     time = text(body.get("simple_time")) or text(body.get("time"))
@@ -883,6 +911,15 @@ def parse_switch_admin(
             'now" while that stays so. To set the time by hand, first choose the Clock source '
             "none under Clock (NTP and PTP then stop setting the clock); to keep it right "
             "automatically, leave it and add an NTP server."
+        )
+    silent = [p.address for p in peers if p.stratum == "16" and p.reach in ("", "0")]
+    if silent:
+        notes.append(
+            f"NTP server {', '.join(silent)} has not answered (stratum 16, reach 0). That is "
+            "normal for the first minute after adding one. If it stays so, check that the "
+            "switch can reach it in that VRF. A server added by name can make the switch pick "
+            "an IPv6 address, which never answers when the VRF has no IPv6 route: add its "
+            "IPv4 address instead."
         )
     if ntp_body is None:
         notes.append("The switch did not report its NTP servers' state.")

@@ -919,8 +919,13 @@ each after a confirm page that shows the lines:
   NTP", even with no NTP server set): choose the clock source `none` first, and
   NTP and PTP then no longer set the clock. The limited role gets this line from
   role version 21 (Update on the Switch page); the broad role already allows it.
-- **NTP servers**: add one (an address or a name, preferred or not, in the
-  default VRF, management or another) and delete one.
+- **NTP servers**: add one (an IP address or a name, preferred or not, in the
+  default VRF, management or another) and delete one. NXray reads a server back
+  after adding it: the switch answers "ok" and then drops a name it cannot
+  resolve, and NXray then says so instead of "Done". A name needs a DNS server
+  the switch can reach in that VRF, set inside the VRF (see DNS); a name that
+  has an IPv6 address can make the switch pick it, which never syncs when the
+  VRF has no IPv6 route, so use the IPv4 address then.
 - **DNS**: the domain name, lookups on or off, and the name servers: those
   added with `use-vrf` (they answer lookups made from the default VRF) and
   those set inside a VRF's own configuration (`vrf context <vrf>` then `ip

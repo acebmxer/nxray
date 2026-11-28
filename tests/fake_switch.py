@@ -3673,6 +3673,9 @@ class FakeSwitch:
             return None
         if not (is_admin or self._role_matches(user, f"conf t ; {cmd}", None)):
             return denied, context
+        if not undo and key.startswith("ntp server ") and not self._ntp_name_resolves(bare):
+            # As on cisco-25gb: the line is accepted, then the switch drops the server.
+            return _ok(ident, None), context
         if (
             undo
             and not any(line == key or line.startswith(key + " ") for line in self.admin_lines)
@@ -3689,6 +3692,22 @@ class FakeSwitch:
         elif not undo:
             self.admin_lines.append(cmd)
         return _ok(ident, None), context
+
+    def _ntp_name_resolves(self, line: str) -> bool:
+        """Whether the switch keeps ``ntp server <server> [use-vrf <vrf>]``: an address
+        always; a name only when a DNS server is set inside that VRF's own configuration
+        (the default VRF: a plain ``ip name-server``), as checked on cisco-25gb (#118)."""
+        words = line.split()
+        try:
+            ipaddress.ip_address(words[2])
+        except ValueError:
+            pass
+        else:
+            return True
+        vrf = words[words.index("use-vrf") + 1] if "use-vrf" in words else "default"
+        if vrf == "default":
+            return any(re.fullmatch(r"ip name-server \S+", ln) for ln in self.admin_lines)
+        return any(v == vrf for _, v in self.context_name_servers)
 
     def _protocol(
         self, user: str, is_admin: bool, cmd: str, ident: int, context: tuple[str, str] | None
