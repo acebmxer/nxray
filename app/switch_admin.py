@@ -55,6 +55,8 @@ LEVEL_HINT = (
     "0 emergencies, 1 alerts, 2 critical, 3 errors, 4 warnings, 5 notifications, "
     "6 informational, 7 debugging: messages of this level and more urgent ones"
 )
+# What may set the switch's clock (``clock protocol``); "none" is what lets ``clock set`` work.
+CLOCK_SOURCES = ("none", "ntp", "ptp")
 DAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 MONTHS = (
     "January",
@@ -211,10 +213,26 @@ SYSTEM = Scope(
             ),
             removable=False,
             help="In the switch's own time zone. Changes no configuration, so there is "
-            "nothing to save",
+            "nothing to save. The switch refuses it while its clock follows NTP or PTP (the "
+            "Time line says which): choose the clock source none below first",
             warning="With NTP servers set, NTP moves the clock back to their time.",
             group="Clock",
             config=False,
+        ),
+        Setting(
+            "clock_source",
+            "Clock source",
+            "clock protocol {source} vdc 1",
+            (Field("source", "Source", "choice", choices=CLOCK_SOURCES),),
+            removable=False,
+            help="What sets the switch's clock: ntp (the default) or ptp keep it right "
+            'on their own, but then the switch refuses "Set the time now"; none lets the '
+            "time be set by hand and nothing keeps it right afterwards",
+            warning="With none, NTP and PTP stop setting the switch's clock: it keeps the time "
+            "it has and drifts until someone sets it again. With ntp or ptp, a time set by "
+            "hand is replaced by theirs. The switch's own configuration is changed, so save "
+            "it to keep this after a restart.",
+            group="Clock",
         ),
         Setting(
             "domain",
@@ -463,6 +481,7 @@ class AdminConfig:
     banner: str | None = None  # None: the switch's own
     timezone: tuple[str, str, str] | None = None  # zone, hours, minutes
     summer_time: list[str] | None = None  # the ten words after clock summer-time
+    clock_source: str = ""  # none, ntp or ptp; "" when the line is not there (ntp)
     domain: tuple[str, str] | None = None  # name, VRF ("" for default)
     lookup: bool = True
     name_servers: list[tuple[str, str]] = field(default_factory=list)  # address, VRF
@@ -541,6 +560,8 @@ def parse_admin_config(config: str) -> AdminConfig:
             found.banner, index = _banner(lines, index)
         elif line.startswith("clock timezone ") and len(words) >= 5:
             found.timezone = (words[2], words[3], words[4])
+        elif line.startswith("clock protocol ") and len(words) >= 3:
+            found.clock_source = words[2]
         elif line.startswith("clock summer-time ") and len(words) >= 12:
             found.summer_time = words[2:12]
         elif line.startswith("ip domain-name ") and len(words) >= 3:
@@ -642,6 +663,12 @@ def clock_text(body: dict[str, Any]) -> tuple[str, str]:
     return time or "unknown", text(body.get("time_source"))
 
 
+def clock_follows_a_source(source: str) -> bool:
+    """True when ``show clock`` says the time comes from NTP or PTP, the two sources
+    that make the switch refuse ``clock set``."""
+    return any(word in source.lower() for word in ("ntp", "ptp"))
+
+
 def _level_words(level: str | None, default: str) -> str:
     if level is None:
         return f"level {default} (default)"
@@ -660,6 +687,8 @@ def _system_values(config: AdminConfig) -> dict[str, dict[str, str]]:
     if config.summer_time:
         names = [f.name for f in _summer_fields()]
         values["summer_time"] = dict(zip(names, config.summer_time, strict=False))
+    if config.clock_source in CLOCK_SOURCES:
+        values["clock_source"] = {"source": config.clock_source}
     if config.domain:
         values["domain"] = {"domain": config.domain[0], "vrf": config.domain[1]}
     if config.lookup:
@@ -703,6 +732,7 @@ def parse_switch_admin(
         facts += [
             ("Time zone", _zone_words(config.timezone)),
             ("Summer time", " ".join(config.summer_time) if config.summer_time else "none"),
+            ("Clock source", config.clock_source or "ntp (default)"),
             (
                 "Domain name",
                 (config.domain[0] + (f" (VRF {config.domain[1]})" if config.domain[1] else ""))
@@ -831,6 +861,13 @@ def parse_switch_admin(
             "NXray's role on the switch does not let it read the switch's configuration yet, "
             "so only the name, the time and the NTP servers in use are shown: an NXray admin "
             "turns on switch admin changes on the Switch page."
+        )
+    if clock_follows_a_source(source):
+        notes.append(
+            f"The switch's clock comes from {source}, so the switch refuses \"Set the time "
+            'now" while that stays so. To set the time by hand, first choose the Clock source '
+            "none under Clock (NTP and PTP then stop setting the clock); to keep it right "
+            "automatically, leave it and add an NTP server."
         )
     if ntp_body is None:
         notes.append("The switch did not report its NTP servers' state.")

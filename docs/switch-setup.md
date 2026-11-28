@@ -912,8 +912,13 @@ each after a confirm page that shows the lines:
   one-line login banner (`banner motd #...#`, so the text may not contain
   `#`), or put back the switch's own banner.
 - **Clock**: the time zone (`clock timezone`), summer time (`clock
-  summer-time`) and setting the time now (`clock set`, which changes no
-  configuration; NTP moves it back when servers are set).
+  summer-time`), setting the time now (`clock set`, which changes no
+  configuration; NTP moves it back when servers are set) and the clock source
+  (`clock protocol none|ntp|ptp vdc 1`). The switch refuses `clock set` while its
+  clock follows NTP or PTP, which is its default (`show clock` says "Time source is
+  NTP", even with no NTP server set): choose the clock source `none` first, and
+  NTP and PTP then no longer set the clock. The limited role gets this line from
+  role version 21 (Update on the Switch page); the broad role already allows it.
 - **NTP servers**: add one (an address or a name, preferred or not, in the
   default VRF, management or another) and delete one.
 - **DNS**: the domain name, lookups on or off, and the name servers.

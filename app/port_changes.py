@@ -64,7 +64,8 @@ rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static ro
 10 the routing protocol rules, 11 the spanning tree rules, 12 the switch
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
 15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart
-rules, 19 the vPC rules, 20 the VXLAN rules and the NVE interface in the port list.
+rules, 19 the vPC rules, 20 the VXLAN rules and the NVE interface in the port list, 21 the
+clock source rule.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -693,6 +694,12 @@ VXLAN_RULES = (
     "rule 253 permit command conf t ; vrf context * ; address-family * ; route-target *",
     "rule 254 permit command conf t ; vrf context * ; address-family * ; no route-target *",
 )
+# Clock source rule, added in ROLE_VERSION 21: ``clock protocol`` (none, ntp or ptp), which the
+# Switch admin page's Clock source setting sends. The switch refuses ``clock set`` while the
+# clock follows NTP or PTP, and ``clock protocol none vdc 1`` is what lets the time be set by
+# hand. The line is the one NX-OS itself names in that refusal; the rule was not tried on a switch.
+ROLE_VERSION_CLOCK_SOURCE = 21
+CLOCK_SOURCE_RULES = ("rule 255 permit command conf t ; clock protocol *",)
 # The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
 NVE_PERMIT = "permit interface nve1"
 # Every loopback, in the broad role's port list only (BROAD_LOOPBACK_VERSION). Checked on
@@ -707,7 +714,7 @@ LOOPBACK_PERMIT = "permit interface loopback0-1023"
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 20
+ROLE_VERSION = 21
 
 LIMITED_RULES = (
     *ROLE_RULES,
@@ -730,6 +737,7 @@ LIMITED_RULES = (
     *RELOAD_RULES,
     *VPC_RULES,
     *VXLAN_RULES,
+    *CLOCK_SOURCE_RULES,
 )
 
 # What each role mode says in the page's words.
@@ -778,6 +786,7 @@ _ADDED_BY_VERSION = {
     18: "switch restart",
     19: "vPC",
     20: "VXLAN",
+    21: "clock source",
 }
 
 

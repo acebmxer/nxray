@@ -124,7 +124,7 @@ def test_changes_off_before_role_version_12(
     assert "Switch admin changes are off" in _text(page)
     assert (
         "Turn on switch admin, security and config, layer 2 security, traffic measuring, reset "
-        "to defaults, sFlow status, switch restart, vPC and VXLAN "
+        "to defaults, sFlow status, switch restart, vPC, VXLAN and clock source "
         "changes" in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, scope="system", setting="hostname", action="set",
@@ -151,7 +151,7 @@ def test_role_version_11_turns_on_switch_admin_without_a_wait(
     text = _text(response.text)
     assert (
         "Switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status, switch restart, vPC and VXLAN changes are "
+        "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes are "
         "on: nxray may now also "
         "change the "
         "switch's hostname" in text
@@ -230,6 +230,70 @@ def test_clock_set_is_not_configuration(logged_in: TestClient, enabled: FakeSwit
     done = _text(_change(logged_in, **fields).text)
     assert "Done:" in done and "Not saved yet" not in done
     assert enabled.clock_sets == ["09:05:00 31 October 2026"]
+
+
+_CLOCK_SET = {
+    "scope": "system",
+    "setting": "clock_set",
+    "action": "set",
+    "v_time": "9:05:00",
+    "v_day": "31",
+    "v_month": "October",
+    "v_year": "2026",
+}
+
+
+def test_the_page_says_why_the_time_cannot_be_set_while_the_clock_follows_ntp(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    text = _text(logged_in.get("/switch-admin").text)
+    assert "clock comes from NTP, so the switch refuses" in text
+    assert "Clock source" in text and "ntp (default)" in text
+
+
+def test_a_refused_clock_set_is_explained_in_plain_words(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.clock_set_needs_none = True
+    refused = _change(logged_in, **_CLOCK_SET)
+    text = _text(refused.text)
+    assert refused.status_code == 400 and enabled.clock_sets == []
+    assert "not allowed while the switch's clock follows NTP or PTP" in text
+    assert "Choose the Clock source none under Clock first" in text
+
+
+def test_choosing_the_clock_source_none_lets_the_time_be_set(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    enabled.clock_set_needs_none = True
+    source = {"scope": "system", "setting": "clock_source", "action": "set", "v_source": "none"}
+    asked = _text(_change(logged_in, confirm=False, **source).text)
+    assert "clock protocol none vdc 1" in asked
+    assert "NTP and PTP stop setting the switch's clock" in asked
+    enabled.requests.clear()
+    done = _text(_change(logged_in, **source).text)
+    assert "Done:" in done and "Not saved yet" in done  # a configuration line, so Save config
+    assert _config_requests(enabled) == [["clock protocol none vdc 1"]]
+    assert "Clock source none" in done
+    assert "Done:" in _text(_change(logged_in, **_CLOCK_SET).text)
+    assert enabled.clock_sets == ["09:05:00 31 October 2026"]
+
+
+def test_an_old_limited_role_is_told_to_update_for_the_clock_source(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    _db(settings, "UPDATE switch_connection SET role_version = 20")
+    source = {"scope": "system", "setting": "clock_source", "action": "set", "v_source": "none"}
+    refused = _change(logged_in, **source)
+    assert refused.status_code == 400
+    assert "written before it could choose the clock source" in _text(refused.text)
+    assert _config_requests(enabled) == []
+    # The other Switch admin changes still work on that role.
+    assert _change(logged_in, scope="system", setting="hostname", action="set",
+                   v_name="core-1").status_code == 200  # fmt: skip
+    # The broad role allows every configuration line, so it needs no newer version.
+    _db(settings, "UPDATE switch_connection SET role_mode = 'broad'")
+    assert _change(logged_in, **source).status_code == 200
 
 
 def test_ntp_server_added_and_deleted(logged_in: TestClient, enabled: FakeSwitch) -> None:

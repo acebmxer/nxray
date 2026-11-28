@@ -398,10 +398,10 @@ def test_role_has_the_layer2_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in LAYER2_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 20
+    assert ROLE_VERSION == 21
     assert missing_changes(13) == (
         "layer 2 security, traffic measuring, reset to defaults, "
-        "sFlow status, switch restart, vPC and VXLAN changes"
+        "sFlow status, switch restart, vPC, VXLAN and clock source changes"
     )
     description = next(line for line in lines if line.startswith("description "))
     assert len(description.removeprefix("description ")) <= 128

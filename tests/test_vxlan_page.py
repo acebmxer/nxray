@@ -139,7 +139,7 @@ def test_changes_off_before_role_version_20(
     assert refused.status_code == 400
     assert "VXLAN changes are off" in _text(refused.text)
     assert _config_requests(enabled) == []
-    assert "Turn on VXLAN changes" in _text(logged_in.get("/switch").text)
+    assert "Turn on VXLAN and clock source changes" in _text(logged_in.get("/switch").text)
 
 
 def test_the_role_names_the_nve_interface(

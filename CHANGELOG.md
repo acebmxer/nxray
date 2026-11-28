@@ -38,6 +38,13 @@ NXray is a web interface for Cisco Nexus switches, built on NX-API.
 
 ### Fixed
 
+- **"Set the time now" was refused with no way forward (#117).** The switch refuses `clock set`
+  while its clock follows NTP or PTP, which is its default even with no NTP server set, and
+  NXray only repeated the switch's message. The Switch admin page now says in plain words, above
+  the forms, when the clock comes from NTP or PTP and the time cannot be set by hand; a refusal
+  is explained the same way; and **Clock** has a new **Clock source** setting (none, ntp or ptp,
+  with a warning that none stops NTP and PTP setting the clock) to make it possible. The limited
+  role needs **Update** on the Switch page once (role version 21); the broad role needs nothing.
 - **One oversized sFlow datagram stopped the sFlow collector for good (#113).** A datagram with an
   absurd sampling rate and frame length stood for more bytes than the database can hold, so
   writing the minute failed and ended the collector's thread: nothing more was stored until NXray

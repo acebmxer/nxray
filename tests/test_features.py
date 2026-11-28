@@ -140,7 +140,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 20
+    assert ROLE_VERSION == 21
 
 
 @pytest.mark.parametrize(
@@ -151,89 +151,97 @@ def test_role_has_the_feature_rules() -> None:
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC and VXLAN changes",
+            "status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
             "route, routing protocol, spanning tree, switch admin, security and config, "
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart, vPC and VXLAN changes",
+            " restart, vPC, VXLAN and clock source changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
             "protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            ", vPC and VXLAN changes",
+            ", vPC, VXLAN and clock source changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol,"
             " spanning tree, switch admin, security and config, layer 2 security, traffic"
-            " measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
+            " measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
+            "clock source changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
             "tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
+            "clock source changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
             "admin, security and config, layer 2 security, traffic measuring, reset to "
-            "defaults, sFlow status, switch restart, vPC and VXLAN changes",
+            "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security "
             "and config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC and VXLAN changes",
+            "status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             8,
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC and VXLAN changes",
+            "status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             9,
             "routing protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            ", vPC and VXLAN changes",
+            ", vPC, VXLAN and clock source changes",
         ),
         (
             10,
             "spanning tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
+            "clock source changes",
         ),
         (
             11,
             "switch admin, security and config, layer 2 security, traffic measuring, "
-            "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes",
+            "reset to defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             12,
             "security and config, layer 2 security, traffic measuring, reset to defaults,"
-            " sFlow status, switch restart, vPC and VXLAN changes",
+            " sFlow status, switch restart, vPC, VXLAN and clock source changes",
         ),
         (
             13,
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart, vPC and VXLAN changes",
+            " restart, vPC, VXLAN and clock source changes",
         ),
         (
             14,
-            "traffic measuring, reset to defaults, sFlow status, switch restart, vPC and VXLAN "
+            "traffic measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
+            "clock source "
             "changes",
         ),
-        (15, "reset to defaults, sFlow status, switch restart, vPC and VXLAN changes"),
-        (16, "sFlow status, switch restart, vPC and VXLAN changes"),
-        (17, "switch restart, vPC and VXLAN changes"),
-        (18, "vPC and VXLAN changes"),
-        (19, "VXLAN changes"),
-        (20, ""),
+        (
+            15,
+            "reset to defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
+        ),
+        (16, "sFlow status, switch restart, vPC, VXLAN and clock source changes"),
+        (17, "switch restart, vPC, VXLAN and clock source changes"),
+        (18, "vPC, VXLAN and clock source changes"),
+        (19, "VXLAN and clock source changes"),
+        (20, "clock source changes"),
+        (21, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:

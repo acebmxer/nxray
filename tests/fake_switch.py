@@ -464,6 +464,7 @@ _ADMIN_KEYS = tuple(
         r"(ip domain-name)",
         r"(clock timezone)",
         r"(clock summer-time)",
+        r"(clock protocol)",
         r"(logging logfile)",
         r"(logging console)",
         r"(logging monitor)",
@@ -706,6 +707,9 @@ class FakeSwitch:
     admin_lines: list[str] = field(default_factory=list)
     context_name_servers: list[tuple[str, str]] = field(default_factory=list)
     clock_sets: list[str] = field(default_factory=list)
+    # When set, "clock set" is refused as NX-OS does while the clock follows NTP or PTP,
+    # until "clock protocol none vdc 1" is in admin_lines.
+    clock_set_needs_none: bool = False
     log_text: str = field(
         default_factory=lambda: FIXTURES.joinpath("show_logging_last_doc.txt").read_text()
     )
@@ -3643,6 +3647,13 @@ class FakeSwitch:
         if cmd.startswith("clock set "):
             if not (is_admin or self._role_matches(user, cmd, None)):
                 return denied, context
+            if self.clock_set_needs_none and "clock protocol none vdc 1" not in self.admin_lines:
+                return _error(
+                    ident,
+                    "Setting clock from CLI is not allowed in this VDC. Use the following "
+                    'config command to use the "clock set" command. clock protocol none '
+                    "vdc <vdc_id>\n",
+                ), context
             self.clock_sets.append(cmd.removeprefix("clock set "))
             return _ok(ident, None), context
         if bare.startswith("hostname "):

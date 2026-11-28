@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.port_changes import ADMIN_RULES, role_lines
+from app.port_changes import ADMIN_RULES, CLOCK_SOURCE_RULES, role_lines
 from app.protocols import Field, check_value
 from app.switch_admin import (
     build_admin_change,
+    clock_follows_a_source,
     clock_text,
     log_command,
     parse_admin_config,
@@ -298,6 +299,23 @@ def test_role_has_the_admin_rules_and_no_wide_snmp_rule() -> None:
     adding = [r for r in snmp if " ; no " not in r]
     assert not any(r.endswith(("snmp-server *", "snmp-server community *")) for r in adding)
     assert not any("snmp-server user" in r for r in ADMIN_RULES)
+
+
+def test_the_role_has_the_clock_source_rule() -> None:
+    assert CLOCK_SOURCE_RULES == ("rule 255 permit command conf t ; clock protocol *",)
+    assert CLOCK_SOURCE_RULES[0] in role_lines(["Ethernet1/1"], "nxray")
+
+
+def test_clock_source_is_a_configuration_line_with_a_checked_source() -> None:
+    change = build_admin_change("system", "clock_source", "set", {}, {"source": "none"})
+    assert change.lines == ("clock protocol none vdc 1",) and change.config
+    with pytest.raises(ValueError):
+        build_admin_change("system", "clock_source", "set", {}, {"source": "none vdc 2"})
+    assert clock_follows_a_source("NTP") and clock_follows_a_source("PTP")
+    assert not clock_follows_a_source("") and not clock_follows_a_source("user configured")
+    config = parse_admin_config("clock protocol none vdc 1\nhostname a\n")
+    assert config.clock_source == "none"
+    assert parse_admin_config("hostname a\n").clock_source == ""
 
 
 def test_log() -> None:

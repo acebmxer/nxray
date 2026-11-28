@@ -539,7 +539,7 @@ tree, 12 also switch admin and reading the running configuration, 13 also ACLs,
 port security, reading the saved configuration and NXray's checkpoints, 14 also
 DHCP snooping and relay, ARP inspection, IP Source Guard, MAC ACLs, object
 groups, VLAN access maps and TCAM regions, 15 also how long the front ports
-average their rates over, `TRAFFIC_RULES`). `EnableResult.had_role`
+average their rates over, `TRAFFIC_RULES`; 21 also choosing the clock source, `CLOCK_SOURCE_RULES`). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -884,6 +884,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `switch_admin_page` | `(request, username) -> Response` | `GET /switch-admin`: the hostname, clock, NTP, DNS, logging, SNMP and banner, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `switch_admin_change` | `(request, username, form) -> Response` | `POST /switch-admin/change`: one change, after a confirm page showing the lines (role version 12); a new hostname is stored too | router | v0.1.0 |
 | `check_admin_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, and the default VRF where a VRF's own configuration is meant | `SITE.check_place` in `routes/switch_admin` | v0.1.0 |
+| `admin_needs` | `(connection, scope, setting) -> str` | Why the role may not choose the clock source yet: a limited role below version 21 ("" when it may, and always on the broad role) | `SITE.needs` in `routes/switch_admin` | v0.4.1 |
 | `switch_log_page` | `(request, username, lines, search, level) -> Response` | `GET /switch-admin/log?lines=&search=&level=`: the newest 50, 200 or 1000 lines of the switch's log, newest first, kept to those containing `search` and of `level` or worse; every role | router | v0.1.0 |
 | `render_acls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the ACLs page with a message | `acls_page`, `switch_save` | v0.1.0 |
 | `acls_page` | `(request, username) -> Response` | `GET /security/acls`: the IPv4 and IPv6 ACLs, their entries and where they apply, read live; every role looks, operators and admins change | router | v0.1.0 |
@@ -2004,6 +2005,7 @@ switch at a time, in memory only, run at once in tests (`Jobs(background=False)`
 | `parse_admin_config` | `(config: str) -> AdminConfig` | `show running-config` text: the hostname, banner (one line or several), time zone, summer time, domain name and lookups, name servers (also those inside a `vrf context`), NTP servers, logging settings and servers, SNMP contact, location, communities and trap receivers | `parse_switch_admin` | v0.1.0 |
 | `parse_ntp_status` | `(body) -> list[NtpPeer]` | `show ntp peer-status`: each server with its VRF, stratum, reach, delay and whether the clock follows it | `parse_switch_admin` | v0.1.0 |
 | `clock_text` | `(body) -> tuple[str, str]` | `show clock`: the time as the switch writes it and its source | `parse_switch_admin` | v0.1.0 |
+| `clock_follows_a_source` | `(source: str) -> bool` | True when the clock's source is NTP or PTP, which makes the switch refuse `clock set` | `parse_switch_admin` | v0.4.1 |
 | `parse_switch_admin` | `(bodies, ntp_body=None, config_text=None) -> ProtocolView` | The page from the reads, NTP status (None when refused) and the configuration text (None when the role may not read it): the switch's facts and current values, each NTP, DNS and logging server and SNMP trap receiver; SNMP communities masked | `SWITCH_ADMIN.parse`, `load_switch_admin_page` | v0.1.0 |
 | `load_switch_admin_page` | `(client) -> SwitchAdminPage` | One request for the reads, one for NTP, one for the configuration text (`show_text`); a role that may not read it gives the page without it | `routes/switch_admin` | v0.1.0 |
 | `build_admin_change` | `(scope, setting, action, ident, values) -> ProtocolChange` | `build_change` for the Switch admin page | `NxapiClient.configure_switch_admin`, `routes/switch_admin` | v0.1.0 |
