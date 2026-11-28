@@ -393,22 +393,37 @@ NAME_SERVER = Scope(
         ),
     ),
     delete=("no ip name-server {address}[ use-vrf {vrf}]",),
-    help="The servers the switch asks for names, when DNS lookups are on.",
+    help="The servers the switch asks for names, when DNS lookups are on. These answer "
+    "lookups made from the default VRF. A lookup made inside a VRF, such as an NTP server "
+    "given by name in the management VRF, needs a server set inside that VRF (the card "
+    "below).",
 )
 
 # Name servers typed inside a VRF's configuration (vrf context management ;
-# ip name-server ...), which some switches have instead: listed so they can be
-# removed; new ones are added with use-vrf above.
+# ip name-server ...). The switch answers a lookup made inside that VRF (ping
+# <name> vrf management, an NTP server given by name) only from these, not from the
+# use-vrf ones above (#119).
 CONTEXT_NAME_SERVER = Scope(
     "dns_context",
     "DNS servers set inside a VRF",
     (
-        Field("address", "Server", "ip"),
-        Field("context", "VRF", "usevrf"),
+        Field("address", "Server", "ip", placeholder="192.0.2.53"),
+        Field("context", "VRF", "usevrf", hint="The VRF whose lookups it answers"),
     ),
     ("vrf context {context}",),
+    (
+        Setting(
+            "server",
+            "Add",
+            "ip name-server {address}",
+            removable=False,
+            ident=("address",),
+        ),
+    ),
     delete=("vrf context {context}", "no ip name-server {address}"),
-    help="Typed inside a VRF's own configuration; they work like the ones above.",
+    help="Typed inside a VRF's own configuration. A lookup made inside that VRF uses these: "
+    "an NTP server given by name in the management VRF needs one there. They are not the "
+    "same as the ones above, which answer lookups from the default VRF.",
 )
 
 LOG_SERVER = Scope(

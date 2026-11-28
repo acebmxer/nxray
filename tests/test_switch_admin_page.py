@@ -124,7 +124,7 @@ def test_changes_off_before_role_version_12(
     assert "Switch admin changes are off" in _text(page)
     assert (
         "Turn on switch admin, security and config, layer 2 security, traffic measuring, reset "
-        "to defaults, sFlow status, switch restart, vPC, VXLAN and clock source "
+        "to defaults, sFlow status, switch restart, vPC, VXLAN, clock source and VRF DNS server "
         "changes" in _text(logged_in.get("/switch").text)
     )
     refused = _change(logged_in, scope="system", setting="hostname", action="set",
@@ -151,7 +151,8 @@ def test_role_version_11_turns_on_switch_admin_without_a_wait(
     text = _text(response.text)
     assert (
         "Switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes are "
+        "defaults, sFlow status, switch restart, vPC, VXLAN, "
+        "clock source and VRF DNS server changes are "
         "on: nxray may now also "
         "change the "
         "switch's hostname" in text
@@ -308,6 +309,41 @@ def test_ntp_server_added_and_deleted(logged_in: TestClient, enabled: FakeSwitch
     assert gone.status_code == 200, _text(gone.text)
     assert _config_requests(enabled) == [["no ntp server 192.0.2.123"]]
     assert enabled.admin_lines == []
+
+
+def test_a_dns_server_inside_a_vrf_is_added_from_the_page(
+    logged_in: TestClient, enabled: FakeSwitch
+) -> None:
+    asked = _change(logged_in, confirm=False, scope="dns_context", setting="server",
+                    action="set", id_address="192.0.2.53", id_context="management")  # fmt: skip
+    assert "vrf context management" in _text(asked.text)
+    assert "ip name-server 192.0.2.53" in _text(asked.text)
+    assert _config_requests(enabled) == []
+    done = _change(logged_in, scope="dns_context", setting="server", action="set",
+                   id_address="192.0.2.53", id_context="management")  # fmt: skip
+    assert done.status_code == 200, _text(done.text)
+    assert _config_requests(enabled) == [["vrf context management", "ip name-server 192.0.2.53"]]
+    assert "192.0.2.53 (VRF management)" in _text(done.text)
+    # The default VRF has no configuration of its own.
+    refused = _change(logged_in, scope="dns_context", setting="server", action="set",
+                      id_address="192.0.2.54", id_context="default")  # fmt: skip
+    assert refused.status_code == 400
+    assert "no configuration of its own" in _text(refused.text)
+
+
+def test_an_old_limited_role_is_told_to_update_for_a_dns_server_in_a_vrf(
+    logged_in: TestClient, enabled: FakeSwitch, settings: Settings
+) -> None:
+    _db(settings, "UPDATE switch_connection SET role_version = 21")
+    change = {"scope": "dns_context", "setting": "server", "action": "set",
+              "id_address": "192.0.2.53", "id_context": "management"}  # fmt: skip
+    refused = _change(logged_in, **change)
+    assert refused.status_code == 400
+    assert "add a DNS server inside a VRF" in _text(refused.text)
+    assert _config_requests(enabled) == []
+    # Removing one needs no newer role, and neither does the broad role.
+    _db(settings, "UPDATE switch_connection SET role_mode = 'broad'")
+    assert _change(logged_in, **change).status_code == 200
 
 
 def test_a_server_in_the_default_vrf_gets_no_use_vrf(

@@ -921,7 +921,13 @@ each after a confirm page that shows the lines:
   role version 21 (Update on the Switch page); the broad role already allows it.
 - **NTP servers**: add one (an address or a name, preferred or not, in the
   default VRF, management or another) and delete one.
-- **DNS**: the domain name, lookups on or off, and the name servers.
+- **DNS**: the domain name, lookups on or off, and the name servers: those
+  added with `use-vrf` (they answer lookups made from the default VRF) and
+  those set inside a VRF's own configuration (`vrf context <vrf>` then `ip
+  name-server`), which answer lookups made inside that VRF, such as an NTP
+  server by name in the management VRF. The limited role gets the second kind
+  from role version 22 (Update on the Switch page); the broad role already
+  allows it.
 - **Logging**: the log file's level and size, console and terminal logging,
   timestamps, and the syslog servers with their level and VRF.
 - **SNMP**: contact, location, read-only communities (typed like a password,
@@ -1604,7 +1610,7 @@ policy-map was made, the switch prints nothing for the first two commands.
 
 **Monitor sessions.** The **Monitor sessions** page needs no rule of its own, so it works
 with the broad role and with a stored admin login, and is off with the limited role (a
-role holds 256 rules and the limited one has 254 in use). It reads `show monitor session
+role holds 256 rules and the limited one has all 256 in use). It reads `show monitor session
 all` and, as text, `show running-config monitor` (for the ERSPAN source address), and
 types `monitor session <n>` (`monitor session <n> type erspan-source` for ERSPAN, which
 the switch needs every time) with its `source interface`, `source vlan`, `filter vlan`,

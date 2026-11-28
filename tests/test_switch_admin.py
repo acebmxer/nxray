@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.port_changes import ADMIN_RULES, CLOCK_SOURCE_RULES, role_lines
+from app.port_changes import ADMIN_RULES, CLOCK_SOURCE_RULES, CONTEXT_DNS_RULES, role_lines
 from app.protocols import Field, check_value
 from app.switch_admin import (
     build_admin_change,
@@ -180,6 +180,14 @@ def test_page_without_the_configuration() -> None:
             ["ip name-server 192.0.2.53 use-vrf management"],
         ),
         (
+            "dns_context",
+            "server",
+            "set",
+            {"address": "192.0.2.53", "context": "management"},
+            {},
+            ["vrf context management", "ip name-server 192.0.2.53"],
+        ),
+        (
             "dns",
             "",
             "delete",
@@ -304,6 +312,13 @@ def test_role_has_the_admin_rules_and_no_wide_snmp_rule() -> None:
 def test_the_role_has_the_clock_source_rule() -> None:
     assert CLOCK_SOURCE_RULES == ("rule 255 permit command conf t ; clock protocol *",)
     assert CLOCK_SOURCE_RULES[0] in role_lines(["Ethernet1/1"], "nxray")
+
+
+def test_the_role_has_the_rule_for_a_name_server_inside_a_vrf() -> None:
+    assert CONTEXT_DNS_RULES == (
+        "rule 256 permit command conf t ; vrf context * ; ip name-server *",
+    )
+    assert CONTEXT_DNS_RULES[0] in role_lines(["Ethernet1/1"], "nxray")
 
 
 def test_clock_source_is_a_configuration_line_with_a_checked_source() -> None:

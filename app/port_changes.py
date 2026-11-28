@@ -65,7 +65,7 @@ rules and the VLAN interfaces in the port list, 8 the VRF rules, 9 the static ro
 admin rules, 13 the security and config rules, 14 the layer 2 security rules,
 15 the traffic measuring rules, 16 the reset rule, 17 the sFlow status rule, 18 the restart
 rules, 19 the vPC rules, 20 the VXLAN rules and the NVE interface in the port list, 21 the
-clock source rule.
+clock source rule, 22 the rule that adds a DNS server inside a VRF.
 
 The switch knows the ``Vlan`` interface type only while the interface-vlan
 feature is on: with it off, ``VLAN_INTERFACE_PERMIT`` is refused
@@ -700,6 +700,14 @@ VXLAN_RULES = (
 # hand. The line is the one NX-OS itself names in that refusal; the rule was not tried on a switch.
 ROLE_VERSION_CLOCK_SOURCE = 21
 CLOCK_SOURCE_RULES = ("rule 255 permit command conf t ; clock protocol *",)
+# DNS-in-a-VRF rule, added in ROLE_VERSION 22: ``vrf context <vrf> ; ip name-server <address>``,
+# which the Switch admin page's "DNS servers set inside a VRF" card sends (#119). A lookup made
+# inside a VRF (an NTP server given by name in the management VRF) is answered only from a server
+# set there, not from ``ip name-server <address> use-vrf <vrf>``. Rule 151 already removes one.
+# Rule 256 is the last number a role takes: a later limited rule needs one freed first. Not
+# tried on a switch as the limited role.
+ROLE_VERSION_CONTEXT_DNS = 22
+CONTEXT_DNS_RULES = ("rule 256 permit command conf t ; vrf context * ; ip name-server *",)
 # The NVE interface (NX-OS 9.3 has one, nve1), in the port list like the VLAN interfaces.
 NVE_PERMIT = "permit interface nve1"
 # Every loopback, in the broad role's port list only (BROAD_LOOPBACK_VERSION). Checked on
@@ -714,7 +722,7 @@ LOOPBACK_PERMIT = "permit interface loopback0-1023"
 # over SSH (see the module notes): accounts below this one get one.
 LAST_PERMIT_VERSION = 7
 
-ROLE_VERSION = 21
+ROLE_VERSION = 22
 
 LIMITED_RULES = (
     *ROLE_RULES,
@@ -738,6 +746,7 @@ LIMITED_RULES = (
     *VPC_RULES,
     *VXLAN_RULES,
     *CLOCK_SOURCE_RULES,
+    *CONTEXT_DNS_RULES,
 )
 
 # What each role mode says in the page's words.
@@ -787,6 +796,7 @@ _ADDED_BY_VERSION = {
     19: "vPC",
     20: "VXLAN",
     21: "clock source",
+    22: "VRF DNS server",
 }
 
 

@@ -539,7 +539,7 @@ tree, 12 also switch admin and reading the running configuration, 13 also ACLs,
 port security, reading the saved configuration and NXray's checkpoints, 14 also
 DHCP snooping and relay, ARP inspection, IP Source Guard, MAC ACLs, object
 groups, VLAN access maps and TCAM regions, 15 also how long the front ports
-average their rates over, `TRAFFIC_RULES`; 21 also choosing the clock source, `CLOCK_SOURCE_RULES`). `EnableResult.had_role`
+average their rates over, `TRAFFIC_RULES`; 21 also choosing the clock source, `CLOCK_SOURCE_RULES`; 22 also adding a DNS server inside a VRF, `CONTEXT_DNS_RULES`). `EnableResult.had_role`
 is true when the account already had the role, so only its rules changed and
 the switch applies them at once and there is no wait.
 
@@ -884,7 +884,7 @@ sends nothing. A switched port's MTU is 1500 or 9216 (`system jumbomtu`).
 | `switch_admin_page` | `(request, username) -> Response` | `GET /switch-admin`: the hostname, clock, NTP, DNS, logging, SNMP and banner, read live; every role looks, operators and admins change | router | v0.1.0 |
 | `switch_admin_change` | `(request, username, form) -> Response` | `POST /switch-admin/change`: one change, after a confirm page showing the lines (role version 12); a new hostname is stored too | router | v0.1.0 |
 | `check_admin_place` | `(page, ident) -> None` | Refuses a VRF the switch lacks, and the default VRF where a VRF's own configuration is meant | `SITE.check_place` in `routes/switch_admin` | v0.1.0 |
-| `admin_needs` | `(connection, scope, setting) -> str` | Why the role may not choose the clock source yet: a limited role below version 21 ("" when it may, and always on the broad role) | `SITE.needs` in `routes/switch_admin` | v0.4.1 |
+| `admin_needs` | `(connection, scope, setting) -> str` | Why the role may not make a newer change yet: choosing the clock source needs a limited role of version 21, adding a DNS server inside a VRF version 22 ("" when it may, and always on the broad role) | `SITE.needs` in `routes/switch_admin` | v0.4.1 |
 | `switch_log_page` | `(request, username, lines, search, level) -> Response` | `GET /switch-admin/log?lines=&search=&level=`: the newest 50, 200 or 1000 lines of the switch's log, newest first, kept to those containing `search` and of `level` or worse; every role | router | v0.1.0 |
 | `render_acls_page` | `(request, username, *, error=None, notice=None, form=None) -> Response` | Reads the switch and shows the ACLs page with a message | `acls_page`, `switch_save` | v0.1.0 |
 | `acls_page` | `(request, username) -> Response` | `GET /security/acls`: the IPv4 and IPv6 ACLs, their entries and where they apply, read live; every role looks, operators and admins change | router | v0.1.0 |

@@ -860,7 +860,7 @@ def switch_enable_changes(
             "Port, VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and config, "
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch "
-            "restart, vPC, VXLAN and clock source changes are on: "
+            "restart, vPC, VXLAN, clock source and VRF DNS server changes are on: "
             f"{account} may now turn the {count} front ports on or off, edit their "
             "descriptions, set their VLANs and their speed, MTU, FEC, flow control, storm "
             "control and layer (switched or routed), split or join the 100G ports, create, "

@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.db import open_db
 from app.dependencies import login_required, operator_required, stored_switch, templates
 from app.nxapi import DEFAULT_VRF, NxapiClient, NxapiCommandError
-from app.port_changes import ROLE_VERSION_CLOCK_SOURCE
+from app.port_changes import ROLE_VERSION_CLOCK_SOURCE, ROLE_VERSION_CONTEXT_DNS
 from app.protocols import ProtocolChange
 from app.routes.protocols import ProtocolSite, form_fields, render_site_page, site_change
 from app.switch_admin import (
@@ -51,10 +51,12 @@ def check_admin_place(page: SwitchAdminPage, ident: dict[str, str]) -> None:
         raise ValueError("the default VRF has no configuration of its own")
 
 
-ROLE_WITHOUT_CLOCK_SOURCE = (
-    "Not changed: NXray's role on the switch was written before it could choose the clock "
-    "source. An NXray admin presses Update on the Switch page, then try again."
+ROLE_WITHOUT = (
+    "Not changed: NXray's role on the switch was written before it could {what}. An NXray "
+    "admin presses Update on the Switch page, then try again."
 )
+ROLE_WITHOUT_CLOCK_SOURCE = ROLE_WITHOUT.format(what="choose the clock source")
+ROLE_WITHOUT_CONTEXT_DNS = ROLE_WITHOUT.format(what="add a DNS server inside a VRF")
 
 CLOCK_SET_REFUSED = (
     "setting the time by hand is not allowed while the switch's clock follows NTP or PTP. "
@@ -64,14 +66,19 @@ CLOCK_SET_REFUSED = (
 
 
 def admin_needs(connection: SwitchConnection, scope: str, setting: str) -> str:
-    """Why the role may not choose the clock source yet: a limited role written before
-    version 21 (the broad role allows every configuration line) ("" when it may)."""
-    if (
-        setting == "clock_source"
-        and connection.role_mode != ROLE_BROAD
-        and connection.role_version < ROLE_VERSION_CLOCK_SOURCE
-    ):
+    """Why the role may not make a newer change yet: choosing the clock source needs a
+    limited role of version 21, adding a DNS server inside a VRF version 22 (the broad
+    role allows every configuration line) ("" when it may)."""
+    if connection.role_mode == ROLE_BROAD:
+        return ""
+    if setting == "clock_source" and connection.role_version < ROLE_VERSION_CLOCK_SOURCE:
         return ROLE_WITHOUT_CLOCK_SOURCE
+    if (
+        scope == "dns_context"
+        and setting == "server"
+        and connection.role_version < ROLE_VERSION_CONTEXT_DNS
+    ):
+        return ROLE_WITHOUT_CONTEXT_DNS
     return ""
 
 

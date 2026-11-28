@@ -171,7 +171,8 @@ def test_role_version_5_offers_port_channel_changes_without_a_wait(
     assert (
         "Turn on port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
         "tree, switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes"
+        "defaults, sFlow status, switch restart, vPC, VXLAN, "
+        "clock source and VRF DNS server changes"
     ) in switch_page
     assert "make, change and delete port-channels" in switch_page
     enabled.ssh_lines.clear()
@@ -179,7 +180,8 @@ def test_role_version_5_offers_port_channel_changes_without_a_wait(
     assert (
         "Port-channel, VLAN interface, VRF, static route, routing protocol, spanning tree, "
         "switch admin, security and config, layer 2 security, traffic measuring, reset to "
-        "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes are "
+        "defaults, sFlow status, switch restart, vPC, VXLAN, "
+        "clock source and VRF DNS server changes are "
         "on: nxray may now also "
         "make, change "
         "and delete" in text

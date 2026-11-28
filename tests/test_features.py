@@ -140,7 +140,7 @@ def test_role_has_the_feature_rules() -> None:
     lines = role_lines(["Ethernet1/1"], "nxray")
     for rule in FEATURE_RULES:
         assert rule in lines
-    assert ROLE_VERSION == 21
+    assert ROLE_VERSION == 22
 
 
 @pytest.mark.parametrize(
@@ -151,97 +151,101 @@ def test_role_has_the_feature_rules() -> None:
             "VLAN, port settings, feature, neighbor, port-channel, VLAN interface, VRF, "
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC, VXLAN and clock source changes",
+            "status, switch restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             2,
             "port settings, feature, neighbor, port-channel, VLAN interface, VRF, static "
             "route, routing protocol, spanning tree, switch admin, security and config, "
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart, vPC, VXLAN and clock source changes",
+            " restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             3,
             "feature, neighbor, port-channel, VLAN interface, VRF, static route, routing "
             "protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            ", vPC, VXLAN and clock source changes",
+            ", vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             4,
             "neighbor, port-channel, VLAN interface, VRF, static route, routing protocol,"
             " spanning tree, switch admin, security and config, layer 2 security, traffic"
-            " measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
-            "clock source changes",
+            " measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
         (
             5,
             "port-channel, VLAN interface, VRF, static route, routing protocol, spanning "
             "tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
-            "clock source changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
         (
             6,
             "VLAN interface, VRF, static route, routing protocol, spanning tree, switch "
             "admin, security and config, layer 2 security, traffic measuring, reset to "
-            "defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
+            "defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
         (
             7,
             "VRF, static route, routing protocol, spanning tree, switch admin, security "
             "and config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC, VXLAN and clock source changes",
+            "status, switch restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             8,
             "static route, routing protocol, spanning tree, switch admin, security and "
             "config, layer 2 security, traffic measuring, reset to defaults, sFlow "
-            "status, switch restart, vPC, VXLAN and clock source changes",
+            "status, switch restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             9,
             "routing protocol, spanning tree, switch admin, security and config, layer 2 "
             "security, traffic measuring, reset to defaults, sFlow status, switch restart"
-            ", vPC, VXLAN and clock source changes",
+            ", vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             10,
             "spanning tree, switch admin, security and config, layer 2 security, traffic "
-            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
-            "clock source changes",
+            "measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
         (
             11,
             "switch admin, security and config, layer 2 security, traffic measuring, "
-            "reset to defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
+            "reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
         (
             12,
             "security and config, layer 2 security, traffic measuring, reset to defaults,"
-            " sFlow status, switch restart, vPC, VXLAN and clock source changes",
+            " sFlow status, switch restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             13,
             "layer 2 security, traffic measuring, reset to defaults, sFlow status, switch"
-            " restart, vPC, VXLAN and clock source changes",
+            " restart, vPC, VXLAN, clock source and VRF DNS server changes",
         ),
         (
             14,
-            "traffic measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN and "
-            "clock source "
+            "traffic measuring, reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server "
             "changes",
         ),
         (
             15,
-            "reset to defaults, sFlow status, switch restart, vPC, VXLAN and clock source changes",
+            "reset to defaults, sFlow status, switch restart, vPC, VXLAN, "
+            "clock source and VRF DNS server changes",
         ),
-        (16, "sFlow status, switch restart, vPC, VXLAN and clock source changes"),
-        (17, "switch restart, vPC, VXLAN and clock source changes"),
-        (18, "vPC, VXLAN and clock source changes"),
-        (19, "VXLAN and clock source changes"),
-        (20, "clock source changes"),
-        (21, ""),
+        (16, "sFlow status, switch restart, vPC, VXLAN, clock source and VRF DNS server changes"),
+        (17, "switch restart, vPC, VXLAN, clock source and VRF DNS server changes"),
+        (18, "vPC, VXLAN, clock source and VRF DNS server changes"),
+        (19, "VXLAN, clock source and VRF DNS server changes"),
+        (20, "clock source and VRF DNS server changes"),
+        (21, "VRF DNS server changes"),
+        (22, ""),
     ],
 )
 def test_missing_changes(version: int, words: str) -> None:
