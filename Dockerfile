@@ -84,11 +84,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv/nxray
 
-# The base image's own pip goes too: nothing installs at runtime.
+# The base image's own pip goes too: nothing installs at runtime. The paths
+# use a wildcard for the Python version, so a later base-image bump does not
+# leave them naming a version that is no longer there.
 RUN python -m pip uninstall --yes pip 2>/dev/null || true \
-    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
-              /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
-              /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
+    && rm -rf /usr/local/lib/python3*/site-packages/pip \
+              /usr/local/lib/python3*/site-packages/pip-*.dist-info \
+              /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 COPY --from=build /opt/venv /opt/venv
 COPY app/ ./app/
